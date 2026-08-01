@@ -330,9 +330,40 @@ function estimateRevealMs(html){
   // arm the acting player's clock before their prompt is readable. Erring long stays deliberate.
   return codePoints.length*REVEAL_MS_PER_CHAR+GHOST_FADE_MS+RESIZE_MS;
 }
+// A CLEAR IS DEFERRED, and this is the single most important thing in this file.
+//
+// The harness caught it: almost every swap in a real game is `panel("")` immediately followed by
+// `panel(newHtml)` — flow.js's `done` handler clears the box the instant a prompt is answered
+// (src/ui/flow.js:87 and four siblings). Executed literally that means: wipe the old message,
+// collapse the row to 0, THEN build the new one. So the outgoing text had already been destroyed by
+// the time the swap ran — no `.apMsg` left to clone, therefore NO GHOST, therefore NO FADE — and the
+// box visibly collapsed to nothing and grew back on every single message.
+//
+// That is why four rounds of fixing the fade changed so little: for most messages the fade was never
+// running at all. The trace showed exactly one swap out of nine with a ghost, and that one behaved
+// perfectly (pinned at 26px through the fade, then a single clean 26 -> 46 resize).
+//
+// So a clear now WAITS one beat. If content arrives before CLEAR_GRACE_MS it is a REPLACE — the old
+// message is still in the DOM, a ghost is cloned from it, and the normal fade -> resize -> reveal
+// sequence runs. If nothing arrives, the clear happens for real, which is F6's explicit-clear path
+// intact (the box empties and hides, no ghost, no fade).
+const CLEAR_GRACE_MS=60;
+let pendingClear=null;
 export function panel(html,needsAction=false){
   html=emojify(html);
   const inner=$("apGridInner");
+  if(pendingClear){clearTimeout(pendingClear);pendingClear=null;}
+  if(!html){
+    // Defer — a replacement may be one statement away.
+    pendingClear=setTimeout(()=>{
+      pendingClear=null;
+      inner.innerHTML="";
+      $("actionPanel").style.display="none";
+      $("actionPanel").classList.remove("needsAction","pendingReveal");
+      resizePanel(false);
+    },CLEAR_GRACE_MS);
+    return;
+  }
   // REDUCED MOTION is read HERE, in JS, and that is not a stylistic choice: index.html's
   // `@media (prefers-reduced-motion: reduce)` sets `.apMsg.fadeOut{display:none}`, so there is no
   // fade to wait for — but a CSS media query cannot reach a JS timer. Without this read, a
@@ -674,7 +705,16 @@ function runHeightSequence({ghostEl,targetH,fromH,revealDone}){
 // re-pins from whatever max-content resolves to, so the sequence picks up cleanly from here.
 export function resizePanel(hasContent){
   const grid=$("apGrid");if(!grid)return;
-  heightSeq++;                                   // cancel any sequence mid-flight
+  // A SEQUENCE IN FLIGHT OWNS THE HEIGHT — do not fight it. The board sizes itself dynamically, so
+  // resize events land mid-swap routinely; the harness caught this one firing during three separate
+  // fades, each time forcing max-content and collapsing the box under the still-fading ghost. That
+  // is the same class of bug as the earlier max-content release, arriving from a different door.
+  //
+  // Skipping is safe rather than merely convenient: every sequence ENDS at max-content of its own
+  // accord (SETTLED), so the re-fit this call wanted still happens — just a beat later, and without
+  // interrupting a fade the player is currently watching.
+  if($("apGridInner")&&$("apGridInner").querySelector(".apMsg.fadeOut"))return;
+  heightSeq++;                                   // otherwise: cancel any sequence and re-fit now
   grid.style.gridTemplateRows=hasContent?"max-content":"0px";
 }
 // Walks msgEl's real DOM in document order and reveals it character-by-character (text nodes)
