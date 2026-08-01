@@ -339,6 +339,110 @@ window.__alerts = []; window.alert = m => window.__alerts.push(String(m));
 An `alert()` on a failure path cost real time here once, presenting as a frozen tab when it was a
 failed Firebase call.
 
+## 8a. THE ANSWER TO §8b: drive headless Chrome yourself over CDP
+
+**When you need real animation timing, do not use the MCP browser at all.** §8b below explains why it
+cannot give you one — hidden tabs kill `requestAnimationFrame`, clamp timers, and never settle
+layout. Launching Chrome headless yourself fixes all three, needs no `npm install`, and **never takes
+over Wyatt's screen** (his standing rule: never drive visible Chrome, it steals his focus).
+
+This found the narration-box bug that four rounds of code-reading missed. It is the single highest-
+leverage tool in this document.
+
+### Launch it
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --disable-gpu --remote-debugging-port=9333 \
+  --user-data-dir=/tmp/chrome-probe --no-first-run about:blank &
+curl -s http://127.0.0.1:9333/json/version    # confirm it is up
+```
+
+Headless **does** run rAF and CSS animations properly. Confirm the environment before trusting a
+reading — a wrong answer here invalidates everything downstream:
+
+```js
+matchMedia('(prefers-reduced-motion: reduce)').matches   // must be false, or you are measuring
+                                                         // the reduced-motion code path
+```
+
+### Talk to it — Node has everything you need
+
+Node 22+ has a global `WebSocket`, so a CDP client is ~15 lines and no dependency:
+
+```js
+const tgt = await (await fetch("http://127.0.0.1:9333/json/new?about:blank",{method:"PUT"})).json();
+const ws  = new WebSocket(tgt.webSocketDebuggerUrl);
+let id=0; const pend=new Map();
+await new Promise(r => ws.onopen = r);
+ws.onmessage = e => { const m=JSON.parse(e.data); if(m.id&&pend.has(m.id)){pend.get(m.id)(m); pend.delete(m.id);} };
+const send = (method,params={}) => new Promise(res => { const i=++id; pend.set(i,res); ws.send(JSON.stringify({id:i,method,params})); });
+const evalJS = async expr => (await send("Runtime.evaluate",{expression:expr,returnByValue:true}))
+                              .result?.result?.value;
+await send("Page.enable"); await send("Runtime.enable");
+await send("Emulation.setDeviceMetricsOverride",{width:390,height:900,deviceScaleFactor:2,mobile:true});
+```
+
+`setDeviceMetricsOverride` is the phone-width tool that `resize_window` could never be (§8b.2) — it
+actually moves `innerWidth`, so narrow-screen bugs reproduce.
+
+### Sample every animation frame
+
+Inject a rAF loop that pushes into an array, then read it back at the end. This gives you numbers,
+not impressions:
+
+```js
+window.__log=[]; window.__t0=performance.now();
+(function tick(){
+  const g=document.getElementById('apGrid'), inner=document.getElementById('apGridInner');
+  const live=inner.querySelector('.apMsg:not(.fadeOut)'), ghost=inner.querySelector('.apMsg.fadeOut');
+  window.__log.push({
+    t:+(performance.now()-window.__t0).toFixed(1),
+    rows:getComputedStyle(g).gridTemplateRows,       // the pinned/max-content row
+    h:live?live.offsetHeight:-1,                     // the MESSAGE height — see the trap below
+    ghost:ghost?+getComputedStyle(ghost).opacity:null
+  });
+  requestAnimationFrame(tick);
+})();
+```
+
+**Trap, and it cost a wrong conclusion here:** do **not** measure `#apGridInner.offsetHeight` as
+"content height". It is stretched to the grid row, so it tracks the height *animation* rather than
+the text. Measure `.apMsg` itself.
+
+### Find WHO changed something, not just that it changed
+
+When a value moves and nothing explains it, log the writers. Patching
+`CSSStyleDeclaration.prototype` from the page did **not** work here; adding a temporary logger inside
+the source did, immediately:
+
+```js
+const HLOG=(w,v)=>{try{(window.__h=window.__h||[]).push({t:performance.now(),w,v:String(v)});}catch(e){}};
+```
+
+Drop one call at each site that writes the value, run, and read the order back. That is what revealed
+`panel("")` firing between every message — which meant the fade was never running on 8 of 9 swaps.
+
+**Remove it afterwards.** `npm test`'s retained-globals check will fail on `window.__h`, which is the
+guard working exactly as intended.
+
+### Assert, do not eyeball
+
+The point of numbers is machine-checkable claims. These three settled the narration box:
+
+| Claim | Check |
+|---|---|
+| the box never moves during a fade | group samples where `ghost !== null`; `rows` must be constant in each |
+| text never reflows while on screen | group by message; `.apMsg` height must be constant in each |
+| nothing is ever clipped | for every frame, natural height must be `<=` the pinned row |
+
+Going from *"still glitchy"* to *"0 of 8 fades moved, 0 of 10 messages reflowed, 0 of 1476 frames
+clipped"* is the difference between guessing and knowing.
+
+**Chrome is not Safari.** This proves sequencing and layout, not compositing — and Safari is where
+this project's rendering bugs have historically lived. A green harness still earns a human Safari
+pass, it does not replace one.
+
 ## 8b. A HIDDEN tab is the other fake freeze — and it silently corrupts layout readings
 
 Check this **first**, before trusting any timing or layout number:

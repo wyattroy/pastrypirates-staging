@@ -759,22 +759,54 @@ export function resizePanel(hasContent){
 export function typewriterReveal(msgEl,msPerChar,startDelayMs=0){
   if(msgEl._revealTimer)clearTimeout(msgEl._revealTimer);
   const units=[],recs=[];
+  // WORDS MUST NOT JUMP LINES AS THEY GROW (Wyatt, 2026-08-01). Emptying the text node and refilling
+  // it means the line breaks are recomputed on every character — so a word starts on one line, grows
+  // past the edge, and hops down to the next. Reserving the layout up front removes the cause rather
+  // than compensating for it.
+  //
+  // Each text node becomes TWO adjacent spans holding the SAME characters in the same order:
+  //   [shown]  the revealed prefix
+  //   [hidden] the rest, visibility:hidden — which still occupies its exact layout box
+  // Characters move from hidden to shown. Because the two spans together always contain the full
+  // text, the browser's line breaking is IDENTICAL to the finished message from the very first
+  // frame: every word is written on the line it will end up on, and nothing ever reflows.
+  //
+  // Two spans per text node, not one per character — the cheap version of this idea. A break
+  // opportunity comes from the text content (UAX #14), never from an inline element boundary, so
+  // splitting mid-word across the two spans cannot introduce a break the full text would not have.
+  //
+  // Bonus, and it matters: the box's natural height is now correct at ANY point in the reveal, so
+  // measurePanelHeight() can no longer read a short box mid-type. That was a real bug twice.
+  const textNodes=[];
   const walker=document.createTreeWalker(msgEl,NodeFilter.SHOW_TEXT|NodeFilter.SHOW_ELEMENT);
   let n;
   while(n=walker.nextNode()){
-    if(n.nodeType===Node.TEXT_NODE){
-      if(!n.nodeValue)continue;
-      const rec={node:n,chars:[...n.nodeValue],shown:0,dirty:false};
-      n.nodeValue="";
-      recs.push(rec);
-      // still one pacing unit per code point, so the timing arithmetic below is untouched — but
-      // the unit now points at its owning node record instead of carrying a character to write
-      for(let i=0;i<rec.chars.length;i++)units.push({rec});
-    }else if(n.tagName==="IMG"){
-      n.style.opacity="0";n.style.transition="opacity .1s";
-      units.push({img:n});
-    }
+    if(n.nodeType===Node.TEXT_NODE){ if(n.nodeValue)textNodes.push(n); }
+    else if(n.tagName==="IMG"){ n.style.opacity="0";n.style.transition="opacity .1s"; units.push({img:n,_dom:n}); }
   }
+  // Replace after the walk — mutating the tree during it would invalidate the walker.
+  for(const tn of textNodes){
+    const chars=[...tn.nodeValue];
+    const shownEl=document.createElement("span");
+    const hiddenEl=document.createElement("span");
+    hiddenEl.style.visibility="hidden";
+    hiddenEl.textContent=tn.nodeValue;
+    const parent=tn.parentNode;
+    parent.insertBefore(shownEl,tn);
+    parent.insertBefore(hiddenEl,tn);
+    parent.removeChild(tn);
+    const rec={shownEl,hiddenEl,chars,shown:0,dirty:false};
+    recs.push(rec);
+    // still one pacing unit per code point, so the timing arithmetic below is untouched
+    for(let i=0;i<chars.length;i++)units.push({rec});
+  }
+  // Images were pushed during the walk and text after it, so restore document order for pacing.
+  units.sort((a,b)=>{
+    const ea=a.img||a.rec.shownEl, eb=b.img||b.rec.shownEl;
+    if(ea===eb)return 0;
+    const pos=ea.compareDocumentPosition(eb);
+    return (pos&Node.DOCUMENT_POSITION_FOLLOWING)?-1:1;
+  });
   return new Promise(resolve=>{
     const total=units.length;
     if(!total){resolve();return;}
@@ -797,7 +829,7 @@ export function typewriterReveal(msgEl,msPerChar,startDelayMs=0){
       // one write per touched node per tick, instead of one per character
       for(let i=0;i<recs.length;i++){
         const r=recs[i];
-        if(r.dirty){r.node.nodeValue=r.chars.slice(0,r.shown).join("");r.dirty=false;}
+        if(r.dirty){r.shownEl.textContent=r.chars.slice(0,r.shown).join("");r.hiddenEl.textContent=r.chars.slice(r.shown).join("");r.dirty=false;}
       }
       if(revealed<total)msgEl._revealTimer=setTimeout(step,pollMs);
       else resolve();
