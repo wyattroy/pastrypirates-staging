@@ -310,7 +310,7 @@ export const GHOST_FADE_MS=800;
 // would be wrong. #actionPanel is a singleton element, so this guards against TIME (a late
 // .then()), not against which node to unhide.
 let panelSeq=0;
-// Resolver for the CURRENT message's height release — see applyPanelHeight's `settled`.
+// Resolver for the CURRENT message's reveal — runHeightSequence waits on it before SETTLED.
 let panelRevealSettle=null;
 // D-02 (18-05): sizes a REMOTE decision's host-side arm-defer window from the ACTOR's own prompt
 // text (never this browser's own shorter spectator line — see panel()'s clock-defer block below).
@@ -349,6 +349,11 @@ export function panel(html,needsAction=false){
   // still live in flow — offsets are relative to #apGridInner, which is already
   // position:relative (index.html) — BEFORE inner.innerHTML wipes it out of the DOM below.
   const ghostRect=outgoing?{top:outgoing.offsetTop,left:outgoing.offsetLeft,width:outgoing.offsetWidth,height:outgoing.offsetHeight}:null;
+  // RULE 1 — PIN BEFORE YOU SWAP. Resolve the row to a real px value while the OLD content is still
+  // in place. Without this the row may be sitting at max-content, and the instant innerHTML lands
+  // the box collapses to the new content's blanked height — which is the box shrinking under a
+  // still-fading ghost that the last round measured at 66px -> 26px during the fade.
+  const fromH=pinCurrentHeight();
   inner.innerHTML=html;
   if(ghost){
     ghost.classList.add("fadeOut");
@@ -439,16 +444,16 @@ export function panel(html,needsAction=false){
   // so anything measured after it reads an empty box. (That is exactly the regression the first
   // version of this sequence shipped: the whole resize was deferred, it measured the blank, and the
   // buttons were clipped at 316px.)
-  const fadeMs=(ghost&&!reduced)?GHOST_FADE_MS:0;
-  if(!html){resizePanel(false);}
+  // RULE 2 — MEASURE WITH THE TEXT PRESENT. typewriterReveal() below blanks every text node
+  // synchronously, so this must happen first or it reads an empty box.
+  let canReveal=Promise.resolve();
+  if(!html){ heightSeq++; resizePanel(false); }
   else{
     const targetH=measurePanelHeight();
-    // `revealSettled` is resolved by the reveal below — the row stays pinned at targetH for the
-    // whole type-in and is only released to max-content once the text has finished arriving.
-    let settleReveal; const revealSettled=new Promise(res=>{settleReveal=res;});
+    // The reveal's completion, promised now and resolved further down once typewriterReveal exists.
+    let settleReveal; const revealDone=new Promise(res=>{settleReveal=res;});
     panelRevealSettle=settleReveal;
-    if(fadeMs)setTimeout(()=>applyPanelHeight(targetH,revealSettled),fadeMs); // phase 2, after the fade
-    else applyPanelHeight(targetH,revealSettled);                             // no ghost: nothing to wait for
+    canReveal=runHeightSequence({ghostEl:(ghost&&!reduced)?ghost:null,targetH,fromH,revealDone});
   }
   // notes/edits #1: every message text types in one character at a time, whether it's passive
   // narration or an action prompt with buttons — see typewriterReveal() for how. The returned
@@ -468,7 +473,9 @@ export function panel(html,needsAction=false){
   //
   // Still handed to typewriterReveal()'s existing startDelay, so `_revealDone` is assigned before
   // panel() returns and flash()'s contract is untouched.
-  const revealDone=msgEl?typewriterReveal(msgEl,REVEAL_MS_PER_CHAR,fadeMs?fadeMs+RESIZE_MS:0):Promise.resolve();
+  // RULE 3 — the reveal starts on the sequence's own SIGNAL (fade done, then resize done), never on
+  // a copy of the CSS durations. The text is blanked synchronously either way.
+  const revealDone=msgEl?typewriterReveal(msgEl,REVEAL_MS_PER_CHAR,canReveal):Promise.resolve();
   if(msgEl)msgEl._revealDone=revealDone;
   // Release the pinned height only once this message's text has fully arrived (or immediately if
   // there is no message to reveal). Captured locally so a NEWER panel() call cannot resolve an
@@ -567,57 +574,108 @@ export function panelRevealDone(){
 //   - panel() stays synchronous and `_revealDone` is still assigned before it returns: the delay is
 //     handed to typewriterReveal()'s existing startDelay parameter, which is what made this
 //     restructure possible without touching flash()'s contract.
-// MEASURE and APPLY are separate, and that separation is load-bearing (2026-08-01, second pass).
+// ============================ THE PANEL HEIGHT, AND ONLY HERE ============================
 //
-// The first version of the swap sequence deferred the WHOLE of resizePanel() to the end of the
-// fade — which silently broke it, because typewriterReveal() BLANKS every text node the moment it
-// is called, synchronously inside panel(). Measuring 800ms later therefore measured an EMPTY box,
-// pinned the row to that height, and clipped the buttons. Wyatt caught it immediately at 316px.
+// Four rewrites of this box all failed the same way: SEVERAL places decided the height, at times
+// that were not coordinated, and whichever timer arrived first won. The measured symptoms differed
+// each round (overshoot-then-snap; a box collapsing under a still-fading ghost; a row released to
+// max-content while the text was blanked, so it stepped up line by line) but the cause never did.
 //
-// So: measure SYNCHRONOUSLY, while the full text is still in the DOM, and apply that number later.
-// Height is still set exactly once per message; only the moment of application moves.
+// So the height is now a pure function of an explicit PHASE, and exactly one owner drives it:
+//
+//   FADING     frozen at the OUTGOING message's height — pinned in px BEFORE the DOM is swapped,
+//              which is the step whose absence let the box collapse the instant the new (blanked)
+//              content landed
+//   RESIZING   animating, once, to the INCOMING message's measured height
+//   REVEALING  pinned at that height while the text types in
+//   SETTLED    released to max-content, so a LATER re-wrap (a resize, a late icon, a font swap)
+//              grows the box instead of being clipped by it
+//
+// Rules that keep it true:
+//   1. PIN BEFORE YOU SWAP. Nothing may collapse the box mid-sequence.
+//   2. MEASURE WITH THE TEXT PRESENT. typewriterReveal() blanks it synchronously; measuring after
+//      that reads an empty box (shipped once, clipped the buttons at 316px).
+//   3. ADVANCE ON REAL EVENTS — animationend, transitionend — with timers only as BACKSTOPS. The
+//      duplicated-constant approach is what CR-01 records going wrong.
+//   4. SKIP the resize when the height does not change. Most messages are the same height; they
+//      should pay nothing.
+//   5. ONE CANCELLATION TOKEN. A new message aborts the old sequence, so two can never both drive.
+let heightSeq=0;
+const RESIZE_BACKSTOP=RESIZE_MS+120;
+// Freeze the row exactly where it is right now, resolving max-content to a real px value. Called
+// BEFORE any DOM swap — this is rule 1, and its absence was the last bug.
+function pinCurrentHeight(){
+  const grid=$("apGrid");if(!grid)return 0;
+  const cur=getComputedStyle(grid).gridTemplateRows;
+  grid.style.transition="none";
+  grid.style.gridTemplateRows=cur;
+  void grid.offsetHeight;      // commit the pin before the transition is restored
+  grid.style.transition="";
+  return parseFloat(cur)||0;
+}
+// Wait for a real event, with a timer backstop. Resolves once, whichever arrives first.
+function once(el,type,backstopMs){
+  return new Promise(res=>{
+    let done=false;
+    const fire=()=>{if(done)return;done=true;el.removeEventListener(type,h);res();};
+    const h=e=>{if(type==="transitionend"&&e.propertyName!=="grid-template-rows")return;fire();};
+    el.addEventListener(type,h);
+    setTimeout(fire,backstopMs);
+  });
+}
 export function measurePanelHeight(minHeight=0){
   const grid=$("apGrid"),inner=$("apGridInner");if(!grid)return 0;
   const from=getComputedStyle(grid).gridTemplateRows;
   grid.style.transition="none";
   grid.style.gridTemplateRows="max-content";
   const h=Math.max(inner.offsetHeight,minHeight); // natural height of the FINISHED message
-  grid.style.gridTemplateRows=from;               // snap back; nothing animates from this probe
+  grid.style.gridTemplateRows=from;
   void grid.offsetHeight;
   grid.style.transition="";
   return h;
 }
-export function applyPanelHeight(h,settled){
-  const grid=$("apGrid");if(!grid)return;
-  grid.style.gridTemplateRows=h+"px";             // one smooth animation to the measured height
-  // SAFETY NET — but NOT until the content has actually arrived.
-  //
-  // Releasing the row to max-content is what makes clipping impossible afterwards: if anything
-  // later grows the content (a resize re-wrap, a late icon, a font swap) the box grows with it.
-  // The catch, measured in Wyatt's second recording: released on a plain 180ms timer it fires while
-  // the typewriter has the text BLANKED, so max-content reads a nearly-empty box, collapses the row
-  // (202 -> 162 in one frame), and the box then STEPS back up line by line as the text types —
-  // eight height changes across one message.
-  //
-  // So the release waits for `settled`: the reveal's own completion promise. At that moment the
-  // content is at its final size, so max-content equals h and the swap is invisible — while every
-  // LATER growth is still protected. Without a promise (the resize/orientationchange path, where
-  // no reveal is running) a short timer is correct and is used instead.
-  const release=()=>{ if(grid.style.gridTemplateRows===h+"px")grid.style.gridTemplateRows="max-content"; };
-  if(settled&&typeof settled.then==="function"){
-    settled.then(release,release);
-    // Backstop: a reveal that is interrupted (a newer panel() call replacing this message
-    // mid-type) may never resolve this particular promise. Without a timer the row would stay
-    // pinned in px forever and the safety net would never engage. Generous — it must not beat a
-    // legitimately long reveal, only rescue a dead one.
-    setTimeout(release,15000);
-  }
-  else setTimeout(release,RESIZE_MS+40);
+// Runs FADING -> RESIZING -> REVEALING -> SETTLED for one message. Returns a promise that resolves
+// when the reveal may START (i.e. once the box has finished moving) — that promise is handed to
+// typewriterReveal as its start SIGNAL, which is what keeps the two in step without either one
+// duplicating the other's duration.
+function runHeightSequence({ghostEl,targetH,fromH,revealDone}){
+  const seq=++heightSeq;
+  const grid=$("apGrid");
+  const alive=()=>seq===heightSeq;
+  const settle=()=>{
+    // SETTLED. Only after the text has fully arrived: released earlier, max-content reads a blanked
+    // box and the row collapses, then steps up line by line as the characters land.
+    if(!alive())return;
+    if(grid.style.gridTemplateRows===targetH+"px")grid.style.gridTemplateRows="max-content";
+  };
+  const fading = ghostEl ? once(ghostEl,"animationend",GHOST_FADE_MS+120) : Promise.resolve();
+  const canReveal = fading.then(()=>{
+    if(!alive())return;
+    // RESIZING — skipped entirely when the height is unchanged (rule 4).
+    if(Math.abs(targetH-fromH)<1)return;
+    grid.style.gridTemplateRows=targetH+"px";
+    return once(grid,"transitionend",RESIZE_BACKSTOP);
+  });
+  canReveal.then(()=>{ if(alive())revealDone.then(settle,settle); });
+  return canReveal;
 }
-export function resizePanel(hasContent,minHeight=0){
+// THE RESIZE / ORIENTATIONCHANGE PATH (src/main.js). Deliberately NOT the swap sequence.
+//
+// A window resize re-wraps the text, so the height that was measured for this message is stale by
+// definition — and if a reveal is running, the text is partially blanked, so re-measuring would
+// read a SHORT box and clip the rest as it types. Both traps are avoided by not measuring at all:
+// max-content always fits whatever is in the box, at any width, at any point in a reveal.
+//
+// There is nothing to animate here either — the user is dragging the window, and the box should
+// track their drag rather than easing 180ms behind it.
+//
+// Any in-flight swap sequence is CANCELLED (rule 5): its measured target belongs to the old width.
+// The reveal itself continues untouched; only the height stops being driven by it. The next swap
+// re-pins from whatever max-content resolves to, so the sequence picks up cleanly from here.
+export function resizePanel(hasContent){
   const grid=$("apGrid");if(!grid)return;
-  if(!hasContent){grid.style.gridTemplateRows="0px";return;}
-  applyPanelHeight(measurePanelHeight(minHeight));
+  heightSeq++;                                   // cancel any sequence mid-flight
+  grid.style.gridTemplateRows=hasContent?"max-content":"0px";
 }
 // Walks msgEl's real DOM in document order and reveals it character-by-character (text nodes)
 // and unit-by-unit (atomic elements like <img>), instead of faking a type-in with a CSS wipe — a
@@ -653,6 +711,11 @@ export function resizePanel(hasContent,minHeight=0){
 // until its first tick. The delay only moves that first tick.
 // The target is clamped at 0 below, so a negative elapsed reveals nothing while the poll loop keeps
 // scheduling — which is what makes the delay work without a separate timer.
+// `startDelayMs` may be a NUMBER (a fixed delay) or a PROMISE (a start SIGNAL). The promise form is
+// what lets the swap sequence drive the reveal off real events — the ghost's animationend, the
+// grid's transitionend — instead of a duplicated copy of the CSS durations, which is the class of
+// bug CR-01 recorded. Either way the text is BLANKED synchronously on call, so the incoming line is
+// invisible from the instant the DOM swaps; only the first TICK waits.
 export function typewriterReveal(msgEl,msPerChar,startDelayMs=0){
   if(msgEl._revealTimer)clearTimeout(msgEl._revealTimer);
   const units=[],recs=[];
@@ -676,7 +739,10 @@ export function typewriterReveal(msgEl,msPerChar,startDelayMs=0){
     const total=units.length;
     if(!total){resolve();return;}
     let revealed=0;
-    const start=performance.now()+startDelayMs;
+    const isSignal=startDelayMs&&typeof startDelayMs.then==="function";
+    // With a signal, the clock starts when it resolves; with a number, at now+delay.
+    let start=isSignal?Infinity:performance.now()+startDelayMs;
+    if(isSignal)startDelayMs.then(()=>{start=performance.now();},()=>{start=performance.now();});
     const pollMs=Math.max(16,Math.min(msPerChar,32));
     const step=()=>{
       // Math.max(0,…): before `start` the elapsed is negative, which would floor to a negative
