@@ -1,0 +1,13 @@
+{
+  "name": "pastry-pirates",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node scripts/determinism_baseline.js --verify && node scripts/engine_contract_check.js && node scripts/dlog_replay_test.js && node scripts/net_registry_test.js && node scripts/net_contract_check.js && node scripts/state_contract_check.js && node scripts/module_graph_check.js && node scripts/ui_contract_check.js && node scripts/wind_dot_contract_check.js && node scripts/no_undef_check.js && node scripts/host_guest_parity_check.js && node scripts/hail_ranking_test.js && node scripts/storm_moored_reason_test.js && node scripts/bot_storm_narration_test.js && node scripts/narration_test.js && node scripts/narration_flow_test.js && node scripts/rim_sweep_trace_test.js && node scripts/extract_narration_lines.js && node scripts/economy_guard_test.js && node scripts/narration_audit_check.js && node scripts/audio_mapping_test.js",
+    "test:determinism": "node scripts/determinism_baseline.js --verify",
+    "test:determinism-diff": "node scripts/determinism_diff.js",
+    "audit:extract": "node scripts/extract_narration_lines.js",
+    "audit:check": "node scripts/narration_audit_check.js"
+  }
+}

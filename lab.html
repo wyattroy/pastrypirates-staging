@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pastry Pirates on the Sugar Seas — Lab</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --teal: #29a3b2; --mint: #45dfa6; --orange: #fdb63d; --lemon: #fef48b; --pink: #fdaecb;
+    --sea: #d3f0f4; --sea2: #bfe8ee; --ink: #1f4249; --parch: #ffffff; --paleblue: #dff3fb;
+    --parch2: #fff6c0; --line: #cfe7eb; --accent: #f59f2d;
+    --p0: #f2679e; --p1: #1d96a6; --p2: #27c78d; --p3: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif; background: #fff; color: var(--ink); }
+  header { padding: 10px 18px; border-bottom: 3px solid var(--teal); display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 22px; margin: 0; letter-spacing: 1px; color: var(--teal); }
+  header .sub { font-size: 13px; opacity: .7; }
+  #layout { display: flex; gap: 14px; padding: 14px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  #left { flex: 0 0 auto; }
+  #right { flex: 1 1 340px; min-width: 320px; max-width: 560px; }
+  #board { background: linear-gradient(160deg, var(--sea), var(--sea2)); border: 2px solid #9edbe5; border-radius: 10px; display: block; }
+  .panel { background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(41,163,178,.08); }
+  .panel h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 2px solid var(--mint); padding-bottom: 5px; color: var(--teal); }
+  details.panel summary { cursor: pointer; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--teal); font-weight: bold; border-bottom: 2px solid var(--mint); padding-bottom: 5px; margin-bottom: 8px; }
+  #scrub { width: 100%; margin-top: 8px; }
+  #controls { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font-family: inherit; font-size: 14px; padding: 6px 14px; border: 1.5px solid var(--teal); border-radius: 7px; background: var(--lemon); cursor: pointer; color: var(--ink); }
+  button:hover { background: #fdea6d; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type=range] { accent-color: var(--accent); }
+  #scrub { width: 100%; margin-top: 8px; }
+  select, input[type=number] { font-family: inherit; font-size: 13px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+  .rulegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; font-size: 13.5px; }
+  .rulegrid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; }
+  .rulegrid label span { flex: 1; }
+  .player-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; }
+  .player-row .dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; border: 1.5px solid rgba(0,0,0,.35); }
+  .player-row .pname { font-weight: bold; width: 118px; }
+  .player-row .coins { width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+  .chips { display: flex; gap: 3px; flex-wrap: wrap; }
+  .chip { font-size: 22px; padding: 1px 5px; border-radius: 6px; background: #fbe1e0; border: 1px solid #e8a6a3; opacity: .8; }
+  .chip.have { opacity: 1; background: #dcfaee; border-color: #27c78d; }
+  .chip.extra { opacity: 1; background: #fff6c0; border-color: #f5a623; }
+  .crown { font-size: 15px; }
+  #log { max-height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.45; }
+  #boardwrap { position: relative; width: 640px; }
+  #actionPanel { margin: 8px 0; width: auto; background: var(--paleblue); border: 2px solid var(--teal);
+    border-radius: 10px; padding: 8px 12px; transition: background .25s; }
+  #actionPanel.needsAction { background: var(--lemon); }
+  .apMsg { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .apBtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .apBtn { background: #fff; font-size: 14px; }
+  .apBtn:hover { background: #eafbf4; }
+  /* ---- battle scoreboard ---- */
+  .btl { text-align: center; }
+  .btl-hd { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
+  .btl-hd .rnd { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .55; font-weight: 700; }
+  .btl-body { display: flex; align-items: flex-start; justify-content: center; gap: 8px; }
+  .btl-col { flex: 1 1 0; max-width: 190px; padding: 8px 6px; border-radius: 12px; border: 2px solid transparent; transition: background .2s, border-color .2s, box-shadow .2s; }
+  .btl-col.live { background: #fff; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,166,35,.18); }
+  .btl-col .who { font-weight: 800; font-size: 14px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btl-col .role { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .5; margin-bottom: 7px; }
+  .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 30px; }
+  .coin { width: 74px; height: 74px; margin: 0 auto 9px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; letter-spacing: .5px; border: 3px solid; position: relative; }
+  .coin.wait { background: #f4f4f4; border-color: #dcdcdc; color: #c2c2c2; font-size: 24px; }
+  .coin.spin { background: radial-gradient(#ffe9a8, #f5c451); border-color: #e0a500; color: transparent; animation: coinspin .34s linear infinite; }
+  .coin.heads { background: radial-gradient(#fff2c4, #f5b942); border-color: #d98e00; color: #7a4a00; }
+  .coin.tails { background: radial-gradient(#5b6b7a, #2f3b47); border-color: #1c2530; color: #e6edf4; }
+  .coin.win { box-shadow: 0 0 0 4px rgba(39,199,141,.55); }
+  @keyframes coinspin { 0% { transform: rotateX(0); } 100% { transform: rotateX(360deg); } }
+  .coin .bs { position: absolute; top: -9px; right: -9px; font-size: 16px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+  /* ---- flippenator: the one physical spot every coin flip happens ---- */
+  .flippenator { display: flex; align-items: center; gap: 14px; }
+  .flipPlank { flex: 0 0 auto; width: 108px; height: 76px; border-radius: 12px;
+    background: linear-gradient(160deg, #b3814a, #8a5f2f); display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,.28); }
+  .flipPlank .coin { width: 56px; height: 56px; font-size: 10.5px; margin: 0; }
+  .flipPlank .coin.spin { font-size: 20px; }
+  .flipBtn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; padding: 0;
+    font-size: 11px; font-weight: 800; letter-spacing: .5px; border: 2px solid #ddd; background: #f2f2f2; color: #bbb; }
+  .flipBtn.active { border-color: var(--accent); background: var(--orange); color: #fff;
+    cursor: pointer; animation: flipglow 1s ease-in-out infinite; }
+  @keyframes flipglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,45,.5); } 50% { box-shadow: 0 0 0 9px rgba(245,159,45,0); } }
+  #shotClockNum { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+  #shotClockWarn { font-size: 12.5px; font-weight: 700; margin-top: 3px; min-height: 16px; }
+  #shotClockPanel.urgent { animation: clockurgent 1s ease-in-out infinite; }
+  #shotClockPanel.urgent #shotClockWarn { color: #a32d2d; }
+  @keyframes clockurgent { 0%, 100% { background: #fff; } 50% { background: #fdeaea; } }
+  .pips { display: flex; justify-content: center; gap: 6px; }
+  .pip { width: 15px; height: 15px; border-radius: 50%; background: #ececec; border: 2px solid #d2d2d2; transition: transform .2s, box-shadow .2s; }
+  .pip.on { box-shadow: 0 0 7px rgba(0,0,0,.28); transform: scale(1.14); }
+  .btl-result { margin-top: 11px; font-weight: 700; font-size: 13.5px; min-height: 19px; }
+  .btl-result .score { color: #1c9e63; }
+  .btl-result .cancel { color: #8a8a8a; }
+  /* battle decisions live inside the scoreboard — coins stay visible above them */
+  .btl-prompt { margin-top: 11px; text-align: center; }
+  .btl-prompt .msg { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+  .btl-prompt .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .btlBtn { font-size: 14px; }
+  .btl-wait { margin-top: 11px; font-weight: 700; font-size: 13.5px; color: #8a8a8a; }
+  .bubble { position: absolute; background: #fff; border: 2px solid var(--teal); border-radius: 9px;
+    padding: 3px 9px; font-size: 12px; font-weight: 500; max-width: 280px; line-height: 1.35;
+    transform: translate(-50%, -108%); box-shadow: 0 2px 6px rgba(31,66,73,.18);
+    pointer-events: none; z-index: 5; transition: opacity .35s; }
+  .activering { animation: ringpulse .8s ease-in-out infinite alternate; }
+  @keyframes ringpulse { from { opacity: .35; } to { opacity: 1; } }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -5px;
+    border: 5px solid transparent; border-top-color: inherit; border-bottom: none; }
+  .pop { animation: popfloat 1.25s ease-out forwards; pointer-events: none; }
+  @keyframes popfloat {
+    0% { opacity: 0; transform: translateY(8px) scale(.6); }
+    18% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-32px) scale(1.3); }
+  }
+  #log .line { padding: 1.5px 4px; border-radius: 4px; }
+  #log .line.cur { background: var(--lemon); }
+  #log .battle { color: #d6337f; }
+  #log .trade { color: #147a8a; }
+  #log .roundhdr { font-weight: bold; opacity: .65; margin-top: 4px; border-top: 1px dashed var(--line); }
+  #statsPanel table, #batchPanel table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  #statsPanel td, #batchPanel td, #batchPanel th { padding: 2.5px 6px; border-bottom: 1px solid #e3f2f5; text-align: left; }
+  #batchPanel th { border-bottom: 1.5px solid var(--line); }
+  .winner-banner { font-size: 16px; font-weight: bold; padding: 8px 10px; background: var(--lemon); border: 1.5px solid var(--orange); border-radius: 8px; margin-bottom: 8px; }
+  .awardsRow { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  .awardCard { flex: 1 1 100px; text-align: center; border: 2px solid; border-radius: 12px; padding: 8px 6px; background: #fff; }
+  .awardIcon { font-size: 22px; line-height: 1; }
+  .awardLabel { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; opacity: .6; margin: 3px 0 1px; }
+  .awardWinner { font-weight: 800; font-size: 13.5px; }
+  .awardValue { font-size: 11.5px; opacity: .7; }
+  .windbox { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .muted { opacity: .6; font-size: 12px; }
+  .rules { font-size: 13.5px; line-height: 1.55; }
+  .rules h4 { margin: 12px 0 4px; color: var(--teal); font-size: 14px; }
+  .rules p { margin: 6px 0; }
+  .num3 { width: 58px; }
+  /* ---- recipe draft cards: an aged treasure-map recipe leaf ---- */
+  .apBtns.recipes { gap: 14px; }
+  .recipeCard { flex: 1 1 200px; min-width: 190px; text-align: left; padding: 0; overflow: hidden;
+    border: 2px solid #a07a45; border-radius: 7px; color: #4a3223;
+    /* mottled, tea-stained parchment built from stacked radial stains */
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #f7edd2, #ecd9ac);
+    box-shadow: inset 0 0 24px rgba(120,80,35,.30), 0 2px 7px rgba(70,45,20,.22); }
+  .recipeCard:hover { border-color: #8a6535;
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #fbf0d4, #f0dcac);
+    box-shadow: inset 0 0 24px rgba(120,80,35,.30), 0 7px 18px rgba(90,55,20,.34); }
+  .recipeTitle { color: #5b3a1f; font-weight: 800; font-size: 16px; letter-spacing: .3px;
+    font-family: Georgia, "Times New Roman", serif; padding: 12px 12px 9px; margin: 0 10px;
+    display: flex; align-items: center; justify-content: center; gap: 7px; text-align: center;
+    border-bottom: 3px double #b48a52; text-shadow: 0 1px 0 rgba(255,250,235,.5); }
+  .recipeDesc { padding: 9px 14px 3px; font-size: 12.5px; line-height: 1.45; color: #6b4a2c;
+    font-style: italic; font-family: Georgia, "Times New Roman", serif; }
+  .recipeList { list-style: none; margin: 0; padding: 8px 14px 12px; }
+  .recipeList li { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 14px;
+    font-weight: 600; color: #4a3223; border-bottom: 1px dashed rgba(120,80,40,.35); }
+  .recipeList li:last-child { border-bottom: none; }
+  .recipeList .ri { font-size: 19px; width: 24px; text-align: center; flex: 0 0 auto; }
+  .recipeList .rn { flex: 1; }
+  .recipeList .rc { font-size: 12px; font-weight: 500; font-style: italic; color: #9a6f3e;
+    flex: 0 0 auto; padding-left: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏴‍☠️ Pastry Pirates <span style="font-weight:normal;font-style:italic">on the Sugar Seas</span></h1>
+  <span class="sub">the rules lab — tweak → watch → scrub → run the numbers</span>
+  <a href="index.html" class="sub" style="color:var(--teal);font-weight:bold;text-decoration:none;border-bottom:1.5px solid var(--teal);">⚓ Play Online</a>
+</header>
+<div id="layout">
+  <div id="left">
+    <div id="boardwrap">
+      <svg id="board" width="640" height="640"></svg>
+    </div>
+    <div style="margin-top:8px" class="windbox"><span id="roundLabel" class="muted"></span></div>
+  </div>
+  <div id="right">
+    <div class="panel">
+      <h3>Captains</h3>
+      <div id="players"></div>
+    </div>
+    <div class="panel">
+      <h3>Flippenator</h3>
+      <div class="flippenator">
+        <div class="flipPlank"><div id="flipCoinWrap"><div class="coin wait">?</div></div></div>
+        <button id="flipBtn" class="flipBtn" type="button" disabled>FLIP</button>
+      </div>
+    </div>
+    <div class="panel" id="shotClockPanel" style="display:none;text-align:center">
+      <div id="shotClockNum">30</div>
+      <div id="shotClockWarn" class="muted"></div>
+    </div>
+    <div id="actionPanel" style="display:none"></div>
+    <div class="panel">
+      <h3>Captain's log</h3>
+      <div id="log"></div>
+    </div>
+    <div class="panel" id="statsWrap" style="display:none">
+      <h3>End of voyage</h3>
+      <div id="statsPanel"></div>
+    </div>
+    <details class="panel">
+      <summary style="cursor:pointer;color:var(--teal);font-weight:bold">How to play</summary>
+      <div class="rules" style="margin-top:8px">
+        <p>Collect <b>every ingredient on your recipe map</b> (the chips by your name), then sail home to
+        <b>⚓ the Isle of Tortuga</b> in the center and dock to win.</p>
+        <p>Each turn: the <b>wind</b> drifts you 1 square (2 in a storm) — moored ships are safe. Then you may
+        <b>sail</b> up to 3 squares for 1🌕. Then <b>act</b>: dock at an island to flip for a crate, attack an
+        adjacent ship, parley (trade) with anyone, or fish for coins.</p>
+        <p>Watch the yellow prompt panel by the captains list — when it's your turn, your choices appear there. The
+        🌀 trade winds around the rim sweep you clockwise around the world for a fast shortcut.</p>
+      </div>
+    </details>
+    <div class="panel">
+      <h3>Helm</h3>
+      <div id="controls">
+        <button id="btnNew">⚓ New game</button>
+        <button class="primary" id="btnResume" style="display:none">⛵ Resume voyage</button>
+        <button id="btnPlay">▶ Play</button>
+        <button id="btnStep">Step</button>
+        <button id="btnEnd">⏭ To end</button>
+        <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-left:6px">speed
+        <input type="range" id="speed" min="0.5" max="40" step="0.5" value="0.5" style="width:110px"></span>
+      </div>
+      <input type="range" id="scrub" min="0" max="0" value="0">
+    </div>
+    <details class="panel">
+      <summary>Ship's Articles (simulation settings)</summary>
+      <div class="rulegrid">
+        <label><span>Players</span><select id="cfgPlayers"><option>2</option><option>3</option><option selected>4</option></select></label>
+        <label><span>Board size</span><select id="cfgGrid"><option>9</option><option>11</option><option>13</option><option selected>15</option></select></label>
+        <label><span>Islands</span><select id="cfgIslands"><option>5</option><option>6</option><option selected>7</option><option>8</option><option>9</option></select></label>
+        <label><span>Recipe size</span><select id="cfgRecipe"><option>3</option><option>4</option><option selected>5</option><option>6</option></select></label>
+        <label><span>Crates per island</span><select id="cfgCrates"><option value="-1" selected>players − 1</option><option value="0">unlimited</option><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+        <label><span>Starting coins</span><input class="num3" type="number" id="cfgCoins" value="3" min="0" max="10"></label>
+        <label><span>Powder (attack cost)</span><select id="cfgPowder"><option>0</option><option>1</option><option selected>2</option><option>3</option></select></label>
+        <label><span>Broadside (reflip)</span><select id="cfgBroadside"><option value="free">free, once</option><option value="paid" selected>1 coin, once</option><option value="none">none</option></select></label>
+        <label><span>Buy on tails (3c)</span><input type="checkbox" id="cfgDockBuy" checked></label>
+        <label><span>Ship's hold (any cargo)</span><input type="checkbox" id="cfgMerchant" checked></label>
+        <label><span>Parley (trade anywhere)</span><input type="checkbox" id="cfgParley" checked></label>
+        <label><span>Harbor tax refund (+1c)</span><input type="checkbox" id="cfgTradeBonus" checked></label>
+        <label><span>Raider (loser-attacker pays 2c)</span><input type="checkbox" id="cfgAsym"></label>
+        <label><span>Rotate first player</span><input type="checkbox" id="cfgRotate" checked></label>
+        <label><span>Storm chance</span><select id="cfgStorm"><option value="0">never</option><option value="0.125" selected>1 in 8</option><option value="0.25">1 in 4</option></select></label>
+        <label><span>Island size</span><select id="cfgIslandSize"><option value="tetris" selected>tetris (3–4)</option><option value="1,1">1×1</option><option value="2,2">2×2</option><option value="2,3">2×3</option></select></label>
+        <label><span>Single dock per island</span><input type="checkbox" id="cfgSingleDock" checked></label>
+        <label><span>Sardines (tails fish = 1c)</span><input type="checkbox" id="cfgSardine" checked></label>
+        <label><span>Unlimited dock flips (no re-dock rule)</span><input type="checkbox" id="cfgUnlimitedDock" checked></label>
+        <label><span>Seed</span><input class="num3" type="number" id="cfgSeed" value="7"></label>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="presetDefault" title="15×15 round world, 7 islands, recipe 5, single docks, paid broadside, sardines, trade-wind currents around the rim">🌍 Default setup</button>
+      </div>
+      <div class="muted" style="margin-top:6px">Changes apply on ⚓ New game. Strategy dropdowns are per captain, above.</div>
+      <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
+        <b style="font-size:13px;letter-spacing:1px;color:var(--teal)">BALANCE CHECK</b><br>
+        <button id="btnBatch" style="margin-top:6px">🎲 Run 400 games with these rules</button>
+        <div id="batchPanel" style="margin-top:8px"></div>
+      </div>
+    </details>
+  </div>
+</div>
+<script>
+"use strict";
+/* ================= RNG ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+
+/* ================= Engine (port of cocoa_pirates_sim.py) ================= */
+// first `nIslands` (7) of these are the ingredients in play — kept in the requested order
+const ING_ALL=["wheat","dairy","sugar","eggs","cocoa","spice","vanilla","salt","honey"];
+const ING_EMOJI={wheat:"🌾",eggs:"🥚",sugar:"🍬",cocoa:"🍫",dairy:"🥛",vanilla:"🌼",spice:"🌶️",honey:"🍯",salt:"🧂"};
+const ING_NAME={wheat:"Toasty Wheat",dairy:"Fresh Milk",sugar:"Crystal Sugar",eggs:"Speckled Eggs",
+  cocoa:"Cacao Pods",salt:"Sea Salt",vanilla:"Vanilla Beans",spice:"Hot Cinnamon",honey:"Golden Honey"};
+// the plain baker's term each pirate ingredient stands in for — shown as a gloss on recipe cards
+const ING_PLAIN={wheat:"flour",dairy:"butter & milk",sugar:"sugar",eggs:"eggs",
+  cocoa:"chocolate",salt:"salt",vanilla:"vanilla",spice:"cinnamon",honey:"honey"};
+// worldbuilding (notes/edits #2): every ingredient island has a place-name + a flavorful haul,
+// announced when a pirate docks there. Only the 7 in-play ingredients need entries (nIslands:7).
+const DOCK_PLACE={sugar:"Glitter Bay",vanilla:"Custard Key",spice:"the Spice Isle",
+  wheat:"the Flour Patch",dairy:"Full Cream Folly",eggs:"Clucker's Cove",cocoa:"Cocoa Cabana",
+  salt:"Brineholt",honey:"Honeycomb Hollow"};
+const DOCK_FLAVOR={sugar:"a sack of crystal sugar",vanilla:"rich vanilla beans",
+  spice:"sprigs of red hot cinnamon",wheat:"a sack of toasty wheat",dairy:"some jugs of cool milk",
+  eggs:"sand-speckled eggs",cocoa:"bursting cacao pods",salt:"a scoop of sea salt",honey:"a pot of golden honey"};
+const dockPlace=x=>DOCK_PLACE[x]||"the island";
+const dockFlavor=x=>DOCK_FLAVOR[x]||iname(x);
+const iname=x=>ING_NAME[x]||x;
+const ilabel=x=>ING_EMOJI[x]+" "+iname(x);
+const DIRS={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]};
+const DIRNAME={N:"north",S:"south",E:"east",W:"west"};
+const NAMES=["Capt. Crumble","Capt. Biscotti","Capt. Gingersnap","Capt. Shortbread"];
+const COLORS=["var(--p0)","var(--p1)","var(--p2)","var(--p3)"];
+const HEXCOL=["#f2679e","#1d96a6","#27c78d","#f5a623"];
+const man=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
+
+class Game{
+  constructor(cfg,seed,record){
+    this.cfg=cfg; this.record=record; this.rng=mulberry32(seed);
+    this.seed=seed; this.randCalls=0;
+    const n=cfg.grid; this.home=[Math.floor(n/2),Math.floor(n/2)];
+    // --- round world: pixelated circle + trade-wind rim channel ---
+    this.isRound=!!cfg.roundBoard;
+    this.valid=new Set(); this.rim=new Set(); this.rimHead={};
+    if(this.isRound){
+      const cc=(n-1)/2, r2=(cc+0.4)*(cc+0.4);
+      for(let x=0;x<n;x++)for(let y=0;y<n;y++)
+        if((x-cc)*(x-cc)+(y-cc)*(y-cc)<=r2)this.valid.add(x+","+y);
+      for(const k of this.valid){
+        const [x,y]=k.split(",").map(Number);
+        for(const d of Object.values(DIRS)){
+          const ox=x+d[0],oy=y+d[1];
+          if(ox<0||oy<0||ox>=n||oy>=n||!this.valid.has(ox+","+oy)){this.rim.add(k);break;}
+        }
+      }
+      // quadrants flow CLOCKWISE (N arc carries you to its E end, E arc to its S end, etc.)
+      // a random rotation offset moves the 4 whirlpool drop-off points each game — kept
+      // separate from `deg` (the true geometric angle, still used for arrow rendering below)
+      const rotOffset=this.r()*360;
+      const cells=[...this.rim].map(k=>{
+        const [x,y]=k.split(",").map(Number);
+        const deg=(Math.atan2(y-cc,x-cc)*180/Math.PI+360)%360;
+        const rdeg=(deg+rotOffset)%360;
+        const q=Math.floor(((rdeg+45)%360)/90); // 0=E 1=S 2=W 3=N
+        let a=rdeg; if(q===0&&a>180)a-=360;
+        return {k,x,y,q,a,deg};
+      });
+      const heads={};
+      for(const c of cells)if(!heads[c.q]||c.a>heads[c.q].a)heads[c.q]=c;
+      for(const c of cells)this.rimHead[c.k]=[heads[c.q].x,heads[c.q].y];
+      this.rimCellInfo=cells; // kept for rendering flow arrows
+    }
+    this.ings=ING_ALL.slice(0,cfg.nIslands);
+    // island placement (rectangles of islandW x islandH)
+    const iw=cfg.islandW||1, ih=cfg.islandH||1;
+    const TET=[ // 3–4 block shapes: lines, Ls, corner, square, S, T
+      [[0,0],[1,0],[2,0]],[[0,0],[1,0],[0,1]],
+      [[0,0],[1,0],[2,0],[3,0]],[[0,0],[1,0],[0,1],[1,1]],
+      [[0,0],[1,0],[2,0],[0,1]],[[0,0],[1,0],[1,1],[2,1]],[[0,0],[1,0],[2,0],[1,1]]];
+    const shapeFor=()=>{
+      if(!cfg.tetris){
+        const flip=this.r()<.5, w=flip?ih:iw, h=flip?iw:ih;
+        const s=[];for(let a=0;a<w;a++)for(let b=0;b<h;b++)s.push([a,b]);return s;
+      }
+      let s=TET[Math.floor(this.r()*TET.length)].map(c=>[...c]);
+      const rot=Math.floor(this.r()*4);
+      for(let t=0;t<rot;t++)s=s.map(([x,y])=>[y,-x]);
+      if(this.r()<.5)s=s.map(([x,y])=>[-x,y]);
+      const mx=Math.min(...s.map(c=>c[0])),my=Math.min(...s.map(c=>c[1]));
+      return s.map(([x,y])=>[x-mx,y-my]);
+    };
+    const rects=[];
+    for(let k=0;k<this.ings.length;k++){
+      let done=false;
+      for(const spacing of [3,2,1]){
+        const tops=[]; for(let x=0;x<n;x++)for(let y=0;y<n;y++)tops.push([x,y]);
+        this.shuffle(tops);
+        for(const [x,y] of tops){
+          const shape=shapeFor();
+          const cellsR=shape.map(([a,b])=>[x+a,y+b]);
+          if(cellsR.some(c=>c[0]>=n||c[1]>=n))continue;
+          if(cellsR.some(c=>man(c,this.home)<2))continue;
+          if(this.isRound&&cellsR.some(c=>{
+            const k=c[0]+","+c[1];
+            if(!this.valid.has(k)||this.rim.has(k))return true;
+            // keep a 1-square water lane between every island and the trade winds
+            return Object.values(DIRS).some(d=>this.rim.has((c[0]+d[0])+","+(c[1]+d[1])));
+          }))continue;
+          if(cellsR.some(c=>rects.some(r2=>r2.some(d=>man(c,d)<spacing))))continue;
+          rects.push(cellsR);done=true;break;
+        }
+        if(done)break;
+      }
+    }
+    this.islands={}; this.islandRect={}; this.dockOf={}; this.islandOf={};
+    this.ings.forEach((ing,i)=>{
+      const cellsR=rects[i]||[[0,0]];
+      this.islandRect[ing]=cellsR;
+      for(const c of cellsR)this.islands[c]=ing;
+    });
+    if(cfg.singleDock){
+      // a dock must be reachable by actually sailing there from home — not just have one
+      // open neighbor. Rim (trade-wind) cells are never a valid stopping point (the wind
+      // sweeps you off them before you can act), so flood-fill open water from home,
+      // treating the rim as impassable, exactly like the game's own routing already does.
+      const passable=c=>!this.blocked(c)&&!this.onRim(c)&&this.islands[c[0]+","+c[1]]===undefined;
+      const homeReach=new Set([this.home[0]+","+this.home[1]]);
+      const bq=[this.home];
+      while(bq.length){
+        const c=bq.shift();
+        for(const d of Object.values(DIRS)){
+          const o=[c[0]+d[0],c[1]+d[1]],k=o[0]+","+o[1];
+          if(homeReach.has(k)||!passable(o))continue;
+          homeReach.add(k);bq.push(o);
+        }
+      }
+      // claimed cells are excluded from later ingredients' candidate pools so two docks can
+      // never land on the same tile (each ingredient used to pick independently, so two
+      // adjacent islands could both roll the one open-water cell they share)
+      const claimed=new Set();
+      for(const ing of this.ings){
+        const waters=[];
+        for(const c of this.islandRect[ing]){
+          for(const d of Object.values(DIRS)){
+            const w2=[c[0]+d[0],c[1]+d[1]];
+            if(!this.blocked(w2)&&!this.onRim(w2)&&this.islands[w2]===undefined
+               &&!(w2[0]===this.home[0]&&w2[1]===this.home[1]))waters.push(w2);
+          }
+        }
+        const open=waters.filter(w=>homeReach.has(w[0]+","+w[1]));
+        const free=w=>!claimed.has(w[0]+","+w[1]);
+        let pool=open.filter(free);
+        if(!pool.length)pool=waters.filter(free);
+        if(!pool.length)pool=open.length?open:waters; // last resort: every candidate is taken
+        const chosen=pool.length?pool[Math.floor(this.r()*pool.length)]:this.home;
+        this.dockOf[ing]=chosen;
+        claimed.add(chosen[0]+","+chosen[1]);
+      }
+    }
+    this.dockCells=new Set(Object.values(this.dockOf).map(c=>c[0]+","+c[1]));
+    this.ings.forEach(ing=>{this.islandOf[ing]=cfg.singleDock?this.dockOf[ing]:this.islandRect[ing][0];});
+    const tok=cfg.crates===0?1e9:cfg.crates;
+    this.tokens={}; this.ings.forEach(i=>this.tokens[i]=tok);
+    this.players=cfg.strategies.map((s,i)=>{
+      // two candidate recipe cards to choose from at game start (draft phase)
+      const a=this.sample(this.ings,cfg.recipeSize);
+      let b=this.sample(this.ings,cfg.recipeSize);
+      let tries=0;
+      while(tries++<20&&a.slice().sort().join()===b.slice().sort().join())b=this.sample(this.ings,cfg.recipeSize);
+      return {idx:i,strategy:s,pos:[...this.home],coins:cfg.startCoins,
+        ing:[],recipe:a,recipeChoices:[a,b],firstFlip:new Set(),dockedNow:new Set(),
+        done:false,heads:0,flips:0,corner:null,justDocked:false};
+    });
+    // ships start at Isle of Tortuga's four docks (N/S/E/W of the island)
+    const dirsArr=Object.values(DIRS);
+    this.players.forEach((p,i)=>{const d=dirsArr[i%4];
+      p.pos=[this.home[0]+d[0],this.home[1]+d[1]];});
+    // monopolists pick the most-demanded scarce ingredient to corner
+    if(cfg.crates>=1&&cfg.crates<1e9){
+      for(const p of this.players){
+        if(p.strategy!=="monopolist")continue;
+        const demand=ing=>this.players.filter(q=>q!==p&&q.recipe.includes(ing)).length;
+        p.corner=this.ings.slice().sort((x,y)=>
+          (demand(y)-demand(x))||((p.recipe.includes(y)?1:0)-(p.recipe.includes(x)?1:0)))[0];
+      }
+    }
+    this.round=0;this.battles=0;this.attWins=0;this.trades=0;this.finishOrder=[];this.events=[];this.winner=null;
+  }
+  r(){this.randCalls++;return this.rng();}
+  isHome(c){return c[0]===this.home[0]&&c[1]===this.home[1];}
+  shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(this.r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
+  sample(a,k){const c=[...a];this.shuffle(c);return c.slice(0,k);}
+  flip(p){p.flips++;const h=this.r()<.5;if(h)p.heads++;return h;}
+  key(c){return c[0]+","+c[1];}
+  isIsland(c){return this.islands[c]!==undefined;}
+  ev(o){if(!this.record)return;o.round=this.round;o.wind=this.windNow;o.storm=this.stormNow;
+    o.state=this.players.map(p=>({pos:[...p.pos],coins:p.coins,ing:[...p.ing],done:p.done}));
+    o.tokens={...this.tokens};this.events.push(o);}
+  needs(p){return p.recipe.filter(i=>!p.ing.includes(i));}
+  blocked(c){const n=this.cfg.grid;
+    if(c[0]<0||c[1]<0||c[0]>=n||c[1]>=n)return true;
+    return this.isRound&&!this.valid.has(c[0]+","+c[1]);}
+  onRim(c){return this.isRound&&this.rim.has(c[0]+","+c[1]);}
+  tradewind(p){ // entering the rim channel sweeps you to the head of that quadrant
+    if(!this.isRound)return false;
+    const head=this.rimHead[p.pos[0]+","+p.pos[1]];
+    if(head&&(head[0]!==p.pos[0]||head[1]!==p.pos[1])){
+      p.pos=[...head];this.ev({t:"tradewind",p:p.idx});return true;
+    }
+    return false;
+  }
+  moored(p){ // ships that DOCKED last turn (or sit at a berth / Isle of Tortuga) can't be wind-forced into land
+    return p.justDocked||(this.cfg.singleDock&&this.adjPort(p)!==null)||man(p.pos,this.home)<=1;
+  }
+  windPush(p,d,dist){
+    for(let s=0;s<dist;s++){
+      const nx=[p.pos[0]+d[0],p.pos[1]+d[1]];
+      if(this.blocked(nx))return;
+      if(this.isHome(nx)){this.ev({t:"moored",p:p.idx});return;} // safe harbor
+      if(this.isIsland(nx)){
+        if(this.moored(p)){this.ev({t:"moored",p:p.idx});return;}
+        if(p.coins>=3){p.coins--;this.ev({t:"dodge",p:p.idx});}
+        else if(this.flip(p)){this.ev({t:"anchor",p:p.idx});}
+        else{p.coins-=Math.floor(p.coins/2);this.ev({t:"aground",p:p.idx});}
+        return;
+      }
+      if(this.players.some(q=>q!==p&&!q.done&&q.pos[0]===nx[0]&&q.pos[1]===nx[1])){
+        this.ev({t:"moored",p:p.idx});return; // another ship holds that square — wind stops short
+      }
+      p.pos=nx;
+      if(this.onRim(nx)){this.tradewind(p);return;} // swept into the trade winds
+    }
+  }
+  stepToward(p,target,steps){
+    // BFS pathfinding: routes cleanly around concave islands (greedy movement gets trapped)
+    const pass=o=>{
+      if(this.blocked(o)||this.isIsland(o)||this.isHome(o))return false;
+      if(this.onRim(o))return false; // bots stay out of the trade-wind channel
+      if(this.dockCells.has(o[0]+","+o[1])&&this.players.some(q=>q!==p&&!q.done&&q.pos[0]===o[0]&&q.pos[1]===o[1]))return false;
+      return true;};
+    const key=c=>c[0]+","+c[1];
+    const start=key(p.pos);
+    const prev={},dist={[start]:0};
+    const queue=[p.pos];
+    let best=null,bestScore=man(p.pos,target)*1000;
+    while(queue.length){
+      const c=queue.shift(),dc=dist[key(c)];
+      const score=man(c,target)*1000+dc;
+      if(score<bestScore){bestScore=score;best=c;}
+      if(dc>=steps+7)continue; // search past move range to find routes around obstacles
+      for(const d of Object.values(DIRS)){
+        const o=[c[0]+d[0],c[1]+d[1]],k=key(o);
+        if(dist[k]!==undefined||!pass(o))continue;
+        dist[k]=dc+1;prev[k]=c;queue.push(o);
+      }
+    }
+    if(!best||key(best)===start)return;
+    const path=[];let c=best;
+    while(key(c)!==start){path.push(c);c=prev[key(c)];}
+    path.reverse();
+    // may sail PAST other ships, but must not END on one: back off to the last free square in range
+    const occ=o=>this.players.some(q=>q!==p&&!q.done&&q.pos[0]===o[0]&&q.pos[1]===o[1]);
+    let idx=Math.min(steps,path.length)-1;
+    while(idx>=0&&occ(path[idx]))idx--;
+    if(idx>=0)p.pos=[...path[idx]];
+  }
+  adjPort(p){
+    if(this.cfg.singleDock){
+      for(const ing of this.ings){const d=this.dockOf[ing];
+        if(p.pos[0]===d[0]&&p.pos[1]===d[1])return ing;}
+      return null;
+    }
+    for(const d of Object.values(DIRS)){const c=[p.pos[0]+d[0],p.pos[1]+d[1]];
+      if(this.isIsland(c))return this.islands[c];}
+    return null;
+  }
+  dockOccupiedBy(ing,exclude){
+    const d=this.dockOf[ing];if(!d)return null;
+    for(const q of this.players)if(q!==exclude&&!q.done&&q.pos[0]===d[0]&&q.pos[1]===d[1])return q;
+    return null;
+  }
+  adjOpp(p){const out=this.players.filter(q=>q!==p&&!q.done&&man(p.pos,q.pos)<=1);this.shuffle(out);return out;}
+  tradeOpp(p){if(this.cfg.parley)return this.players.filter(q=>q!==p&&!q.done);
+    return this.players.filter(q=>q!==p&&!q.done&&man(p.pos,q.pos)<=1);}
+  doDock(p,port){
+    const ing=port,k=port; // ports are identified by ingredient name
+    if(this.cfg.singleDock&&this.dockOccupiedBy(ing,p))return false;
+    if(!this.cfg.unlimitedDock&&p.firstFlip.has(k)&&p.dockedNow.has(k))return false;
+    p.firstFlip.add(k);p.dockedNow.add(k);p.justDocked=true;
+    if(this.flip(p)){
+      if(this.tokens[ing]>0){this.tokens[ing]--;p.ing.push(ing);this.ev({t:"dock",p:p.idx,ing,heads:1,got:"ing"});}
+      else{p.coins+=3;this.ev({t:"dock",p:p.idx,ing,heads:1,got:"empty"});}
+    }else{
+      if(this.cfg.dockBuy&&p.coins>=3&&this.needs(p).includes(ing)&&this.tokens[ing]>0){
+        p.coins-=3;this.tokens[ing]--;p.ing.push(ing);this.ev({t:"dock",p:p.idx,ing,heads:0,got:"bought"});}
+      else{p.coins+=3;this.ev({t:"dock",p:p.idx,ing,heads:0,got:"coins"});}
+    }
+    return true;
+  }
+  cnt(arr,x){return arr.filter(v=>v===x).length;}
+  tryTrade(p){
+    for(const q of this.tradeOpp(p)){
+      if(q.strategy==="human")continue; // bots never auto-trade with humans; humans initiate via Parley
+      const give=p.ing.filter(i=>this.needs(q).includes(i)&&this.cnt(p.ing,i)>(p.recipe.includes(i)?1:0));
+      const get=q.ing.filter(i=>this.needs(p).includes(i)&&this.cnt(q.ing,i)>(q.recipe.includes(i)?1:0));
+      if(give.length&&get.length){
+        const gi=give[0],ge=get[0];
+        p.ing.splice(p.ing.indexOf(gi),1);q.ing.push(gi);
+        q.ing.splice(q.ing.indexOf(ge),1);p.ing.push(ge);
+        this.trades++;if(this.cfg.tradeBonus){p.coins++;q.coins++;}
+        this.ev({t:"trade",a:p.idx,b:q.idx,gave:gi,got:ge,kind:"swap"});return true;
+      }
+      if(get.length){
+        const ge=get[0];
+        const price=(q.strategy==="monopolist"&&ge===q.corner)?5:4; // monopolists gouge
+        if(p.coins>=price){
+          q.ing.splice(q.ing.indexOf(ge),1);p.ing.push(ge);
+          p.coins-=price;q.coins+=price;this.trades++;if(this.cfg.tradeBonus){p.coins++;q.coins++;}
+          this.ev({t:"trade",a:p.idx,b:q.idx,gave:price+" coins",got:ge,kind:"buy"});return true;
+        }
+      }
+    }
+    return false;
+  }
+  battle(att,def){
+    const c=this.cfg,need=2;
+    if(c.powder){if(att.coins<c.powder)return null;att.coins-=c.powder;}
+    this.battles++;
+    let a=0,d=0,free=c.broadside==="free",paid=c.broadside==="paid";
+    const rounds=[];
+    while(a<need&&d<need){
+      let bs=false,ah=this.flip(att),dh=this.flip(def);
+      if(free&&!ah){ah=this.flip(att);free=false;bs=true;}
+      else if(paid&&!ah&&att.coins>=1){att.coins--;ah=this.flip(att);paid=false;bs=true;}
+      rounds.push([ah?1:0,dh?1:0,bs?1:0]);
+      if(ah&&dh){} else if(ah)a++; else if(dh)d++;
+    }
+    const win=a>=need?att:def,lose=a>=need?def:att;
+    if(win===att)this.attWins++;
+    let spoil;
+    if(c.asym&&lose===att){
+      const take=Math.min(2,lose.coins);lose.coins-=take;win.coins+=take;spoil=take+"c (raider)";
+    }else{
+      const wanted=lose.ing.filter(i=>this.needs(win).includes(i));
+      if(lose.coins>=5&&!wanted.length){lose.coins-=5;win.coins+=5;spoil="5 coins";}
+      else if(wanted.length){const i=wanted[0];lose.ing.splice(lose.ing.indexOf(i),1);win.ing.push(i);spoil=ilabel(i);}
+      else if(lose.ing.length){const i=lose.ing[0];lose.ing.splice(lose.ing.indexOf(i),1);win.ing.push(i);spoil=ilabel(i);}
+      else{const take=Math.min(5,lose.coins);lose.coins-=take;win.coins+=take;spoil=take+" coins (all they had)";}
+    }
+    if(win===att){ // only a winning attacker takes the loser's square; a repelled attack moves no one
+      [att.pos,def.pos]=[def.pos,att.pos];
+      this.tradewind(att);this.tradewind(def);
+    }
+    this.ev({t:"battle",a:att.idx,d:def.idx,rounds,winner:win.idx,spoil});
+    if(win===att)for(const pl of [att,def]){ // only ships that swapped into a new berth may dock — a ship that never left doesn't re-dock
+      const port=this.adjPort(pl);
+      if(port&&(this.cfg.unlimitedDock||!pl.firstFlip.has(port)))this.doDock(pl,port);
+    }
+    return win;
+  }
+  chooseTarget(p){
+    const needs=this.needs(p);
+    if(!needs.length)return this.home; // recipe done — go win
+    if(p.strategy==="monopolist"&&p.corner&&this.tokens[p.corner]>0)
+      return this.islandOf[p.corner]; // corner the market first
+    let cands=needs.filter(i=>this.tokens[i]>0).map(i=>this.islandOf[i]);
+    if(this.cfg.merchant&&p.strategy==="trader"){
+      let extra=this.ings.filter(i=>!needs.includes(i)&&!p.ing.includes(i)&&this.tokens[i]>0&&
+        this.players.some(q=>q!==p&&!q.done&&this.needs(q).includes(i))).map(i=>this.islandOf[i]);
+      if(cands.length){const best=Math.min(...cands.map(c=>man(p.pos,c)));
+        extra=extra.filter(c=>man(p.pos,c)+3<=best);}
+      cands=cands.concat(extra);
+    }
+    if(!cands.length){
+      const holders=this.players.filter(q=>q!==p&&!q.done&&q.ing.some(i=>needs.includes(i)));
+      if(holders.length){holders.sort((x,y)=>man(p.pos,x.pos)-man(p.pos,y.pos));return holders[0].pos;}
+      return this.home;
+    }
+    cands.sort((x,y)=>man(p.pos,x)-man(p.pos,y));return cands[0];
+  }
+  wantsAttack(p){
+    if(p.strategy==="rusher")return null;
+    if(p.coins<this.cfg.powder)return null;
+    for(const q of this.adjOpp(p)){
+      const steals=q.ing.some(i=>this.needs(p).includes(i));
+      const rich=q.coins>=5;
+      if(p.strategy==="pirate"&&(steals||rich))return q;
+      if((p.strategy==="balanced"||p.strategy==="trader")&&steals)return q;
+      if(this.cfg.singleDock&&p.strategy!=="rusher"){
+        for(const ing of this.needs(p))
+          if(this.tokens[ing]>0&&this.dockOccupiedBy(ing)===q)return q;
+      }
+    }
+    return null;
+  }
+  takeTurn(p,windDir,storm){
+    this.ev({t:"turn",p:p.idx});
+    const before=[...p.pos];
+    this.windPush(p,DIRS[windDir],storm?2:1);
+    p.justDocked=false;
+    if(p.pos[0]!==before[0]||p.pos[1]!==before[1])this.ev({t:"windmove",p:p.idx});
+    const port0=this.adjPort(p);
+    if(!port0)p.dockedNow.clear();
+    let target=this.chooseTarget(p);
+    if(p.strategy==="pirate"&&this.needs(p).length){
+      const prey=this.players.filter(q=>q!==p&&!q.done&&q.ing.some(i=>this.needs(p).includes(i)));
+      if(prey.length){prey.sort((x,y)=>man(p.pos,x.pos)-man(p.pos,y.pos));
+        if(man(p.pos,prey[0].pos)<man(p.pos,target))target=prey[0].pos;}
+    }
+    const dist=man(p.pos,target);
+    const exact=this.dockCells.has(target[0]+","+target[1]);
+    if((dist>1||(dist===1&&exact))&&p.coins>0){p.coins--;const b=[...p.pos];this.stepToward(p,target,3);
+      if(p.pos[0]!==b[0]||p.pos[1]!==b[1])this.ev({t:"sail",p:p.idx});else p.coins++;}
+    if(!this.adjPort(p))p.dockedNow.clear(); // leaving a port re-arms its dock flip
+    const port=this.adjPort(p);
+    if((p.strategy==="trader"||this.cfg.parley)&&this.tryTrade(p))return;
+    const victim=this.wantsAttack(p);
+    if(victim){if(!this.tryTrade(p))this.battle(p,victim);return;}
+    if(port&&p.strategy==="monopolist"&&port===p.corner&&this.tokens[port]>0){
+      if(this.doDock(p,port))return;} // hoard every crate, even duplicates
+    if(port&&this.needs(p).includes(port)&&this.tokens[port]>0){
+      if(this.doDock(p,port))return;}
+    if(port&&this.cfg.merchant&&(p.strategy==="trader"||p.strategy==="balanced")){
+      const ing=port;
+      if(this.tokens[ing]>0&&!p.ing.includes(ing)&&this.players.some(q=>q!==p&&this.needs(q).includes(ing))){
+        if(this.doDock(p,port))return;}}
+    if(port&&(this.cfg.unlimitedDock||!p.firstFlip.has(port))){if(this.doDock(p,port))return;}
+    if(p.coins<=1){const h=this.flip(p);
+      if(h)p.coins+=2;else if(this.cfg.sardine)p.coins+=1;
+      this.ev({t:"fish",p:p.idx,heads:h?1:0});}
+  }
+  checkFinish(p){
+    if(!this.needs(p).length&&man(p.pos,this.home)<=1){
+      p.done=true;this.finishOrder.push(p.idx);this.ev({t:"finish",p:p.idx});return true;}
+    return false;
+  }
+  play(){
+    let order=this.players.map((_,i)=>i);
+    while(this.round<150){
+      this.round++;
+      if(this.cfg.rotate&&this.round>1)order=order.slice(1).concat(order.slice(0,1));
+      const wind="NSEW"[Math.floor(this.r()*4)];
+      const storm=this.r()<this.cfg.storm;
+      this.windNow=wind;this.stormNow=storm;
+      this.ev({t:"newround",dir:wind});
+      for(const i of order){
+        const p=this.players[i];
+        if(p.done)continue;
+        this.takeTurn(p,wind,storm);
+        if(this.checkFinish(p)){
+          if(this.finishOrder.length===1){
+            for(const j of order){const q=this.players[j];
+              if(q.done||j===i)continue;
+              this.takeTurn(q,wind,storm);this.checkFinish(q);}
+            return this.resolveEnd();
+          }
+        }
+      }
+    }
+    return this.resolveEnd();
+  }
+  resolveEnd(){
+    if(!this.finishOrder.length){this.ev({t:"end",winner:null});return null;}
+    if(this.finishOrder.length===1){this.winner=this.finishOrder[0];this.ev({t:"end",winner:this.winner});return this.winner;}
+    let champ=this.players[this.finishOrder[0]];
+    for(const idx of this.finishOrder.slice(1)){
+      const ch=this.players[idx];let a=0,d=0;const bneed=3;
+      while(a<bneed&&d<bneed){const ah=this.flip(champ),dh=this.flip(ch);
+        if(ah&&dh){}else if(ah)a++;else if(dh)d++;}
+      const w=a>=bneed?champ:ch;
+      this.ev({t:"bakeoff",a:champ.idx,b:ch.idx,winner:w.idx});
+      champ=w;
+    }
+    this.winner=champ.idx;this.ev({t:"end",winner:this.winner});return this.winner;
+  }
+}
+
+/* ================= UI ================= */
+const $=id=>document.getElementById(id);
+let game=null,evIdx=0,timer=null,logLines=[];
+
+function escHtml(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+// ---- the recipe book: 21 signature pastries, one per 5-of-7 ingredient combination ----
+// Ingredient keys: dairy=Milk, vanilla=Vanilla, wheat=Flour, cocoa=Chocolate,
+// sugar=Sugar, spice=Cinnamon, eggs=Eggs.
+const RECIPE_BOOK=[
+  {ings:["dairy","wheat","cocoa","sugar","spice"], title:"Spiced Cocoa Shortbread",
+    desc:"Buttery, melt-in-your-mouth shortbread biscuits infused with warm cinnamon and rich cocoa."},
+  {ings:["dairy","wheat","cocoa","sugar","eggs"], title:"Molten Chocolate Lava Cake",
+    desc:"A decadent, warm chocolate cake with an oozing, liquid fudge center."},
+  {ings:["dairy","wheat","cocoa","spice","eggs"], title:"Mayan Cocoa Soufflé",
+    desc:"A soaring, dramatic chocolate soufflé highlighting the dark, complex notes of pure cocoa and cinnamon."},
+  {ings:["dairy","wheat","sugar","spice","eggs"], title:"Cinnamon-Sugar Churros",
+    desc:"Crispy, golden pastry dough tossed in a sweet, crackly cinnamon-sugar shell."},
+  {ings:["dairy","cocoa","sugar","spice","eggs"], title:"Mexican Chocolate Torte",
+    desc:"An ultra-fudgy, dense chocolate cake whipped with eggs and spiced with sweet cinnamon."},
+  {ings:["wheat","cocoa","sugar","spice","eggs"], title:"Spiced Fudge Brownies",
+    desc:"Deep, dark brownies with a gorgeous shiny crust and a dense, chewy center."},
+  {ings:["dairy","vanilla","wheat","cocoa","sugar"], title:"Caramel Slice",
+    desc:"A toasted-coconut shortbread base, a thick layer of chewy milk caramel, and a clean snap of chocolate on top — the classic Aussie tearoom treat."},
+  {ings:["dairy","vanilla","wheat","cocoa","spice"], title:"Cinnamon Snaps",
+    desc:"Crisp, rustic butter biscuits celebrating aromatic vanilla and warming cinnamon."},
+  {ings:["dairy","vanilla","wheat","sugar","spice"], title:"Snickerdoodle Bites",
+    desc:"Pillowy-soft butter cookies rolled in sweet cinnamon-sugar and pure vanilla."},
+  {ings:["dairy","vanilla","cocoa","sugar","spice"], title:"Cinnamon-Chocolate Fudge",
+    desc:"A quick-set, melt-in-your-mouth chocolate fudge layered with warm spice and vanilla."},
+  {ings:["vanilla","wheat","cocoa","sugar","spice"], title:"Crispy Cocoa Snaps",
+    desc:"Thin, highly satisfying cookies with a loud snap and deep spiced chocolate notes."},
+  {ings:["dairy","vanilla","wheat","cocoa","eggs"], title:"Dark Chocolate Cream Puffs",
+    desc:"Golden choux pastry puffs filled with an elegant, bittersweet vanilla-chocolate pastry cream."},
+  {ings:["dairy","vanilla","wheat","sugar","eggs"], title:"Pound Cake",
+    desc:"A dense, rich, buttery cake with a fine, tight crumb and a golden crust — the original \"one pound of everything\" cake, finished with a simple vanilla-milk glaze."},
+  {ings:["dairy","vanilla","cocoa","sugar","eggs"], title:"French Pots de Crème",
+    desc:"Luxurious, spoonable baked custards highlighting premium chocolate and smooth vanilla."},
+  {ings:["vanilla","wheat","cocoa","sugar","eggs"], title:"Chocolate Genoise Sponge Cake",
+    desc:"A feather-light, delicate sponge cake relying on whipped eggs for its airy lift."},
+  {ings:["dairy","vanilla","wheat","spice","eggs"], title:"Cinnamon Dutch Baby",
+    desc:"A dramatic skillet pancake that puffs up in the oven, featuring a custardy center of vanilla and spice."},
+  {ings:["dairy","vanilla","cocoa","spice","eggs"], title:"Mexican Chocolate Pots",
+    desc:"Silky-smooth custard cups naturally sweetened by vanilla bean and cinnamon."},
+  {ings:["vanilla","wheat","cocoa","spice","eggs"], title:"Cocoa Cloud Soufflé",
+    desc:"An airy, intensely rich whipped soufflé celebrating pure, dark chocolate."},
+  {ings:["dairy","vanilla","sugar","spice","eggs"], title:"Vanilla Bean Crème Brûlée",
+    desc:"Velvety baked custard topped with a satisfying, blowtorched glass-like caramelized sugar crust."},
+  {ings:["vanilla","wheat","sugar","spice","eggs"], title:"Cinnamon Sponge Cake",
+    desc:"A fluffy, golden cake scented with sweet vanilla and coated in a crisp cinnamon-sugar crust."},
+  {ings:["vanilla","cocoa","sugar","spice","eggs"], title:"Chocolate Fudge Torte",
+    desc:"A premium, dense cake utilizing whipped eggs to achieve a velvety, chocolatey mouthfeel."},
+];
+const RECIPE_LOOKUP={};
+for(const r of RECIPE_BOOK)RECIPE_LOOKUP[r.ings.slice().sort().join("|")]=r;
+function recipeInfo(recipe){return RECIPE_LOOKUP[recipe.slice().sort().join("|")];}
+function recipeTitle(recipe){
+  const info=recipeInfo(recipe);
+  if(info)return info.title;
+  // fallback for any non-standard ingredient set: a simple ingredient-led name
+  const lead=recipe.filter(i=>ING_NAME[i]).slice(0,2).map(i=>iname(i).split(" ").pop());
+  return `Captain's ${lead.join(" & ")} Bake`.replace(/\s+/g," ").trim();
+}
+function recipeCardHTML(recipe){
+  const info=recipeInfo(recipe);
+  const items=recipe.map(i=>`<li><span class="ri">${ING_EMOJI[i]}</span><span class="rn">${iname(i)}</span><span class="rc">${ING_PLAIN[i]||""}</span></li>`).join("");
+  const desc=info?`<div class="recipeDesc">${info.desc}</div>`:"";
+  return `<div class="recipeTitle">📜 ${recipeTitle(recipe)}</div>`+desc+
+    `<ul class="recipeList">${items}</ul>`;
+}
+
+/* ---------- Captain rows in the sidebar (strategy dropdown is per captain) ---------- */
+function buildPlayerRows(){
+  const np=+$("cfgPlayers").value,defaults=["human","pirate","trader","rusher"];
+  let html="";
+  for(let i=0;i<np;i++){
+    const cur=$("strat"+i)?$("strat"+i).value:defaults[i];
+    html+=`<div class="player-row" id="prow${i}" style="background:${HEXCOL[i]}18">
+      <span class="dot" style="background:${HEXCOL[i]}"></span>
+      <span class="pname">${NAMES[i]}</span>
+      <select id="strat${i}">${["human","balanced","pirate","trader","rusher","monopolist"].map(s=>`<option value="${s}" ${s===cur?"selected":""}>${s==="human"?"🧑‍🍳 human":s}</option>`).join("")}</select>
+      <span class="coins" id="coins${i}">🌕 –</span>
+      <span class="chips" id="chips${i}"></span>
+      <span class="crown" id="crown${i}"></span></div>`;
+  }
+  $("players").innerHTML=html;
+}
+$("cfgPlayers").addEventListener("change",buildPlayerRows);
+
+/* ---------- board rendering ---------- */
+const SVGNS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+// trace the outer boundary loop(s) of a polyomino (array of [x,y] grid cells) in grid units
+function tracePolygonLoops(cells){
+  const setK=new Set(cells.map(c=>c[0]+","+c[1]));
+  const edgeMap=new Map();
+  for(const [x,y] of cells){
+    const sides=[[[x,y],[x+1,y],0,-1],[[x+1,y],[x+1,y+1],1,0],
+      [[x+1,y+1],[x,y+1],0,1],[[x,y+1],[x,y],-1,0]];
+    for(const [p1,p2,nx,ny] of sides)
+      if(!setK.has((x+nx)+","+(y+ny)))edgeMap.set(p1[0]+","+p1[1],p2);
+  }
+  const visited=new Set(),loops=[];
+  for(const startKey of edgeMap.keys()){
+    if(visited.has(startKey))continue;
+    const loop=[];let curKey=startKey;
+    while(!visited.has(curKey)){
+      visited.add(curKey);
+      const [cx,cy]=curKey.split(",").map(Number);
+      loop.push([cx,cy]);
+      const next=edgeMap.get(curKey);
+      curKey=next[0]+","+next[1];
+    }
+    loops.push(loop);
+  }
+  return loops;
+}
+// build an SVG path with rounded corners from a loop of [x,y] points already in pixel space
+function roundedPathFromLoop(loop,r){
+  const n=loop.length;let d="";
+  for(let i=0;i<n;i++){
+    const prev=loop[(i-1+n)%n],cur=loop[i],next=loop[(i+1)%n];
+    const v1=[prev[0]-cur[0],prev[1]-cur[1]],v2=[next[0]-cur[0],next[1]-cur[1]];
+    const len1=Math.hypot(v1[0],v1[1]),len2=Math.hypot(v2[0],v2[1]);
+    const rr=Math.min(r,len1/2,len2/2);
+    const p1=[cur[0]+v1[0]/len1*rr,cur[1]+v1[1]/len1*rr];
+    const p2=[cur[0]+v2[0]/len2*rr,cur[1]+v2[1]/len2*rr];
+    d+=(i===0?`M ${p1[0]},${p1[1]} `:`L ${p1[0]},${p1[1]} `);
+    d+=`Q ${cur[0]},${cur[1]} ${p2[0]},${p2[1]} `;
+  }
+  return d+"Z";
+}
+let cell=0,shipEls=[],activeRing=null,spinNeedle=null,stormText=null,stormDial=null,windLabels=[];
+function drawBoard(){
+  const svg=$("board");svg.innerHTML="";
+  const n=game.cfg.grid,W=640;cell=W/n;
+  if(game.isRound){
+    svg.style.background="transparent";
+    for(const k of game.valid){
+      const [x,y]=k.split(",").map(Number);
+      const rimC=game.rim.has(k);
+      el("rect",{x:x*cell,y:y*cell,width:cell,height:cell,
+        fill:rimC?"#ccd4f5":"#cdeef3",stroke:"#a6dee8","stroke-width":1},svg);
+    }
+    // flow arrows on every channel square (clockwise), 🌀 at each quadrant's drop-off
+    const headKeys=new Set(Object.values(game.rimHead).map(h=>h[0]+","+h[1]));
+    for(const c of game.rimCellInfo||[]){
+      const cx=(c.x+.5)*cell,cy=(c.y+.5)*cell;
+      if(headKeys.has(c.k)){
+        const t=el("text",{x:cx,y:cy+cell*.13,"text-anchor":"middle","font-size":cell*.4},svg);
+        t.textContent="🌀";
+      }else{
+        const rot=c.deg+90; // tangent of clockwise flow
+        const t=el("text",{x:cx,y:cy+cell*.11,"text-anchor":"middle","font-size":cell*.32,
+          fill:"#5b6bd6",transform:`rotate(${rot} ${cx} ${cy})`},svg);
+        t.textContent="➤";
+      }
+    }
+  }else{
+    svg.style.background="";
+    for(let i=0;i<=n;i++){
+      el("line",{x1:i*cell,y1:0,x2:i*cell,y2:W,stroke:"#a6dee8","stroke-width":1},svg);
+      el("line",{x1:0,y1:i*cell,x2:W,y2:i*cell,stroke:"#a6dee8","stroke-width":1},svg);
+    }
+  }
+  // home: Isle of Tortuga is a 1-square island with 4 docks (N/S/E/W)
+  const [hx,hy]=game.home;
+  el("rect",{x:hx*cell+2,y:hy*cell+2,width:cell-4,height:cell-4,rx:cell*.3,
+    fill:"#fef48b",stroke:"#f5a623","stroke-width":2},svg);
+  const ht=el("text",{x:(hx+.5)*cell,y:(hy+.5)*cell+cell*.16,"text-anchor":"middle","font-size":cell*.5},svg);
+  ht.textContent="⚓";
+  for(const d of Object.values(DIRS)){
+    const dx=hx+d[0],dy=hy+d[1];
+    if(dx<0||dy<0||dx>=n||dy>=n)continue;
+    el("rect",{x:dx*cell+cell*.3,y:dy*cell+cell*.3,width:cell*.4,height:cell*.4,
+      rx:3,fill:"#fdd97a",stroke:"#f5a623","stroke-width":1.5,opacity:.75},svg);
+  }
+  // islands (arbitrary polyomino shapes): fused cell fills + a single union outline
+  for(const ing of game.ings){
+    const cells=game.islandRect[ing];
+    const loops=tracePolygonLoops(cells);
+    for(const loop of loops){
+      const pxLoop=loop.map(([x,y])=>[x*cell,y*cell]);
+      const d=roundedPathFromLoop(pxLoop,cell*.32);
+      el("path",{d,fill:"#7bc47f",stroke:"#3d8b40","stroke-width":2.5,"stroke-linejoin":"round"},svg);
+    }
+    // one big icon per remaining crate, one per island square — a taken crate turns fully
+    // grey in place rather than shrinking to a count badge, so the whole island reads at a glance
+    if(game.cfg.crates<1e9){
+      cells.slice(0,game.cfg.crates).forEach((c,idx)=>{
+        const scx=(c[0]+.5)*cell,scy=(c[1]+.5)*cell;
+        el("text",{x:scx,y:scy+cell*.27,"text-anchor":"middle","font-size":cell*.8,
+          id:`crate_${ing}_${idx}`},svg).textContent=ING_EMOJI[ing];
+      });
+    }else{
+      // unlimited-crate config: one plain icon
+      const mx=cells.reduce((s,c)=>s+c[0],0)/cells.length, my=cells.reduce((s,c)=>s+c[1],0)/cells.length;
+      let best=cells[0],bd=1e9;
+      for(const c of cells){const dd=(c[0]-mx)**2+(c[1]-my)**2;if(dd<bd){bd=dd;best=c;}}
+      const cx=(best[0]+.5)*cell,cy=(best[1]+.5)*cell;
+      el("text",{x:cx,y:cy+cell*.15,"text-anchor":"middle","font-size":cell*.45},svg).textContent=ING_EMOJI[ing];
+    }
+    if(game.cfg.singleDock){
+      const d=game.dockOf[ing];
+      // plank connecting the berth to its island
+      const adj=Object.values(DIRS).find(dd=>game.islands[[d[0]+dd[0],d[1]+dd[1]]]===ing);
+      if(adj){
+        const px=(d[0]+.5+adj[0]*.5)*cell, py=(d[1]+.5+adj[1]*.5)*cell;
+        el("rect",{x:px-(adj[0]?cell*.20:cell*.13),y:py-(adj[1]?cell*.20:cell*.13),
+          width:adj[0]?cell*.40:cell*.26,height:adj[1]?cell*.40:cell*.26,
+          rx:2,fill:"#c98a2e"},svg);
+      }
+      el("rect",{x:d[0]*cell+cell*.25,y:d[1]*cell+cell*.25,width:cell*.5,height:cell*.5,
+        rx:3,fill:"#f5a623",stroke:"#c77f16","stroke-width":1.5,opacity:.95},svg);
+      const dt=el("text",{x:(d[0]+.5)*cell,y:(d[1]+.5)*cell+cell*.12,"text-anchor":"middle","font-size":cell*.3,fill:"#fff"},svg);
+      dt.textContent="⚓";
+    }
+  }
+  // wind spinner HUD (bottom-right corner) — sized off `cell` rather than fixed pixels, so it
+  // scales with the board's actual cell density instead of a magic number tuned for one grid size.
+  // Everything is drawn in a <g> translated to the dial's center, so all local coordinates are
+  // relative to (0,0) — the needle's rotation pivot is then exactly "0px 0px", which stays correct
+  // at any browser zoom level (an absolute px transform-origin drifted from the dial at non-100% zoom).
+  const sr=cell*.95,scx=W-sr-14,scy=W-sr-32;
+  const hud=el("g",{opacity:.95,transform:`translate(${scx},${scy})`},svg);
+  stormDial=el("circle",{cx:0,cy:0,r:sr,fill:"#fffdf0",stroke:"#f5a623","stroke-width":2.5},hud);
+  windLabels=[];
+  for(const [lab,lx,ly] of [["N",0,-sr+13],["E",sr-11,4],["S",0,sr-6],["W",-sr+11,4]]){
+    const tx=el("text",{x:lx,y:ly,"text-anchor":"middle","font-size":12,fill:"#1f4249","font-weight":"bold"},hud);
+    tx.textContent=lab;windLabels.push(tx);
+  }
+  spinNeedle=el("g",{fill:"#d6337f"},hud);
+  el("polygon",{points:`0,${-sr+17} -6,9 6,9`,stroke:"#fff","stroke-width":1},spinNeedle);
+  spinNeedle.style.transition="transform .7s ease";
+  spinNeedle.style.transformOrigin="0px 0px";
+  el("circle",{cx:0,cy:0,r:4.5,fill:"#1f4249"},hud);
+  stormText=el("text",{x:0,y:sr+16,"text-anchor":"middle","font-size":14,"font-weight":"bold"},hud);
+  // active-player highlight ring (positioned in render)
+  activeRing=el("circle",{r:cell*.44,fill:"none",stroke:"#f5a623","stroke-width":4,
+    "stroke-dasharray":"7 5",opacity:0},svg);
+  // ships
+  shipEls=[];
+  game.players.forEach((p,i)=>{
+    const g=el("g",{style:"transition: transform .35s ease"},svg);
+    el("circle",{cx:0,cy:0,r:cell*.3,fill:HEXCOL[i],stroke:"#fff","stroke-width":2,opacity:.92},g);
+    const t=el("text",{x:0,y:cell*.11,"text-anchor":"middle","font-size":cell*.34},g);
+    t.textContent="⛵";
+    shipEls.push(g);
+  });
+  // seat the ships on their Isle of Tortuga docks right away, before the first event renders
+  game.players.forEach((p,i)=>{
+    const [x,y]=shipXY(p.pos,i,game.players);
+    shipEls[i].style.transform=`translate(${x}px,${y}px)`;
+  });
+}
+function shipXY(pos,i,state){
+  // offset ships sharing a cell
+  const same=state.map((s,j)=>({j,k:s.pos[0]+","+s.pos[1]})).filter(o=>o.k===pos[0]+","+pos[1]);
+  const my=same.findIndex(o=>o.j===i),m=same.length;
+  const ox=m>1?(my%2?1:-1)*cell*.18:0, oy=m>2?(my<2?-1:1)*cell*.18:0;
+  return [(pos[0]+.5)*cell+ox,(pos[1]+.5)*cell+oy];
+}
+
+/* ---------- event text ---------- */
+function pn(i){return `<b style="color:${HEXCOL[i]}">${NAMES[i].replace("Capt. ","")}</b>`;}
+function fl(h){return h?"⚪H":"⚫T";}
+function fmtItem(x){return /coin/.test(x)?x.replace(" coins","🌕").replace("coins","🌕"):(ING_EMOJI[x]||"")+" "+iname(x);}
+function describe(e){
+  switch(e.t){
+    case "newround":return {cls:"roundhdr",txt:`— Round ${e.round}: wind blows ${DIRNAME[e.dir]}${e.storm?" ⛈️ STORM!":""} —`};
+    case "windmove":return {txt:`${pn(e.p)} drifts with the wind`};
+    case "sail":return {txt:`${pn(e.p)} pays 1🌕 and sails`};
+    case "dodge":return {txt:`${pn(e.p)} pays 1🌕 to dodge an island`};
+    case "anchor":return {txt:`${pn(e.p)} flips ⚪H — drops anchor safely!`};
+    case "moored":return {txt:`${pn(e.p)} is safely moored — the wind can't budge them ⚓`};
+    case "tradewind":return {txt:`🌀 ${pn(e.p)} is swept along the trade winds around the rim!`};
+    case "parley":return {cls:"trade",txt:`🤝 ${pn(e.a)} offered ${fmtItem(e.offer)} for ${pn(e.b)}'s ${fmtItem(e.want)} — ${e.ok?"deal struck!":"<b>refused</b>"}`};
+    case "aground":return {txt:`${pn(e.p)} flips ⚫T — runs aground! Loses half their coins ⚠️`};
+    case "dock":{
+      const place=dockPlace(e.ing),flavor=dockFlavor(e.ing);
+      const g={ing:`docks at ${place} — flips ⚪H, hauls aboard ${ilabel(e.ing)}!`,
+        empty:`docks at ${place} for ${flavor} — ⚪H but the island is empty; takes 3🌕`,
+        bought:`docks at ${place} for ${flavor} and flips ⚫T, but buys it anyway for 3🌕`,
+        coins:`docks at ${place} for ${flavor}, but flips ⚫T and takes 3🌕`};
+      return {txt:`${pn(e.p)} ${g[e.got]}`};}
+    case "trade":return {cls:"trade",txt:`🤝 ${pn(e.a)} trades ${fmtItem(e.gave)} to ${pn(e.b)} for ${fmtItem(e.got)}${game.cfg.tradeBonus?" (+1🌕 each)":""}`};
+    case "sidebet":
+      if(e.won)return {cls:"trade",txt:`🔭 ${pn(e.p)} called it${e.amt?` and backed it with ${e.amt}🌕`:""} — Spotter's Bounty +${e.delta}🌕`};
+      return {cls:"trade",txt:e.amt?`💰 ${pn(e.p)} backed the wrong ship — loses ${e.amt}🌕`:`🔭 ${pn(e.p)} missed the call — no bounty`};
+    case "battle":{
+      const aP=e.rounds.filter(r=>r[0]&&!r[1]).length,dP=e.rounds.filter(r=>r[1]&&!r[0]).length;
+      const bsN=e.rounds.filter(r=>r[2]).length,rn=e.rounds.length;
+      return {cls:"battle",txt:`⚔️ ${pn(e.a)} attacks ${pn(e.d)} — ${pn(e.winner)} wins ${aP}–${dP} in ${rn} round${rn>1?"s":""}${bsN?` (${bsN} broadside${bsN>1?"s":""})`:""}, takes ${e.spoil}. ${e.winner===e.a?"Seizes the square — ships swap places.":"Attack repelled — no one moves."}`};}
+    case "fish":return {txt:`${pn(e.p)} goes fishing — ${e.heads?"⚪H, catches 2🌕":(game.cfg.sardine?"⚫T, just a sardine (1🌕)":"⚫T, nothing biting")}`};
+    case "wheelfish":return {txt:`🧭 ${pn(e.p)} passes the ship's wheel and fishes — ${e.heads?"⚪H, catches 2🌕":(game.cfg.sardine?"⚫T, just a sardine (1🌕)":"⚫T, nothing biting")}`};
+    case "finish":return {cls:"roundhdr",txt:`🏁 ${pn(e.p)} returns to the Isle of Tortuga with a full recipe!`};
+    case "shotclock":return {cls:"trade",txt:`⏱ ${pn(e.p)} was too slow — loses 1🌕, everyone else +1🌕`};
+    case "shotclockskip":return {cls:"roundhdr",txt:`⏰ ${pn(e.p)} took too long and walks the plank — sent back to port!`};
+    case "bakeoff":return {cls:"battle",txt:`🧁 BAKEOFF! ${pn(e.a)} vs ${pn(e.b)} — ${pn(e.winner)} takes it!`};
+    case "end":return {cls:"roundhdr",txt:e.winner===null?"⏳ No one finished (round cap).":`👑 ${pn(e.winner)} is the Best Baker in the Caribbean!`};
+    case "turn":return null;
+    default:return null;
+  }
+}
+
+/* ---------- playback ---------- */
+function render(){
+  const e=game.events[evIdx];if(!e)return;
+  const st=e.state;
+  // recipes are secret: only the local human's own recipe target is revealed.
+  // in a spectator-only game (no human seat, e.g. a bot-vs-bot design test) everything stays visible.
+  const humanIdxs=game.players.map((p,i)=>p.strategy==="human"?i:-1).filter(i=>i>=0);
+  const youIdx=humanIdxs.length===1?humanIdxs[0]:-1;
+  const spectator=humanIdxs.length===0;
+  game.players.forEach((p,i)=>{
+    const [x,y]=shipXY(st[i].pos,i,st);
+    shipEls[i].style.transform=`translate(${x}px,${y}px)`;
+    shipEls[i].style.opacity=st[i].done?.45:1;
+    $("coins"+i).textContent="🌕 "+st[i].coins;
+    const hold=[...st[i].ing];
+    if(spectator||i===youIdx){
+      // recipe chips consume one matching crate each; every leftover crate is surplus cargo
+      const chips=game.players[i].recipe.map(ing=>{
+        const k=hold.indexOf(ing);
+        const have=k>=0;
+        if(have)hold.splice(k,1);
+        return `<span class="chip ${have?"have":""}" title="${iname(ing)}">${ING_EMOJI[ing]}</span>`;
+      });
+      const extras=hold.map(x2=>`<span class="chip extra" title="surplus cargo: ${iname(x2)}">${ING_EMOJI[x2]}</span>`);
+      $("chips"+i).innerHTML=chips.join("")+(extras.length?`<span style="opacity:.4">·</span>`:"")+extras.join("");
+    }else{
+      // other captains' recipe maps are private — only the crates visibly aboard their ship are shown.
+      // sorted so duplicate ingredients sit next to each other — easier to spot a tradeable double
+      const held=hold.slice().sort().map(x2=>`<span class="chip have" title="${iname(x2)}">${ING_EMOJI[x2]}</span>`);
+      $("chips"+i).innerHTML=held.join("")||`<span style="opacity:.4">empty hold</span>`;
+    }
+    const lastEv=game.events[game.events.length-1];
+    $("crown"+i).textContent=(lastEv.t==="end"&&lastEv.winner===i&&evIdx===game.events.length-1)?"👑":"";
+  });
+  // active-player ring: whose turn is it as of this event?
+  if(activeRing){
+    let active=null;
+    for(let i=evIdx;i>=0&&i>evIdx-80;i--){
+      const t=game.events[i].t;
+      if(t==="turn"){active=game.events[i].p;break;}
+      if(t==="newround")break;
+    }
+    activeRing.classList.toggle("activering",active!=null&&!st[active].done);
+    if(active!=null&&!st[active].done){
+      const [ax,ay]=shipXY(st[active].pos,active,st);
+      activeRing.setAttribute("stroke",HEXCOL[active]);
+      activeRing.style.transform=`translate(${ax}px,${ay}px)`;
+      activeRing.setAttribute("opacity",1);
+    }else activeRing.setAttribute("opacity",0);
+  }
+  if(game.cfg.crates<1e9)for(const ing of game.ings){
+    const remaining=e.tokens[ing];
+    for(let idx=0;idx<game.cfg.crates;idx++){
+      const ic=document.getElementById(`crate_${ing}_${idx}`);if(!ic)continue;
+      const taken=idx>=remaining;
+      ic.style.opacity=taken?.3:1;
+      ic.style.filter=taken?"grayscale(1)":"";
+    }
+  }
+  if(spinNeedle&&e.wind){
+    spinNeedle.style.transform=`rotate(${({N:0,E:90,S:180,W:270})[e.wind]}deg)`;
+    const storming=!!e.storm;
+    stormText.textContent=storming?"⛈️ STORM":"";
+    stormText.setAttribute("fill",storming?"#e63946":"#1f4249");
+    if(stormDial){
+      stormDial.setAttribute("fill",storming?"#2a2f4a":"#fffdf0");
+      stormDial.setAttribute("stroke",storming?"#141824":"#f5a623");
+    }
+    spinNeedle.setAttribute("fill",storming?"#ffd23f":"#d6337f");
+    windLabels.forEach(t=>t.setAttribute("fill",storming?"#f4f6ff":"#1f4249"));
+  }
+  $("roundLabel").textContent=`round ${e.round} · event ${evIdx+1}/${game.events.length}`;
+  $("scrub").value=evIdx;
+  renderLog();
+  // end stats
+  if(evIdx===game.events.length-1&&(!live||liveDone))showStats();
+  else $("statsWrap").style.display="none";
+}
+let logRenderedTo=-1;
+function renderLog(){
+  const box=$("log");
+  const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<50;
+  if(evIdx===logRenderedTo+1){
+    const prev=box.querySelector(".line.cur");if(prev)prev.classList.remove("cur");
+    const L=logLines[evIdx];
+    if(L){const d=document.createElement("div");d.className="line "+(L.cls||"")+" cur";d.innerHTML=L.txt;box.appendChild(d);}
+  }else if(evIdx!==logRenderedTo){
+    let html="";
+    for(let i=0;i<=evIdx;i++){const L=logLines[i];if(!L)continue;
+      html+=`<div class="line ${L.cls||""} ${i===evIdx?"cur":""}">${L.txt}</div>`;}
+    box.innerHTML=html;
+  }
+  logRenderedTo=evIdx;
+  if(atBottom)box.scrollTop=box.scrollHeight;
+}
+
+/* ---------- action popups on the map ---------- */
+function popEmoji(x,y,emo,big){
+  const t=el("text",{x,y,"text-anchor":"middle","font-size":cell*(big?.72:.55),"class":"pop"},$("board"));
+  t.textContent=emo;
+  setTimeout(()=>t.remove(),1300);
+}
+function spawnPops(e){
+  if(!e)return;
+  const st=e.state;
+  const at=i=>{const [x,y]=shipXY(st[i].pos,i,st);return [x,y-cell*.42];};
+  switch(e.t){
+    case "battle":{
+      const loser=e.winner===e.a?e.d:e.a;
+      const [x1,y1]=at(e.a),[x2,y2]=at(e.d);
+      popEmoji((x1+x2)/2,Math.min(y1,y2)-cell*.15,"⚔️",true);
+      popEmoji(...at(loser),"💸");
+      const sp=(e.spoil||"").includes("coin")?"💰":(e.spoil||"💰").split(" ")[0];
+      popEmoji(...at(e.winner),sp||"💰");
+      break;}
+    case "fish":case "wheelfish":popEmoji(...at(e.p),e.heads?"🎣":(game.cfg.sardine?"🐟":"🎣"));break;
+    case "trade":popEmoji(...at(e.a),"🤝");popEmoji(...at(e.b),"🤝");break;
+    case "dock":popEmoji(...at(e.p),(e.got==="ing"||e.got==="bought")?ING_EMOJI[e.ing]:"🌕");break;
+    case "aground":popEmoji(...at(e.p),"💥");break;
+    case "anchor":case "moored":popEmoji(...at(e.p),"⚓");break;
+    case "tradewind":popEmoji(...at(e.p),"🌀",true);break;
+    case "parley":popEmoji(...at(e.a),e.ok?"🤝":"🙅");break;
+    case "dodge":popEmoji(...at(e.p),"💨");break;
+    case "finish":popEmoji(...at(e.p),"🏁",true);break;
+    case "bakeoff":popEmoji(...at(e.winner),"🧁",true);break;
+    case "end":if(e.winner!==null)popEmoji(...at(e.winner),"👑",true);break;
+  }
+}
+
+/* ---------- action bubbles above ships ---------- */
+const bubbles={};
+function anchorFor(e){
+  switch(e.t){
+    case "trade":case "battle":case "parley":return e.a;
+    case "bakeoff":case "end":return e.winner;
+    case "newround":case "turn":return null;
+    default:return typeof e.p==="number"?e.p:null;
+  }
+}
+function showEventBubble(e){
+  const anc=anchorFor(e);
+  const L=logLines[evIdx];
+  if(anc==null||anc===undefined||!L)return;
+  showBubble(anc,L.txt);
+}
+function showBubble(i,txt){
+  if(bubbles[i])bubbles[i].remove();
+  const st=game.events[evIdx].state;
+  let [x,y]=shipXY(st[i].pos,i,st);
+  x=Math.max(145,Math.min(640-145,x)); // keep wide bubbles on the board
+  const d=document.createElement("div");
+  d.className="bubble";d.style.borderColor=HEXCOL[i];d.innerHTML=txt;
+  d.style.left=x+"px";d.style.top=(y-cell*.32)+"px";
+  $("boardwrap").appendChild(d);bubbles[i]=d;
+  const mine=d;
+  const life=Math.max(1400,2.2*1000/(+$("speed").value));
+  setTimeout(()=>{if(bubbles[i]===mine){mine.style.opacity="0";
+    setTimeout(()=>{mine.remove();if(bubbles[i]===mine)delete bubbles[i];},400);}},life);
+}
+function clearBubbles(){for(const k in bubbles){bubbles[k].remove();delete bubbles[k];}}
+
+// Derived entirely from the event log (including each event's captured position snapshot),
+// so it works identically for live play, or scrubbing a finished game — no separate live-only
+// counters to keep in sync.
+function computeAwards(){
+  const battles={},fishCount={},dist={};
+  game.players.forEach((p,i)=>{battles[i]=0;fishCount[i]=0;dist[i]=0;});
+  let prevPos=game.players.map(()=>null);
+  for(const e of game.events){
+    if(e.t==="battle"&&e.winner!=null)battles[e.winner]=(battles[e.winner]||0)+1;
+    if((e.t==="fish"||e.t==="wheelfish")&&e.heads)fishCount[e.p]=(fishCount[e.p]||0)+1;
+    if(e.state)e.state.forEach((s,i)=>{
+      if(prevPos[i])dist[i]+=Math.abs(s.pos[0]-prevPos[i][0])+Math.abs(s.pos[1]-prevPos[i][1]);
+      prevPos[i]=s.pos;
+    });
+  }
+  return {battles,fishCount,dist};
+}
+function showStats(){
+  $("statsWrap").style.display="";
+  const w=game.winner;
+  const banner=w===null?"⏳ Nobody finished!":`👑 ${NAMES[w]} (${game.cfg.strategies[w]}) wins!`;
+  const luck=game.players.map(p=>p.flips?(p.heads/p.flips):0);
+  const {battles,fishCount,dist}=computeAwards();
+  const award=(obj,label,icon,unit)=>{
+    const entries=Object.entries(obj).map(([i,v])=>[+i,v]).filter(([,v])=>v>0);
+    if(!entries.length)return "";
+    entries.sort((a,b)=>b[1]-a[1]);
+    const [topI,topV]=entries[0];
+    return `<div class="awardCard" style="border-color:${HEXCOL[topI]}">
+      <div class="awardIcon">${icon}</div>
+      <div class="awardLabel">${label}</div>
+      <div class="awardWinner" style="color:${HEXCOL[topI]}">${NAMES[topI].replace("Capt. ","")}</div>
+      <div class="awardValue">${topV}${unit||""}</div>
+    </div>`;
+  };
+  const awards=[
+    award(battles,"Most battles won","⚔️"),
+    award(fishCount,"Most fish caught","🎣"),
+    award(dist,"Farthest traveled","⛵"," sq"),
+  ].filter(Boolean).join("");
+  $("statsPanel").innerHTML=`<div class="winner-banner">${banner}</div>
+    ${awards?`<div class="awardsRow">${awards}</div>`:""}
+    <table>
+    <tr><td>Rounds</td><td>${game.round}</td></tr>
+    <tr><td>Battles</td><td>${game.battles} (attacker won ${game.battles?Math.round(100*game.attWins/game.battles):0}%)</td></tr>
+    <tr><td>Trades</td><td>${game.trades}</td></tr>
+    <tr><td>Bakeoff</td><td>${game.finishOrder.length>1?"yes — "+game.finishOrder.length+" finishers":"no"}</td></tr>
+    ${game.players.map((p,i)=>`<tr><td style="color:${HEXCOL[i]}">${NAMES[i]} heads-luck</td><td>${p.flips?Math.round(100*luck[i]):0}% of ${p.flips} flips</td></tr>`).join("")}
+    </table>`;
+}
+
+/* ================= LIVE (human) MODE — local, no networking ================= */
+let live=false, liveDone=false, liveGen=0;
+let curSeat=0; // seat currently being prompted, used to line up the shot clock
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Bots pace their moves off the Helm's speed slider, exactly like the batch/scrub engine.
+function stepDelay(){return Math.min(3000,1500/(+$("speed").value));}
+async function botBeat(){liveRender();narrateCurrent();await sleep(stepDelay());}
+// keep the yellow action panel in step with the bot's latest move — liveRender only
+// updates the board/log/bubble, so without this the panel stays stuck on the last prompt.
+function narrateCurrent(){
+  const e=game.events[evIdx];if(!e)return;
+  if(e.t==="turn"){netNarrate(`🧭 ${pn(e.p)} takes the wheel…`);return;}
+  const L=logLines[evIdx];if(L)netNarrate(L.txt);
+}
+function setActor(s){curSeat=s;}
+
+// ---- the flippenator: one always-visible coin+button; every flip in the game plays here ----
+function setFlipCoin(state){const el=$("flipCoinWrap");if(el)el.innerHTML=coinHTML(state);}
+function setFlipActive(onClick){
+  const btn=$("flipBtn");if(!btn)return;
+  if(onClick){btn.classList.add("active");btn.disabled=false;btn.onclick=onClick;}
+  else{btn.classList.remove("active");btn.disabled=true;btn.onclick=null;}
+}
+function broadcastFlip(state){setFlipCoin(state);}
+
+// ---- shot clock: 30s to finish the solo part of your turn (wind response, sail pick, action
+// choice) before you're sent back to port. Stops once you commit to dock/attack/trade/fish,
+// since those are bounded sub-flows the clock shouldn't cut off mid-way. ----
+let shotClockSeat=null, shotClockDeadline=0, shotClockTimer=null, shotClockForce=null;
+let shotClockFired={}, turnExpired=false;
+function startShotClock(p){
+  shotClockSeat=p.idx;
+  shotClockDeadline=Date.now()+30000;
+  shotClockFired={};
+  turnExpired=false;
+  setClockUI();
+  if(shotClockTimer)clearInterval(shotClockTimer);
+  shotClockTimer=setInterval(shotClockTick,500);
+}
+function stopShotClock(){
+  shotClockSeat=null;shotClockForce=null;
+  if(shotClockTimer){clearInterval(shotClockTimer);shotClockTimer=null;}
+  setClockUI();
+}
+function shotClockTick(){
+  if(shotClockSeat==null)return;
+  const elapsed=Date.now()-(shotClockDeadline-30000);
+  if(!shotClockFired.t10&&elapsed>=10000){shotClockFired.t10=true;applyShotClockPenalty();}
+  if(!shotClockFired.t20&&elapsed>=20000){shotClockFired.t20=true;applyShotClockPenalty();}
+  if(elapsed>=30000){expireShotClock();return;}
+  setClockUI();
+}
+function applyShotClockPenalty(){
+  const p=game.players[shotClockSeat];if(!p)return;
+  const others=game.players.filter(q=>q!==p&&!q.done);
+  const take=Math.min(1,p.coins);
+  p.coins-=take;others.forEach(q=>q.coins++);
+  game.ev({t:"shotclock",p:p.idx,others:others.map(q=>q.idx)});
+  liveRender();
+}
+function expireShotClock(){
+  const p=game.players[shotClockSeat];
+  turnExpired=true;
+  if(shotClockForce){shotClockForce();shotClockForce=null;}
+  if(p){
+    p.pos=[...game.home];
+    game.ev({t:"shotclockskip",p:p.idx});
+    liveRender();
+    netNarrate(`⏰ ${NAMES[p.idx]} took too long — sent back to port!`);
+  }
+  stopShotClock();
+}
+function setClockUI(){
+  const wrap=$("shotClockPanel");if(!wrap)return;
+  if(shotClockSeat==null){wrap.style.display="none";return;}
+  wrap.style.display="";
+  const remain=Math.max(0,Math.ceil((shotClockDeadline-Date.now())/1000));
+  const numEl=$("shotClockNum"),warnEl=$("shotClockWarn");
+  numEl.textContent=remain;
+  numEl.style.color=remain<=10?"#e24b4a":(remain<=20?"#c77f16":"var(--teal)");
+  wrap.classList.toggle("urgent",remain<=10);
+  const elapsed=30-remain;
+  const p=game.players&&game.players[shotClockSeat];
+  const who=p?NAMES[p.idx].replace("Capt. ",""):"";
+  warnEl.textContent=(elapsed>=8&&elapsed<10)||(elapsed>=18&&elapsed<20)||(elapsed>=28&&elapsed<30)
+    ?`⏱ quick play, ${who}!`:`${who}'s turn`;
+}
+setInterval(setClockUI,500);
+
+function liveRender(){
+  evIdx=Math.max(0,game.events.length-1);
+  if(!game.events.length)return;
+  logLines=game.events.map(describe);
+  $("scrub").max=Math.max(0,game.events.length-1);
+  render();
+  const e=game.events[evIdx];
+  spawnPops(e);
+  showEventBubble(e);
+}
+// needsAction=true turns the panel yellow (this seat must decide something);
+// false (the default) is pale blue — informational only, nothing to click.
+function panel(html,needsAction=false){
+  $("actionPanel").innerHTML=html;
+  $("actionPanel").style.display=html?"":"none";
+  $("actionPanel").classList.toggle("needsAction",!!needsAction);
+}
+function setNeedsAction(v){const el=$("actionPanel");if(el)el.classList.toggle("needsAction",!!v);}
+function showNarration(html){panel(html?`<div class="apMsg">${html}</div>`:"");}
+function netNarrate(html){showNarration(html);}
+// used during battles so the local scoreboard (coins) stays put while the play-by-play narrates
+function netBroadcast(html){}
+
+function apBtnStyle(col){return col?` style="border:2px solid ${col};background:${col}22;font-weight:700"`:"";}
+function ask(msg,opts,colors){
+  const seat=curSeat;
+  netNarrate(msg);
+  const base=localAsk(msg,opts,colors);
+  const idxP=withShotClock(seat,base,0);
+  return idxP.then(i=>opts[i].value);
+}
+// If `seat` is the one currently on the shot clock, wrap its decision so expireShotClock() can
+// force a default answer once 30s run out, instead of the answer waiting forever. A no-op for
+// every other decision in the game (recipe drafts, side bets, battle/trade sub-flows, etc).
+function withShotClock(seat,base,defaultVal){
+  if(seat!==shotClockSeat)return base;
+  return new Promise(res=>{
+    let done=false;
+    shotClockForce=()=>{if(!done){done=true;res(defaultVal);}};
+    base.then(v=>{if(!done){done=true;shotClockForce=null;res(v);}});
+  });
+}
+function localAsk(msg,opts,colors){
+  return new Promise(res=>{
+    if(opts.length===1&&opts[0].flip){
+      setNeedsAction(true);
+      setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);res(0);});
+      return;
+    }
+    setFlipActive(null);
+    const grid=opts.some(o=>o.cls)?" recipes":"";
+    panel(`<div class="apMsg">${msg}</div><div class="apBtns${grid}">`+
+      opts.map((o,i)=>`<button class="apBtn ${o.cls||""}" data-i="${i}"${apBtnStyle(colors&&colors[i])}>${o.label}</button>`).join("")+`</div>`,true);
+    $("actionPanel").querySelectorAll(".apBtn").forEach(b=>{
+      b.onclick=()=>{panel("");res(+b.dataset.i);};
+    });
+  });
+}
+async function flash(msg,ms){netNarrate(msg);await sleep(ms||900);}
+async function humanFlip(p,label){
+  setActor(p.idx);
+  await ask(label||"Flip the dubloon!",[{label:"🌕 FLIP!",value:1,flip:true}]);
+  broadcastFlip("spin");
+  await sleep(340);
+  const h=game.flip(p);
+  broadcastFlip(h?"H":"T");
+  netNarrate(`${pn(p.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`);
+  await sleep(650);
+  broadcastFlip("wait");
+  return h;
+}
+// A fishing cast, flipped on the flippenator like every other coin in the game.
+// Humans tap CAST; bots auto-cast. Awards the catch and logs the event (evt is "fish" or "wheelfish").
+async function fishCast(p,evt,label){
+  const bd=(typeof stepDelay==="function")?stepDelay():500;
+  const spin=Math.max(260,Math.min(650,bd*0.7));
+  const hold=Math.max(500,Math.min(1200,bd*1.0));
+  if(p.strategy==="human"){
+    setActor(p.idx);
+    await ask(label||`${NAMES[p.idx]}: cast your line — flip!`,[{label:"🎣 CAST!",value:1,flip:true}]);
+  }
+  netNarrate(`🎣 ${pn(p.idx)} casts a line…`);
+  broadcastFlip("spin");
+  await sleep(spin);
+  const h=game.flip(p);
+  broadcastFlip(h?"H":"T");
+  const note=h?"a fine catch! +2🌕":(game.cfg.sardine?"just a sardine +1🌕":"nothin' biting");
+  netNarrate(`🎣 ${pn(p.idx)} flips ${h?"⚪ HEADS":"⚫ TAILS"} — ${note}`);
+  await sleep(hold);
+  broadcastFlip("wait");
+  if(h)p.coins+=2;else if(game.cfg.sardine)p.coins+=1;
+  game.ev({t:evt,p:p.idx,heads:h?1:0});
+  liveRender();
+  return h;
+}
+function reachable(p,steps){
+  const n=game.cfg.grid,seen={[p.pos[0]+","+p.pos[1]]:true},q=[[p.pos,0]],out=[];
+  while(q.length){
+    const [c,d]=q.shift();
+    if(d>=steps)continue;
+    for(const dd of Object.values(DIRS)){
+      const o=[c[0]+dd[0],c[1]+dd[1]],k=o[0]+","+o[1];
+      if(game.blocked(o))continue;
+      if(game.islands[o]!==undefined||game.isHome(o))continue;
+      if(seen[k])continue;
+      seen[k]=true;
+      // you may sail PAST other ships, but not end your move on one
+      const occupied=game.players.some(q2=>q2!==p&&!q2.done&&q2.pos[0]===o[0]&&q2.pos[1]===o[1]);
+      if(!occupied)out.push(o);
+      if(!game.onRim(o))q.push([o,d+1]); // entering the trade winds ends your move
+    }
+  }
+  return out;
+}
+function pickCell(p,cells){
+  setActor(p.idx);
+  netNarrate(`${NAMES[p.idx]} is choosing where to sail…`);
+  const base=localPickCell(p,cells);
+  return withShotClock(p.idx,base,null);
+}
+function localPickCell(p,cells){
+  return new Promise(res=>{
+    const svg=$("board"),hs=[];
+    const done=v=>{hs.forEach(h=>h.remove());panel("");res(v);};
+    for(const c of cells){
+      const r=el("rect",{x:c[0]*cell+2,y:c[1]*cell+2,width:cell-4,height:cell-4,rx:5,
+        fill:"#fdb63d",opacity:.4,style:"cursor:pointer"},svg);
+      r.addEventListener("click",()=>done(c));
+      hs.push(r);
+    }
+    panel(`<div class="apMsg">${NAMES[p.idx]}: click a highlighted square to sail (−1🌕)</div>
+      <div class="apBtns"><button class="apBtn" id="apStay">Stay put</button></div>`,true);
+    $("apStay").onclick=()=>done(null);
+  });
+}
+async function humanWind(p){
+  setActor(p.idx);
+  const d=DIRS[game.windNow],dist=game.stormNow?2:1;
+  for(let s=0;s<dist;s++){
+    const nx=[p.pos[0]+d[0],p.pos[1]+d[1]];
+    if(game.blocked(nx))break;
+    if(game.isHome(nx)){game.ev({t:"moored",p:p.idx});liveRender();return;}
+    if(game.players.some(q=>q!==p&&!q.done&&q.pos[0]===nx[0]&&q.pos[1]===nx[1])){
+      game.ev({t:"moored",p:p.idx});liveRender();return; // another ship holds that square — wind stops short
+    }
+    if(game.islands[nx]!==undefined){
+      if(game.moored(p)){game.ev({t:"moored",p:p.idx});liveRender();return;}
+      const opts=[];
+      if(p.coins>=1)opts.push({label:"Pay 1🌕 to dodge",value:"pay"});
+      opts.push({label:"Flip! (H: anchor · T: lose half 🌕)",value:"flip"});
+      const v=await ask(`${NAMES[p.idx]}: the wind blows you toward an island!`,opts);
+      if(turnExpired)return;
+      if(v==="pay"){p.coins--;game.ev({t:"dodge",p:p.idx});}
+      else{
+        const h=await humanFlip(p,"Flip to drop anchor!");
+        if(turnExpired)return;
+        if(h)game.ev({t:"anchor",p:p.idx});
+        else{p.coins-=Math.floor(p.coins/2);game.ev({t:"aground",p:p.idx});}
+      }
+      liveRender();return;
+    }
+    p.pos=nx;
+    if(game.onRim(nx)){ // swept into the trade winds
+      game.ev({t:"windmove",p:p.idx});liveRender();
+      if(game.tradewind(p)){liveRender();await flash("🌀 The trade winds sweep you around the rim!",1300);}
+      return;
+    }
+  }
+  game.ev({t:"windmove",p:p.idx});liveRender();
+}
+async function humanDock(p,port){
+  setActor(p.idx);
+  const ing=port;
+  const h=await humanFlip(p,`Docking at ${ilabel(ing)} — flip!`);
+  if(h){
+    if(game.tokens[ing]>0){game.tokens[ing]--;p.ing.push(ing);game.ev({t:"dock",p:p.idx,ing,heads:1,got:"ing"});}
+    else{p.coins+=3;game.ev({t:"dock",p:p.idx,ing,heads:1,got:"empty"});}
+  }else{
+    let got="coins";
+    if(game.cfg.dockBuy&&p.coins>=3&&game.tokens[ing]>0){
+      const buy=await ask("Tails! Take 3🌕 — or buy the crate anyway for 3🌕?",[
+        {label:`Buy ${ilabel(ing)} (−3🌕)`,value:true},{label:"Take 3🌕",value:false}]);
+      if(buy){p.coins-=3;game.tokens[ing]--;p.ing.push(ing);got="bought";}
+      else p.coins+=3;
+    }else p.coins+=3;
+    game.ev({t:"dock",p:p.idx,ing,heads:0,got});
+  }
+  p.firstFlip.add(ing);p.dockedNow.add(ing);
+  liveRender();
+}
+function coinHTML(state,bs,win){
+  const b=bs?`<span class="bs">🔥</span>`:"";
+  const w=win?" win":"";
+  if(state==="H")return `<div class="coin heads${w}">HEADS${b}</div>`;
+  if(state==="T")return `<div class="coin tails${w}">TAILS${b}</div>`;
+  if(state==="spin")return `<div class="coin spin">🪙${b}</div>`;
+  return `<div class="coin wait">?</div>`;
+}
+function pipsHTML(n,col,total){
+  total=total||3;
+  let s="";
+  for(let i=0;i<total;i++)s+=`<span class="pip${i<n?" on":""}"${i<n?` style="background:${col};border-color:${col}"`:""}></span>`;
+  return `<div class="pips">${s}</div>`;
+}
+// The battle scoreboard: names, a static result circle per fighter, and pips. The coin never
+// spins here — every flip in the game (battles included) physically happens on the shared
+// flippenator; this just displays whatever it last landed on for each fighter.
+function renderBattle(o){
+  const nm=i=>NAMES[i].replace("Capt. ",""),col=i=>HEXCOL[i];
+  const A=o.att,D=o.def,need=o.need||3,title=o.title||"⚔️ Broadside Battle";
+  panel(`<div class="btl">
+    <div class="btl-hd"><span>${title}</span><span class="rnd">Round ${o.round} · first to ${need}</span></div>
+    <div class="btl-body">
+      <div class="btl-col${o.live==="a"?" live":""}">
+        <div class="who" style="color:${col(A.idx)}">${nm(A.idx)}</div>
+        <div class="role">${o.roleA||"Attacker"}</div>
+        ${coinHTML(o.atState,o.atBs,o.winCoin==="a")}
+        ${pipsHTML(o.a,col(A.idx),need)}
+      </div>
+      <div class="btl-mid">VS</div>
+      <div class="btl-col${o.live==="d"?" live":""}">
+        <div class="who" style="color:${col(D.idx)}">${nm(D.idx)}</div>
+        <div class="role">${o.roleD||"Defender"}</div>
+        ${coinHTML(o.dfState,o.dfBs,o.winCoin==="d")}
+        ${pipsHTML(o.d,col(D.idx),need)}
+      </div>
+    </div>
+    ${battleFooter(o)}
+  </div>`,!!o.prompt);
+}
+// the footer beneath the coins: a decision (buttons), a "waiting…" note, or the round result
+function battleFooter(o){
+  if(o.prompt){
+    const {msg,opts,colors}=o.prompt;
+    return `<div class="btl-prompt">${msg?`<div class="msg">${msg}</div>`:""}<div class="btns">`+
+      opts.map((op,i)=>`<button class="apBtn btlBtn" data-i="${i}"${apBtnStyle(colors&&colors[i])}>${op.label}</button>`).join("")+
+      `</div></div>`;
+  }
+  if(o.waiting)return `<div class="btl-wait">⏳ Waiting for ${o.waiting}…</div>`;
+  return `<div class="btl-result">${o.result||"&nbsp;"}</div>`;
+}
+// A battle decision that keeps the coins on screen: the scoreboard (o) renders with the
+// prompt buttons tucked beneath it, so nothing about the layout jumps when it's your turn.
+function battleAsk(p,o,msg,opts,colors){
+  setActor(p.idx);
+  const isFlip=opts.length===1&&!!opts[0].flip;
+  netBroadcast(msg);
+  const idxP=new Promise(res=>{
+    if(isFlip){
+      renderBattle(o);
+      setNeedsAction(true);
+      setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);res(0);});
+    }else{
+      renderBattle(Object.assign({},o,{prompt:{msg,opts,colors}}));
+      $("actionPanel").querySelectorAll(".btlBtn").forEach(b=>{
+        b.onclick=()=>res(+b.dataset.i);
+      });
+    }
+  });
+  return idxP.then(i=>opts[i].value);
+}
+// The Lookout's Call: every spectator MUST call a winner from the crow's nest —
+// it's free, and a correct call earns a Spotter's Bounty (+1🌕) from the ship's
+// bank. Players MAY back their call with their own coin for a bigger prize.
+async function collectSideBets(att,def){
+  const bets=[],ns=i=>NAMES[i].replace("Capt. ","");
+  const spectators=game.players.filter(p=>p!==att&&p!==def&&!p.done);
+  for(const s of spectators){
+    if(s.strategy==="human"){
+      setActor(s.idx);
+      // The call itself is free and mandatory — no coin of your own at risk.
+      const who=await ask(`⚔️ A battle's brewing! Guess the winner for free and win a dubloon — or back your own call with coin next for double or nothing.`,
+        [{label:`Call ${ns(att.idx)}`,value:"a"},{label:`Call ${ns(def.idx)}`,value:"d"}],
+        [HEXCOL[att.idx],HEXCOL[def.idx]]);
+      let amt=0;
+      let amounts=[1,2,3,5].filter(n=>s.coins>=n);
+      if(s.coins>5)amounts.push(s.coins); // all-in
+      if(amounts.length){
+        setActor(s.idx);
+        // Optional: sweeten the call with real coin.
+        amt=await ask(`💰 Back your call on ${who==="a"?ns(att.idx):ns(def.idx)} with coin? Win and you keep the free dubloon AND double your stake — lose and your stake is gone. (purse: ${s.coins}🌕)`,
+          [{label:"Just the free call",value:0}].concat(
+            amounts.map(n=>({label:`Back with ${n}🌕`+(n===s.coins?" — all in!":""),value:n}))));
+      }
+      bets.push({idx:s.idx,on:who,amt});
+      if(amt)await flash(`💰 ${pn(s.idx)} calls ${pn(who==="a"?att.idx:def.idx)} and backs it with ${amt}🌕!`,1100);
+      else await flash(`🔭 ${pn(s.idx)} calls ${pn(who==="a"?att.idx:def.idx)} from the crow's nest.`,900);
+    }else{
+      // Bots always call (favoring the fuller purse), and sometimes back it with coin.
+      const fav=att.coins>=def.coins?"a":"d";
+      const on=game.r()<.72?fav:(fav==="a"?"d":"a");
+      const amt=(s.coins>=4&&game.r()<.5)?Math.min(2,s.coins):0;
+      bets.push({idx:s.idx,on,amt});
+    }
+  }
+  return bets;
+}
+async function settleSideBets(bets,winSide){
+  if(!bets.length)return;
+  const parts=[];
+  for(const bet of bets){
+    const p=game.players[bet.idx],won=bet.on===winSide;
+    // Correct call: Spotter's Bounty (+1) plus doubled stake. Wrong: only a
+    // wagered stake sinks — a free call costs nothing.
+    const delta=won?1+2*bet.amt:-bet.amt;
+    p.coins+=delta;
+    game.ev({t:"sidebet",p:bet.idx,amt:bet.amt,won,on:bet.on,delta});
+    if(delta>0)parts.push(`${pn(bet.idx)} +${delta}🌕`);
+    else if(delta<0)parts.push(`${pn(bet.idx)} −${bet.amt}🌕`);
+    else parts.push(`${pn(bet.idx)} no bounty`);
+  }
+  liveRender();
+  await flash("🔭 The Lookout's Call settles — "+parts.join(" · "),1600);
+}
+async function asyncBattle(att,def){
+  const c=game.cfg,need=2;
+  showBubble(att.idx,`⚔️ ${pn(att.idx)} attacks ${pn(def.idx)}!`);
+  await flash(`⚔️ ${NAMES[att.idx]} attacks ${NAMES[def.idx]}! First to ${need} points wins…`,Math.max(900,stepDelay()));
+  if(c.powder)att.coins-=c.powder;
+  game.battles++;
+  const bets=await collectSideBets(att,def);
+  let a=0,d=0,free=c.broadside==="free",paid=c.broadside==="paid";
+  const rounds=[];
+  const hA=att.strategy==="human",hD=def.strategy==="human";
+  let round=0;
+  const nm=i=>NAMES[i].replace("Capt. ","");
+  const bd=(typeof stepDelay==="function")?stepDelay():500;
+  const spin=Math.max(260,Math.min(650,bd*0.7));  // coin tumble time
+  const beat=Math.max(300,Math.min(900,bd*0.9));  // suspense pause before the defender answers
+  const hold=Math.max(500,Math.min(1500,bd*1.1)); // pause to read the round result
+  const base=o=>Object.assign({att,def,a,d,round,need},o);
+  // Every flip — human or bot — physically happens on the shared flippenator: spin, land,
+  // then the result is copied into this fighter's result circle in the scoreboard.
+  const hFlip=async(side,p,label,extra)=>{
+    extra=extra||{};
+    const key=side==="a"?"atState":"dfState";
+    await battleAsk(p,base(Object.assign({live:side,[key]:"wait"},extra)),
+      label,[{label:"🌕 FLIP!",value:1,flip:true}]);
+    broadcastFlip("spin");
+    await sleep(spin);
+    const h=game.flip(p);
+    broadcastFlip(h?"H":"T");
+    netBroadcast(`${pn(p.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`);
+    renderBattle(base(Object.assign({live:side,[key]:h?"H":"T"},extra)));
+    await sleep(Math.min(hold*0.5,500));
+    broadcastFlip("wait");
+    return h;
+  };
+  // a bot's flip: same flippenator spin, just no button to wait on
+  const bFlip=async(side,p,extra)=>{
+    extra=extra||{};
+    const key=side==="a"?"atState":"dfState";
+    renderBattle(base(Object.assign({live:side,[key]:"wait"},extra)));
+    broadcastFlip("spin");
+    await sleep(spin);
+    const h=game.flip(p);
+    broadcastFlip(h?"H":"T");
+    await sleep(300);
+    broadcastFlip("wait");
+    return h;
+  };
+  while(a<need&&d<need){
+    round++;
+    let bs=false,ah,dh;
+    // fresh round — both coins face-down, attacker on deck
+    renderBattle(base({atState:"wait",dfState:"wait",live:"a",result:`${nm(att.idx)} loads the cannon…`}));
+    await sleep(beat*0.5);
+    // ---- ATTACKER flips ----
+    if(hA){
+      ah=await hFlip("a",att,`⚔️ ${nm(att.idx)} (attacker) — fire!`,{dfState:"wait"});
+    }else{
+      ah=await bFlip("a",att,{dfState:"wait"});
+    }
+    renderBattle(base({atState:ah?"H":"T",dfState:"wait",live:"a"}));
+    // ---- broadside reflip on a tails ----
+    if(!ah&&(free||(paid&&att.coins>=1))){
+      let use=true;
+      if(hA)use=await battleAsk(att,base({atState:"T",dfState:"wait",live:"a"}),
+        paid?"Tails! Fire the broadside — pay 1🌕 to reflip?":"Tails! Fire the broadside — free reflip?",
+        [{label:"🔥 Reflip!",value:true},{label:"Keep tails",value:false}]);
+      if(use){
+        if(paid)att.coins--;
+        if(hA){ah=await hFlip("a",att,"🔥 Broadside — reflip!",{atBs:true,dfState:"wait"});}
+        else{ah=await bFlip("a",att,{atBs:true,dfState:"wait",result:"🔥 Broadside — reflip!"});}
+        bs=true;free=false;paid=false;
+        renderBattle(base({atState:ah?"H":"T",atBs:true,dfState:"wait",live:"a"}));
+      }else if(!hA){free=false;paid=false;}
+    }
+    // ---- suspense: hand it to the defender ----
+    await sleep(beat*0.6);
+    renderBattle(base({atState:ah?"H":"T",atBs:bs,dfState:"wait",live:"d",
+      result:`${nm(att.idx)} shows ${ah?"HEADS":"TAILS"} — ${nm(def.idx)} must answer…`}));
+    await sleep(beat);
+    // ---- DEFENDER flips ----
+    if(hD){
+      dh=await hFlip("d",def,`🛡️ ${nm(def.idx)} (defender) — answer!`,{atState:ah?"H":"T",atBs:bs});
+    }else{
+      dh=await bFlip("d",def,{atState:ah?"H":"T",atBs:bs});
+    }
+    // ---- resolve the round ----
+    rounds.push([ah?1:0,dh?1:0,bs?1:0]);
+    let scorer=null,rmsg;
+    if(ah&&dh){rmsg=`<span class="cancel">Both fire HEADS — cannonballs collide, no damage.</span>`;}
+    else if(ah){a++;scorer="a";rmsg=`<span class="score">${nm(att.idx)} lands a hit! +1</span>`;}
+    else if(dh){d++;scorer="d";rmsg=`<span class="score">${nm(def.idx)} lands a hit! +1</span>`;}
+    else{rmsg=`<span class="cancel">Both miss — TAILS all round, no damage.</span>`;}
+    renderBattle(base({atState:ah?"H":"T",atBs:bs,dfState:dh?"H":"T",live:null,winCoin:scorer,result:rmsg}));
+    await sleep(hold);
+  }
+  panel("");
+  const win=a>=need?att:def,lose=a>=need?def:att;
+  if(win===att)game.attWins++;
+  let spoil;
+  if(c.asym&&lose===att){
+    const take=Math.min(2,lose.coins);lose.coins-=take;win.coins+=take;spoil=take+"c (raider)";
+  }else{
+    const canCoins=lose.coins>=5,hasIng=lose.ing.length>0;
+    let mode;
+    if(canCoins&&hasIng){
+      if(lose.strategy==="human"){setActor(lose.idx);
+        mode=await ask(`${NAMES[lose.idx]}, you lost! Pay with…`,
+          [{label:"5🌕",value:"coins"},{label:"a crate (winner picks)",value:"ing"}]);}
+      else{const w2=lose.ing.filter(i=>game.needs(win).includes(i));mode=w2.length?"ing":"coins";}
+    }else if(hasIng)mode="ing";else mode="coins";
+    if(mode==="coins"){const take=Math.min(5,lose.coins);lose.coins-=take;win.coins+=take;spoil=take+" coins";}
+    else{
+      let pick;
+      const uniq=[...new Set(lose.ing)];
+      if(win.strategy==="human"&&uniq.length>1){setActor(win.idx);
+        pick=await ask(`${NAMES[win.idx]}, choose your plunder!`,uniq.map(i=>({label:ilabel(i),value:i})));}
+      else{const w2=lose.ing.filter(i=>game.needs(win).includes(i));pick=w2[0]||lose.ing[0];}
+      lose.ing.splice(lose.ing.indexOf(pick),1);win.ing.push(pick);spoil=ilabel(pick);
+    }
+  }
+  if(win===att){ // only a winning attacker takes the loser's square; a repelled attack moves no one
+    [att.pos,def.pos]=[def.pos,att.pos];
+    game.tradewind(att);game.tradewind(def);
+  }
+  game.ev({t:"battle",a:att.idx,d:def.idx,rounds,winner:win.idx,spoil});
+  liveRender();
+  await settleSideBets(bets,a>=need?"a":"d");
+  if(win===att)for(const pl of [att,def]){ // only ships that swapped into a new berth may dock — a ship that never left doesn't re-dock
+    const port=game.adjPort(pl);
+    if(port&&(game.cfg.unlimitedDock||!pl.firstFlip.has(port))){
+      if(pl.strategy==="human")await humanDock(pl,port);
+      else{game.doDock(pl,port);liveRender();}
+    }
+  }
+  return win;
+}
+async function humanTrade(p){
+  setActor(p.idx);
+  const opps=game.tradeOpp(p).filter(q=>q.ing.length>0);
+  if(!opps.length){await flash("No one has cargo to trade for.");return false;}
+  const q=opps.length===1?opps[0]:
+    await ask("Parley with whom?",opps.map(o=>({label:NAMES[o.idx],value:o})).concat([{label:"Cancel",value:null}]),
+      opps.map(o=>HEXCOL[o.idx]).concat([null]));
+  if(!q)return false;
+  const want=await ask(`What do you want from ${NAMES[q.idx]}?`,
+    [...new Set(q.ing)].map(i=>({label:ilabel(i),value:i})).concat([{label:"Cancel",value:null}]));
+  if(!want)return false;
+  // An offer is an ingredient, coins, or both together — sweeten a crate with a few coins on top.
+  const ingOpts=[...new Set(p.ing)].map(i=>({label:ilabel(i),value:i}));
+  ingOpts.push({label:"— coins only —",value:null});
+  ingOpts.push({label:"Cancel",value:"__cancel__"});
+  const baseIng=await ask("Offer which crate (or coins only)?",ingOpts);
+  if(baseIng==="__cancel__")return false;
+  const coinChoices=[0,1,2,3,4,5,6].filter(n=>n===0||p.coins>=n);
+  if(!baseIng)coinChoices.shift(); // a coins-only offer needs at least 1 coin
+  const coinOpts=coinChoices.map(n=>({label:n===0?"No extra coins":`+${n}🌕`,value:n}));
+  coinOpts.push({label:"Cancel",value:-1});
+  const extraCoins=await ask(baseIng?`Sweeten with coin? (offering ${ilabel(baseIng)})`:"How many coins?",coinOpts);
+  if(extraCoins===-1)return false;
+  const give={ing:baseIng,coins:extraCoins};
+  // plain-text form (stored on events, later run through fmtItem for the log); emoji form for
+  // direct UI prompts below
+  const offerLabel=(give.ing?iname(give.ing):"")+(give.ing&&give.coins?" + ":"")+(give.coins?`${give.coins} coins`:"");
+  const offerDisplay=(give.ing?ilabel(give.ing):"")+(give.ing&&give.coins?" + ":"")+(give.coins?`${give.coins}🌕`:"");
+  let accept;
+  if(q.strategy==="human"){
+    setActor(q.idx);
+    accept=await ask(`${NAMES[q.idx]}: accept ${offerDisplay} for your ${ilabel(want)}?`,
+      [{label:"✅ Accept",value:true},{label:"❌ Decline",value:false}]);
+  }else{
+    // bot valuation: a crate is ESSENTIAL if it's on their recipe and they hold no spare — unless
+    // they're within one turn's sail of that crate's own dock and could just go re-flip for
+    // another, in which case trading it away is the efficient path (players trading with each
+    // other instead of everyone physically re-visiting every island).
+    const essential=q.recipe.includes(want)&&game.cnt(q.ing,want)<=1;
+    const nearResupply=essential&&game.tokens[want]>0&&man(q.pos,game.islandOf[want])<=3;
+    const trulyEssential=essential&&!nearResupply;
+    // bots won't hand a human their final needed ingredient for a song
+    const humanNeeds=game.needs(p);
+    const humanFinishes=humanNeeds.length===1&&humanNeeds[0]===want;
+    let cost=trulyEssential?7:2;
+    if(humanFinishes)cost=Math.max(cost,9);
+    const ingVal=give.ing?(game.needs(q).includes(give.ing)?7:2):0;
+    const val=ingVal+give.coins;
+    const bonus=game.cfg.tradeBonus?1:0;
+    accept=val+bonus>=cost;
+    if(!accept){
+      const shortfall=Math.max(0,cost-bonus-ingVal-give.coins);
+      if(!humanFinishes&&p.coins>=shortfall){
+        // counteroffer: name their price instead of flat refusal
+        setActor(p.idx);
+        const deal=await ask(`${NAMES[q.idx]} scoffs — but counters: "${shortfall}🌕 more for my ${ilabel(want)}, take it or leave it."`,
+          [{label:`Pay ${shortfall}🌕 more`,value:true},{label:"Walk away",value:false}]);
+        if(deal){
+          q.ing.splice(q.ing.indexOf(want),1);p.ing.push(want);
+          if(give.ing){p.ing.splice(p.ing.indexOf(give.ing),1);q.ing.push(give.ing);}
+          const totalCoins=give.coins+shortfall;
+          p.coins-=totalCoins;q.coins+=totalCoins;
+          game.trades++;
+          if(game.cfg.tradeBonus){p.coins++;q.coins++;}
+          game.ev({t:"trade",a:p.idx,b:q.idx,gave:offerLabel+(shortfall?` + ${shortfall} coins`:""),got:want,kind:"counter"});
+          liveRender();
+          return true;
+        }
+      }
+      game.ev({t:"parley",a:p.idx,b:q.idx,offer:offerLabel||"nothing",want,ok:false});
+      liveRender();
+      await flash(humanFinishes?`${NAMES[q.idx]} refuses — "Not lettin' ye finish yer recipe that easy!"`:`${NAMES[q.idx]} declines!`);
+      return true;
+    }
+  }
+  if(!accept){
+    game.ev({t:"parley",a:p.idx,b:q.idx,offer:offerLabel||"nothing",want,ok:false});
+    liveRender();
+    await flash(`${NAMES[q.idx]} declines!`);
+    return true;
+  }
+  q.ing.splice(q.ing.indexOf(want),1);p.ing.push(want);
+  if(give.ing){p.ing.splice(p.ing.indexOf(give.ing),1);q.ing.push(give.ing);}
+  if(give.coins){p.coins-=give.coins;q.coins+=give.coins;}
+  game.trades++;
+  if(game.cfg.tradeBonus){p.coins++;q.coins++;}
+  game.ev({t:"trade",a:p.idx,b:q.idx,gave:offerLabel||"nothing",got:want,kind:"human"});
+  liveRender();
+  return true;
+}
+async function wheelFish(p){
+  // the captain who just handed off the ship's wheel casts a line while the new leader takes over
+  setActor(p.idx);
+  await flash(`🧭 ${NAMES[p.idx]} passes the ship's wheel — and casts a line while the crew comes about…`,Math.max(900,stepDelay()));
+  await fishCast(p,"wheelfish",`🎣 ${NAMES[p.idx]}, fish as you pass the wheel — flip!`);
+}
+async function humanAct(p){
+  setActor(p.idx);
+  const port=game.adjPort(p);
+  const canDock=port&&(game.cfg.unlimitedDock||!(p.firstFlip.has(port)&&p.dockedNow.has(port)))
+    &&!(game.cfg.singleDock&&game.dockOccupiedBy(port,p));
+  const targets=game.adjOpp(p);
+  const opts=[];
+  if(canDock)opts.push({label:`⚓ Dock at ${ilabel(port)}`,value:"dock"});
+  if(targets.length&&p.coins>=game.cfg.powder)
+    opts.push({label:`⚔️ Attack${game.cfg.powder?` (−${game.cfg.powder}🌕 powder)`:""}`,value:"attack"});
+  if(game.tradeOpp(p).length)opts.push({label:"🤝 Parley",value:"trade"});
+  if(!game.needs(p).length&&man(p.pos,game.home)<=1)
+    opts.unshift({label:"🧁 Start your bakery!",value:"bakery"});
+  opts.push({label:"🎣 Fish",value:"fish"});
+  const v=await ask(`${NAMES[p.idx]}, choose your action:`,opts);
+  if(turnExpired)return;
+  stopShotClock(); // committing to an action ends the clock — dock/attack/trade/fish run unbounded
+  if(v==="bakery"){await flash("🧁 Firing up the ovens on the Isle of Tortuga!",1200);return;}
+  if(v==="dock")await humanDock(p,port);
+  else if(v==="attack"){
+    const t=targets.length===1?targets[0]:
+      await ask("Attack whom?",targets.map(o=>({label:NAMES[o.idx],value:o})),targets.map(o=>HEXCOL[o.idx]));
+    await asyncBattle(p,t);
+  }
+  else if(v==="trade"){const done=await humanTrade(p);if(!done){await humanAct(p);}return;}
+  else if(v==="fish"){
+    await fishCast(p,"fish","🎣 Cast your line — flip!");
+  }
+}
+async function humanTurn(p){
+  setActor(p.idx);
+  game.ev({t:"turn",p:p.idx});
+  liveRender();
+  startShotClock(p);
+  await flash(`⛵ Ahoy, ${NAMES[p.idx]} — your turn! The wind blows <b>${DIRNAME[game.windNow]}</b>${game.stormNow?" — ⛈️ STORM! It pushes everyone 2 squares":""}.`,1500);
+  if(turnExpired)return;
+  const before=[...p.pos];
+  await humanWind(p);
+  if(turnExpired)return;
+  if(p.pos[0]!==before[0]||p.pos[1]!==before[1])
+    await flash(`🌬️ The wind carries you ${DIRNAME[game.windNow]}.`,1000);
+  if(turnExpired)return;
+  p.justDocked=false;
+  if(!game.adjPort(p))p.dockedNow.clear();
+  if(p.coins>0){
+    const dest=await pickCell(p,reachable(p,3));
+    if(turnExpired)return;
+    if(dest){p.coins--;p.pos=dest;game.ev({t:"sail",p:p.idx});liveRender();
+      if(game.tradewind(p)){liveRender();await flash("🌀 The trade winds sweep you around the rim!",1200);}}
+  }else await flash(`${NAMES[p.idx]}: no coins — sailing costs 1🌕, so you drift with the wind. (Fish to refill your purse!)`,1600);
+  if(turnExpired)return;
+  if(!game.adjPort(p))p.dockedNow.clear();
+  await humanAct(p);
+  stopShotClock();
+}
+async function botTurn(p){
+  const g=game;
+  g.ev({t:"turn",p:p.idx});
+  await botBeat();
+  const before=[...p.pos];
+  g.windPush(p,DIRS[g.windNow],g.stormNow?2:1);
+  p.justDocked=false;
+  // windPush itself may already have logged a moored/dodge/anchor/aground event (none of which
+  // move the ship) — narrate every time, not just on a position change, or the yellow panel goes
+  // stale while those outcomes silently happen off-screen
+  if(p.pos[0]!==before[0]||p.pos[1]!==before[1])g.ev({t:"windmove",p:p.idx});
+  await botBeat();
+  if(!g.adjPort(p))p.dockedNow.clear();
+  let target=g.chooseTarget(p);
+  if(p.strategy==="pirate"&&g.needs(p).length){
+    const prey=g.players.filter(q=>q!==p&&!q.done&&q.ing.some(i=>g.needs(p).includes(i)));
+    if(prey.length){prey.sort((x,y)=>man(p.pos,x.pos)-man(p.pos,y.pos));
+      if(man(p.pos,prey[0].pos)<man(p.pos,target))target=prey[0].pos;}
+  }
+  const dist=man(p.pos,target);
+  const exact=g.dockCells.has(target[0]+","+target[1]);
+  if((dist>1||(dist===1&&exact))&&p.coins>0){
+    p.coins--;const b=[...p.pos];g.stepToward(p,target,3);
+    if(p.pos[0]!==b[0]||p.pos[1]!==b[1]){g.ev({t:"sail",p:p.idx});await botBeat();}else p.coins++;
+  }
+  if(!g.adjPort(p))p.dockedNow.clear();
+  liveRender();
+  // hail humans: locked-out bots offer coins for a crate they can't get any other way
+  if(g.cfg.parley&&(game.round-(p.lastOffer||-9))>=3){
+    for(const ing of g.needs(p)){
+      if(g.tokens[ing]>0)continue; // island still has crates — no need to beg
+      const human=g.players.find(q=>q.strategy==="human"&&!q.done&&q.ing.includes(ing));
+      if(human&&p.coins>=5){
+        p.lastOffer=game.round;
+        setActor(human.idx);
+        const sell=await ask(`📯 ${NAMES[p.idx]} hails you: "Ahoy! 5🌕 for your ${ilabel(ing)} — what say ye?"`,
+          [{label:"Sell for 5🌕",value:true},{label:"Refuse",value:false}]);
+        g.ev({t:"parley",a:p.idx,b:human.idx,offer:"5 coins",want:ing,ok:sell});
+        if(sell){
+          human.ing.splice(human.ing.indexOf(ing),1);p.ing.push(ing);
+          p.coins-=5;human.coins+=5;g.trades++;
+          if(g.cfg.tradeBonus){p.coins++;human.coins++;}
+          g.ev({t:"trade",a:p.idx,b:human.idx,gave:"5 coins",got:ing,kind:"hail"});
+        }
+        await botBeat();
+        break;
+      }
+    }
+  }
+  const port=g.adjPort(p);
+  if((p.strategy==="trader"||g.cfg.parley)&&g.tryTrade(p)){await botBeat();return;}
+  const victim=g.wantsAttack(p);
+  if(victim){if(!g.tryTrade(p))await asyncBattle(p,victim);await botBeat();return;}
+  if(port&&p.strategy==="monopolist"&&port===p.corner&&g.tokens[port]>0){
+    if(g.doDock(p,port)){await botBeat();return;}}
+  if(port&&g.needs(p).includes(port)&&g.tokens[port]>0){if(g.doDock(p,port)){await botBeat();return;}}
+  if(port&&g.cfg.merchant&&(p.strategy==="trader"||p.strategy==="balanced")){
+    if(g.tokens[port]>0&&!p.ing.includes(port)&&g.players.some(q=>q!==p&&g.needs(q).includes(port))){
+      if(g.doDock(p,port)){await botBeat();return;}}}
+  if(port&&(g.cfg.unlimitedDock||!p.firstFlip.has(port))){if(g.doDock(p,port)){await botBeat();return;}}
+  if(p.coins<=1){
+    await fishCast(p,"fish");
+    await botBeat();
+  }
+}
+// The bakeoff gets the same scoreboard + flippenator treatment as a regular battle, just
+// without attacker/defender roles, broadsides, or spoils — just two finalists racing to `need`.
+async function asyncBakeoff(A,B){
+  const need=3;
+  let a=0,d=0,round=0;
+  const nm=i=>NAMES[i].replace("Capt. ","");
+  const bd=(typeof stepDelay==="function")?stepDelay():500;
+  const spin=Math.max(260,Math.min(650,bd*0.7));
+  const hold=Math.max(500,Math.min(1500,bd*1.1));
+  const base=o=>Object.assign({att:A,def:B,a,d,round,need,title:"🧁 The Bakeoff!",roleA:"Finalist",roleD:"Finalist"},o);
+  const flipSide=async(side,p)=>{
+    const key=side==="a"?"atState":"dfState";
+    if(p.strategy==="human"){
+      await battleAsk(p,base({live:side,[key]:"wait"}),
+        `🧁 ${nm(p.idx)} — flip!`,[{label:"🌕 FLIP!",value:1,flip:true}]);
+    }else{
+      renderBattle(base({live:side,[key]:"wait"}));
+    }
+    broadcastFlip("spin");
+    await sleep(spin);
+    const h=game.flip(p);
+    broadcastFlip(h?"H":"T");
+    netBroadcast(`${pn(p.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`);
+    renderBattle(base({live:side,[key]:h?"H":"T"}));
+    await sleep(Math.min(hold*0.5,500));
+    broadcastFlip("wait");
+    return h;
+  };
+  while(a<need&&d<need){
+    round++;
+    renderBattle(base({atState:"wait",dfState:"wait",live:"a",result:`🧁 Bakeoff — round ${round}!`}));
+    await sleep(300);
+    const ah=await flipSide("a",A);
+    const dh=await flipSide("d",B);
+    let scorer=null,rmsg;
+    if(ah&&dh){rmsg=`<span class="cancel">Both HEADS — no score this round.</span>`;}
+    else if(ah){a++;scorer="a";rmsg=`<span class="score">${nm(A.idx)} scores! +1</span>`;}
+    else if(dh){d++;scorer="d";rmsg=`<span class="score">${nm(B.idx)} scores! +1</span>`;}
+    else{rmsg=`<span class="cancel">Both TAILS — no score this round.</span>`;}
+    renderBattle(base({atState:ah?"H":"T",dfState:dh?"H":"T",live:null,winCoin:scorer,result:rmsg}));
+    await sleep(hold);
+  }
+  panel("");
+  const w=a>=need?A:B;
+  game.ev({t:"bakeoff",a:A.idx,b:B.idx,winner:w.idx});liveRender();
+  return w;
+}
+// Recipe drafting: each human seat picks between two candidate cards in turn (a single local
+// browser drives every human seat in the lab, so sequential picks are simplest); bots pick at random.
+async function recipeDraft(){
+  for(const p of game.players){
+    if(p.done||!p.recipeChoices)continue;
+    if(p.strategy==="human"){
+      setActor(p.idx);
+      const i=await localAsk(`${NAMES[p.idx]}, choose your recipe — bake it by gathering every ingredient, then sail home to win:`,
+        [{label:recipeCardHTML(p.recipeChoices[0]),value:0,cls:"recipeCard"},
+         {label:recipeCardHTML(p.recipeChoices[1]),value:1,cls:"recipeCard"}]);
+      p.recipe=p.recipeChoices[i];
+    }else{
+      p.recipe=p.recipeChoices[game.r()<.5?0:1];
+    }
+  }
+  liveRender();
+}
+async function runLive(myGen){
+  const alive=()=>myGen===liveGen;
+  if(game.round===0){
+    await flash("⚓ Ahoy! Collect every ingredient on your recipe map, then sail home and dock at the Isle of Tortuga to win. Each turn the wind moves you, then you may sail (1🌕), then act. Watch the yellow panel for your prompts!",3200);
+    await recipeDraft();
+  }
+  let order=game.players.map((_,i)=>i);
+  if(game.cfg.rotate&&game.round>1){
+    const rot=(game.round-1)%order.length;
+    order=order.slice(rot).concat(order.slice(0,rot));
+  }
+  let ended=false;
+  while(game.round<150&&!ended){
+    saveLive();
+    if(!alive())return;
+    game.round++;
+    let wheelPasser=null;
+    if(game.cfg.rotate&&game.round>1){
+      order=order.slice(1).concat(order.slice(0,1));
+      wheelPasser=game.players[order[order.length-1]]; // last round's leader, now rotated to the back
+    }
+    game.windNow="NSEW"[Math.floor(game.r()*4)];
+    game.stormNow=game.r()<game.cfg.storm;
+    game.ev({t:"newround",dir:game.windNow});liveRender();
+    await flash(describe(game.events[game.events.length-1]).txt,900);
+    if(!alive())return;
+    if(wheelPasser&&!wheelPasser.done){await wheelFish(wheelPasser);if(!alive())return;}
+    for(const i of order){
+      if(!alive())return;
+      const p=game.players[i];
+      if(p.done)continue;
+      await (p.strategy==="human"?humanTurn(p):botTurn(p));
+      if(!alive())return;
+      if(game.checkFinish(p)){
+        liveRender();
+        if(game.finishOrder.length===1){
+          for(const j of order){
+            const q=game.players[j];
+            if(q.done||j===i)continue;
+            await (q.strategy==="human"?humanTurn(q):botTurn(q));
+            if(!alive())return;
+            if(game.checkFinish(q))liveRender();
+          }
+          ended=true;break;
+        }
+      }
+    }
+  }
+  if(!alive())return;
+  await liveResolveEnd();
+  if(!alive())return;
+  clearSave();
+  live=false;liveDone=true;setReplayControls(true);liveRender();
+}
+async function liveResolveEnd(){
+  liveDone=true;
+  if(!game.finishOrder.length)game.winner=null;
+  else if(game.finishOrder.length===1)game.winner=game.finishOrder[0];
+  else{
+    let champ=game.players[game.finishOrder[0]];
+    for(const idx of game.finishOrder.slice(1))champ=await asyncBakeoff(champ,game.players[idx]);
+    game.winner=champ.idx;
+  }
+  game.ev({t:"end",winner:game.winner});
+  liveRender();
+  netNarrate(game.winner==null?"⏳ Nobody finished the voyage.":`👑 ${NAMES[game.winner]} is the Best Baker in the Caribbean!`);
+}
+function setReplayControls(on){
+  for(const id of ["btnPlay","btnStep","btnEnd","scrub"])$(id).disabled=!on;
+}
+const LS=(typeof localStorage!=="undefined")?localStorage:{getItem:()=>null,setItem(){},removeItem(){}};
+function saveLive(){
+  if(!game.cfg.strategies.includes("human"))return;
+  try{
+    LS.setItem("ppsave",JSON.stringify({
+      cfg:game.cfg,seed:game.seed,randCalls:game.randCalls,round:game.round,
+      battles:game.battles,trades:game.trades,attWins:game.attWins,
+      finishOrder:game.finishOrder,tokens:game.tokens,
+      players:game.players.map(p=>({pos:p.pos,coins:p.coins,ing:p.ing,recipe:p.recipe,
+        done:p.done,heads:p.heads,flips:p.flips,corner:p.corner,justDocked:p.justDocked,
+        firstFlip:[...p.firstFlip],dockedNow:[...p.dockedNow]})),
+      events:game.events}));
+  }catch(e){}
+}
+function clearSave(){LS.removeItem("ppsave");}
+function resumeLive(){
+  let s;try{s=JSON.parse(LS.getItem("ppsave"));}catch(e){return;}
+  if(!s)return;
+  const myGen=++liveGen;
+  live=true;liveDone=false;stop();panel("");
+  const g=new Game(s.cfg,s.seed,true);
+  while(g.randCalls<s.randCalls)g.r();
+  g.round=s.round;g.battles=s.battles;g.trades=s.trades;g.attWins=s.attWins;
+  g.finishOrder=s.finishOrder;g.tokens=s.tokens;g.events=s.events;
+  s.players.forEach((sp,i)=>{const p=g.players[i];
+    p.pos=sp.pos;p.coins=sp.coins;p.ing=sp.ing;p.recipe=sp.recipe;p.done=sp.done;
+    p.heads=sp.heads;p.flips=sp.flips;p.corner=sp.corner;p.justDocked=!!sp.justDocked;
+    p.firstFlip=new Set(sp.firstFlip);p.dockedNow=new Set(sp.dockedNow);});
+  game=g;
+  $("cfgPlayers").value=s.cfg.strategies.length;buildPlayerRows();
+  s.cfg.strategies.forEach((st,i)=>{if($("strat"+i))$("strat"+i).value=st;});
+  logLines=game.events.map(describe);evIdx=Math.max(0,game.events.length-1);
+  clearBubbles();logRenderedTo=-2;$("log").innerHTML="";
+  $("scrub").max=Math.max(0,game.events.length-1);$("statsWrap").style.display="none";
+  drawBoard();setReplayControls(false);if(game.events.length)render();
+  $("btnResume").style.display="none";
+  return runLive(myGen);
+}
+async function startLive(cfg,seed){
+  const myGen=++liveGen;
+  live=true;liveDone=false;
+  game=new Game(cfg,seed,true);
+  logLines=[];evIdx=0;clearBubbles();logRenderedTo=-2;
+  $("log").innerHTML="";$("scrub").max=0;$("statsWrap").style.display="none";
+  drawBoard();setReplayControls(false);
+  return runLive(myGen);
+}
+
+/* ---------- headless simulation / batch (no UI prompts) & Helm playback ---------- */
+function readCfg(){
+  const np=+$("cfgPlayers").value;
+  let crates=+$("cfgCrates").value;
+  if(crates===-1)crates=Math.max(1,np-1);
+  const nIsl=+$("cfgIslands").value;
+  const strategies=[];
+  for(let i=0;i<np;i++){const sel=$("strat"+i);strategies.push(sel?sel.value:["balanced","pirate","trader","rusher"][i]);}
+  const sizeVal=$("cfgIslandSize").value;
+  const tetris=sizeVal==="tetris";
+  const [iw,ih]=tetris?[2,2]:sizeVal.split(",").map(Number);
+  return {grid:+$("cfgGrid").value,nIslands:nIsl,recipeSize:Math.min(+$("cfgRecipe").value,nIsl),
+    crates,startCoins:+$("cfgCoins").value,powder:+$("cfgPowder").value,broadside:$("cfgBroadside").value,
+    dockBuy:$("cfgDockBuy").checked,merchant:$("cfgMerchant").checked,parley:$("cfgParley").checked,
+    tradeBonus:$("cfgTradeBonus").checked,asym:$("cfgAsym").checked,rotate:$("cfgRotate").checked,
+    storm:+$("cfgStorm").value,islandW:iw,islandH:ih,tetris,singleDock:$("cfgSingleDock").checked,
+    sardine:$("cfgSardine").checked,unlimitedDock:$("cfgUnlimitedDock").checked,roundBoard:true,strategies};
+}
+function buildPlayerRowsIfNeeded(){
+  const np=+$("cfgPlayers").value;
+  if(!$("prow0")||document.querySelectorAll(".player-row").length!==np)buildPlayerRows();
+}
+function tick(){
+  if(evIdx<game.events.length-1){
+    evIdx++;render();
+    const e=game.events[evIdx];
+    spawnPops(e);
+    showEventBubble(e);
+  }
+  else stop();
+}
+function play(){
+  if(timer)return stop();
+  $("btnPlay").textContent="⏸ Pause";
+  timer=setInterval(tick,stepDelay());
+}
+function stop(){if(timer){clearInterval(timer);timer=null;}$("btnPlay").textContent="▶ Play";}
+function newGame(){
+  if(live&&!liveDone&&game&&game.cfg.strategies.includes("human")){
+    const ok=(typeof window!=="undefined"&&window.confirm)
+      ?window.confirm("⚓ Abandon the current voyage and start a new game? Your saved progress will be lost.")
+      :true;
+    if(!ok)return;
+    clearSave();
+  }
+  stop();
+  liveGen++;panel(""); // abort any live game in progress
+  buildPlayerRowsIfNeeded();
+  const cfg=readCfg();
+  if(cfg.strategies.includes("human"))$("btnResume").style.display="none";
+  const seed=+$("cfgSeed").value;
+  $("cfgSeed").value=seed+1; // next game differs
+  if(cfg.strategies.includes("human")){startLive(cfg,seed);return;}
+  live=false;liveDone=false;setReplayControls(true);
+  game=new Game(cfg,seed,true);
+  game.play();
+  logLines=game.events.map(describe);
+  evIdx=0;
+  clearBubbles();
+  logRenderedTo=-2;
+  $("log").innerHTML="";
+  $("scrub").max=game.events.length-1;
+  drawBoard();render();
+}
+$("btnNew").onclick=newGame;
+$("btnPlay").onclick=play;
+$("btnStep").onclick=()=>{stop();tick();};
+$("btnEnd").onclick=()=>{stop();evIdx=game.events.length-1;render();};
+$("scrub").oninput=e=>{stop();clearBubbles();evIdx=+e.target.value;render();};
+$("speed").oninput=()=>{if(timer){stop();play();}};
+
+/* ---------- batch mode ---------- */
+$("btnBatch").onclick=()=>{
+  const cfg=readCfg();
+  cfg.strategies=cfg.strategies.map(s=>s==="human"?"balanced":s); // batch uses bots in human seats
+  const N=400,wins={},games={},seatW=new Array(cfg.strategies.length).fill(0);
+  let rounds=0,battles=0,trades=0,attW=0,attB=0,unfin=0,luckW=0,luckG=0;
+  const rng=mulberry32(12345);
+  for(let g=0;g<N;g++){
+    const strat=[...cfg.strategies];
+    for(let i=strat.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[strat[i],strat[j]]=[strat[j],strat[i]];}
+    const gm=new Game({...cfg,strategies:strat},Math.floor(rng()*1e9),false);
+    const w=gm.play();
+    strat.forEach(s=>games[s]=(games[s]||0)+1);
+    rounds+=gm.round;battles+=gm.battles;trades+=gm.trades;attW+=gm.attWins;attB+=gm.battles;
+    if(w===null)unfin++;
+    else{wins[strat[w]]=(wins[strat[w]]||0)+1;seatW[w]++;
+      const rates=gm.players.map(p=>p.flips?p.heads/p.flips:0);
+      if(rates[w]===Math.max(...rates))luckW++;luckG++;}
+  }
+  const stratSet=[...new Set(cfg.strategies)].sort();
+  $("batchPanel").innerHTML=`<table>
+    <tr><th>Strategy</th><th>Win rate</th></tr>
+    ${stratSet.map(s=>`<tr><td>${s}</td><td>${(100*(wins[s]||0)/(games[s]||1)).toFixed(1)}%</td></tr>`).join("")}
+    <tr><td colspan=2 style="border-top:1.5px solid var(--line)"></td></tr>
+    <tr><td>Avg rounds</td><td>${(rounds/N).toFixed(1)}</td></tr>
+    <tr><td>Battles / game</td><td>${(battles/N).toFixed(1)}</td></tr>
+    <tr><td>Trades / game</td><td>${(trades/N).toFixed(2)}</td></tr>
+    <tr><td>Attacker wins</td><td>${attB?(100*attW/attB).toFixed(1):0}% of battles</td></tr>
+    <tr><td>Winner was luckiest flipper</td><td>${luckG?(100*luckW/luckG).toFixed(1):0}%</td></tr>
+    <tr><td>Seat wins</td><td>${seatW.map((v,i)=>`P${i+1}:${v}`).join(" ")}</td></tr>
+    <tr><td>Unfinished</td><td>${unfin}</td></tr>
+  </table><div class="muted">${N} games, seats shuffled each game.</div>`;
+};
+
+/* ---------- presets ---------- */
+function applyPreset(vals){
+  for(const [id,v] of Object.entries(vals)){
+    const n=$(id);
+    if(n.type==="checkbox")n.checked=v;else n.value=v;
+  }
+  newGame();
+}
+const DEFAULTS={cfgPlayers:4,cfgGrid:15,cfgIslands:7,cfgRecipe:5,
+  cfgCrates:-1,cfgCoins:3,cfgPowder:2,cfgBroadside:"paid",cfgDockBuy:true,cfgMerchant:true,
+  cfgParley:true,cfgTradeBonus:true,cfgAsym:false,cfgRotate:true,cfgStorm:"0.125",
+  cfgIslandSize:"tetris",cfgSingleDock:true,cfgSardine:true,cfgUnlimitedDock:true};
+$("presetDefault").onclick=()=>applyPreset(DEFAULTS);
+
+/* ---------- boot ---------- */
+buildPlayerRows();
+newGame();
+$("btnResume").onclick=resumeLive;
+if(LS.getItem("ppsave"))$("btnResume").style.display="";
+</script>
+</body>
+</html>

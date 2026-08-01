@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+ONLINE_SETUP.md
+DESIGN_REPORT.md
+notes/
+node_modules/
+
+# art-review/ is deliberately NOT ignored, despite what
+# notes/art-generation-process.md §6 says. Gemini output is not reproducible —
+# the same prompt gives a different image — so the repo is the only backup of
+# art that cannot be remade, and ignored files are one `git clean -xdf` from
+# gone. Revisit when the tracked total passes ~700 MB (Pages caps a published
+# site at 1 GB): at that point move the whole folder to an orphan
+# `art-archive` branch rather than ignoring it.

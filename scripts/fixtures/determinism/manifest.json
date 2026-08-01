@@ -1,0 +1,243 @@
+{
+  "formatVersion": 1,
+  "capturedAt": "2026-07-26T22:17:01.251Z",
+  "seedBase": 12345,
+  "seedCount": 30,
+  "extraSeeds": [
+    12379
+  ],
+  "botStrategies": [
+    "pirate",
+    "trader",
+    "balanced",
+    "rusher",
+    "monopolist"
+  ],
+  "seatRotation": "BOT_STRATS[(seedIndex + seat) % BOT_STRATS.length] for seat in 0..3; base range is seedIndex 0..seedCount-1, extraSeeds continue the same index from seedCount",
+  "engineSourceHash": "a9b4dde97e20625198ddeb0fae834627f886cb76aed312caf1d715e79fe48006",
+  "requiredEventTypes": [
+    "battle",
+    "battleflee",
+    "trade",
+    "dock",
+    "fish",
+    "windmove",
+    "tradewind",
+    "shipwrecked",
+    "aground",
+    "end",
+    "bakeoff",
+    "finish"
+  ],
+  "coverage": {
+    "newround": 609,
+    "turn": 2479,
+    "sail": 1820,
+    "fish": 1453,
+    "battle": 128,
+    "dock": 787,
+    "anchor": 9,
+    "blocked": 58,
+    "windmove": 210,
+    "dodge": 34,
+    "blownOut": 108,
+    "moored": 167,
+    "battleflee": 35,
+    "trade": 75,
+    "finish": 34,
+    "tradewind": 86,
+    "end": 31,
+    "anchorHold": 5,
+    "bakeoff": 3,
+    "aground": 6,
+    "shipwrecked": 1
+  },
+  "perSeed": [
+    {
+      "seed": 12345,
+      "file": "seed-12345.jsonl",
+      "events": 397,
+      "sha256": "8ec37cf09119daaaed29c3df7446c54036dd763bd0e6bb776c201ac891b1e5d5"
+    },
+    {
+      "seed": 12346,
+      "file": "seed-12346.jsonl",
+      "events": 322,
+      "sha256": "b83afcfeaa2ff44b0f109aa1904ee55d587e3b0ce8a0fa7284f77a8ac059009a"
+    },
+    {
+      "seed": 12347,
+      "file": "seed-12347.jsonl",
+      "events": 182,
+      "sha256": "e5bd199d8587d2f53595c293d1cda7d5b05c3c341e6bc44b2ad047e0247e7165"
+    },
+    {
+      "seed": 12348,
+      "file": "seed-12348.jsonl",
+      "events": 239,
+      "sha256": "0571ba9daf1d7a71c7012a9232db42fadcad0f6793fda8234b8dc445cb149de6"
+    },
+    {
+      "seed": 12349,
+      "file": "seed-12349.jsonl",
+      "events": 176,
+      "sha256": "c7c5a74df1a1fae0ab4c1ea11575872718cefdef4771d9cd103317d06f8724c5"
+    },
+    {
+      "seed": 12350,
+      "file": "seed-12350.jsonl",
+      "events": 284,
+      "sha256": "08af71881b5c8112e1cd9bf35e37dee2db7032419e2cd49d334db8518df5781f"
+    },
+    {
+      "seed": 12351,
+      "file": "seed-12351.jsonl",
+      "events": 248,
+      "sha256": "4e0a6d663dec1ba5e357773e4bd58c66f4d8bff4e2cd878db55881fa0977b16e"
+    },
+    {
+      "seed": 12352,
+      "file": "seed-12352.jsonl",
+      "events": 210,
+      "sha256": "5538658be8c639159ab0575391b5ede725a935aa244190dcacd6c7c91944e7fb"
+    },
+    {
+      "seed": 12353,
+      "file": "seed-12353.jsonl",
+      "events": 211,
+      "sha256": "ed7298a102b9648d712df62bae0e54161cfbf034a6c635a721d23686a37bdbab"
+    },
+    {
+      "seed": 12354,
+      "file": "seed-12354.jsonl",
+      "events": 186,
+      "sha256": "e579c782d61a5bf762f1a0a77b707975c097f12b4aa77a2685af113a5f374279"
+    },
+    {
+      "seed": 12355,
+      "file": "seed-12355.jsonl",
+      "events": 291,
+      "sha256": "b8d2ec242b2449620f0cb6a2ea1fb6128c87ff87e7b831477934b5e11b6d82bb"
+    },
+    {
+      "seed": 12356,
+      "file": "seed-12356.jsonl",
+      "events": 237,
+      "sha256": "2094efff34edd08d6b506a780ca4559403e0c1cc789046750b58a89b785d6c2d"
+    },
+    {
+      "seed": 12357,
+      "file": "seed-12357.jsonl",
+      "events": 249,
+      "sha256": "1ee3cbb2bfe21a42bbc2ac7e55f599118d54408c325f6cd1fca500eaaa4a5726"
+    },
+    {
+      "seed": 12358,
+      "file": "seed-12358.jsonl",
+      "events": 308,
+      "sha256": "22be53e673df0e3055ede796bcd552cd5d58b22dbdd13611287799772b934bde"
+    },
+    {
+      "seed": 12359,
+      "file": "seed-12359.jsonl",
+      "events": 278,
+      "sha256": "b6bafe3eeedfca84048c78b2dd3bb843091fa80319974c480a12cd402a84ad02"
+    },
+    {
+      "seed": 12360,
+      "file": "seed-12360.jsonl",
+      "events": 349,
+      "sha256": "8fdd4f16cca757f90650a9ab6c2e39b12fc81c37e46940550ad2976688666446"
+    },
+    {
+      "seed": 12361,
+      "file": "seed-12361.jsonl",
+      "events": 241,
+      "sha256": "049441086133cdd3ed7261fb2acbe7fc93256cb25124ee541bf7c2cae03547e6"
+    },
+    {
+      "seed": 12362,
+      "file": "seed-12362.jsonl",
+      "events": 276,
+      "sha256": "38a5c4625928237f46e74b0c264018f4bf70823722eb41dab6863b3edc0567b5"
+    },
+    {
+      "seed": 12363,
+      "file": "seed-12363.jsonl",
+      "events": 294,
+      "sha256": "2f02f0db698aee61730bea7777d9d88f7c531b8a8cedd8848509c655de410b0d"
+    },
+    {
+      "seed": 12364,
+      "file": "seed-12364.jsonl",
+      "events": 256,
+      "sha256": "e614313d396352ac226ffb504046fc83a67a38678a7ae8d572a6ce33fa9f4bbb"
+    },
+    {
+      "seed": 12365,
+      "file": "seed-12365.jsonl",
+      "events": 157,
+      "sha256": "27a30959afa9b00b63899fd52817e6a52e00df8453dd57cb3ccf5facbe56b8f1"
+    },
+    {
+      "seed": 12366,
+      "file": "seed-12366.jsonl",
+      "events": 203,
+      "sha256": "5114be34605be0a45375f3f163ee756f4761dc79d0ac382e1b93d7294dada132"
+    },
+    {
+      "seed": 12367,
+      "file": "seed-12367.jsonl",
+      "events": 292,
+      "sha256": "7ebdc6e2609fef0aa28d741a22d2c9b04210a137aa2b91d1d3926f51ce52bb64"
+    },
+    {
+      "seed": 12368,
+      "file": "seed-12368.jsonl",
+      "events": 273,
+      "sha256": "830c8e69adbd782369cc476b43fd5ffb2959481e3a24392e4218443a892a1dae"
+    },
+    {
+      "seed": 12369,
+      "file": "seed-12369.jsonl",
+      "events": 348,
+      "sha256": "766761cc87fa595daa0ae7f3c992b325e167ce87a637e063ba4c6d2b8d3a81b5"
+    },
+    {
+      "seed": 12370,
+      "file": "seed-12370.jsonl",
+      "events": 429,
+      "sha256": "72d708ce349bdb305db3c78f4faf3533eace689bcf8f38eea9855a740627868a"
+    },
+    {
+      "seed": 12371,
+      "file": "seed-12371.jsonl",
+      "events": 177,
+      "sha256": "ae7b37cd91996212477a5932f46cbb9647ecfe4425e46ad2f4f369255ebe10fb"
+    },
+    {
+      "seed": 12372,
+      "file": "seed-12372.jsonl",
+      "events": 209,
+      "sha256": "11b5c191fb2384c1ae931894f5f1a0400b974508ff3727815224c0613d12beb4"
+    },
+    {
+      "seed": 12373,
+      "file": "seed-12373.jsonl",
+      "events": 200,
+      "sha256": "030942b0e33b2f21a5f2d78c26f623fd344c003ff986f29c4ac85eb0f9033375"
+    },
+    {
+      "seed": 12374,
+      "file": "seed-12374.jsonl",
+      "events": 294,
+      "sha256": "a94f771dd02448dfd1e38a5c619234130644d9676a1ed7c587e65d9996fb141e"
+    },
+    {
+      "seed": 12379,
+      "file": "seed-12379.jsonl",
+      "events": 322,
+      "sha256": "0d7d8605a768b5baeb472135be0c2acc8791a4c97595ad3075f605b45717c6da"
+    }
+  ]
+}

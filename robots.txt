@@ -1,0 +1,3 @@
+# Temporary preview build — not the live game. Do not index.
+User-agent: *
+Disallow: /
