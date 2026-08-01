@@ -49,8 +49,31 @@ import { playForEvent, isMuted } from "./audio.js";
 const $=id=>document.getElementById(id);
 const sleep=ms=>appState.replaying?Promise.resolve():waitWhilePaused().then(()=>new Promise(r=>setTimeout(r,ms)));
 
+// Writes only what has actually CHANGED. This is a performance fix, not tidiness — see the note
+// on the welcome-screen early return below for what unconditional writes were costing.
+function setIf(el,prop,val){ if(el&&el[prop]!==val)el[prop]=val; }
+function setStyleIf(el,prop,val){ if(el&&el.style[prop]!==val)el.style[prop]=val; }
 export function setClockUI(){
   const wrap=$("shotClockPanel");if(!wrap)return;
+  // ⚠ SAFARI CPU (Wyatt, 2026-08-01: "Safari rendering is killing my computer when I open
+  // pastrypirates — even without running the game", 137% CPU on Safari Graphics and Media).
+  //
+  // This function is on a 500ms setInterval that runs FOREVER (src/main.js), and it used to write
+  // DOM unconditionally every tick — including `muteEl.innerHTML=...`, which rebuilds an <img>
+  // element twice a second. Meanwhile the welcome screen puts `filter: blur(7px) saturate(1.15)
+  // brightness(.97)` over the WHOLE of #game (index.html's .bg-blurred), which contains the full
+  // board SVG.
+  //
+  // A filter forces that subtree into its own compositing layer, and ANY invalidation inside it
+  // makes Safari re-rasterise AND re-blur the entire surface. So a clock nobody can see was
+  // repainting a full-screen blurred board twice a second, on the welcome screen, before the game
+  // had even started.
+  //
+  // Two defences, both kept: skip the work entirely while the blurred welcome screen is up, and
+  // write only what changed the rest of the time (setIf/setStyleIf above) so an in-game tick does
+  // not invalidate layers for nothing either.
+  const gameEl=$("game");
+  if(gameEl&&gameEl.classList.contains("bg-blurred"))return;
   // AUDIO-02/D-15/D-16 (phase 21): #btnMute is a #controlsRow sibling (index.html), not a third
   // corner icon on the clock face — rendered here, above the end-of-voyage early return below,
   // so the same tick that hides #shotClockPanel at the win screen also hides #btnMute (D-16),
@@ -60,11 +83,11 @@ export function setClockUI(){
   // setClockUI() re-runs on the 500ms interval).
   const muteEl=$("btnMute");
   if(muteEl){
-    muteEl.style.display=appState.liveDone?"none":"";
+    setStyleIf(muteEl,"display",appState.liveDone?"none":"");
     // D-14: Wyatt's megaphone pair replaces 21-04's 🔊/🔇 emoji scaffold. #btnMute img in
     // index.html sizes these to 60% of the button (~29px), overriding .narrIcon's inline 18px —
     // id+element beats class, so no extra rule is needed.
-    muteEl.innerHTML=isMuted()?iconImg(SOUND_OFF_IMG):iconImg(SOUND_ON_IMG);
+    setIf(muteEl,"innerHTML",isMuted()?iconImg(SOUND_OFF_IMG):iconImg(SOUND_ON_IMG));
     // Tooltip copy recorded in .planning/todos/pending/copy-shipped-vs-approved-gate.md — no
     // @copy marker (a new misc.sound.* id would need registering in art-review's node-group
     // table, out of scope for this phase; see that file's phase-21 entry for the follow-up).
@@ -98,7 +121,7 @@ export function setClockUI(){
   // every player in both solo and multiplayer (a guest's click reaches togglePause() via
   // src/orchestrator.js's wireLobby rewire, which routes through the networked pause path).
   pauseEl.style.display=(!appState.liveDone)?"":"none";
-  $("scPauseImg").src=paused?PLAY_IMG:PAUSE_IMG;
+  setIf($("scPauseImg"),"src",paused?PLAY_IMG:PAUSE_IMG);
   // #7 / D-20 (phase 21): the timer off/on toggle is offered to EVERY player in EVERY mode —
   // the soloBotGame() gate that used to hide it in solo/pass-and-play is gone. It used to be a
   // dead control there (toggleTimer() early-returned with no Firebase connection); Task 2 gave
@@ -107,7 +130,7 @@ export function setClockUI(){
   const toggleEl=$("scTimerToggle");
   if(toggleEl){
     toggleEl.style.display=appState.liveDone?"none":"";
-    toggleEl.innerHTML=appState.timerOff?iconImg(BLOCKED_SLASH_IMG):iconImg(STOPWATCH_IMG);
+    setIf(toggleEl,"innerHTML",appState.timerOff?iconImg(BLOCKED_SLASH_IMG):iconImg(STOPWATCH_IMG));
     // @copy misc.timer.toggletooltip
     toggleEl.title=appState.timerOff?"Turn the timer back on":"Turn the timer off";
   }
