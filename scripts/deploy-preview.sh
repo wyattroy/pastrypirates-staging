@@ -38,9 +38,20 @@ MSG="${1:-Update preview}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Never leaves this repo. CNAME is first and is the reason for the file.
+# SITE-IDENTITY FILES. None of these ever leave this repo: each one tells the outside world
+# "this deployment is playpastrypirates.com", which is a lie on the preview and an actively
+# harmful one. rsync protects --exclude'd paths from --delete, so the preview keeps its OWN
+# versions of these rather than losing them.
+#
+# robots.txt/sitemap.xml were added after the first real run of this script republished them:
+# the preview carries `Disallow: /` to stay out of search, and this repo's copy says `Allow: /`
+# plus a sitemap pointing at the live domain. Copying them across would have invited Google to
+# index the preview as duplicate content competing with the real game — the same failure as
+# CNAME wearing different clothes, and it went unnoticed until the deploy diff was read.
 EXCLUDES=(
   --exclude=CNAME          # ← THE ONE THAT MATTERS. See the header.
+  --exclude=robots.txt     # preview must stay Disallow:/ — do not publish the live Allow:/
+  --exclude=sitemap.xml    # lists playpastrypirates.com URLs; meaningless on the preview
   --exclude=.git/
   --exclude=.planning/
   --exclude=.claude/
