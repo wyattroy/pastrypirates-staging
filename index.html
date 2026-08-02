@@ -559,8 +559,21 @@
      Speed: 3.6s -> 2.7s (33% faster, his "re-increase 30%"), chosen over 2.77 so the stagger lands
      on clean thirds. Travel widened .6->2.4 to .55->2.7 so the gaps between rings read larger, which
      is the "more gap between them" half of the note.
-     The stagger in src/ui/board.js is duration/3 = 0.9s. CHANGE ONE AND THE OTHER MUST FOLLOW. */
-  .ripple { transform-box: fill-box; transform-origin: center; animation: rippleOut 2.7s linear infinite; }
+     The stagger in src/ui/board.js is duration/3 = 0.9s. CHANGE ONE AND THE OTHER MUST FOLLOW.
+
+     PERF-01 (2026-08-02): these rings are now HTML divs (#rippleHost in #boardwrap), not SVG
+     circles — see that markup for the measurement. The TIMING NOTES ABOVE ARE UNCHANGED AND STILL
+     BINDING: 2.7s linear, and the stagger is still duration/3 = 0.9s. Only the element type
+     changed; do not re-tune either number on the strength of that. */
+  #rippleHost { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  /* the thing that MOVES — carries the same translate() the SVG <g> used to, and the same
+     transition the trade-wind sweep retunes (src/ui/board.js setShipGlideMs). */
+  #rippleRing { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
+  /* size, border width and the negative centring margin are all set from board.js in cqw, because
+     they derive from `cell` (640/grid) and must scale with the board exactly as stroke-width:2 and
+     r=cell*.4 did. will-change is what keeps each ring on its own compositor layer. */
+  .hrip { position: absolute; left: 0; top: 0; border-style: solid; border-color: #fff;
+    border-radius: 50%; animation: rippleOut 2.7s linear infinite; will-change: transform, opacity; }
   @keyframes rippleOut { 0% { transform: scale(.55); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
   /* UI-03: boat emojis linger 2x longer — both the rise and the fade are slower (1.25s → 2.5s,
      and the splash variant 1.9s → 3.8s below). The JS removal timeouts are doubled to match. */
@@ -758,6 +771,15 @@
   .modalOverlay { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center;
     padding: 24px; overflow-y: auto;
     background: radial-gradient(ellipse at 50% 12%, rgba(69,223,166,.22), rgba(41,163,178,.40) 68%); }
+  /* NAME-02 (Wyatt, 2026-08-01): "i think maybe the modal pops up BEHIND the join crew modal —
+     because the background blur changes color, but i cannot see it until i click back."
+     Exactly right. Every .modalOverlay shares z-index:1000, so which one wins is decided purely by
+     DOM order — and #lobbyRoom (line ~995) is declared AFTER #nameModal (line ~975), so it painted
+     over it. Harmless until the room screen gained "Change yer name", because until then the name
+     modal was never open at the same time as another overlay.
+     The name modal is a modal OVER a screen, never a peer of one, so it wins outright rather than
+     being reordered in the markup — a fix that cannot be undone by someone moving the markup. */
+  #nameModal { z-index: 1001; }
   .modalCard { background: linear-gradient(175deg, #ffffff, var(--parch2) 250%); border: 3px solid var(--teal);
     border-radius: 20px; padding: 26px 28px 22px; max-width: 440px; width: 100%; text-align: center;
     box-shadow: 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18); }
@@ -852,6 +874,16 @@
   .seat { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; margin:5px 0; border:1.5px solid var(--line); }
   .seat .nm { flex:1; font-weight:600; }
   .seat.me { background:var(--lemon); border-color:var(--accent); }
+  /* NAME-02 (Wyatt, 2026-08-01): "put the Change yer name inside your pill, so it's easier to see,
+     and wrap it in a standard styling blue button." It rides in the reader's OWN seat row, which
+     .seat's existing flex + `.nm{flex:1}` right-aligns with no layout work.
+     SOLID teal rather than the house outline-and-faded-fill pattern (button.primary / .footerKofi):
+     that pattern fills with --lemon, and this button sits ON --lemon, so an outline button would
+     have all but vanished against the pill it lives in. Teal is the house blue, so the fill is the
+     palette's, not a new colour. */
+  .seat .seatRename { flex:0 0 auto; padding:4px 11px; font-size:12.5px; font-weight:700;
+    border:1.5px solid var(--teal); background:var(--teal); color:#fff; border-radius:7px; }
+  .seat .seatRename:hover { background:#22909e; border-color:#22909e; }
   .who { font-size:11px; font-weight:normal; opacity:.7; }
   /* ---- recipe draft cards: an aged treasure-map recipe leaf ---- */
   .apBtns.recipes { gap: 14px; }
@@ -1152,6 +1184,15 @@
         <svg id="board" viewBox="0 0 640 640"></svg>
         <!-- #1b: storm overlay — darkens the board + animated rain/wind, fades in/out via CSS -->
         <div id="stormOverlay" aria-hidden="true"></div>
+        <!-- PERF-01 (2026-08-02): the active-turn sonar ripple, moved OUT of the board SVG.
+             Measured, GPU on, phone viewport: as three SVG <circle>s animating only transform and
+             opacity it forced ~62 layouts PER SECOND — 97% of all layout work while the game sat
+             idle, and just over half the main-thread cost during play. Chrome does not composite
+             SVG transform animations at all, and will-change cannot promote an SVG child to its own
+             layer; transform-box/transform-origin candidates all measured identical. As HTML it
+             costs ZERO layouts. Positions come in `cqw` against #boardwrap (container-type:
+             inline-size), so board user units still map 1:1 and every call site keeps its numbers. -->
+        <div id="rippleHost" aria-hidden="true"><div id="rippleRing"></div></div>
         <!-- chat speech bubbles, one per seat, positioned over that seat's boat -->
         <div id="chatBubbles"></div>
       </div>

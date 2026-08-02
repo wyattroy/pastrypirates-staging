@@ -114,6 +114,12 @@ import { playFlip } from "./audio.js";
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
 // see the file header's deviation note.
 const $=id=>document.getElementById(id);
+// PERF-01 (2026-08-02): board user units -> cqw, for the active-turn ripple now living in HTML
+// (#rippleHost) instead of the board SVG. #boardwrap declares `container-type: inline-size`, so
+// 100cqw is exactly the board's rendered width and the SVG's 640-unit viewBox maps onto it 1:1 —
+// which is why every ripple call site below still passes the same shipXY() coordinates it always
+// did, and why nothing has to recompute a scale factor on resize. 640 is drawBoard's own `W`.
+const CQ=v=>v/640*100;
 
 /* ---------- board rendering ---------- */
 const SVGNS="http://www.w3.org/2000/svg";
@@ -269,10 +275,35 @@ export function drawBoard(){
   stormText=el("text",{x:0,y:sr+16,"text-anchor":"middle","font-size":14,"font-weight":"bold"},hud);
   // active-player highlight: a sonar-style ripple of white rings expanding out from the boat
   // (positioned in render). Fixed white, not per-player color, so it stays visible against art.
-  activeRing=el("g",{opacity:0},svg);
-  for(let i=0;i<3;i++)
-    el("circle",{class:"ripple",r:cell*.4,fill:"none",stroke:"#fff","stroke-width":2,
-      // NEGATIVE delays, and the sign is the whole point — do not drop the minus.
+  //
+  // PERF-01 (2026-08-02): these are HTML divs in #rippleHost now, NOT SVG circles in this svg.
+  // Measured with the GPU on at a phone viewport, the SVG version forced ~62 layouts per second —
+  // 97% of all layout work while the game sat idle, and just over half the main-thread cost during
+  // play — from an animation that only touches transform and opacity. Chrome does not composite SVG
+  // transform animations at all; will-change cannot promote an SVG child, and transform-box /
+  // transform-origin candidates all measured identical to shipped. As HTML the same rings cost
+  // ZERO layouts at a locked 60fps.
+  //
+  // Sizes go out in `cqw` against #boardwrap (container-type: inline-size), so 640 board user units
+  // == 100cqw and the geometry maps 1:1: r=cell*.4 becomes a diameter of cell*.8, stroke-width:2
+  // becomes a 2-unit border, and both scale with the board exactly as the SVG did — no scale factor
+  // to keep in sync, and every call site below keeps the numbers it already had.
+  activeRing=$("rippleRing");
+  if(activeRing){
+    activeRing.innerHTML="";
+    activeRing.style.opacity=0;
+    activeRing.style.transform="";
+    activeRing.style.transition="";
+    const d=CQ(cell*.8), bw=CQ(2);
+    for(let i=0;i<3;i++){
+      const ring=document.createElement("div");
+      ring.className="hrip";
+      // left/top are 0 and the parent carries the translate, so the negative margin is what centres
+      // each ring on the boat — the job transform-box:fill-box + transform-origin:center did in SVG.
+      //
+      // NEGATIVE delays, and the sign is the whole point — do not drop the minus. Carried over from
+      // the SVG rings verbatim, because it is a property of the ANIMATION, not of the element type,
+      // and it survived the move unchanged.
       //
       // A POSITIVE animation-delay leaves the element in its UN-ANIMATED state until the delay
       // elapses, and animation-fill-mode is `none` here. Measured: with +0.9s/+1.8s, rings 2 and 3
@@ -285,7 +316,11 @@ export function drawBoard(){
       // so all three rings are correctly distributed at 0%, 33% and 66% from the very first frame.
       // One third of the 2.7s rippleOut cycle in index.html; if that duration changes, this must
       // change with it or the rings bunch together.
-      style:`animation-delay:${-i*.9}s`},activeRing);
+      ring.style.cssText=`width:${d}cqw;height:${d}cqw;margin:${-d/2}cqw 0 0 ${-d/2}cqw;`
+        +`border-width:${bw}cqw;animation-delay:${-i*.9}s`;
+      activeRing.appendChild(ring);
+    }
+  }
   // ships
   shipEls=[];
   appState.game.players.forEach((p,i)=>{
@@ -1092,7 +1127,7 @@ export function renderLiveShips(){
     const a=activeTurnSeat();
     if(a!=null&&live[a]&&!live[a].done){
       const [ax,ay]=shipXY(live[a].pos,a,live,cell);
-      activeRing.style.transform=`translate(${ax}px,${ay}px)`;
+      activeRing.style.transform=`translate(${CQ(ax)}cqw,${CQ(ay)}cqw)`;
     }
   }
 }
@@ -1170,7 +1205,7 @@ export function paintShipAtPoint(seat,fx,fy){
   const x=(fx+.5)*cell, y=(fy+.5)*cell;
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y);
-  if(activeRing&&activeTurnSeat()===seat)activeRing.style.transform=`translate(${x}px,${y}px)`;
+  if(activeRing&&activeTurnSeat()===seat)activeRing.style.transform=`translate(${CQ(x)}cqw,${CQ(y)}cqw)`;
 }
 export function paintShipAt(seat,c){
   if(appState.replaying)return;
@@ -1183,7 +1218,7 @@ export function paintShipAt(seat,c){
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y); // the bubble rides along, as renderLiveShips does
   if(activeRing&&activeTurnSeat()===seat){
-    activeRing.style.transform=`translate(${x}px,${y}px)`;
+    activeRing.style.transform=`translate(${CQ(x)}cqw,${CQ(y)}cqw)`;
   }
 }
 export function render(){
@@ -1253,9 +1288,10 @@ export function render(){
   if(activeRing){
     if(active!=null){
       const [ax,ay]=shipXY(st[active].pos,active,st,cell);
-      activeRing.style.transform=`translate(${ax}px,${ay}px)`;
-      activeRing.setAttribute("opacity",1);
-    }else activeRing.setAttribute("opacity",0);
+      activeRing.style.transform=`translate(${CQ(ax)}cqw,${CQ(ay)}cqw)`;
+      // PERF-01: a style, not an attribute — `opacity` is presentational-attribute-only on SVG.
+      activeRing.style.opacity=1;
+    }else activeRing.style.opacity=0;
   }
   appState.game.players.forEach((p,i)=>{
     const row=$("prow"+i);if(row)row.classList.toggle("activeTurn",i===active);

@@ -107,9 +107,27 @@ export function requireName(){
 // with a continuation (`next`) carrying that mode's remaining body; confirmName() resolves the
 // name, persists it, and invokes the stored continuation with the resolved name as its argument.
 let pendingNameAction=null;
+// NAME-01 (2026-08-01, measured): the name a player was SHOWN is not the same thing as a name they
+// CHOSE, and multiplayer needs to tell them apart. The modal prefills requireName(), which for a
+// player with no saved name is unusedDefaultName(null,0) — computed against a NULL seat map, so it
+// is the identical string ("Davy Scones") in every browser on earth. A player who accepts the
+// prefill without typing was therefore sending a truthy `typedName` into joinRoom, which made
+// `typedName||unusedDefaultName(s,i)` (src/orchestrator.js) skip the collision-safe fallback
+// entirely. Reproduced in a two-browser session: host and guest both seated as "Davy Scones". The
+// helper was never broken — it simply never ran.
+//
+// So: remember the exact string that was auto-offered. If the player confirms it untouched, the
+// name is UNCHOSEN, and the seat-claim path resolves it against the live transaction seat map
+// instead. `null` means the player typed something of their own, which is always honoured verbatim.
+let autoOfferedName=null;
+export function pendingAutoName(){return autoOfferedName;}
 export function openNameModal(next){
   pendingNameAction=next;
-  $("nameModalInput").value=requireName();
+  const saved=(getLastName()||"").trim();
+  // Only a name the player has actually chosen before counts as chosen now; a blank store means the
+  // value below is ours, not theirs.
+  autoOfferedName=saved?null:unusedDefaultName(null,0);
+  $("nameModalInput").value=saved?saved.slice(0,40):autoOfferedName;
   $("nameModal").style.display="flex";
   $("nameModalInput").focus();
   $("nameModalInput").select();
@@ -119,11 +137,20 @@ export function confirmName(){
   // is a no-op, not a throw.
   if(!pendingNameAction)return;
   const raw=($("nameModalInput").value||"").trim().slice(0,40);
+  // Unchosen == left blank, or confirmed exactly as offered. Either way the displayed name stays
+  // the friendly default so the player still sees a captain rather than an empty field — it is only
+  // the DOWNSTREAM treatment that differs.
+  const auto=(!raw)||(autoOfferedName!==null&&raw===autoOfferedName);
   const name=raw||unusedDefaultName(null,0);
+  autoOfferedName=auto?name:null;
   // RAW trimmed string, NOT HTML-escaped here — escaping already happens once at render time
   // inside pname() (./util.js), which reads appState.roster[i].name. A second escape at this write
   // site would double-escape legitimate names containing "&" or "<".
-  saveLastName(name);
+  //
+  // NAME-01: an auto default is NOT persisted. Writing it to pp_lastName would harden a name the
+  // player never picked into one that looks chosen on the next boot — and every later join would
+  // then duplicate it again, which is the bug returning by the back door.
+  if(!auto)saveLastName(name);
   $("nameModal").style.display="none";
   const next=pendingNameAction;
   pendingNameAction=null;
@@ -148,11 +175,22 @@ export function confirmName(){
 // P10: dismissing the name modal returns to the mode-choice screen instead of proceeding. Hides the
 // overlay first so showHome() paints over a closed modal, and drops the pending continuation so no
 // half-started mode is left armed behind it.
+// NAME-02 (Wyatt, 2026-08-01): "back should go back one step, not exit out entirely."
+//
+// Cancel returns to the screen the modal opened OVER, which is not always home. Until the room
+// screen gained "Change yer name" the modal could only be opened from the mode-choice screen, so an
+// unconditional showHome() happened to be right and this was invisible. It is not invisible now:
+// measured, a host who opened the modal from the room screen and pressed ✕ was dropped onto the
+// mode-choice screen while `appState.room` still pointed at a live room they were still hosting —
+// visually ejected from a game that had not ended.
+//
+// Keyed on being seated rather than on a remembered screen id, because that is the condition that
+// actually makes home the wrong destination, and it stays true however the modal was reached.
 function cancelName(){
   const overlay=$("nameModal");
   if(overlay)overlay.style.display="none";
   pendingNameAction=null;
-  showHome();
+  if(appState.room&&!appState.gameStarted)showRoom(); else showHome();
 }
 let nameModalWired=false;
 export function wireNameModal(){
@@ -257,8 +295,17 @@ export function renderSeatList(seats){
     // reader, `{name}` for another human, `{captain default} — 🤖 bot` for an empty seat.
     if(s.id)label=me?"you":"";
     else label="🤖 bot";
+    // NAME-02 (Wyatt, 2026-08-01): "put the Change yer name inside your pill, so it's easier to
+    // see." It renders ONLY in the reader's own row — the one place a player looks to check how
+    // their name reads — and only for a seat that is actually theirs, so there is no control
+    // suggesting you can rename a bot or another captain.
+    //
+    // It is rebuilt on every seats update, so its click cannot be bound once at wire time. The
+    // handler is DELEGATED from #seatList in src/orchestrator.js; nothing here binds it, which also
+    // keeps this file free of the net-calling code its purity bar (D-07) forbids.
+    const rename=me?`<button class="seatRename" type="button" id="btnChangeName">Change yer name</button>`:"";
     html+=`<div class="seat ${me?"me":""}">
-      <span class="nm">${pn(i)}${label?` — ${label}`:""}</span></div>`;
+      <span class="nm">${pn(i)}${label?` — ${label}`:""}</span>${rename}</div>`;
   }
   $("seatList").innerHTML=emojify(html);
   if(appState.isHost){
