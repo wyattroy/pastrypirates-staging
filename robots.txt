@@ -1,3 +1,5 @@
-# Temporary preview — not the live game
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /lab.html
+
+Sitemap: https://playpastrypirates.com/sitemap.xml

@@ -971,7 +971,10 @@ const mpErrorSites = findNamedCallSites(src.orch, FILE_PATHS.orch, ["alert"]);
 }
 // 8 -> 10 (2026-07-31): createRoom and joinRoom each gained a null-db guard whose alert says
 // "we never connected", which is a different failure from the capacity line they used to share.
-if (mpErrorSites.length !== 10) fail(`mpError: expected exactly 10 alert() call sites in ${FILE_PATHS.orch}, found ${mpErrorSites.length}`);
+// 10 -> 11 (2026-08-01, NAME-02): the room screen's "Change yer name" makes renameMySeat() a new
+// player-triggered write, which can fail on its own — independently of joining — so it carries its
+// own line rather than borrowing one that talks about rooms and capacity.
+if (mpErrorSites.length !== 11) fail(`mpError: expected exactly 11 alert() call sites in ${FILE_PATHS.orch}, found ${mpErrorSites.length}`);
 const mpError = mpErrorSites.map((s) => ({ file: s.file, line: s.line, fn: s.fn, rawMsg: s.args[0] || "" }));
 
 /* ---- battleLine: the live-round-result `rmsg=` assignments in asyncBattle() (orchestrator.js)

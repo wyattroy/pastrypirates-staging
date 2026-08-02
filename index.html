@@ -574,7 +574,17 @@
      r=cell*.4 did. will-change is what keeps each ring on its own compositor layer. */
   .hrip { position: absolute; left: 0; top: 0; border-style: solid; border-color: #fff;
     border-radius: 50%; animation: rippleOut 2.7s linear infinite; will-change: transform, opacity; }
-  @keyframes rippleOut { 0% { transform: scale(.55); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
+  /* PERF-01 follow-up (Wyatt, 2026-08-02): "the css rings are smooth, but they look weird on top of
+     the boats" — asking for a bigger smallest ring so there is less overlap. (His note is trimmed
+     rather than quoted whole: the D-29 register gate scans this file for 2nd-person pronouns and
+     cannot tell a quoted message from player-facing copy.)
+     START .55 -> 1.25, and 1.25 is DERIVED, not taste: the ring's base diameter is cell*0.8
+     (r=cell*.4 in the SVG original) and the boat <image> is exactly one cell square (boatSize=cell
+     in drawBoard), so a ring clears the boat's whole image box when 0.8*s >= 1 — i.e. s >= 1.25. At
+     the old .55 the innermost ring was 0.44 of a cell, sitting ENTIRELY INSIDE the boat, which is
+     why it read as painted across it. The 2.7 end and the 2.7s linear timing are untouched, so the
+     rings still finish exactly where they always did; only the innermost one moved out. */
+  @keyframes rippleOut { 0% { transform: scale(1.25); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
   /* UI-03: boat emojis linger 2x longer — both the rise and the fade are slower (1.25s → 2.5s,
      and the splash variant 1.9s → 3.8s below). The JS removal timeouts are doubled to match. */
   /* UI-06: sail-destination squares — juicy, bouncing, clearly clickable */
