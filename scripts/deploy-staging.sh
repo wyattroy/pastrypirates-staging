@@ -148,6 +148,29 @@ if [ "$GOT" != "$STAGING_HOST" ]; then
 fi
 echo "    guard passed: staging CNAME is '$GOT' (not the production host)"
 
+# A STAGING BUILD MUST SAY IT IS STAGING, and this publisher forgot for a day.
+# publish-staging-path.sh (the /staging PATH tier) rewrites PP4_STAMP to
+# <stamp>-STAGING/<branch> for exactly this reason — "a screenshot of staging can
+# never be mistaken for production" — and THIS script, the one that publishes the
+# real subdomain, shipped the stamp untouched. So on 2026-08-27
+# staging.playpastrypirates.com served DIFFERENT CODE under an IDENTICAL stamp to
+# production, which is worse than no stamp at all: the one tell Wyatt relies on to
+# know which build he is looking at was actively lying.
+# Stamped on the COPY, never the source, so the working tree stays clean.
+STAMPFILE="$WORK/staging/src/ui/stage.js"
+if [ -f "$STAMPFILE" ]; then
+  STAMP="$(grep -o 'PP4_STAMP = "[^"]*"' "$STAMPFILE" | head -1 | sed 's/.*= "//; s/"//')"
+  BRANCH="$(git -C "$SRC" branch --show-current)"
+  case "$STAMP" in
+    *-STAGING/*) echo "    stamp already marked: $STAMP" ;;
+    *) sed -i '' "s|const PP4_STAMP = \"$STAMP\";|const PP4_STAMP = \"$STAMP-STAGING/$BRANCH\";|" "$STAMPFILE"
+       echo "    stamped: $STAMP-STAGING/$BRANCH" ;;
+  esac
+else
+  echo "FATAL: $STAMPFILE missing — refusing to publish an unstampable staging build." >&2
+  exit 1
+fi
+
 cd "$WORK/staging"
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
   echo "==> nothing changed; not pushing."
