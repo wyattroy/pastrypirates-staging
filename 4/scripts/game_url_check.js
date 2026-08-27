@@ -101,7 +101,30 @@ let gamePath = null;
   else pass("no in-page import names a tree other than the served root");
 }
 
-// 4. RED-PROOF. A check that has never been seen to fail is not a check (CLAUDE.md rule 6).
+// 4. No script may READ or IMPORT a path under a tree the cutover deleted.
+{
+  /* THE FOURTH INSTANCE IN ONE DAY, and the most expensive: sea_trial.mjs:35 did
+       fs.readFileSync(path.join(REPO, "4/src/ui/stage.js"))
+     to print the build stamp, so THE SEA TRIAL — the gate CLAUDE.md mandates for every change —
+     crashed with ENOENT before sailing a single leg, and had done since the cutover. ceo_brief.mjs
+     carried the identical line, so "run CEO" was dead too. Cases 2 and 3 above only look at URLs
+     and in-page imports; a Node-side file read is a different shape and slipped past both.
+     Prose mentioning 4/src is fine and common (this file does it) — a STRING PASSED TO A READ is
+     not. */
+  const bad = [];
+  for (const f of FILES) {
+    if (PROSE_OK.has(f)) continue;
+    fs.readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+      if (!/(readFileSync|existsSync|readdirSync|createReadStream|import\s*\(|require\s*\()/.test(line)) return;
+      const m = line.match(/["'`]([^"'`]*\b4\/(?:src|index\.html)[^"'`]*)["'`]/);
+      if (m) bad.push(`${path.relative(REPO, f)}:${i + 1} -> ${m[1]}`);
+    });
+  }
+  if (bad.length) fail(`${bad.length} script(s) READ a path under 4/ that the cutover deleted: ${bad.slice(0, 5).join(", ")}`);
+  else pass("no script reads or imports a path under the deleted 4/src tree");
+}
+
+// 5. RED-PROOF. A check that has never been seen to fail is not a check (CLAUDE.md rule 6).
 {
   const synthetic = 'await c.nav(`http://127.0.0.1:${PORT}/4/`); await import("/4/src/ui/index.js");';
   const cdpLine   = 'tgt = await (await fetch(`http://127.0.0.1:${dbgPort}/json/new?about:blank`, { method: "PUT" })).json();';
@@ -113,8 +136,17 @@ let gamePath = null;
      one went red on nine CDP control-plane fetches that are all correct. So the red-proof also
      asserts the gate stays QUIET on the line it must never flag. */
   const sparesCDP = /fetch\(/.test(cdpLine);
-  if (catchesURL && catchesImport && sparesCDP) pass("red-proof: catches the line that broke the fleet, and spares the CDP fetch it must not flag");
-  else fail(`red-proof FAILED (url:${catchesURL} import:${catchesImport} sparesCDP:${sparesCDP})`);
+  /* …and case 4, both ways: it must catch the read that killed the sea trial, and stay quiet on a
+     comment that merely MENTIONS the old tree — this file is full of those on purpose. */
+  const deadRead  = 'const stampSrc = fs.readFileSync(path.join(REPO, "4/src/ui/stage.js"), "utf8");';
+  const proseOnly = '// the cutover deleted 4/src/ui/stage.js, which is why this gate exists';
+  const readRe = /(readFileSync|existsSync|readdirSync|createReadStream|import\s*\(|require\s*\()/;
+  const pathRe = /["'`]([^"'`]*\b4\/(?:src|index\.html)[^"'`]*)["'`]/;
+  const catchesRead = readRe.test(deadRead) && pathRe.test(deadRead);
+  const sparesProse = !(readRe.test(proseOnly) && pathRe.test(proseOnly));
+  if (catchesURL && catchesImport && sparesCDP && catchesRead && sparesProse)
+    pass("red-proof: catches the URL, the import and the dead file read; spares the CDP fetch and plain prose");
+  else fail(`red-proof FAILED (url:${catchesURL} import:${catchesImport} sparesCDP:${sparesCDP} read:${catchesRead} sparesProse:${sparesProse})`);
 }
 
 console.log(`\n${failures ? "FAIL" : "PASS"} — ${failures} failure(s)`);

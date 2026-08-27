@@ -782,12 +782,33 @@ export async function bakeoffReveal(view,result){
     const bowl=bake.slots.indexOf(bake.order[k]);
     const el=bowls[bowl];
     if(!el)continue;
+    /* T-32 (his checklist #22b) — A CRATE ALREADY SOLVED HAS NOTHING TO REVEAL, SO IT COSTS NOTHING.
+       Wyatt, from a second attempt with two crates left: "the 1st turned pink instantly, then the
+       5th lagged as if 2, 3 and 4 were being revealed invisibly." That is exactly what it was.
+
+       A locked bowl is never `covered` (see the reveal-cover pass in playBakeoffLive), so this loop
+       was removing a class it does not have, restamping a number it already shows, and then pausing
+       a full REVEAL_MS in front of a crate that visibly did not change. MEASURED before the fix, by
+       posing a five-step bench with three locked and timing the whole reveal: 0 locked -> 6309ms,
+       3 locked -> 6310ms. Identical. 1561ms — 3 x 520 — spent on nothing, which is his "lagged as
+       if 2, 3 and 4 were being revealed" to the millisecond.
+
+       THE PAUSE IS THE REVEAL. It exists to let a player watch one crate be judged before the next
+       is, so it belongs only to a crate whose state actually changes on screen. The classes are
+       still written for the locked ones — they are already right, and writing them keeps this loop
+       one path rather than two (rule 23) — but the beat is not spent.
+
+       Read from the DOM rather than from a `locked` array because `view` is {order,slots} and does
+       not carry one; the bowl itself is the thing that knows, and it is the same class the cover
+       pass keys on, so the two cannot disagree about what "locked" means. */
+    const alreadyLocked=el.classList.contains("locked");
     el.classList.remove("covered","picked");
     // Stamp the step number as the bowl comes off. A row of green and pink outlines says HOW MANY
     // landed but not WHICH — and "which" is the only thing the player can act on next attempt.
     const num=el.querySelector(".bkoNum");
     if(num)num.textContent=String(k+1);
     el.classList.add(result.correct[k]?"right":"wrong");
+    if(alreadyLocked)continue;
     await sleep(reduced?Math.round(REVEAL_MS*0.5):REVEAL_MS);
   }
   if(hint){

@@ -493,7 +493,7 @@ log(anyFail ? "\nRESULT: FAIL" : "\nRESULT: PASS");
 {
   const queued = results.filter(Boolean).flatMap(r => (r.queued || []).map(it => ({ shot: it.shot, context: it.context })));
   if (queued.length) {
-    const n = writeJudgeQueue(OUT, queued, { build: "see 4/src/ui/stage.js PP4_STAMP", legs: LEGS });
+    const n = writeJudgeQueue(OUT, queued, { build: "see src/ui/stage.js PP4_STAMP", legs: LEGS });
     log(`WROTE ${path.join(OUT, "judge-queue.json")} — ${n} screen(s) awaiting a session's eyes.`);
     log(`  A session should read that file; it carries its own instructions and the rubric.`);
   }

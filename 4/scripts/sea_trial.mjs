@@ -32,7 +32,7 @@ const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)
 const say = (...a) => console.log(...a);
 
 /* ---- what build is this? -------------------------------------------------- */
-const stampSrc = fs.readFileSync(path.join(REPO, "4/src/ui/stage.js"), "utf8");
+const stampSrc = fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8");   // NOT 4/src — the cutover moved the game to the root
 const STAMP = (stampSrc.match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown";
 const started = new Date();
 

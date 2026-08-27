@@ -42,7 +42,7 @@ if (fs.existsSync(recPath)) {
   if (i >= 0) { const j = t.indexOf("\n## ", i + 4); prev = t.slice(i + 1, j < 0 ? undefined : j).trim(); }
 }
 
-const stamp = (fs.readFileSync(path.join(REPO, "4/src/ui/stage.js"), "utf8").match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown";
+const stamp = (fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8").match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown";
 const trial = fs.existsSync(path.join(REPO, ".planning/SEA-TRIAL.md"))
   ? fs.readFileSync(path.join(REPO, ".planning/SEA-TRIAL.md"), "utf8").split("\n").slice(0, 4).join("\n")
   : "no .planning/SEA-TRIAL.md on disk";

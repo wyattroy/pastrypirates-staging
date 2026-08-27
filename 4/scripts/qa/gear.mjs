@@ -90,6 +90,37 @@ const PLUMBING_FORBIDDEN = /\bspec\b|\bpayload\b|renderPickPrompt|playBakeoffLiv
    a session gets stopped by one and waved through by the other. */
 const isDoc = f => f.endsWith(".md") || f.startsWith(".planning/") || f.startsWith("docs/") || f.startsWith("4/scripts/");
 
+/* ── WHAT COUNTS AS GAME CODE, AND WHY THIS IS NOT `startsWith("4/")` ANY MORE ────────────────
+   IT WAS EXACTLY INVERTED FROM THE CUTOVER UNTIL 2026-08-26 NIGHT. This file filtered on
+   `f.startsWith("4/") && !isDoc(f)`, and isDoc excludes `4/scripts/` — so with `4/` holding ONLY
+   `scripts/` after the promotion, the game list was ALWAYS EMPTY. Every real change to the live
+   game reported GEAR: NONE, "nothing to prove"; and a change to a QA script would have reported
+   FULL. The instrument that decides how much testing every change gets was pointing at tooling and
+   calling the game nothing.
+
+   Found by editing src/ui/bakeoff.js and being told no game code had changed. It is the same
+   cutover rot that left the browser fleet navigating to an empty /4/ — and it is the third time in
+   one day that a hand-written path outlived the tree it named.
+
+   DERIVED AS AN EXCLUSION LIST, not an inclusion one, on this file's own stated principle: a check
+   that cannot see its subject must return the STRICT answer. A new top-level directory nobody
+   thought about is therefore GAME by default and gets the heavier gear, rather than silently
+   getting none.
+
+     tooling      scripts/ and 4/ — BOTH trees. 4/ is dev scripts only now.
+     record       .planning/, docs/, .claude/, notes/, any .md
+     art source   art-review/ (not shipped; the assets it produces are, and those ARE game)
+     generated    staging/ — published FROM the tree below by publish-staging-path.sh, so a change
+                  there is always a CONSEQUENCE of a game change, never a cause. Gearing on it would
+                  double-count the same edit.
+
+   Everything else ships to a player and counts: index.html, src/**, assets/**, sfx/**, about.html,
+   and classic/** — classic is frozen, but it is still served at /classic, so a change there is a
+   change a player can reach and must not be waved through. */
+const NOT_GAME = [/^\.planning\//, /^docs\//, /^\.claude\//, /^notes\//, /^art-review\//,
+                  /^scripts\//, /^4\//, /^staging\//];
+const isGame = f => !!f && !f.endsWith(".md") && !NOT_GAME.some(re => re.test(f));
+
 function changedLines(f) {
   const d = sh(`git diff -U0 -- ${JSON.stringify(f)}`) + sh(`git diff -U0 --cached -- ${JSON.stringify(f)}`);
   return d.split("\n").filter(l => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
@@ -114,7 +145,7 @@ const looksCosmetic = lines => lines.length > 0 && lines.every(l => {
 });
 
 /* ---- decide ----------------------------------------------------------------- */
-const game = files.filter(f => f.startsWith("4/") && !isDoc(f));   // let, morally — the NONE branch may refill it
+const game = files.filter(isGame);   // let, morally — the NONE branch may refill it
 let gear, why, modes = ["solo", "passplay", "crew"];
 
 if (!game.length) {
@@ -139,7 +170,7 @@ if (!game.length) {
      against the shipped tree genuinely means there is nothing to sail — the danger was never NONE
      itself, it was NONE reached by looking only at UNCOMMITTED work. */
   const vsMain = sh("git diff --name-only origin/main...HEAD").split("\n").map(x => x.trim()).filter(Boolean);
-  const shipped = vsMain.filter(f => f.startsWith("4/") && !isDoc(f));
+  const shipped = vsMain.filter(isGame);
   if (shipped.length) {
     game.push(...shipped);
     gear = "FULL";
