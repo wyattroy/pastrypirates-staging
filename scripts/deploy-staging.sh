@@ -176,6 +176,26 @@ else
   exit 1
 fi
 
+# THE BROWSER TAB SAYS STAGING TOO — because the build stamp lives in the ☰ menu, and on
+# 2026-08-27 Wyatt played PRODUCTION for a while believing it was staging. The cause was not
+# carelessness: typing a bare domain makes a modern browser try https://, staging has no
+# certificate yet, that fails, and he lands back on his production bookmark. A tell that requires
+# opening a menu is a tell that gets skipped.
+#
+# DELIBERATELY THE TITLE AND NOTHING ELSE. A banner ON the page was considered and rejected: the
+# entire value of staging is being IDENTICAL to production, and an overlay could itself produce a
+# false finding ("something is covering the board") — testing a game that differs from the one
+# that ships is the failure this whole tier exists to prevent. The tab is outside the game.
+INDEX="$WORK/staging/index.html"
+if [ -f "$INDEX" ]; then
+  if grep -q "<title>\[STAGING\]" "$INDEX"; then
+    echo "    title already marked"
+  else
+    sed -i '' 's|<title>|<title>[STAGING] |' "$INDEX"
+    echo "    tab title: $(grep -o '<title>[^<]*</title>' "$INDEX" | head -1)"
+  fi
+fi
+
 cd "$WORK/staging"
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
   echo "==> nothing changed; not pushing."
