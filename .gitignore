@@ -6,9 +6,60 @@ notes/
 node_modules/
 
 # art-review/ is deliberately NOT ignored, despite what
-# notes/art-generation-process.md §6 says. Gemini output is not reproducible —
+# .planning/art-generation-process.md §6 says. Gemini output is not reproducible —
 # the same prompt gives a different image — so the repo is the only backup of
 # art that cannot be remade, and ignored files are one `git clean -xdf` from
 # gone. Revisit when the tracked total passes ~700 MB (Pages caps a published
 # site at 1 GB): at that point move the whole folder to an orphan
 # `art-archive` branch rather than ignoring it.
+
+# hook scratch: per-session markers for read-the-doc-first
+.claude/hooks/.read-state/
+
+# stage_layout_check.mjs writes its contact sheet + screenshots here on every run —
+# 142MB of transient probe output per pass; evidence lives in the gate's log and
+# the commit messages, never in the repo
+layout-check-shots/
+
+# Sea-trial / probe output — thousands of PNGs per run, regenerated on every trial.
+# Added 2026-08-26 after `git add -A` staged 15,913 of them into the cutover commit.
+sea-trial-shots/
+crew-phone-shots/
+seed-drill-shots/
+mp-rig-shots/
+playtest-gate/
+
+# Chrome/Chromium profiles from playtest runs. NEVER commit a --user-data-dir.
+# On 2026-08-26, commit 5d82213 added 15 of these (10,713 files, 142 MB) because a
+# playtest pointed --user-data-dir INSIDE the repo instead of /tmp. GitHub's secret
+# scanner then fired on Default/shared_proto_db/000003.log — it had found the Google
+# API key that is baked into every copy of Chrome, sent as X-Goog-Api-Key to
+# optimizationguide-pa.googleapis.com. That key is Google's, not ours, so there was
+# nothing to rotate; the cost was 142 MB in a public repo and a 3:50am alert email.
+# A profile also carries Cookies, Login Data and History — these were empty because
+# the profiles were freshly made, which is luck, not a guarantee. See
+# docs/DRIVING-THE-GAME.md §8a: user-data-dir belongs in /tmp.
+#
+# The globs must cover EVERY name the QA scripts give a profile, not just the one
+# that leaked. Checked against 4/scripts on main 2026-08-26: playtest_gate.mjs makes
+# prof-<name>-a and prof-sheet-<tag> (these are the ones that leaked), group_g_peek_probe
+# prof, group_f/g_shots prof-<TAG>, mp_rig prof-host and prof-guest, mouse_qa profile,
+# stage_layout_check profile-<W>x<H>, contact_sheet _sheet-profile. A name-by-name list
+# rots the moment someone adds a script, so these are deliberately shape-based.
+# Note playtest_gate.mjs defaults --out to ./playtest-gate (inside the repo), so the
+# default run is caught here too, not only the --out that caused the incident.
+prof/
+prof-*/
+profile/
+profile-*/
+_sheet-profile/
+chrome-probe*/
+
+# Two more scripts still default their --out INSIDE the repo: mouse_qa.mjs
+# (./mouse-qa-shots) and narration_timeline.mjs (./narration-timeline). The profile
+# globs above already catch the profile each one creates; these two lines cover the
+# screenshots beside it, which are the same transient probe output as every other
+# directory in this block. Added in the same commit as the globs rather than waiting
+# for a third incident to make the case.
+mouse-qa-shots/
+narration-timeline/

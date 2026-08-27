@@ -26,10 +26,16 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { pickTree, treeLine, REPO_ROOT } from "./lib/pick_tree.js";
+import { stripCommentSegments } from "./lib/js_region_tokenizer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, "..");
+
+// THE TREE THIS GATE SCANS (03-01 Task 2 / TEST-04). Bare run unchanged; `--tree=4` scans the game
+// under development. docs/HARD-WON-LESSONS.md §3.
+const picked = pickTree(process.argv);
+const ROOT = picked.root;
 const SHARED_DIR = path.join(ROOT, "src", "shared");
 const ENGINE_DIR = path.join(ROOT, "src", "engine");
 const INDEX_HTML = path.join(ROOT, "index.html");
@@ -51,17 +57,24 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Strip a `//` line comment before matching (D-08's known false positive — RESEARCH.md Q5: prose
-// mentioning `document.body` immediately above the real impurity it describes relocating, e.g.
-// "Rewriting document.body here..."). This codebase uses only `//` line comments and single-line
-// `/* ... */` banners in the moved region — no multi-line block comments — so stripping from the
-// first `//` to end-of-line is sufficient. (No file under src/engine or src/shared contains a
-// `://` inside a string literal today, which would otherwise be a false-negative risk for this
-// same stripping approach — reconfirm that if a URL-bearing string is ever added here.)
-function stripLineComment(line) {
-  const idx = line.indexOf("//");
-  return idx === -1 ? line : line.slice(0, idx);
-}
+// Comments are stripped before the purity match (D-08's known false positive — RESEARCH.md Q5:
+// prose mentioning `document.body` immediately above the real impurity it describes relocating,
+// e.g. "Rewriting document.body here...").
+//
+// CONVERGED 03-01 Task 2. This was a private trailing-`//`-to-end-of-line strip, whose header
+// carried two caveats that are both now retired rather than re-checked: it assumed no multi-line
+// `/* ... */` blocks in the moved region (4/src/engine/index.js has several), and it asked that
+// the "no `://` inside a string literal here" assumption be reconfirmed whenever a URL-bearing
+// string appeared. Reconfirmed 2026-08-23 — still zero `://` in either tree's shared/engine — and
+// then made moot: the shared stripCommentSegments() is classify()-backed, so a `//` inside a
+// string is string content and a `/* */` block is fully blanked. One definition of "a comment"
+// across four gates (rule 23), and the strongest of them.
+//
+// APPLIED TO THE WHOLE FILE, NOT LINE BY LINE — and that distinction is the reason this convergence
+// was worth doing rather than cosmetic. A per-line strip cannot know a line is the CONTINUATION of
+// a `/* ... */` block: such a line begins with ordinary prose and matches no comment pattern at
+// all. That is exactly the miss that left two false NO-APP-STATE findings standing against
+// 4/src/net/writers.js. Whole-file, offsets preserved, so line numbers below stay exact.
 
 /* ============================= Assertion 1: purity (ENGINE-01, D-08) ============================= */
 const PURITY_PATTERNS = [
@@ -78,10 +91,9 @@ const PURITY_PATTERNS = [
 function checkPurity() {
   let ok = true;
   for (const file of allFiles) {
-    const rel = path.relative(ROOT, file);
-    const lines = fs.readFileSync(file, "utf8").split("\n");
-    lines.forEach((raw, i) => {
-      const stripped = stripLineComment(raw);
+    const rel = path.relative(REPO_ROOT, file);
+    const lines = stripCommentSegments(fs.readFileSync(file, "utf8")).split("\n");
+    lines.forEach((stripped, i) => {
       for (const { name, re } of PURITY_PATTERNS) {
         const m = stripped.match(re);
         if (m) {
@@ -93,6 +105,71 @@ function checkPurity() {
   }
   return ok;
 }
+
+/* ============================================================================================
+   THE PER-TREE INVENTORIES (03-01 Task 2 / TEST-04)
+   ============================================================================================
+   Two assertions in this file are INVENTORIES — a pinned count and a pinned name list. Until
+   2026-08-23 both described the ROOT tree's shape and only the root tree was ever scanned, so the
+   question never came up. Re-aimed at `4/` they were its only two failures, and NEITHER was a
+   violation in 4/: one is a count that is legitimately higher, and the other is seven v1 constants
+   that 4/ deliberately deleted.
+
+   PINNED, NOT DERIVED — and this is deliberate, not laziness (CLAUDE.md rule 9 says derive; this
+   is the documented exception, and the file already states it for MOVED_SYMBOLS). Deriving an
+   inventory from the file under test makes the assertion tautological: a name silently dropped
+   from a barrel would silently drop out of the list being checked against that barrel, and the
+   check would pass. The pin IS the assertion. What must not be pinned is the pin's SCOPE, so the
+   inventory is keyed by tree and an unknown tree is a named failure rather than a silent fallback
+   onto the root's numbers — measuring one tree with another tree's constants is precisely what
+   this whole phase exists to stop.
+   ============================================================================================ */
+const TREE_INVENTORY = {
+  /* THE KEYS SWAPPED AT THE 2026-08-26 CUTOVER, and the numbers did not move — the TREES did.
+     `root` used to mean the v1 game and `4` the game under development. 4/ was promoted to the repo
+     root, so what these two entries describe is unchanged; only their names are. Getting this wrong
+     is not a quiet failure: engine_contract_check went red on 7-vs-9 annotations and five "missing"
+     exports the instant the trees moved, which is the gate doing exactly its job. */
+  classic: {
+    annotationCount: 7,
+    /* Every pinned moved symbol is exported by the classic barrels. Nothing is absent by design. */
+    absentByDesign: {},
+  },
+  root: {
+    // NINE, not seven. MEASURED 2026-08-23: src/shared/index.js has 7 and src/engine/index.js
+    // has 2. The two promoted-tree-only sites are real order-reaching constructs the classic tree does not
+    // have:
+    //   src/shared/index.js:244  SEA_CREATURES — Wyatt, 2026-08-06: "we want each animal to be
+    //     followed by a substantially different animal". Each captain walks the list as a RING, so
+    //     the 50->1 join is a real adjacency too.
+    //   src/engine/index.js:1229 the bot's trade offer is COMPOSED FIRST and only then tested
+    //     against the memory. Testing before composing lets the real hail through anyway — and the
+    //     hail is the spam (docs/HARD-WON-LESSONS.md §5, commit 03a683c).
+    // Both are COUNTED but not ANCHORED below, and that gap is stated rather than hidden: the
+    // engine one sits above a `/* ... */` block, which breaks the contiguous `//` walk the anchor
+    // check uses. Anchoring it would mean changing how a construct is recognised as annotated,
+    // which is a bigger change than a count and does not belong in a gate port.
+    annotationCount: 9,
+    /* SEVEN v1 CONSTANTS THE PROMOTED GAME DELETED ON PURPOSE — verified absent from src/ entirely, not moved.
+       src/shared/index.js:218 says so in its own words: "The lee is gone: an island upwind of
+       you does nothing at all now. v1's SAIL_BUDGET(_LEEWARD) and windStepCost are deleted rather
+       than left unused — a constant nothing reads is exactly the dead code the house rules exist
+       to prevent." AW/TW/DW are v1's bot weight tables and FISH_BASE its fishing constant; the v3
+       race planner replaced all four. Reason is recorded per name so this list cannot become a
+       shrug. */
+    absentByDesign: {
+      SAIL_BUDGET: "the lee mechanic is gone in the promoted game — deleted, not moved (src/shared/index.js:218)",
+      SAIL_BUDGET_LEEWARD: "the lee mechanic is gone in the promoted game — deleted, not moved (src/shared/index.js:218)",
+      windStepCost: "the lee mechanic is gone in the promoted game — deleted, not moved (src/shared/index.js:218)",
+      AW: "v1 bot weight table, superseded by the v3 race planner",
+      TW: "v1 bot weight table, superseded by the v3 race planner",
+      DW: "v1 bot weight table, superseded by the v3 race planner",
+      FISH_BASE: "v1 fishing constant, superseded by the v3 race planner",
+    },
+  },
+};
+
+const INVENTORY = TREE_INVENTORY[picked.name] || null;
 
 /* ================= Assertion 2: ORDER IS LOAD-BEARING annotations (ENGINE-04, D-09/D-10) ================= */
 const ANNOTATION_TOKEN = "ORDER IS LOAD-BEARING";
@@ -113,14 +190,34 @@ const ANNOTATED_CONSTRUCTS = [
 function checkAnnotations() {
   let ok = true;
 
+  /* ==========================================================================================
+     THIS ASSERTION OPTS OUT OF COMMENT STRIPPING, EXPLICITLY, AND MUST ALWAYS DO SO.
+     ==========================================================================================
+     Its SUBJECT IS A COMMENT. "ORDER IS LOAD-BEARING" exists nowhere else — it is an annotation,
+     by definition written in prose above a construct whose iteration order feeds the seeded RNG.
+     Three other assertions in this file and three other gates gained comment stripping on
+     2026-08-23 (03-01 Task 2). If that had been applied GLOBALLY here, this count would read ZERO,
+     compare zero against a pinned zero once somebody "fixed" the pin, and pass forever — a check
+     that cannot fail while still reading as protection (docs/HARD-WON-LESSONS.md §2 and §3, and
+     the same disease as 4/scripts/seat_arg_check.js's comment stripper blanking what it inspects).
+     STRIP PER-ASSERTION, NEVER GLOBALLY. If you are adding stripping to this file, this function
+     is the one that must not get it.
+     ========================================================================================== */
+  if (!INVENTORY) {
+    failures.push(
+      `ANNOTATIONS: no pinned inventory for the scanned tree (${picked.name}). This assertion is a PINNED COUNT and there is no honest number to compare against for a tree nobody has counted — add one to TREE_INVENTORY rather than letting this fall back on another tree's figure.`
+    );
+    return false;
+  }
+
   let totalCount = 0;
   for (const file of allFiles) {
-    const content = fs.readFileSync(file, "utf8");
+    const content = fs.readFileSync(file, "utf8"); // RAW — see the opt-out note above
     totalCount += content.split(ANNOTATION_TOKEN).length - 1;
   }
-  if (totalCount !== 7) {
+  if (totalCount !== INVENTORY.annotationCount) {
     failures.push(
-      `ANNOTATIONS: expected exactly 7 occurrences of "${ANNOTATION_TOKEN}" across src/engine + src/shared, found ${totalCount}`
+      `ANNOTATIONS: expected exactly ${INVENTORY.annotationCount} occurrences of "${ANNOTATION_TOKEN}" across src/engine + src/shared in the ${picked.name} tree, found ${totalCount}. Declared ${INVENTORY.annotationCount}, counted ${totalCount}. If an order-reaching construct was genuinely added or removed, update TREE_INVENTORY["${picked.name}"].annotationCount in the same edit — and say in the comment there WHICH construct it is.`
     );
     ok = false;
   }
@@ -223,24 +320,49 @@ async function checkMovedSymbolCompleteness() {
   // import in this DOM-free Node context before this assertion can even run — that is itself a
   // form of impurity, so surface it as a named failure of this assertion rather than letting an
   // uncaught exception abort the whole run before the other three PASS/FAIL lines print.
+  if (!INVENTORY) {
+    failures.push(
+      `EXPORTS: no pinned inventory for the scanned tree (${picked.name}) — see TREE_INVENTORY. This assertion will not measure a tree against another tree's expected shape.`
+    );
+    return false;
+  }
+
   let sharedNs, engineNs;
   try {
-    sharedNs = await import(path.join(SHARED_DIR, "index.js"));
-    engineNs = await import(path.join(ENGINE_DIR, "index.js"));
+    sharedNs = await import(pathToFileURL(path.join(SHARED_DIR, "index.js")).href);
+    engineNs = await import(pathToFileURL(path.join(ENGINE_DIR, "index.js")).href);
   } catch (err) {
     failures.push(`EXPORTS: importing src/shared/index.js or src/engine/index.js threw — ${err.message}`);
     return false;
   }
 
+  /* THE PIN IS THE SAME 129 NAMES IN BOTH TREES. What differs is which of them the scanned tree is
+     allowed to be MISSING, and that exclusion is itself checked in BOTH directions below — because
+     an exclusion list nobody re-checks is a permanent blind spot wearing a comment. A name on
+     absentByDesign that turns out to be PRESENT is a failure too: it means the tree changed under
+     the exclusion and nothing would otherwise have said so. That is what stops this list from
+     quietly becoming the place awkward names go to be forgotten. */
+  const absent = INVENTORY.absentByDesign;
   for (const name of MOVED_SYMBOLS) {
     const inShared = name in sharedNs;
     const inEngine = name in engineNs;
-    if (!inShared && !inEngine) {
-      ok = false;
-      failures.push(`EXPORTS: "${name}" is not exported by src/shared/index.js or src/engine/index.js`);
-    } else if (inShared && inEngine) {
+    const exemptReason = Object.prototype.hasOwnProperty.call(absent, name) ? absent[name] : null;
+
+    if (inShared && inEngine) {
       ok = false;
       failures.push(`EXPORTS: "${name}" is exported by BOTH barrels — must be exactly one`);
+      continue;
+    }
+    if (!inShared && !inEngine) {
+      if (exemptReason) continue; // absent by design, and the reason is pinned beside the name
+      ok = false;
+      failures.push(`EXPORTS: "${name}" is not exported by src/shared/index.js or src/engine/index.js in the ${picked.name} tree`);
+      continue;
+    }
+    // PRESENT. If it is on the deliberately-absent list, the list has rotted.
+    if (exemptReason) {
+      ok = false;
+      failures.push(`EXPORTS-EXEMPTION-STALE: "${name}" is listed in TREE_INVENTORY["${picked.name}"].absentByDesign ("${exemptReason}") but it IS exported by a barrel in that tree. Remove the exemption — an exclusion nobody re-checks is a blind spot, not a decision.`);
     }
   }
 
@@ -263,6 +385,13 @@ async function checkMovedSymbolCompleteness() {
 
 /* ================= Runner ================= */
 async function main() {
+  // THE TREE, AND WHAT WAS OPENED, BEFORE ANY VERDICT (HARD-WON-LESSONS §3).
+  console.log(treeLine(picked, `${sharedFiles.length} .js under src/shared, ${engineFiles.length} under src/engine, ${MOVED_SYMBOLS.length} pinned moved symbol(s)`));
+  if (allFiles.length === 0) {
+    console.error(`FAIL: no .js files found under ${SHARED_DIR} or ${ENGINE_DIR} — this gate scanned NOTHING.`);
+    process.exit(1);
+  }
+
   const purityOk = checkPurity();
   console.log(
     `${purityOk ? "PASS" : "FAIL"} purity (ENGINE-01) — zero document/window/firebase/localStorage/Date.now/Math.random/globalThis/new Function references`
@@ -270,7 +399,7 @@ async function main() {
 
   const annotationsOk = checkAnnotations();
   console.log(
-    `${annotationsOk ? "PASS" : "FAIL"} annotations (ENGINE-04) — exactly 7 ORDER IS LOAD-BEARING annotations, one per order-reaching construct`
+    `${annotationsOk ? "PASS" : "FAIL"} annotations (ENGINE-04) — exactly ${INVENTORY ? INVENTORY.annotationCount : "?"} ORDER IS LOAD-BEARING annotations (pinned for the ${picked.name} tree), ${ANNOTATED_CONSTRUCTS.length} of them anchored to a named construct`
   );
 
   const dagOk = checkDagDirection();
@@ -278,11 +407,11 @@ async function main() {
 
   const exportsOk = await checkMovedSymbolCompleteness();
   console.log(
-    `${exportsOk ? "PASS" : "FAIL"} moved-symbol completeness — every moved name exported by exactly one barrel, none re-declared in index.html`
+    `${exportsOk ? "PASS" : "FAIL"} moved-symbol completeness — ${MOVED_SYMBOLS.length - (INVENTORY ? Object.keys(INVENTORY.absentByDesign).length : 0)} name(s) exported by exactly one barrel, none re-declared in index.html${INVENTORY && Object.keys(INVENTORY.absentByDesign).length ? `, ${Object.keys(INVENTORY.absentByDesign).length} absent by design (${Object.keys(INVENTORY.absentByDesign).join(", ")}) and re-checked as still absent` : ""}`
   );
 
   if (failures.length) {
-    console.error("\nFAILURES:");
+    console.error(`\nFAILURES — tree: ${picked.label}`);
     for (const f of failures) console.error(`  - ${f}`);
     process.exit(1);
   }

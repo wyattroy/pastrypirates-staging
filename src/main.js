@@ -12,7 +12,7 @@
 // retained global (`window.revealMyRecipe`, D-05), calls `boot()` directly, and hosts the small
 // handful of top-level browser-lifecycle statements (auto-pause, clock tick, resize/orientation)
 // that used to live in the classic script as bare top-level statements (never function
-// declarations, so they never showed up in analyze_classic.mjs's function-only inventory, but
+// declarations, so they never showed up in analyze_classic.mjs's function-only inventory, but  [ROOT-TREE-CITATION: analyze_classic.mjs reads the root tree on purpose — true as written]
 // still needed a real home once that region was deleted).
 
 import { MODULE_OK_FLAG } from "./module-contract.js";
@@ -21,6 +21,7 @@ import * as stateNs from "./state/index.js";
 import * as ui from "./ui/index.js";
 import * as orchestrator from "./orchestrator.js";
 import { boot } from "./orchestrator.js";
+import { initStage } from "./ui/stage.js";
 
 // D-15 (amended): the marker assignment must be guarded — `window` is
 // undeclared under plain Node and a bare reference throws ReferenceError,
@@ -38,11 +39,10 @@ if (typeof window !== "undefined") {
   // it is the one operator safe on an undeclared identifier; a truthiness
   // check on a bare `firebase` reference would throw under exactly the
   // conditions this tripwire exists to catch.
-  if (typeof firebase === "undefined") {
-    console.error(
-      "[src/main.js] firebase global not found — classic script load order may be broken."
-    );
-  }
+  // v2: the Firebase SDK is deliberately not on the page — this build is solo and pass-and-play
+  // only. A missing global is therefore the EXPECTED state, and the v1 tripwire that reported it
+  // as broken script order would fire on every single boot. Restoring the two SDK <script> tags in
+  // index.html is what brings multiplayer (and this check's usefulness) back.
 
   // 11-04/11-05/11-06/11-07: the injected-handler seam (D-07/criterion 1), fully formalized.
   // src/ui/panel.js's flash()/liveRender() and src/ui/flow.js's remotePickHighlights()/
@@ -57,7 +57,10 @@ if (typeof window !== "undefined") {
   //
   // 11-07 (bridge deletion, post-hoc fix): deleting the bridge exposed a much larger set of bare
   // cross-module CALLS the bridge had been silently satisfying beyond those original 5 edges —
-  // caught by a dedicated no-undef gate (scripts/no_undef_check.js) added this same wave, and
+  // caught by a dedicated no-undef gate (4/scripts/no_undef_check.js) added this same wave, and
+  // (CORRECTED 03-01/TEST-07: this said `scripts/no_undef_check.js`  [ROOT-TREE-CITATION: no_undef_check.js named here IS the root copy, deliberately], which scans the
+  // root game's src/ and has never opened this file. The 4/ copy is byte-identical and tree-relative,
+  // so it is the one that actually covers this tree — HARD-WON-LESSONS §3. It is NOT yet in npm test.)
   // confirmed independently in a live Chrome session (renderDecorativeBoard/startSinglePlayer
   // threw ReferenceError on the bridge-deleted build). Every one of the keys below is either (a)
   // a src/orchestrator.js (main-tier) function a ui-tier module needs to CALL — src/ui/ can never
@@ -71,11 +74,17 @@ if (typeof window !== "undefined") {
   ui.setNetHandlers({
     onBroadcast: orchestrator.netNarrate,
     onEvents: orchestrator.pushEvents,
+    // onRespond: 02.15-02 Task 3 retired remotePickHighlights(), its only consumer. Left wired,
+    // deliberately unused — deleting a composition-root entry is a cleanup, not part of an
+    // architecture drop, and touching this file here would widen the diff for no player benefit.
     onRespond: orchestrator.sendResponse,
     onRecovery: orchestrator.setRecoveryState,
     onLeave: orchestrator.leaveGame,
     // 11-07 additions — src/orchestrator.js (main-tier) targets:
     onRemotePrompt: orchestrator.remotePrompt,
+    // 04-01 Task 3 (MP-05): the bake-off's bench moments. A (a)-case edge — benchPublish is
+    // main-tier (it reaches src/net/) and src/ui/ can never import a main-tier file.
+    onBenchPublish: orchestrator.benchPublish,
     onRemoteDraftPrompt: orchestrator.remoteDraftPrompt,
     onLogDecision: orchestrator.logDecision,
     onBeginGame: orchestrator.beginGame,
@@ -88,6 +97,11 @@ if (typeof window !== "undefined") {
     onRenderBattle: orchestrator.renderBattle,
     onBattleAsk: orchestrator.battleAsk,
     onAsyncBattle: orchestrator.asyncBattle,
+    // Wyatt's problem 5 (2026-08-23): endReplay tells the orchestrator the resumed host is live
+    // again, so the host-gone safety net is re-armed for the NEW connection (the old one's
+    // server-side onDisconnect burned when it fired). An (a)-case edge like onRemotePrompt:
+    // armHostGone reaches src/net/ and flow.js can never import a main-tier file.
+    onHostBack: orchestrator.armHostGone,
     // 11-07 additions — ui-tier sibling targets (cycle-avoidance, not net-adjacency):
     onEndReplay: ui.endReplay,
     onLocalAsk: ui.localAsk,
@@ -95,6 +109,11 @@ if (typeof window !== "undefined") {
     onFlash: ui.flash,
     onSetClockUI: ui.setClockUI,
     onNarrateLastEvent: ui.narrateLastEvent,
+    // his item 7 (rule 23): the once-per-voyage black-market ceremony, reached by BOTH narration
+    // paths through util.js's eventCeremony(). panel.js owns the card; util.js owns the gate and
+    // cannot import panel.js back without closing a cycle, so the edge comes through here — the
+    // same (b)-case cycle-avoidance as onLiveRender and onFlash directly above.
+    onDryCeremony: ui.dryCeremony,
     onPopEmoji: ui.popEmoji,
     onRender: ui.render,
   });
@@ -133,22 +152,34 @@ if (typeof window !== "undefined") {
   // automatically reachable there. Since converting that one button to addEventListener would
   // mean board.js reaching back into a DOM-attach step outside its own render pass, GLOBAL-02/03's
   // "single documented mechanism" principle is honored the other way: one explicit, named,
-  // commented `window.` assignment, exactly like the debug hooks above. ui_contract_check.js's
+  // commented `window.` assignment, exactly like the debug hooks above. ui_contract_check.js's  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
   // retained-globals-allowlist assertion enforces that this is the ONLY new non-debug window.*
   // assignment anywhere under src/.
   window.revealMyRecipe = ui.revealMyRecipe;
 
   // 11-07: moved verbatim from the (now-deleted) classic <script> region. These are top-level
-  // statements, not function declarations, so they never appeared in analyze_classic.mjs's
+  // statements, not function declarations, so they never appeared in analyze_classic.mjs's  [ROOT-TREE-CITATION: analyze_classic.mjs reads the root tree on purpose — true as written]
   // function-only inventory across 11-01..11-06 — but they still execute every page load and
   // needed a real module home once the classic region itself was removed.
 
   // auto-pause solo/bot games when the tab/screen goes hidden (backgrounded, locked, computer
   // sleeps) — mobile especially can't rely on a second tab catching up later, so we pause rather
-  // than let bots keep playing unattended. Never auto-resumes; player taps ▶ same as manual pause.
+  // than let bots keep playing unattended.
+  //
+  // /4: a pause the PLAYER never asked for must also end itself when they come back. The stage
+  // hides the shot-clock panel (and solo defaults the clock off), so the v2 rule "never
+  // auto-resumes; player taps ▶" left no reachable ▶ at all — an app-switch on a phone silently
+  // paused the game, and the next sleep() (in practice the trade-wind rim sweep, twice in live
+  // playtests) hung the turn forever with no indicator. Only the automatic pause auto-resumes:
+  // a pause the player chose by tapping ⏸ stays theirs to end.
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && stateNs.appState.isHost && ui.soloBotGame() && !stateNs.appState.shotClockPaused) {
+    const st = stateNs.appState;
+    if (document.hidden && st.isHost && ui.soloBotGame() && !st.shotClockPaused) {
+      st.autoPausedByHide = true;
       ui.toggleShotClockPause();
+    } else if (!document.hidden && st.autoPausedByHide) {
+      st.autoPausedByHide = false;
+      if (st.shotClockPaused) ui.toggleShotClockPause();
     }
   });
 
@@ -190,6 +221,15 @@ if (typeof window !== "undefined") {
   // is where that wiring happens, so this ordering preserves it. 11-07: both
   // are now real src/ui/ exports, called directly rather than through the
   // `window`-property indirection the bridge provided.
+  /* THE BELT BEHIND THE BRACES. orchestrator.js catches the voyage chain at its root, which is
+     where a broken turn actually lands. This catches everything that is NOT rooted there — a
+     guest's Firebase watcher, a detached animation, a stray listener — because the failure mode
+     being closed is not "an error happened" but "the game died and said nothing". Installed at the
+     composition root, before boot(), so nothing can throw ahead of the handler that reports it.
+     voyageAground() itself is first-fault-wins, so the two paths cannot stack two boxes. */
+  window.addEventListener("unhandledrejection", e => ui.voyageAground(e.reason, "unhandled rejection"));
+  window.addEventListener("error", e => ui.voyageAground(e.error || e.message, "uncaught error"));
+
   ui.applyEngineBootstrapEffects();
   ui.attachPastryArt();
 
@@ -206,4 +246,13 @@ if (typeof window !== "undefined") {
   // directly. The module still drives startup only after the UI wiring and retained global above
   // are in place, same ordering as before.
   boot();
+initStage();
+/* THE PULSE BEACON (?debug=pulse) — Wyatt's sanctioned debug instrument, 2026-08-24: the pulse
+   bug lives only on real devices, so the game itself can testify. Dynamic import, gated on the
+   URL flag: zero bytes fetched and zero work done for every ordinary player. The beacon is
+   DOM-only by design (see its own header) — it can never touch the engine or the replay. */
+try {
+  if (new URLSearchParams(location.search).get("debug") === "pulse")
+    import("./ui/pulsebeacon.js");
+} catch (e) {}
 }

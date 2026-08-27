@@ -113,6 +113,10 @@ const FILE_PATHS = {
  */
 const SCOPE_EXCLUSIONS = {
   "src/ui/index.js": "a re-export barrel — no strings of its own at all.",
+  "src/ui/usage.js":
+    "TELEMETRY, not text. Fire-and-forget REST pings (visits/starts/fins) read back by /stats.html; "
+    + "its only string literals are database paths and build tags, and it renders nothing a player "
+    + "ever sees.",
   "src/ui/handlers.js": "wires DOM events to the flow functions; every string it shows is built in flow.js/util.js and swept there.",
   "src/ui/recipe.js":
     "RECIPE CONTENT, not narration. It holds the 20 real pastry recipes — titles, descriptions, "

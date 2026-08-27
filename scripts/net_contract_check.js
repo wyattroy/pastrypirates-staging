@@ -38,6 +38,42 @@
 // to close. This script is biased toward over-flagging on purpose.
 //
 // ============================================================================
+// 2026-08-23 (03-01 Task 2) — REFINED, NOT REVERSED. Read this with the above.
+// ============================================================================
+// The paragraph above is entirely correct and its conclusion is unchanged for
+// the case it argues: a `//`-to-END-OF-LINE strip stays banned in this file,
+// forever, for exactly the databaseURL reason it gives.
+//
+// What re-aiming this gate at `4/` exposed is that the paragraph proves
+// something narrower than "never strip". It proves that a strip which can
+// TRUNCATE A LINE CONTAINING CODE is unsafe. Dropping a line that is ENTIRELY
+// a comment cannot truncate a line containing code — there is no code on it —
+// so it does not reopen that hole at all.
+//
+// And the "occasional false positive" turned out not to be occasional. Against
+// 4/ this gate reported two NO-APP-STATE violations at src/net/writers.js:174
+// and :193. Both are inside the long host-gone comment block. Neither is code.
+// The bias toward over-flagging was written when the cost was "a reworded
+// comment" — but that cost is now "rewrite the paragraph explaining WHY the
+// host-gone path works", i.e. the gate makes writing the explanation an
+// offence. HARD-WON-LESSONS §1b records the same thing happening to
+// 4/scripts/seat_arg_check.js, whose first run failed on the comment
+// documenting the bug it exists to catch.
+//
+// So assertions 2 and 3 now match against source with COMMENT CHARACTERS
+// BLANKED, via the shared stripCommentSegments() in
+// lib/js_region_tokenizer.js — which is classify()-backed, so it knows the
+// `//` inside databaseURL is string content and leaves that line whole — the one used by host_guest_parity_check.js and
+// wind_dot_contract_check.js, so there is one definition of "a comment".
+// Stripped lines become EMPTY rather than disappearing, so reported line
+// numbers still point at the right line.
+//
+// PER-ASSERTION, NOT GLOBAL. Assertions 1, 4 and 5 are untouched and still
+// match raw. Any assertion whose SUBJECT is a comment must opt out and say so:
+// strip globally and such an assertion counts zero and passes forever
+// (engine_contract_check.js's annotation count is exactly that case).
+//
+// ============================================================================
 // Scope
 // ============================================================================
 // Scans `index.html` and every `.js` file under `src/` (recursively). NEVER
@@ -92,9 +128,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pickTree, treeLine, REPO_ROOT } from "./lib/pick_tree.js";
+import { stripCommentSegments } from "./lib/js_region_tokenizer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, "..");
+
+const picked = pickTree(process.argv);
+const ROOT = picked.root;
 const SRC_DIR = path.join(ROOT, "src");
 const NET_DIR = path.join(ROOT, "src", "net");
 const UI_DIR = path.join(ROOT, "src", "ui");
@@ -135,7 +175,7 @@ function checkSoleListenerSite() {
   const targets = [INDEX_HTML, ...allSrcJsFiles].filter((f) => f !== REGISTRY_FILE);
 
   for (const file of targets) {
-    const rel = path.relative(ROOT, file);
+    const rel = path.relative(REPO_ROOT, file);
     const lines = fs.readFileSync(file, "utf8").split("\n");
     lines.forEach((line, i) => {
       for (const lit of ATTACH_LITERALS) {
@@ -155,10 +195,11 @@ function checkSoleListenerSite() {
 }
 
 /* ================= Assertion 2: no UI dependency (SPLIT-04) ================= */
-// Hardcoded from 09-01-PLAN.md's artifacts register. Literal substring
-// match, no comment stripping — a UI name mentioned even inside a comment
-// inside src/net/ is flagged on purpose (over-flagging is the intended
-// bias; the fix is to reword the comment, not weaken the check).
+// Hardcoded from 09-01-PLAN.md's artifacts register. Literal substring match.
+// STRIPS COMMENTS (03-01 Task 2 — see the header section dated 2026-08-23).
+// Tokenizer-backed, so a name in prose inside a `/* ... */` block no longer
+// counts, and a name inside a real STRING literal still does. What is gated
+// is what the file DOES, which was always the intent.
 const UI_DENYLIST = [
   "setFlipCoin", "setClockUI", "setFlipActive", "setNeedsAction", "showNarration",
   "showChatBubble", "appendChatLine", "renderSeatList", "renderBattle",
@@ -170,8 +211,8 @@ const UI_DENYLIST = [
 function checkNoUiDependency() {
   let ok = true;
   for (const file of netJsFiles) {
-    const rel = path.relative(ROOT, file);
-    const lines = fs.readFileSync(file, "utf8").split("\n");
+    const rel = path.relative(REPO_ROOT, file);
+    const lines = stripCommentSegments(fs.readFileSync(file, "utf8")).split("\n");
     lines.forEach((line, i) => {
       for (const name of UI_DENYLIST) {
         if (line.includes(name)) {
@@ -205,8 +246,10 @@ const APP_STATE_PATTERNS = APP_STATE_DENYLIST.map((name) => ({
 function checkNoAppStateDependency() {
   let ok = true;
   for (const file of netJsFiles) {
-    const rel = path.relative(ROOT, file);
-    const lines = fs.readFileSync(file, "utf8").split("\n");
+    const rel = path.relative(REPO_ROOT, file);
+    // STRIPS COMMENTS (03-01 Task 2). This is the assertion that reported
+    // 4/src/net/writers.js:174 and :193 — both prose inside the host-gone comment block.
+    const lines = stripCommentSegments(fs.readFileSync(file, "utf8")).split("\n");
     lines.forEach((line, i) => {
       for (const { name, re } of APP_STATE_PATTERNS) {
         if (re.test(line)) {
@@ -229,7 +272,7 @@ const IMPORT_RE = /(?:from\s+|import\()\s*["']([^"']+)["']/g;
 function checkDirectionalImports() {
   let ok = true;
   for (const file of netJsFiles) {
-    const rel = path.relative(ROOT, file);
+    const rel = path.relative(REPO_ROOT, file);
     const content = fs.readFileSync(file, "utf8");
     const lines = content.split("\n");
     lines.forEach((line, i) => {
@@ -300,6 +343,13 @@ async function checkWatcherInventory() {
 
 /* ================= Runner ================= */
 async function main() {
+  // THE TREE, AND WHAT WAS OPENED, BEFORE ANY VERDICT (HARD-WON-LESSONS §3).
+  console.log(treeLine(picked, `${netJsFiles.length} .js file(s) under src/net/, ${allSrcJsFiles.length} under src/`));
+  if (netJsFiles.length === 0) {
+    console.error(`FAIL: no .js files found under ${NET_DIR} — this gate scanned NOTHING. Every assertion below would pass over an empty set.`);
+    process.exit(1);
+  }
+
   const soleListenerOk = checkSoleListenerSite();
   console.log(
     `${soleListenerOk ? "PASS" : "FAIL"} sole listener site (NET-02, D-04) — zero .on()/.off() calls outside src/net/registry.js`
@@ -320,7 +370,7 @@ async function main() {
   );
 
   if (failures.length) {
-    console.error("\nFAILURES:");
+    console.error(`\nFAILURES — tree: ${picked.label}`);
     for (const f of failures) console.error(`  - ${f}`);
     process.exit(1);
   }

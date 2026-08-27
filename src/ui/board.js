@@ -53,7 +53,7 @@
 // layer holds while storms arrive and leave); a non-storm-only rule is WIND-01's, and Phase 20's.
 //
 // Purity bar for src/ui/: reads DOM and game state, NEVER imports src/net/ (D-07).
-// scripts/module_graph_check.js and scripts/ui_contract_check.js both gate this mechanically.
+// scripts/module_graph_check.js and scripts/ui_contract_check.js both gate this mechanically.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
 //
 // Deviation ($ duplicate, mirrors 11-01's recipe.js precedent): `$` is a classic-script-local
 // `const $=id=>document.getElementById(id)` (index.html:863), used ~120+ times across the
@@ -100,13 +100,19 @@ import {
   DIRS, STORM_DIAG, HEXCOL, ASSET_BASE, EMOJI_IMG,
   BOARD_IMG, DOCK_IMG, BOAT_IMG, ING_IMG, ING_HOLE_IMG, ANCHOR_IMG, TRADE_SWIRL_IMG,
   WIND_ARROW_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, COIN_IMG, SCROLL_IMG, CROWN_IMG,
+  STORM_CLOUD_IMG,
   HOURGLASS_IMG, CROISSANT_IMG, CAKE_SLICE_IMG, DONUT_IMG, CUPCAKE_IMG,
   FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG,
   iconImg, iname, ingImg,
+  devHost,
 } from "../shared/index.js";
 import {
   dockOrient, tracePolygonLoops, roundedPathFromLoop, islandArtPlacement, shipXY, pulseEl,
-  describeFor, NEUTRAL_VIEWER, assignBadges, pname, pn, buildPlayerRows, SHIP_GLIDE_MS,
+  // describeFor + NEUTRAL_VIEWER dropped with LOAD-03's last step: their only use here was seeding
+  // the decorative board's demo log line, and that board no longer renders. Dead imports are
+  // forbidden in this codebase (D-33/D-34/D-40) and no gate catches them, so they go with the code
+  // that used them rather than being left behind as plausible-looking dependencies.
+  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx,
 } from "./util.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
 import { playFlip } from "./audio.js";
@@ -129,10 +135,21 @@ export function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag)
 // width/height in board px.
 export function iconAt(svg,cx,cy,size,href,rotateDeg,flip){
   const g=el("g",{transform:`translate(${cx},${cy})${flip?" scale(-1,1)":""}${rotateDeg?` rotate(${rotateDeg})`:""}`},svg);
-  el("image",{x:-size/2,y:-size/2,width:size,height:size,href},g);
+  const im=el("image",{x:-size/2,y:-size/2,width:size,height:size,href},g);
+  /* T-33 — THE FALLBACK TWO COMMENTS ALREADY PROMISED, now actually here. shared/index.js said
+     "iconAt() below removes the <image> on load failure, leaving the original emoji/shape visible"
+     and spawnPops says "same fallback as iconAt()". Neither was true: this function had no error
+     handler, so a failed ingredient image was left showing the browser's broken-image glyph — the
+     blue "?" Wyatt photographed on 2026-08-26, on island tiles AND in captains' hold chips.
+     Two image failures were caught in a driven solo run, both on holes/sugar.png.
+
+     Removing the <image> is the whole fallback: whatever the art was drawn OVER (the island shape,
+     the crate) is underneath and becomes visible again. An empty square is a far better failure
+     than a broken-image icon, and it is what the rest of the file already does. */
+  im.addEventListener("error",()=>im.remove());
   return g;
 }
-let cell=0,shipEls=[],activeRing=null,spinNeedle=null,stormText=null,stormDial=null,windLabels=[];
+let cell=0,shipEls=[],activeRing=null,spinNeedle=null,forecastNeedle=null,forecastPulse=null,forecastBox=null,forecastLabel=null,forecastStorm=null,forecastMark=null,forecastSpin=null,forecastSpinner=null,stormText=null,stormDial=null,windLabels=[];
 
 // Exported accessors for the still-classic call sites that read this cluster's render-only state
 // directly (localPickCell/remotePickHighlights read cell; showChatBubble reads shipEls) — see the
@@ -140,8 +157,70 @@ let cell=0,shipEls=[],activeRing=null,spinNeedle=null,stormText=null,stormDial=n
 export function boardCell(){return cell;}
 export function boardShipEls(){return shipEls;}
 
+/* THE TRADE WINDS ACTUALLY BLOW — playtest 21 item 9 (WIND-02, on the roadmap unstarted since
+   v1.3). The rim used to be one STATIC WIND_ARROW_IMG per channel square plus a still swirl at each
+   drop-off, so the one part of the board that is defined by movement was the only part that never
+   moved. Wyatt's pick: always on, so the current teaches itself at a glance before a ship is ever
+   swept.
+
+   IT IS HTML, NOT SVG, AND THAT IS THE WHOLE ENGINEERING DECISION. index.html's #sailHost note
+   records the measurement that settles it: an animated transform on an SVG child forced ~62 layouts
+   PER SECOND — 97% of all layout work with the game idle — and "Chrome does not composite SVG
+   transform animations at all; will-change cannot promote an SVG child to its own layer". Animating
+   forty arrows in #board would therefore have been the single most expensive thing in the build, on
+   a phone Wyatt has already reported running hot. As HTML, transform and opacity are compositor
+   work and cost zero layouts.
+
+   THE ROTATION AND THE MOTION ARE ON DIFFERENT ELEMENTS, deliberately. The wrapper carries the
+   tangent rotation and never animates; the <img> inside animates translateX and opacity only. So
+   each arrow drifts along its OWN channel direction — compose them on one element and the keyframe
+   transform would overwrite the rotation, which is the same class of bug as the compass chip whose
+   CSS animation erased its SVG transform attribute.
+
+   The per-cell delay is what makes it a CURRENT rather than forty independent twitches: the wave
+   travels clockwise around the ring, in the direction a ship is actually carried. */
+function buildRimFlow(cellPx){
+  const host=$("rimHost"); if(!host)return;
+  host.innerHTML="";
+  const g=appState.game; if(!g||!g.isRound)return;
+  const CQ=v=>(v/640*100)+"cqw";
+  const heads=new Set(Object.values(g.rimHead||{}).map(h=>h[0]+","+h[1]));
+  const ring=g.rimCellInfo||[];
+  ring.forEach((c,i)=>{
+    const left=CQ(c.x*cellPx),top=CQ(c.y*cellPx),size=CQ(cellPx);
+    const d=document.createElement("div");
+    d.style.left=left;d.style.top=top;d.style.width=size;d.style.height=size;
+    // the grid cell this belongs to, carried rather than left to be re-derived. Same reasoning as
+    // sailHighlightRect's data-gx/gy: two readers there had been inverting the positioning maths by
+    // hand, which is a second copy of it to keep in step. It is also what lets a probe check an
+    // arrow against its OWN square instead of against the board's corner — under a zoom, points at
+    // different board positions move by different amounts, so only a same-cell comparison means
+    // anything.
+    d.dataset.gx=c.x; d.dataset.gy=c.y;
+    if(heads.has(c.k)){
+      d.className="rimSwirl";
+      const img=document.createElement("img");
+      img.src=TRADE_SWIRL_IMG;img.alt="";img.decoding="async";
+      d.appendChild(img);
+    }else{
+      d.className="rimFlow";
+      d.style.transform=`rotate(${c.deg+90}deg)`;   // tangent of the clockwise flow — STATIC
+      const img=document.createElement("img");
+      img.src=WIND_ARROW_IMG;img.alt="";img.decoding="async";
+      // the wave runs with the current, one beat per cell around the ring
+      img.style.animationDelay=(-(i%ring.length)*0.16)+"s";
+      d.appendChild(img);
+    }
+    host.appendChild(d);
+  });
+}
 export function drawBoard(){
   const svg=$("board");svg.innerHTML="";
+  // PERF-01 (2026-08-02): the boats live in their own SVG overlaying #board so they paint ABOVE the
+  // ripple rings, which are HTML now and would otherwise cover them. Cleared in lockstep with
+  // #board — emptying one and not the other would strand ghost boats from the previous board.
+  // Same viewBox and same box, so ship coordinates are unchanged. See index.html's paint-order note.
+  const shipsSvg=$("boardShips");if(shipsSvg)shipsSvg.innerHTML="";
   const n=appState.game.cfg.grid,W=640;cell=W/n;
   // custom board art (ocean + Isle of Tortuga + its docks baked in) sits behind everything.
   // `grid` draws the functional cell boundaries on top of it: open water is outline-only
@@ -161,17 +240,9 @@ export function drawBoard(){
       el("rect",{x:x*cell,y:y*cell,width:cell,height:cell,
         fill:rimC?"#000000":"none","fill-opacity":rimC?.1:0,stroke:"#a6dee8","stroke-width":1,"stroke-opacity":.5},grid);
     }
-    // flow arrows on every channel square (clockwise), a swirl icon at each quadrant's drop-off
-    const headKeys=new Set(Object.values(appState.game.rimHead).map(h=>h[0]+","+h[1]));
-    for(const c of appState.game.rimCellInfo||[]){
-      const cx=(c.x+.5)*cell,cy=(c.y+.5)*cell;
-      if(headKeys.has(c.k)){
-        iconAt(svg,cx,cy,cell,TRADE_SWIRL_IMG);
-      }else{
-        const rot=c.deg+90; // tangent of clockwise flow
-        iconAt(svg,cx,cy,cell,WIND_ARROW_IMG,rot);
-      }
-    }
+    // playtest 21 item 9: the current MOVES now — see buildRimFlow. The arrows and the drop-off
+    // swirls left #board entirely, so nothing about the channel is drawn here any more.
+    buildRimFlow(cell);
   }else{
     svg.style.background="";
     for(let i=0;i<=n;i++){
@@ -240,6 +311,16 @@ export function drawBoard(){
         const g=iconAt(svg,scx,scy,cell*.8,ING_IMG[ing]);
         g.id=`crate_${ing}_${idx}`;
       });
+      // 🏴 THE BLACK MARKET FLAG (draft art — emoji until Wyatt commissions a proper flag): flies
+      // over the dock when the shelf is empty, the standing "still sells after dark, 10🌕" marker
+      // the ceremony teaches. Built hidden; render() toggles it from the same event snapshot that
+      // greys the crates, so the two tells can never disagree.
+      if(appState.game.cfg.blackMarket&&appState.game.dockOf&&appState.game.dockOf[ing]){
+        const fd=appState.game.dockOf[ing];
+        const f=el("text",{x:(fd[0]+.5)*cell,y:(fd[1]+.42)*cell,"text-anchor":"middle",
+          "font-size":Math.round(cell*.55)},svg);
+        f.textContent="🏴";f.id=`bmflag_${ing}`;f.style.opacity=0;
+      }
     }else{
       // unlimited-crate config (not used by the live game, kept for the lab): one plain icon
       const mx=cells.reduce((s,c)=>s+c[0],0)/cells.length, my=cells.reduce((s,c)=>s+c[1],0)/cells.length;
@@ -255,7 +336,7 @@ export function drawBoard(){
   // relative to (0,0) — the needle's rotation pivot is then exactly "0px 0px", which stays correct
   // at any browser zoom level (an absolute px transform-origin drifted from the dial at non-100% zoom).
   const sr=cell*.95,scx=W-sr-14,scy=sr+32;
-  const hud=el("g",{opacity:.95,transform:`translate(${scx},${scy})`},svg);
+  const hud=el("g",{opacity:.95,transform:`translate(${scx},${scy})`,class:"ppHud"},svg); // /4: the pill is the instrument on the stage
   // colored ring stays underneath as the storm-state indicator (still toggled by fill/stroke
   // below) — the dial art sits on top slightly smaller, so a thin halo of that color peeks out
   // around the rim instead of being fully hidden by the now-opaque dial image.
@@ -265,6 +346,12 @@ export function drawBoard(){
   // used to be), so the separately-drawn text labels are gone — windLabels stays around (now
   // always empty) purely so the storm-color-toggle loop below still has something safe to iterate.
   windLabels=[];
+  /* THE DIAL IS LEFT ALONE: one ornate needle, always THIS round's wind.
+     Two attempts to put the forecast ON the dial both failed for the same reason — anything drawn
+     over the needle competes with it. First a ghost needle (mistaken for the live wind), then a
+     red chevron (legible, but it shouted louder than the thing it was annotating). The forecast
+     now lives in its own chip BELOW the dial, where it annotates without competing. Do not put a
+     second marker back on this dial. */
   spinNeedle=el("g",{},hud);
   // needle art's collar (rotation pivot) sits at the vertical center of the image, so the
   // box is centered on (0,0) rather than offset — an offset box put the pivot ~6% of the
@@ -273,6 +360,71 @@ export function drawBoard(){
   spinNeedle.style.transition="transform .7s ease";
   spinNeedle.style.transformOrigin="0px 0px";
   stormText=el("text",{x:0,y:sr+16,"text-anchor":"middle","font-size":14,"font-weight":"bold"},hud);
+  /* THE FORECAST CHIP (Wyatt, 2026-08-05): a filled box below the compass, where the caption used
+     to be, reading "FORECAST: N ↑" — and turning red when a storm is coming.
+
+     SIZING IS DELIBERATE AND NOT sr-RELATIVE. The old caption was font-size 12 in board user
+     units, and the board is ~640 units wide — so on a 374px phone it rendered at about SEVEN
+     pixels. That is why it was, in his words, almost impossible to see. This is font-size 20 in
+     the same space (~12px on that phone) on a 170-unit chip (~99px), which is a legible chip
+     rather than a whisper.
+
+     Nudged left of the dial's centre (FC_DX) because the compass sits hard against the board's
+     right edge and a centred chip would overflow it. */
+  // Sized in the SVG's 640-unit space, which maps to the board's rendered width — so on a 374px
+  // phone these units are ~0.58px each. The chip is therefore ~117px wide with ~12px text, against
+  // the old caption's ~7px. It is nudged well left of the dial's centre because the compass sits
+  // hard against the board's right edge and a centred chip of this width would run off it.
+  //
+  // TWO NESTED GROUPS, AND THE NESTING IS LOAD-BEARING. The outer one carries the POSITION as an
+  // SVG transform attribute; the inner one carries the storm PULSE, which is a CSS animation that
+  // writes `transform`. A CSS transform overrides an element's SVG transform attribute outright —
+  // so with both on one node the pulse silently erased the translate, and the chip snapped back
+  // over the dial's centre and hung 28px off the right edge of the board. Measured, not guessed.
+  // Keep the position and the animation on different nodes.
+  // Smaller, and ABOVE the dial (Wyatt, 2026-08-05) — below it the chip covered playable squares,
+  // and it must not sit on the compass either. There are only ~32 units of room between the board's
+  // top edge and the dial, so the height is set to fit that gap exactly, and the negative FC_DY
+  // lifts it clear. It lands over the corner's decorative pastry art rather than over the grid.
+  /* LAID OUT WITH TWO ANCHORS, NOT ONE CENTRED STRING, and that is deliberate. "FORECAST:" is
+     pinned to the left edge with text-anchor:start and the direction to the right edge with
+     text-anchor:end, which leaves a fixed gap in the middle for the storm icon to drop into. A
+     single centred string would have needed the text measured at runtime to know where the icon
+     goes — and measurement is exactly what has gone wrong twice on this chip already. With two
+     anchors nothing needs measuring: both ends are nailed to the box. */
+  const FC_W=190,FC_H=28,FC_PAD=9,FC_DX=-50,FC_DY=-(sr+2+28);
+  forecastNeedle=el("g",{transform:`translate(${FC_DX},${FC_DY})`,class:"fcChip"},hud); // /4: the wind pill supersedes the chip on the stage
+  forecastPulse=el("g",{},forecastNeedle);
+  forecastBox=el("rect",{x:-FC_W/2,y:0,width:FC_W,height:FC_H,rx:10,
+    fill:"#fffdf0",stroke:"#29a3b2","stroke-width":2},forecastPulse);
+  forecastLabel=el("text",{x:-FC_W/2+FC_PAD,y:FC_H*0.70,"text-anchor":"start","font-size":15,
+    "font-weight":"bold",fill:"#1f4249"},forecastPulse);
+  forecastLabel.textContent="FORECAST:";
+  // the game's own storm art, not a Unicode glyph — the same icon the narration uses, so the chip
+  // looks like the rest of the game rather than like whatever emoji font the phone happens to have
+  // sits immediately left of the direction with a real gap — measured at 170 units wide the
+  // cloud crowded the letter, so the chip gained 20 units rather than the icon losing size
+  forecastStorm=el("image",{x:FC_W/2-FC_PAD-54,y:FC_H*0.5-11,width:22,height:22,
+    href:STORM_CLOUD_IMG},forecastPulse);
+  forecastMark=el("text",{x:FC_W/2-FC_PAD,y:FC_H*0.70,"text-anchor":"end","font-size":15,
+    "font-weight":"bold",fill:"#1f4249"},forecastPulse);
+  /* The hidden-direction spinner (v2.1). Lives in the SAME slot the direction occupies — between
+     the cloud's right edge and the box's right padding — because the whole point is that it stands
+     where a direction would have stood. Centred in that slot rather than anchored to an edge, since
+     a rotating glyph has to turn about its own middle.
+     THREE NESTED GROUPS, and every one of them is load-bearing:
+       forecastSpin    — SVG transform attribute, position only. Never animated.
+       forecastSpinner — the CSS class .fcSpin, rotation only.
+     A CSS transform on the positioned element would REPLACE its SVG transform attribute and fling
+     the glyph off the chip — the exact failure that cost two attempts when this chip was first
+     built (see the comment above about measurement going wrong twice). Splitting position from
+     animation is what makes that impossible rather than merely unlikely. */
+  const FC_SLOT_L=FC_W/2-FC_PAD-54+22, FC_SLOT_R=FC_W/2-FC_PAD; // cloud's right edge .. box padding
+  forecastSpin=el("g",{transform:`translate(${(FC_SLOT_L+FC_SLOT_R)/2},${FC_H/2})`},forecastPulse);
+  forecastSpinner=el("g",{},forecastSpin);
+  const spinGlyph=el("text",{x:0,y:0,"text-anchor":"middle","dominant-baseline":"central",
+    "font-size":18,"font-weight":"bold",fill:"#ffffff"},forecastSpinner);
+  spinGlyph.textContent="↑";
   // active-player highlight: a sonar-style ripple of white rings expanding out from the boat
   // (positioned in render). Fixed white, not per-player color, so it stays visible against art.
   //
@@ -294,6 +446,7 @@ export function drawBoard(){
     activeRing.style.opacity=0;
     activeRing.style.transform="";
     activeRing.style.transition="";
+    ringSeat=null;   // a rebuilt ring belongs to nobody yet — its first placement must snap
     const d=CQ(cell*.8), bw=CQ(2);
     for(let i=0;i<3;i++){
       const ring=document.createElement("div");
@@ -329,7 +482,10 @@ export function drawBoard(){
     // step by hand, in different files, one of them the pacing basis for every per-square animation
     // in the game. setShipGlideMs() below now also has to restore this exact value, which would
     // have made it three. Deriving it makes the coupling structural instead of a promise.
-    const g=el("g",{style:`transition: transform ${shipGlideCss(SHIP_GLIDE_MS)}`},svg);
+    // PERF-01: appended to shipsSvg, not svg — the boats' whole reason for being a separate layer.
+    // Falls back to #board if the overlay is somehow absent, so a stale cached index.html degrades
+    // to the old (rings-over-boats) look rather than a board with no ships on it.
+    const g=el("g",{style:`transition: transform ${shipGlideCss(SHIP_GLIDE_MS)}`},shipsSvg||svg);
     const boatSize=cell;
     el("image",{x:-boatSize/2,y:-boatSize/2,width:boatSize,height:boatSize,href:BOAT_IMG[i]},g);
     shipEls.push(g);
@@ -423,7 +579,7 @@ export function buildStormLayers(ov,seed){
 // knows the live wind direction at exactly the right moment (see the wind block below). Off by
 // default (D-08, D-10); enabled only by `?wind=1` or `localStorage.pp_wind_proto==="1"`. See the
 // file header's Phase 19 / WIND-00 scoped exception above for the full BUG-01 safety argument.
-export const WIND_PROTOTYPE_ENABLED_DEFAULT=false;
+export const WIND_PROTOTYPE_ENABLED_DEFAULT=true;
 /* ===== WIND DOT PROTOTYPE (Phase 19 / WIND-00) BEGIN ===== */
 
 // windPrototypeEnabled() — the on/off switch (D-08, D-10). Memoized into module-scope
@@ -440,6 +596,21 @@ export function windPrototypeEnabled(){
   return windProtoEnabled;
 }
 
+// windHudEnabled() — the tuning HUD's own switch, separate from the dots themselves so the effect
+// can ship while the developer panel stays out of the way. Same memoize-and-guard shape as
+// windPrototypeEnabled() above.
+let windHudOn=null;
+export function windHudEnabled(){
+  if(windHudOn!==null)return windHudOn;
+  let on=false;
+  // CUTOVER 2026-08-26: dev machines only — see devHost() in shared/index.js and Phase 6
+  // criterion 4. A player typing ?windhud=1 on the live site must not get a tuning panel.
+  try{ if(devHost() && location.search.indexOf("windhud=1")!==-1)on=true; }catch(err){}
+  try{ if(localStorage.getItem("pp_wind_hud")==="1")on=true; }catch(err){}
+  windHudOn=on;
+  return windHudOn;
+}
+
 // WIND_DOT_MAX is D-04's 0-100 dial ceiling. WIND_DOT_DEFAULT is D-02's 5-10 target density and
 // D-06's locked run-2 value. WIND_DOT_SEED_SALT keeps this stream from correlating with the rain's
 // (stormLayerSpecs, above) even though both derive from the same game seed — its hex spells "WIND"
@@ -447,7 +618,28 @@ export function windPrototypeEnabled(){
 // so a live rotation never exposes a layer corner. WIND_READOUT_MS is 19-RESEARCH.md Pitfall 4's
 // throttle: the readout text updates at most this often, so measuring the frame rate never becomes
 // part of the frame cost it measures.
-const WIND_DOT_MAX=100, WIND_DOT_DEFAULT=10, WIND_DOT_SEED_SALT=0x57494e44, WIND_LAYER_OVERSIZE=2.2, WIND_READOUT_MS=250;
+const WIND_SPEED_SCALE=0.2;
+// WIND_DOT_DEFAULT 10 -> 20 (Wyatt, 2026-08-10: "Add 100% more wind particles"). Goes with the
+// lane-band fix in windDotFrame below — the two together are what he asked for: more dots, and
+// all of them actually crossing the board.
+const WIND_DOT_MAX=100, WIND_DOT_DEFAULT=20, WIND_DOT_SEED_SALT=0x57494e44, WIND_LAYER_OVERSIZE=2.2, WIND_READOUT_MS=250;
+// WIND_DOT_PX (Wyatt, 2026-08-05): "decrease the wind particle size fifty percent" — the
+// prototype's 7px halved. A named constant rather than an edited literal, because the size is now
+// something taste may move again; nothing else in the region depends on it (the wobble cap and the
+// wrap margin are both in layer space, not dot space, so a smaller dot does not change its path).
+const WIND_DOT_PX=3.5;
+
+// WIND_STORM_FADE_* (Wyatt, 2026-08-05): "fade out the wind particles when a storm starts — the two
+// animation effects should not happen simultaneously." The rain's own fade is `.8s ease` on
+// #stormOverlay (index.html), so the two timings are set AGAINST it rather than matched to it:
+//  - OUT at 400ms with no delay, so the dots are gone about halfway through the rain's fade IN —
+//    the board never shows drifting dots under falling rain.
+//  - IN at 900ms behind an 800ms delay, so the dots only begin returning once the rain's own 800ms
+//    fade OUT has fully finished. A crossfade back would have been the same overlap in reverse.
+// The dots' rAF loop is also STOPPED once the fade-out finishes and restarted before the fade-in
+// (windStormSync) — an invisible dot field must not keep paying for frames through a storm, which
+// is the one moment the board is already at its most expensive (BUG-01).
+const WIND_STORM_FADE_OUT_MS=400, WIND_STORM_FADE_IN_MS=900, WIND_STORM_FADE_IN_DELAY_MS=800;
 
 // WIND_WOBBLE_MAX_PX/WIND_WOBBLE_PERIOD_MS (D-02.2) and WIND_FADE_FRAC (D-02.1) are 19-04's two
 // named fill-in points' constants. WIND_WOBBLE_MAX_PX caps the lateral sway's amplitude in the
@@ -495,7 +687,12 @@ export function windDotSpecs(seed,count){
   const rnd=mulberry32(((seed==null?DEMO_RAIN_SEED:seed)^WIND_DOT_SEED_SALT)>>>0);
   const specs=[];
   for(let i=0;i<n;i++){
-    specs.push({startT:rnd(),wobbleAmp:rnd(),speed:rnd(),lane:rnd()});
+    // lane is STRATIFIED, not raw-uniform: dot i lives in the i-th slice of the crosswind span,
+    // jittered within it. Raw draws are fixed for a whole voyage, so one unlucky game could leave
+    // a 15% stretch of the board's edge with no dot in it ever (measured: one seed's 20 uniform
+    // lanes topped out at 0.83). A slice apiece guarantees the whole starting edge is served,
+    // every game — and the draw count per dot is unchanged, so the spec order note above holds.
+    specs.push({startT:rnd(),wobbleAmp:rnd(),speed:rnd(),lane:(i+rnd())/Math.max(1,n)});
   }
   return specs;
 }
@@ -526,7 +723,12 @@ export function windDotSpecs(seed,count){
 // (drawn in [0,1) by windDotSpecs) so no dot's deviation from its lane can exceed WIND_WOBBLE_MAX_PX.
 export function windDotFrame(spec,tMs,layerW,layerH){
   const margin=16;
-  const rate=0.35+spec.speed*0.5; // layer-heights per second
+  // WIND_SPEED_SCALE (Wyatt, 2026-08-05): "MUCH slower — 20% their current speed". The prototype
+  // was tuned as a visible-motion demo; as ambient scene-setting under a board people are reading,
+  // that pace is busy. Applied as a scale on the rate rather than by editing the two literals, so
+  // the prototype's own 0.35..0.85 spread — the per-dot variation that stops them moving in
+  // lockstep — is preserved exactly, just slowed.
+  const rate=(0.35+spec.speed*0.5)*WIND_SPEED_SCALE; // layer-heights per second
   const span=layerH+margin*2;
   let raw=(spec.startT*span+(tMs/1000)*rate*layerH)%span;
   if(raw<0)raw+=span;
@@ -546,7 +748,17 @@ export function windDotFrame(spec,tMs,layerW,layerH){
   opacity=Math.max(0,Math.min(1,opacity));
 
   const wobble=Math.sin(tMs/WIND_WOBBLE_PERIOD_MS*Math.PI*2+spec.startT*Math.PI*2)*spec.wobbleAmp*WIND_WOBBLE_MAX_PX;
-  const x=spec.lane*layerW+wobble;
+  /* LANES SPAN THE BOARD, NOT THE OVERSIZED LAYER (Wyatt, 2026-08-10: "make sure they spawn
+     across the whole starting edge of the board"). The layer is WIND_LAYER_OVERSIZE (2.2x) wide
+     so a live rotation never exposes a corner — but lanes drawn across its FULL width meant only
+     ~1/2.2 of the dots ever crossed the board's clip, and whichever random lanes survived
+     bunched wherever they fell. Measured before this change (headless, 10 dots): five lanes over
+     the board, all between 0.00 and 0.50 of its width, none between 0.60 and 1.00 — exactly the
+     "they all spawn near one spot" a playtest sees. Lanes now map into the central board-width
+     band, so every dot crosses the board and lane=0..1 is edge-to-edge of the board itself. The
+     oversize keeps its one job; the dots just stop hiding in it. */
+  const band=1/WIND_LAYER_OVERSIZE;
+  const x=layerW*((1-band)/2+spec.lane*band)+wobble;
 
   return {x,y,opacity};
 }
@@ -557,7 +769,7 @@ export function windDotFrame(spec,tMs,layerW,layerH){
 // `div.wdot` elements and REMOVING surplus ones from the DOM entirely (never just hiding them).
 // Regenerates the module-scope `windSpecs` cache from windDotSpecs(seed,count) in the SAME call so
 // specs and elements can never disagree in length. Every dot is styled inline via element.style
-// only (D-14 — index.html is never touched): absolute position at left/top 0, a 7px circle, a flat
+// only (D-14 — index.html is never touched): absolute position at left/top 0, a WIND_DOT_PX circle, a flat
 // translucent white fill, and pointerEvents:"none". The dot is a drawn shape, not a baked image —
 // no new asset is loaded.
 export function buildWindDots(container,seed,count){
@@ -571,8 +783,8 @@ export function buildWindDots(container,seed,count){
     d.style.position="absolute";
     d.style.left="0";
     d.style.top="0";
-    d.style.width="7px";
-    d.style.height="7px";
+    d.style.width=WIND_DOT_PX+"px";
+    d.style.height=WIND_DOT_PX+"px";
     d.style.borderRadius="50%";
     d.style.background="rgba(255,255,255,.72)";
     d.style.pointerEvents="none";
@@ -628,6 +840,16 @@ export function buildWindDots(container,seed,count){
 // Anti-Patterns / Open Question 1 — the headroom run isolates this variable rather than guessing).
 let windDotEls=[],windSpecs=[],windDotsOn=true,windDotCount=WIND_DOT_DEFAULT,windAngle=0,windRafId=0,windLayer=null,windHudBuilt=false,windLastReadoutMs=0,windLastFrameMs=null,windWillChangeOn=false;
 
+// windStormFaded is the LAST storm state windStormSync acted on, so a fade fires once on the edge
+// rather than on every render() (render runs many times per storm — restarting the transition each
+// time would freeze the dots at whatever opacity they had reached). windStormTimer is the pending
+// stop-the-loop timeout, always cleared before a new one is set so a storm that ends mid-fade-out
+// cannot stop a loop the fade-in has just restarted. windBuilt replaces the old `if(!windRafId)`
+// build guard in windDotsTick: that test conflated "the pool exists" with "the loop is running",
+// and once a storm legitimately stops the loop it would have rebuilt the pool and restarted the
+// loop on the very next render — undoing the stop every single frame of the storm.
+let windStormFaded=false,windStormTimer=0,windBuilt=false;
+
 // windReducedMotion (D-13) — read ONCE at module init via the JS `matchMedia` pattern
 // (src/ui/panel.js:300), not the pure-CSS `animation-play-state` pattern the storm rain uses,
 // because the dots' motion is written by windDotLoop's own transform/opacity assignments — a CSS
@@ -666,6 +888,16 @@ function windEnsureLayer(){
     dots.style.borderRadius="10px";
     dots.style.overflow="hidden";
     dots.style.zIndex="6";
+    // The storm fade lives on the CONTAINER, not on the dots: one compositor-only opacity
+    // transition on one element, rather than 10 per-dot transitions fighting windDotLoop's own
+    // per-frame opacity writes (the loop would win, and the fade would never happen). Duration and
+    // delay are rewritten per direction by windStormSync — only the property and easing are fixed
+    // here. `opacity` is the sole transitioned property, so this stays inside BUG-01's
+    // compositor-only contract.
+    dots.style.opacity="1";
+    dots.style.transitionProperty="opacity";
+    dots.style.transitionTimingFunction="ease";
+    dots.style.transitionDuration=WIND_STORM_FADE_OUT_MS+"ms";
     bw.appendChild(dots);
   }
   let layer=dots.querySelector(".wlayer");
@@ -798,6 +1030,17 @@ function windFormatElapsed(ms){
 // #statsPanel and writes plain sentences, not a table of jargon — this is the text Wyatt reads to
 // decide whether Phase 20 goes ahead, not a metrics dump.
 export function renderWindSummary(){
+  // v2.1 (Wyatt, 2026-08-06): "remove this wind for smoothness report". It is developer instrumentation
+  // that shipped onto a PLAYER'S End of Voyage screen — a dashed box of frame rates between the
+  // keepsakes and the captains' luck. The wind dots are long since approved and live; the verdict this
+  // was built to inform has been made.
+  //
+  // The METER itself stays. windMeterSample still runs inside the existing rAF loop (one call, no
+  // extra loop) and windMeterSummary() still feeds the live readout in the tuning HUD behind
+  // ?windhud=1 — so this is not dead code, it is instrumentation that no longer shows itself to
+  // someone who did not ask for it. Gate flipped here, at the one render, rather than by deleting the
+  // instrument, so `?windhud=1` keeps working exactly as before.
+  if(!windHudEnabled())return;
   if(!windPrototypeEnabled())return;
   const panel=$("statsPanel");
   if(!panel)return;
@@ -1048,21 +1291,63 @@ export function windSetDotCount(n){
   if(dialEl)dialEl.value=String(windDotCount);
 }
 
-// windDotsTick(angle) — the ONE call render() makes into this region (see the wind block below).
-// Returns immediately when the prototype is disabled, touching no DOM at all in a normal build.
-// Otherwise: stores the live angle, ensures the layer + HUD exist, writes the SAME `angle+180`
-// convention --slant uses as a live transform (zero restart), builds the dot pool on first run, and
-// starts the shared loop if it is not already running.
-export function windDotsTick(angle){
+// windStormSync(storming) — the wind field's half of "the two animation effects should not happen
+// simultaneously" (Wyatt, 2026-08-05). EDGE-TRIGGERED: returns immediately unless the storm state
+// actually changed, because render() runs many times during one storm and re-writing the opacity
+// every time would restart the CSS transition from wherever it had got to, pinning the dots at a
+// half-faded value forever.
+//
+// Fading OUT: rewrite the duration to WIND_STORM_FADE_OUT_MS with no delay, drop the container to
+// opacity 0, and schedule stopWindDots() for just after the fade lands. The loop keeps running
+// THROUGH the fade — a stopped loop freezes the dots, and dots that stop drifting the instant the
+// storm is announced read as a bug rather than as weather.
+//
+// Fading IN: start the loop FIRST (so the dots are already moving by the time they are visible —
+// starting it after would show a frozen field for one frame), then fade in behind
+// WIND_STORM_FADE_IN_DELAY_MS so the rain's own .8s fade-out has finished before the dots return.
+function windStormSync(storming){
+  if(storming===windStormFaded)return;
+  windStormFaded=storming;
+  const host=$("windDots");
+  if(windStormTimer){clearTimeout(windStormTimer);windStormTimer=0;}
+  if(storming){
+    if(host){
+      host.style.transitionDuration=WIND_STORM_FADE_OUT_MS+"ms";
+      host.style.transitionDelay="0ms";
+      host.style.opacity="0";
+    }
+    // +80ms of slack so the stop lands after the last painted frame of the fade, never on top of it
+    windStormTimer=setTimeout(function(){ windStormTimer=0; stopWindDots(); },WIND_STORM_FADE_OUT_MS+80);
+  }else{
+    startWindDots();
+    if(host){
+      host.style.transitionDuration=WIND_STORM_FADE_IN_MS+"ms";
+      host.style.transitionDelay=WIND_STORM_FADE_IN_DELAY_MS+"ms";
+      host.style.opacity="1";
+    }
+  }
+}
+
+// windDotsTick(angle,storming) — the ONE call render() makes into this region (see the wind block
+// below). Returns immediately when the prototype is disabled, touching no DOM at all in a normal
+// build. Otherwise: stores the live angle, ensures the layer + HUD exist, writes the SAME
+// `angle+180` convention --slant uses as a live transform (zero restart), builds the dot pool and
+// starts the loop on first run, and hands the live storm state to windStormSync above.
+export function windDotsTick(angle,storming){
   if(!windPrototypeEnabled())return;
   windAngle=angle;
   const layer=windEnsureLayer();
-  buildWindHud();
+  // v2: the DOTS are on by default (they are the clearest read of which way the wind blows), but
+  // the tuning HUD is not — it is a fixed panel pinned bottom-right, which on a phone lands on top
+  // of the Captains panel. Opt in with ?windhud=1 when the density dial is actually wanted.
+  if(windHudEnabled())buildWindHud();
   if(layer)layer.style.transform=`rotate(${windAngle+180}deg)`;
-  if(!windRafId){
+  if(!windBuilt){
+    windBuilt=true;
     buildWindDots(layer,appState.game&&appState.game.seed,windDotCount);
     startWindDots();
   }
+  windStormSync(!!storming);
 }
 
 /* ===== WIND DOT PROTOTYPE (Phase 19 / WIND-00) END ===== */
@@ -1115,6 +1400,14 @@ export function renderLiveShips(){
   live.forEach((p,i)=>{
     const [x,y]=shipXY(p.pos,i,live,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
+    // A CAPTAIN AT THE OVENS FADES OUT (Wyatt, 2026-08-08: "in a past version, the boat faded
+    // semitransparent when docked. I removed that feature in v2, but now i want it back because we
+    // have the bake-off"). It is not decoration: Game.inPlay() has genuinely taken them off the
+    // board — no storm moves them, nobody can reach, trade with or raid them, and their square is
+    // free — so the boat being half-there is the honest picture of the rule. Anything still solid
+    // on this board can be interacted with; anything faded cannot.
+    // opacity only (PERF-01), and written unconditionally because it is one property on four nodes.
+    shipEls[i].style.opacity=p.baking?0.42:1;
     if(chatBubbles[i])positionChatBubble(i,x,y); // keep an active chat bubble riding along with its boat
   });
   // the active-turn ripple has to travel with the ship it's ringing, or it's left behind mid-push.
@@ -1127,9 +1420,47 @@ export function renderLiveShips(){
     const a=activeTurnSeat();
     if(a!=null&&live[a]&&!live[a].done){
       const [ax,ay]=shipXY(live[a].pos,a,live,cell);
-      activeRing.style.transform=`translate(${CQ(ax)}cqw,${CQ(ay)}cqw)`;
+      ringTo(a,ax,ay);
     }
   }
+}
+/* THE RIPPLE FOLLOWS ITS OWN BOAT, AND ONLY JUMPS BETWEEN BOATS — one place decides, because this
+   has now been got wrong twice from two different directions.
+
+   2026-07-31: the ring carried no transition while the ship eased, so it ran ~2 squares AHEAD
+   during a rim sweep. Fixed then by retuning the ring alongside the ship for the duration of the
+   sweep — but only for the sweep, and only through setShipGlideMs.
+   2026-08-14, Wyatt, from a screen recording: *"The ripples now move differently than the ship
+   sailing."* The same defect, on ORDINARY moves, where nothing retunes anything: the ship glides
+   SHIP_GLIDE_MS (700 — doubled from the 350 the original fix was judged against) while the ring
+   snaps to the destination on the first frame and waits there.
+
+   The rule the old comment was reaching for, stated properly: **the ring must wear whatever glide
+   the ship it is marking is wearing.** It must still SNAP, but only when the wheel changes hands —
+   a ring that glided from the last captain's boat to the next would slide right across the board.
+   Those two cases are distinguishable, and the seat is what tells them apart, so this decides it
+   once instead of every caller guessing.
+
+   The layout read on the snap path is load-bearing for the same reason it is in snapShipTo: style
+   writes are batched, so without forcing the commit the "snap" animates after all. */
+let ringSeat=null;
+function ringTo(seat,x,y){
+  if(!activeRing)return;
+  const jumped=(ringSeat!==seat);
+  ringSeat=seat;
+  const xf=`translate(${CQ(x)}cqw,${CQ(y)}cqw)`;
+  if(jumped){
+    activeRing.style.transition="none";
+    activeRing.style.transform=xf;
+    void activeRing.getBoundingClientRect();
+    activeRing.style.transition="";
+    return;
+  }
+  // same boat: match its glide exactly, so the two are one moving object
+  const sh=shipEls[seat];
+  const want=sh?sh.style.transition:"";
+  if(activeRing.style.transition!==want)activeRing.style.transition=want;
+  activeRing.style.transform=xf;
 }
 // G14: which seat currently owns the turn, by walking back from the current event to the nearest
 // `turn` (stopping at a round boundary). Extracted from renderLiveShips so paintShipAt can ring the
@@ -1154,7 +1485,9 @@ function activeTurnSeat(){
 // tiers by construction.
 // ONE spelling of the ship glide, used by drawBoard() to create it and by setShipGlideMs() to
 // retune and restore it. Only the duration and the easing ever vary.
-const SHIP_GLIDE_EASE="cubic-bezier(.42,0,.58,1)";
+// /4 playtest 12 (Wyatt: the sail "starts too rapidly") — a deeper S: the boat leans into the
+// move instead of leaping, and settles the same way.
+const SHIP_GLIDE_EASE="cubic-bezier(.6,0,.32,1)";
 function shipGlideCss(ms,ease){ return `${ms}ms ${ease||SHIP_GLIDE_EASE}`; }
 // Retune ONE ship's glide duration, or restore the default when `ms` is null.
 //
@@ -1185,6 +1518,39 @@ function shipGlideCss(ms,ease){ return `${ms}ms ${ease||SHIP_GLIDE_EASE}`; }
 // The ring is only retuned while a sweep is in flight, and RESTORED to snapping afterwards. It must
 // keep snapping normally: `render()` repositions it whenever the turn passes, and a ring that
 // glided there would slide right across the board from the previous captain's boat to the next.
+/* PUT A SHIP AND ITS RING ON A CELL WITH NO INTERPOLATION, AND MAKE IT STICK BEFORE RETURNING.
+   2026-08-14, from a screen recording — Wyatt: *"The ripples now move differently than the ship
+   sailing."* Measured: a 108 x 54px excursion in the first two frames of every routed sail.
+
+   WHY IT HAPPENS, and it is not what it looks like. The targets are never wrong — the ring and the
+   ship are aimed at identical positions on every frame. What differs is the TRANSITION they are
+   carrying when liveRender() aims them at the destination: the ship has the ordinary 700ms glide
+   and eases off toward it, while the ring carries NONE (deliberately — see setShipGlideMs below;
+   it must snap when the turn passes, or it slides across the board between captains). So the ring
+   resolves to the destination INSTANTLY. animateSailRoute then arms a 16ms tick glide and paints
+   the start — and the ring, already at the far end, animates the whole length of the move backwards
+   over those 16ms. That is the ripple leaving the boat.
+
+   THE `getBoundingClientRect()` IS THE ENTIRE POINT OF THIS FUNCTION, and removing it as a useless
+   read would restore the bug in silence. Style writes are batched: set transition:none, write the
+   transform, then re-arm a transition, and the browser applies the transition in force at the END
+   of the task — so the "snap" animates after all. Reading layout forces the start position to be
+   committed first, which is what makes it a snap rather than a very short journey.
+
+   Restores whatever transitions were in force, so a caller can arm its own glide afterwards. */
+export function snapShipTo(seat,c){
+  if(!shipEls.length||!shipEls[seat])return;
+  const ringing=activeRing&&activeTurnSeat()===seat;
+  const prevShip=shipEls[seat].style.transition;
+  const prevRing=ringing?activeRing.style.transition:null;
+  shipEls[seat].style.transition="none";
+  if(ringing)activeRing.style.transition="none";
+  paintShipAt(seat,c);
+  void shipEls[seat].getBoundingClientRect();          // commit it — see above
+  if(ringing)void activeRing.getBoundingClientRect();
+  shipEls[seat].style.transition=prevShip;
+  if(ringing)activeRing.style.transition=prevRing;
+}
 export function setShipGlideMs(seat,ms,ease){
   if(!shipEls.length||!shipEls[seat])return;
   const css=`transform ${shipGlideCss(ms==null?SHIP_GLIDE_MS:ms,ms==null?null:ease)}`;
@@ -1205,7 +1571,7 @@ export function paintShipAtPoint(seat,fx,fy){
   const x=(fx+.5)*cell, y=(fy+.5)*cell;
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y);
-  if(activeRing&&activeTurnSeat()===seat)activeRing.style.transform=`translate(${CQ(x)}cqw,${CQ(y)}cqw)`;
+  if(activeRing&&activeTurnSeat()===seat)ringTo(seat,x,y);
 }
 export function paintShipAt(seat,c){
   if(appState.replaying)return;
@@ -1217,9 +1583,22 @@ export function paintShipAt(seat,c){
   const [x,y]=shipXY(c,seat,st,cell);
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y); // the bubble rides along, as renderLiveShips does
-  if(activeRing&&activeTurnSeat()===seat){
-    activeRing.style.transform=`translate(${CQ(x)}cqw,${CQ(y)}cqw)`;
-  }
+  if(activeRing&&activeTurnSeat()===seat)ringTo(seat,x,y);
+}
+/* ONE PLACE DRAWS A PURSE (rule 23 / DISPLAY-RULES §1).
+   These four lines lived inline in render(), which was fine while render() was the only thing that
+   ever moved a coin on screen. 04-01 Task 2 produced a SECOND consumer — a captain baking in
+   another browser who pays for a re-watch, whose coin the host has not charged yet, because the
+   count rides home in the single reply and settles there. The rule when a second consumer appears
+   is CONVERGE, not add a path: so render() goes through this too, and the pulse, the dataset stamp
+   and the markup are one statement rather than two copies drifting.
+   `coins` is a NUMBER, and 0 is a real purse — every test in here is explicit, never truthiness. */
+export function showSeatCoins(seat,coins){
+  const el=$("coins"+seat);
+  if(!el)return;
+  if(el.dataset.coins!==undefined&&+el.dataset.coins!==coins)pulseEl(el);
+  el.dataset.coins=coins;
+  el.innerHTML=`${iconImg(COIN_IMG)} ${coins}`;
 }
 export function render(){
   const e=appState.game.events[appState.evIdx];if(!e)return;
@@ -1232,12 +1611,32 @@ export function render(){
   appState.game.players.forEach((p,i)=>{
     const [x,y]=shipXY(st[i].pos,i,st,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
-    shipEls[i].style.opacity=st[i].done?.45:1;
+    // v2.1 (Wyatt, 2026-08-06): "they don't need to fade out visually when they dock at Tortuga —
+    // they are still active players." A finished captain used to drop to 45% opacity, which read as
+    // "out of the game". Under rule 13b they were never out — they are a legal target sitting on the
+    // most valuable cargo at the table — and since the bakery raid now actually un-bakes them
+    // (Game.unfinish), a ghosted ship is worse than cosmetic: it says "nothing to do here" about the
+    // one ship worth attacking. Every ship renders at full strength; the tell that somebody is home
+    // is that they are parked on Tortuga, plus the 🏁 line that announced it.
+    //
+    // THE BAKE-OFF BRINGS IT BACK (Wyatt, 2026-08-08: "in a past version, the boat faded
+    // semitransparent when docked... now i want it back because we have the bake-off").
+    //
+    // A PREVIOUS VERSION OF THIS NOTE WAS WRONG AND IS CORRECTED HERE. It claimed a docked finisher
+    // stays solid because they are "still a legal target, still worth attacking". That is the v2
+    // CLASSIC rule, carried across and asserted as if it were this build's. It is not: Wyatt ruled
+    // on 2026-08-06 that Tortuga is sanctuary, canAttack returns false the moment the ovens are
+    // lit, and under the bake-off `done` is only ever set by endBakeDay — which ends the voyage.
+    // So there is no such thing here as a docked finisher sitting around raidable.
+    //
+    // Which leaves one honest meaning for the fade, and it is the same one either way you say it:
+    // a ship you cannot reach. inPlay() has taken them off the board — no storm, no raid, no trade,
+    // square free — and the boat being half-there is the picture of that.
+    // Read off the event snapshot, not live state, so dragging the scrubber back to before the
+    // ovens were lit shows a solid ship again.
+    shipEls[i].style.opacity=st[i].baking?0.42:1;
     if(chatBubbles[i])positionChatBubble(i,x,y); // keep an active chat bubble riding along with its boat
-    const coinsEl=$("coins"+i),newCoins=st[i].coins;
-    if(coinsEl.dataset.coins!==undefined&&+coinsEl.dataset.coins!==newCoins)pulseEl(coinsEl);
-    coinsEl.dataset.coins=newCoins;
-    coinsEl.innerHTML=`${iconImg(COIN_IMG)} ${newCoins}`;
+    showSeatCoins(i,st[i].coins);
     const hold=[...st[i].ing];
     const chipsEl=$("chips"+i);
     let newChipsHtml;
@@ -1272,23 +1671,56 @@ export function render(){
       // @copy misc.board.emptyhold
       newChipsHtml=held.join("")||`<span style="opacity:.4">empty hold</span>`;
     }
-    if(chipsEl.innerHTML&&chipsEl.innerHTML!==newChipsHtml)pulseEl(chipsEl);
-    chipsEl.innerHTML=newChipsHtml;
+    /* T-33 — the guard decided whether to PULSE, not whether to WRITE, so all four captains' hold
+       chips were destroyed and rebuilt on every render: 600 fresh <img> elements in 210 seconds,
+       each one a cold fetch. Moving the assignment inside the comparison keeps the pulse behaviour
+       byte-identical and stops the churn. */
+    if(chipsEl.innerHTML!==newChipsHtml){
+      if(chipsEl.innerHTML)pulseEl(chipsEl);
+      chipsEl.innerHTML=newChipsHtml;
+    }
     const lastEv=appState.game.events[appState.game.events.length-1];
     $("crown"+i).innerHTML=(lastEv.t==="end"&&lastEv.winner===i&&appState.evIdx===appState.game.events.length-1)?iconImg(CROWN_IMG):"";
   });
   // active-player ring + captain's-box highlight: whose turn is it as of this event?
+  /* T-09 (Wyatt, 2026-08-26, with a host/guest screenshot pair): "the bakeoff SHOULD be happening
+     for guest because it's their turn -- but Dough hook (who just played) is still displayed as the
+     active player ship in the top header, and in the captain's box." He saw it in crew; he then
+     found the same thing in pass-and-play (his #34), so it is every mode.
+
+     THE WALK ONLY KNEW ABOUT `turn`. A bake is not a turn — the engine emits {t:"ovens",p} when a
+     captain steps up and {t:"bake",p} for each attempt — so during a bake the most recent `turn`
+     was still the PREVIOUS captain's, and the ring and the highlight faithfully pointed at them.
+     Both screens agreed, which is why this was never a host/guest fault: one derivation, one wrong
+     answer, drawn identically everywhere.
+
+     THIS CHANGE DOES NOT FIX WHAT HE SAW, and the probe says so: bakeoff_surface.mjs still reads
+     "Flaky Jack" lit while "Davy Probe" bakes. MEASURED, not assumed. The reason is that
+     bakeoffPrompt runs BEFORE the engine records anything — {t:"ovens"} and {t:"bake"} are emitted
+     when the attempt RESOLVES — so while the bench is on screen there is no bake event to find.
+     What this does fix is the moment after the bake, and a resumed voyage replaying across one.
+
+     THE REAL DEFECT, located and left for a supervised change: there are TWO independent answers
+     to "whose turn is it". `appState.curSeat`, which every prompt sets through applyActiveSeat —
+     including the bake — and THIS EVENT WALK, which the ring and the captains box actually read.
+     They disagree for the whole length of a bake. That is rule 23's shape exactly: one fact,
+     derived twice, kept in step by nothing.
+
+     Converging them means deciding which one wins during REPLAY, where there is no live actor and
+     the box must follow the narration playhead rather than run ahead of it (see applyCaptainOrder
+     below). That is a design call, not a patch, so it waits for Wyatt rather than being guessed at
+     while he sleeps. Do not "fix" this by reading curSeat here as well — that makes three. */
   let active=null;
   for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
     const t=appState.game.events[i].t;
-    if(t==="turn"){active=appState.game.events[i].p;break;}
+    if(t==="turn"||t==="ovens"||t==="bake"){active=appState.game.events[i].p;break;}
     if(t==="newround")break;
   }
   if(active!=null&&st[active].done)active=null;
   if(activeRing){
     if(active!=null){
       const [ax,ay]=shipXY(st[active].pos,active,st,cell);
-      activeRing.style.transform=`translate(${CQ(ax)}cqw,${CQ(ay)}cqw)`;
+      ringTo(active,ax,ay);
       // PERF-01: a style, not an attribute — `opacity` is presentational-attribute-only on SVG.
       activeRing.style.opacity=1;
     }else activeRing.style.opacity=0;
@@ -1296,20 +1728,68 @@ export function render(){
   appState.game.players.forEach((p,i)=>{
     const row=$("prow"+i);if(row)row.classList.toggle("activeTurn",i===active);
   });
+  // Pass & Play only: float the captain whose turn it is to the top of the box, rest in sailing
+  // order. Driven from `active` above (the same derivation the ring and the highlight use) so the
+  // box moves in step with the narration playhead, not ahead of it. See applyCaptainOrder.
+  applyCaptainOrder(active);
   if(appState.game.cfg.crates<1e9)for(const ing of appState.game.ings){
     const remaining=e.tokens[ing];
     for(let idx=0;idx<appState.game.cfg.crates;idx++){
       const ic=document.getElementById(`crate_${ing}_${idx}`);if(!ic)continue;
       const taken=idx>=remaining;
       const img=ic.querySelector("image");
-      if(img)img.setAttribute("href",taken?ING_HOLE_IMG[ing]:ING_IMG[ing]);
+      /* T-33 — WRITE ONLY WHEN IT CHANGES. This wrote every crate's href on every render whether
+         or not the value differed, and an SVG href assignment restarts the load machinery even
+         when the string is identical. Measured over one 210-second solo voyage: 1743 href writes
+         on #board, of which 1739 wrote the value that was already there — about 29 redundant
+         fetches per game event, forever. A rewrite that lands on an in-flight load CANCELS it and
+         fires `error`, and nothing here catches an error, so the element is left showing the
+         browser's broken-image glyph — a blue "?" in Safari, which is exactly what Wyatt
+         photographed on the board AND in the hold chips. */
+      const want=taken?ING_HOLE_IMG[ing]:ING_IMG[ing];
+      if(img&&img.getAttribute("href")!==want)img.setAttribute("href",want);
       ic.style.opacity=taken?.45:1;
     }
+    // the black-market flag rises exactly when the last crate greys (same snapshot, one truth)
+    const flag=document.getElementById(`bmflag_${ing}`);
+    if(flag){const dry=remaining<=0&&remaining<1e9;flag.style.opacity=dry?1:0;}
   }
   if(spinNeedle&&e.wind){
     const storming=!!e.storm;
-    const angle=storming&&e.wind2?STORM_DIAG[e.wind][e.wind2]:({N:0,E:90,S:180,W:270})[e.wind];
+    // v2 rule 7: a storm blows ONE direction now, so there is no combined diagonal to aim at —
+    // the needle simply points where the wind points, storm or no storm.
+    const angle=({N:0,E:90,S:180,W:270})[e.wind];
     spinNeedle.style.transform=`rotate(${angle}deg)`;
+    // v2 rule 6: next round's committed wind, as the small chevron riding on the needle. It points
+    // the way the wind will BLOW, matching the needle's own convention exactly.
+    // v2.1: forecastWind() is null while a storm is coming — the chip still shouts STORM, it just
+    // cannot say which way. `have` (not `nx`) gates the chip's visibility now, because gating on
+    // the direction would make the whole chip DISAPPEAR on exactly the round it matters most.
+    const nx=appState.game&&appState.game.forecastWind();
+    const nextStorm=!!(appState.game&&appState.game.stormNext);
+    const have=!!(appState.game&&(nx||nextStorm));
+    if(forecastNeedle)forecastNeedle.style.display=have?"":"none";
+    if(forecastMark&&have){
+      // With no direction to name, the direction slot holds a turning arrow instead of a letter —
+      // the two are mutually exclusive and share the same space, so exactly one is ever shown.
+      //
+      // THIS REPLACED THE WORD "STORM", which was a measured mistake and not a taste one: at the
+      // shipped size the word rendered 31.3px wide into an 18.6px slot and overlapped the cloud
+      // icon by 12.7px. The slot is fixed by the two anchors this chip is built on, so the thing
+      // that goes in it has to be small — a glyph, never a word.
+      forecastMark.textContent=nx?`${nx} ${({N:"↑",E:"→",S:"↓",W:"←"})[nx]||""}`:"";
+      if(forecastSpin)forecastSpin.style.display=nx?"none":"";
+      if(forecastSpinner)forecastSpinner.classList.toggle("fcSpin",!nx);
+      // the storm cloud sits BEFORE the slot, and only when weather is actually coming
+      if(forecastStorm)forecastStorm.style.display=nextStorm?"":"none";
+      // THE STORM WARNING IS THE WHOLE BOX GOING RED — a filled chip changing colour is visible in
+      // peripheral vision on a phone in a way that a small glyph never was.
+      forecastMark.setAttribute("fill",nextStorm?"#ffffff":"#1f4249");
+      forecastLabel.setAttribute("fill",nextStorm?"#ffffff":"#1f4249");
+      forecastBox.setAttribute("fill",nextStorm?"#d32f2f":"#fffdf0");
+      forecastBox.setAttribute("stroke",nextStorm?"#7f1d1d":"#29a3b2");
+      forecastPulse.classList.toggle("fcStorm",nextStorm);
+    }
     // notes/edits UI-05: the "⛈️ STORM" word + emoji under the compass are gone — the darkened
     // board, the coloured dial, the glowing needle and the rain already read as "storm" without a
     // caption. Kept the (now always-empty) node so the storm-colour toggle below still has a safe
@@ -1335,11 +1815,25 @@ export function render(){
       buildStormLayers(ov,appState.game&&appState.game.seed); // lazily create the jittered rain layers (once)
       ov.style.setProperty("--slant",(angle+180)+"deg");
     }
-    windDotsTick(angle);
+    // `storming` goes in so the dot field can fade itself out for the duration of the rain — the
+    // two effects are never on screen together (windStormSync).
+    windDotsTick(angle,storming);
   }
   $("scrub").value=appState.evIdx;
   renderLog();
   // end stats
+  // PERF-02 (2026-08-02), resolved at the root. This test is a HEURISTIC — "we are at the event
+  // frontier and nobody is playing" is inferred to mean the voyage ended. The welcome screen used to
+  // satisfy it by accident: its decorative board carried one event at evIdx 0, so the frontier test
+  // was trivially true and `live` was false because nobody was playing. showStats() therefore ran on
+  // the WELCOME screen, firing celebrateHomeDocks() and leaving four SVG pastries dancing forever
+  // behind the blur (60 layouts/sec; 11.1% CPU -> 4.2% once gone) and deleting Tortuga's four berths.
+  //
+  // Fixed first with an appState.decorative flag, then fixed PROPERLY by removing the cause: the
+  // welcome screen no longer renders at all (see seedIdleGameState), so nothing can reach this
+  // before a real game exists and the flag was deleted rather than left standing guard over an
+  // impossibility. The heuristic itself is unchanged and still worth replacing with an explicit
+  // game-over fact one day — but it is no longer reachable from a state that lies to it.
   if(appState.evIdx===appState.game.events.length-1&&(!appState.live||appState.liveDone))showStats();
   else $("statsWrap").style.display="none";
 }
@@ -1501,12 +1995,26 @@ export function showStats(){
   // NARR-01: the stats table is hoisted into its own local purely so the wording audit can review it
   // as one unit of copy (art-review/narration-audit.html, `// @copy` below). Pure string hoist — the
   // rendered HTML is byte-identical to the inline version it replaced.
+  /* ITEM 7 (Wyatt, 2026-08-20 playtest): this row said "Bakery" and read `finishOrder.length`, which
+     counts captains who FINISHED a bake (engine/index.js:2859 pushes only the `won` list). It was not
+     miscounting — it was measuring something other than what the word promised. He watched three
+     captains reach Tortuga and start their bakeries and read "one baker home" as simply wrong, which
+     from where he sat it was.
+
+     His ruling: count the captains who GOT HOME. A captain is home once they have reached Tortuga and
+     fired the ovens — `baking` (engine/index.js:2774), which stays true for anyone still baking when
+     the voyage ends — or `done`, set when their bake completed. `done` is not implied by `baking`:
+     :2859 clears `baking` as it sets `done`, so BOTH terms are needed and neither is redundant.
+
+     This is a NEW quantity. `finishOrder` is untouched and still means what it always meant — it
+     orders the finishers and other code depends on that. Do not repoint it at this. */
+  const bakersHome = appState.game.players.filter(p => p.baking || p.done).length;
   // @copy misc.board.statsheadings
   const statsTable=`<table>
-    <tr><td>Rounds</td><td>${appState.game.round}</td></tr>
+    <tr><td>Days</td><td>${appState.game.round}</td></tr>
     <tr><td>Battles</td><td>${appState.game.battles} (attacker won ${appState.game.battles?Math.round(100*appState.game.attWins/appState.game.battles):0}%)</td></tr>
     <tr><td>Trades</td><td>${appState.game.trades}</td></tr>
-    <tr><td>Bakeoff</td><td>${appState.game.finishOrder.length>1?"yes — "+appState.game.finishOrder.length+" finishers":"no"}</td></tr>
+    <tr><td>Bakeries</td><td>${bakersHome===0?"no bakers home":bakersHome===1?"1 baker home":bakersHome+" bakers home"}</td></tr>
     ${appState.game.players.map((p,i)=>`<tr><td style="color:${HEXCOL[i]}">${pname(i)} heads-luck</td><td>${p.flips?Math.round(100*luck[i]):0}% of ${p.flips} flips</td></tr>`).join("")}
     </table>`;
   $("statsPanel").innerHTML=`<div class="winner-banner">${banner}${victoryPic}${victoryLine}</div>
@@ -1515,25 +2023,35 @@ export function showStats(){
   renderWindSummary();
 }
 
-// a purely decorative bot-vs-bot board rendered behind the welcome modal, so new players
-// get a glimpse of the game before they've made a choice. Never interactive.
-export function renderDecorativeBoard(){
+// LOAD-03 final (2026-08-02). This used to be renderDecorativeBoard(): it built a bot-vs-bot game
+// AND drew it behind the welcome modal, so new players glimpsed a board before choosing.
+//
+// THE DRAWING IS GONE, AND THE NAME NOW SAYS WHAT IS LEFT. Two separate jobs were tangled here:
+//
+//   1. Draw a backdrop — OBSOLETE. The welcome screen sits on a static blurred still now
+//      (#welcomeBackdrop), and #game is display:none behind it, so every element this drew was
+//      built, laid out and composited for something nobody could see. beginGame() calls
+//      drawBoard()/buildPlayerRows() itself, so a real game never depended on this having run.
+//
+//   2. Put a Game on appState — LOAD-BEARING, and the real reason this could not simply be
+//      deleted. `appState.game` is read 269 times across src/ and only 52 of those are guarded, so
+//      "a game always exists" is a global invariant of this codebase. This function is what holds
+//      it up before anyone has chosen a mode. That is a seam worth naming rather than a decoration.
+//
+// Deleting job 1 also removed the need for the `appState.decorative` flag added earlier the same
+// day: the ONLY render() that could fire before a real game began was the one this function used to
+// call, and render()'s end-of-voyage test could therefore never misfire on the welcome screen
+// again. The flag went with it rather than being left as a guard against something now impossible.
+//
+// If the 269 unguarded reads are ever made honest, this whole function can go. Until then it is the
+// cheapest possible way to keep the invariant true — one object, no DOM.
+export function seedIdleGameState(){
   try{
     const strategies=["pirate","trader","balanced","rusher"];
     appState.game=new Game(roundCfg(strategies),Math.floor(Math.random()*1e9),true);
     appState.roster=strategies.map(s=>({bot:true,strat:s}));
     appState.mySeat=null;
-    drawBoard();buildPlayerRows();
-    appState.game.round=1;appState.game.windNow="NSEW"[Math.floor(Math.random()*4)];appState.game.stormNow=false;
-    appState.game.ev({t:"newround",dir:appState.game.windNow});
-    // D-24: seed the demo log third-person like syncLogLines() does. Behaviourally identical here
-    // (mySeat is null above, so describe() already resolves neutral) — made explicit so the two
-    // log-building paths cannot drift if this preview ever runs with a seat assigned.
-    appState.evIdx=0;appState.logLines=[describeFor(appState.game.events[0],NEUTRAL_VIEWER)];
-    render();
-    $("statsWrap").style.display="none";
-    $("actionPanel").style.display="none";
-  }catch(err){console.error("decorative board failed",err);}
+  }catch(err){console.error("idle game state failed to seed",err);}
 }
 
 // Board size is driven purely by available HEIGHT (board+footer always fit the viewport, floored
@@ -1543,12 +2061,85 @@ export function renderDecorativeBoard(){
 // (narrow) layout — board full-width on its own row, sidebar full-width below it — instead of
 // squeezing the sidebar further and wrapping ingredients onto a second line.
 const MIN_SIDEBAR_W=380,MAX_SIDEBAR_W=560;
+// MUTE-01 (Wyatt, 2026-08-02), his rule verbatim: "if there is room ON THE SAME LINE as the turn
+// clock, put it there. if not, move it down."
+//
+// So it is MEASURED. Two earlier attempts substituted a proxy for that question and both were wrong
+// in ways he had to catch on screen: the sidebar-layout class (which answers "does the sidebar fit
+// ingredient chips") and then a 460px threshold derived from a stale measurement, which pushed the
+// button down at 391px where 11px of room was plainly visible. The contents of this row all clamp
+// with their container, so no fixed number can track them — only asking the layout can.
+//
+// The gap is counted, which was his question: `free` is what remains after the other children AND
+// the gaps between them, and the button needs its own width PLUS one more gap. The row's standard
+// spacing is therefore never squeezed to make something fit.
+//
+// It MOVES the button between two parents rather than restyling one in place, because his two
+// placements want genuinely different boxes — a flex child sitting snug after the clock and
+// bottom-aligned with it, or a grid item under the captains box. No CSS can relocate an element
+// across containers, and duplicating it would mean keeping two buttons' state in step.
+export function placeMuteButton(){
+  const row=$("controlsRow"), slot=$("muteSlot"), btn=$("btnMute"), clock=$("shotClockPanel");
+  if(!row||!slot||!btn)return;
+  /* ON THE STAGE THERE IS ONLY ONE HOME, AND THE MEASUREMENT BELOW WAS SENDING THE BUTTON TO THE
+     OTHER ONE. Wyatt, 2026-08-20: "the host has no mute button (guest does)."
+
+     MEASURED, in a solo /4 game — so this was never a host/guest question at all:
+         #btnMute      parent #controlsRow   rect 0x0   hidden by #controlsRow
+         #controlsRow  parent #pp4Cap        display:none
+         #muteSlot     parent #footerRow     (the ☰ menu — visible when the menu is open)
+     enterStage() parks #controlsRow inside #pp4Cap and index.html's `body.pp4Stage #controlsRow`
+     hides it outright ("the coin + clock left the sheet"), while #muteSlot is moved into the ☰
+     menu on purpose — playtest 10 item 2, "the sound toggle was orphaned at the top-left of the
+     stage… it lives in the ☰ menu now". So on the stage the row is not a smaller home for the
+     button, it is a CLOSED one, and the fit test below was a coin toss between the menu and
+     oblivion.
+
+     That coin toss is also why it looked like a parity bug. The test reads live widths during
+     layout, so two clients answering it a frame apart answer it differently — the guest kept its
+     button in the menu and the host lost its own. Nothing about hosting was involved.
+
+     The fit measurement is still exactly right for the classic layout, where #controlsRow is a real
+     visible row; it is only meaningless once the stage has taken it away. */
+  if(document.body.classList.contains("pp4Stage")){
+    if(btn.parentNode!==slot)slot.appendChild(btn);
+    return;
+  }
+  const gap=parseFloat(getComputedStyle(row).gap)||0;
+  // Measure with the button OUT of the row, so its own width never counts toward "used".
+  const used=[...row.children]
+    .filter(el=>el!==btn&&getComputedStyle(el).display!=="none")
+    .reduce((sum,el,i)=>sum+el.getBoundingClientRect().width+(i?gap:0),0);
+  // The button is the same width in either home — #muteSlot mirrors the row's box and is its own
+  // inline-size container, so the cqw its styling uses resolves to the same basis. Without that this
+  // test would depend on where the button already was, and oscillate.
+  const need=btn.getBoundingClientRect().width+gap;
+  const fits=(row.getBoundingClientRect().width-used)>=need;
+  const wantRow=fits?row:slot;
+  if(btn.parentNode===wantRow)return; // no DOM write unless the answer actually changed
+  if(fits&&clock&&clock.nextSibling)row.insertBefore(btn,clock.nextSibling); // snug, right after the clock
+  else if(fits)row.appendChild(btn);
+  else slot.appendChild(btn);
+}
+let muteRO=null;
+export function watchMutePlacement(){
+  const row=$("controlsRow"), clock=$("shotClockPanel");
+  if(!row||muteRO||typeof ResizeObserver==="undefined"){placeMuteButton();return;}
+  // Observe the row AND the clock: the row catches viewport/layout changes, the clock catches its
+  // own content growing (the timer toggle appearing, the countdown widening) — either can change
+  // the answer without the other moving. ResizeObserver fires only on real size changes, so this
+  // costs nothing while the game sits still, unlike re-measuring on the 500ms tick.
+  muteRO=new ResizeObserver(()=>placeMuteButton());
+  muteRO.observe(row);
+  if(clock)muteRO.observe(clock);
+  placeMuteButton();
+}
 export function syncBoardSizing(){
   const root=document.documentElement;
   const footerH=($("footerRow")||{}).offsetHeight||0;
   const chromeH=28+14+footerH; // #game top/bottom padding + layout gap + footer height
-  const boardSize=Math.max(600,window.innerHeight-chromeH);
-  const availW=window.innerWidth-28; // #game's own left+right padding
+  const boardSize=Math.max(600,vhPx()-chromeH);
+  const availW=vwPx()-28; // #game's own left+right padding (LAYOUT viewport — see vwPx in util.js)
   const remaining=availW-boardSize-14; // width left for the sidebar after the board + the column gap
   const wide=remaining>=MIN_SIDEBAR_W;
   $("game").classList.toggle("layoutWide",wide);
@@ -1567,11 +2158,102 @@ export function syncBoardSizing(){
     const gap=14; // matches #layout's grid gap, repeated between every stacked row
     const actionMaxH=180;
     const controlsH=($("controlsRow")||{}).offsetHeight||0;
-    const narrowBudget=window.innerHeight-28-gap*2-controlsH-actionMaxH;
+    const narrowBudget=vhPx()-28-gap*2-controlsH-actionMaxH;
     const narrowBoardSize=Math.max(280,Math.min(narrowBudget,availW));
     root.style.setProperty("--boardW",narrowBoardSize+"px");
     root.style.removeProperty("--sideW");
   }
+  // MUTE-01: --boardW just changed, which is the width #controlsRow and #muteSlot both cap to, so
+  // re-ask whether the button still fits beside the clock. The ResizeObserver covers everything
+  // else; this covers the case where the row's own max-width moved under it.
+  placeMuteButton();
+}
+
+/* ================= D-49: EVERY COIN FLIP TAKES THE SAME 1.5 SECONDS =================
+   Wyatt, 2026-08-21: "the coin flips take varying lengths of time; figure out why this is." Two
+   causes, both real, and neither of them a number anyone had looked at:
+
+   1. THE TWO CODE PATHS DISAGREED BY DESIGN. The dock flip (flow.js humanFlip) slept 340ms
+      between the spin and the result; a battle flip (orchestrator.js) slept
+      `clamp(260, 650, stepDelay()*0.7)`, and stepDelay() is a flat 3000, so it slept 650. Nearly
+      twice as long, in the same voyage, for the same coin.
+   2. THE CLOCK STARTED IN THE WRONG PLACE. `.coin.spin` is `animation:coinspin .34s linear
+      infinite` — an INFINITE spin whose length is decided entirely by when the result arrives.
+      Since the playtest-22 fix the coin starts spinning ON THE TAP, inside setFlipActive's
+      callback, and only then does the promise resolve, ask() return and humanFlip resume to run
+      its sleep. So what a player watched was scheduling latency PLUS 340ms — and this build's own
+      comment beside that line already admits it "has been caught losing whole timers to" exactly
+      that latency. No two flips were alike because no two resumptions were.
+
+   THE CLOCK IS STAMPED WHERE THE SPIN IS PAINTED, which is here — `setFlipCoin("spin")` is the one
+   spelling of a spinning coin in the whole game, reached by the dock tap, by broadcastFlip, and by
+   a guest's Firebase listener alike. Every caller then waits the REMAINDER of FLIP_SPIN_MS, so the
+   length on screen is the same however slow the chain that got there was.
+
+   ONE CLOCK, THREE WAITS, and the split is deliberate: this module owns WHEN the spin began and
+   HOW LONG a flip lasts; each call site owns HOW it waits, through its own `sleep`, which is what
+   keeps fast-forward, pause and reload-replay behaving exactly as they did. A raw setTimeout here
+   would have made a skipped battle crawl and a replay stall.
+
+   THIS IS A NUMBER WYATT CHOSE, and "nothing is a constant" does not reach it: that rule is about
+   quantities that shift with game state, and the whole point of this one is that it must NOT
+   shift. It is the fault, stated as a value. 1500 -> 1000 is his own correction, playtest
+   2026-08-23c item 18: "it should be 1 second, not 1.5 seconds (this last part is my mistake —
+   1.5 feels too long)". */
+/* T-35 (Wyatt, 2026-08-26): "the coin flip should be the exact length of the audio file, so that
+   the coin ALWAYS lands when the coin in the audio file lands -- it's the final 'blip' in the file
+   which you should be able to notice, but if not i can try to time it myself and give you time
+   code."  He does not need to time it. MEASURED 2026-08-26 from sfx/coin-flip.mp3 itself, decoded
+   to PCM and read as a 10ms peak envelope:
+
+       file duration                    965ms
+       transient 1 (the toss)             0ms
+       transient 2 (THE LANDING BLIP)   790-800ms, peaking at 795ms
+       after that                       ~165ms of decay tail, nothing struck
+
+   So at 1000ms the coin was landing on screen about 205ms AFTER the sound of it landing — which is
+   exactly the mismatch he suspected without being able to name it. 795 is the blip, so 795 is the
+   flip.
+
+   NOT THE FILE'S 965ms LENGTH, and the distinction is his own sentence: he asks for the coin to
+   land "when the coin in the audio file lands", and what follows the blip is decay, not an event.
+   Matching the file length would have re-created the same lateness, 30ms smaller.
+
+   WHY A MEASURED CONSTANT RATHER THAN A DERIVED ONE (rule 9 asks, and it deserves an answer): the
+   blip's position is a property of the ASSET, not of game state — it does not shift across a
+   voyage, which is what rule 9 is about. Deriving it at runtime would mean decoding the file on
+   every boot to find a number that only changes when somebody re-exports the sound. IF THAT SOUND
+   IS EVER RE-EXPORTED, RE-MEASURE THIS. That is the one thing that invalidates it.
+
+   HISTORY, kept: 1500 -> 1000 was his own correction (playtest 2026-08-23c item 18, "it should be
+   1 second, not 1.5 seconds -- this last part is my mistake"). 1000 -> 795 is this measurement. If
+   795 reads as hurried on his screen, the honest fix is a different sound, not a coin that lands
+   after its own noise. */
+export const FLIP_SPIN_MS = 795;
+/* HOW LONG A LANDED COIN STAYS ON ITS FACE — the flip's second beat, and until now it had three
+   different answers. T-34 (Wyatt, 2026-08-26): "I'm not convinced these are consistent. write a
+   unit test to do each one." He passed the item and doubted it anyway, and he was right: the SPIN
+   was converged onto FLIP_SPIN_MS on 2026-08-23, the HOLD never was. Measured across the four
+   paths:
+       battle, human (hFlip)        sleep(800)
+       battle, bot   (bFlip)        sleep(800)
+       dock,  human  (humanFlip)    however long the narration's own hold runs
+       dock,  bot    (botDockCoin)  NOTHING — the face was set and the function returned
+   So a bot's dock coin landed and vanished while every other flip held, which is exactly the
+   "bots' dock coins spin and land like yers" claim being almost true.
+
+   800 is HIS number, playtest 13: "hold the finished coin heads/tails for longer — .8 seconds
+   maybe". It is named here so the four paths cannot drift again, and so a gate can read it.
+   The human dock flip keeps its narration hold rather than adding this on top: flash() floors a
+   message's hold at 1000ms, which already exceeds this, and stacking them would make one flip
+   longer than the rest to fix an inconsistency. */
+export const FLIP_LAND_HOLD_MS = 800;
+let flipSpinAt = 0;
+/* How much of the spin is left, from the frame it was painted. Zero if no spin is running, so a
+   caller that reaches it out of order waits nothing rather than a phantom full spin. */
+export function flipSpinLeftMs(){
+  if (!flipSpinAt) return 0;
+  return Math.max(0, Math.round(FLIP_SPIN_MS - (performance.now() - flipSpinAt)));
 }
 
 // ---- the flippenator: one always-visible coin+button; every flip in the game plays here ----
@@ -1580,18 +2262,30 @@ export function syncBoardSizing(){
 // battle scoreboard's per-fighter result circles, a separate use of the same .coin styles).
 export function setFlipCoin(state){
   const el=$("flipCoinWrap");if(!el)return;
+  // IDEMPOTENT for "spin", because the tap now paints it and broadcastFlip repaints it a beat
+  // later (setFlipActive below) — re-entering the state ye are already in must not re-play the
+  // sound, or every flip is heard twice.
+  const wasSpin=el.classList.contains("spin");
   el.classList.remove("heads","tails","spin","wait","active");el.onclick=null;el.style.backgroundImage="";
   if(state==="H"){el.classList.add("heads");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent="";}
   else if(state==="T"){el.classList.add("tails");el.style.backgroundImage=`url(${FLIP_TAILS_IMG})`;el.textContent="";}
-  else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";playFlip();}
+  // D-49: the flip's clock starts on the frame the spin is PAINTED, and only on the frame it
+  // actually starts — the `wasSpin` guard that already stops the sound doubling is the same
+  // guard that stops broadcastFlip's repaint a beat later restarting the timer under the tap.
+  else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";if(!wasSpin){flipSpinAt=performance.now();playFlip();}}
   else{el.classList.add("wait");el.textContent="";}
 }
 export function setFlipActive(onClick){
   const el=$("flipCoinWrap");if(!el)return;
+  if(window.__pp4)window.__pp4.flip(el,onClick);   // /4 stage: the flip ceremony rides the same arming
   // notes/edits #6: show the heads face behind "FLIP" (was a flat gradient, no coin art) — a
   // tint layer on top keeps the text legible over the image.
   // notes/edits UI-09: drop the heavy orange tint over the whole coin — show the clean heads face
   // and make just the word "FLIP" orange instead (see #flipCoinWrap.active CSS).
   if(onClick){el.classList.add("active");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent="FLIP";el.onclick=onClick;}
-  else{el.classList.remove("active");el.style.backgroundImage="";el.onclick=null;}
+  // A PLAIN DISARM CLEARS THE WORD TOO. Every other coin state sets textContent; this one did not,
+  // so a disarmed coin kept the caption "FLIP" over a blank chip (playtest 22). The coin that has
+  // just been TAPPED goes straight to the spin instead — see localAsk, which owns that distinction:
+  // this function is called to disarm on every ordinary prompt as well, where a spin would be a lie.
+  else{el.classList.remove("active");el.style.backgroundImage="";el.textContent="";el.onclick=null;}
 }

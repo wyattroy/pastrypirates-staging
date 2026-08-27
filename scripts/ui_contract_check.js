@@ -75,9 +75,11 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { locateClassicScriptRegion } from "./lib/js_region_tokenizer.js";
+import { locateClassicScriptRegion, classify } from "./lib/js_region_tokenizer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { pickTree, treeLine } from "./lib/pick_tree.js";
+
 const REAL_ROOT = path.join(__dirname, "..");
 
 const DEBUG_HOOK_NAMES = ["__pp_module_ok", "__pp_boot_count", "__pp_net_debug", "__pp_app_state_debug"];
@@ -334,22 +336,64 @@ function checkChromeExceptionsFresh(root) {
   return failures;
 }
 
-// A leading-comment line, in either JS (`//`) or CSS/JSDoc (`/*`, `*`) form. index.html's two
-// excluded CSS comments — the shot-clock width reservation at :377 and the "you just lost treasure"
-// pop note at :425 — are both caught here by construction, not by a special case.
+// A leading-comment line, in either JS (`//`) or CSS/JSDoc (`/*`, `*`) form. Kept as a cheap
+// second filter, but it is NO LONGER what separates prose from speech — see maskToSpeech below.
 const isLeadingComment = (line) => /^\s*(\/\/|\/\*|\*)/.test(line);
+
+/* ONLY WHAT A PLAYER CAN ACTUALLY READ, AND THIS USED TO BE A LINE-WISE GUESS.
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   MEASURED 2026-08-26 against the promoted tree: this scan reported 67 player-facing strings in
+   the pre-conversion register. SIXTY-SEVEN. Classified with this repo's own tokenizer, 59 were
+   COMMENT ONLY, 1 was code only, and of the 7 touching a string, every single one was a false
+   positive — six were `hd.you` / `sh.you`, a BOOLEAN PROPERTY, in template literals whose actual
+   words already read "yer" and "ye've"; the seventh was inside an HTML comment. The true count of
+   player-facing strings in the wrong register was ZERO.
+
+   WHY IT WAS WRONG. `isLeadingComment` only skips a line that STARTS with `//`, `/*` or `*`. This
+   codebase indents block-comment continuation lines with plain spaces, so every line after the
+   first of a long WHY-comment read as code. Those comments are the graveyard (CLAUDE.md rule 10)
+   and many of them QUOTE WYATT DIRECTLY.
+
+   WHAT THAT NEARLY COST. The handoff called this "THE HIGHEST-VALUE SMALL JOB — the pirate voice,
+   in the live game" and sized it at ~22 strings. Acting on the list would have rewritten 59 code
+   comments — including his own words — into pirate speak: destroying the graveyard, corrupting the
+   record, and changing nothing a player can see. A gate that is confidently wrong is worse than no
+   gate, because it generates work.
+
+   So the pronoun detector now runs over SPEECH ONLY, region-classified, never line-guessed:
+     - .js  -> string literals only. Interpolation expressions inside a template are CODE to the
+               tokenizer, so `${hd.you ? "yer" : "their"}` contributes only its quoted words.
+     - .html-> the markup text, with HTML comments and CSS block comments blanked. HTML text IS
+               speech, so it is kept rather than discarded.
+   Masking preserves length and newlines so every reported line number stays true. */
+function maskToSpeech(rel, src) {
+  const blank = (str, a, b) => str.slice(0, a) + str.slice(a, b).replace(/[^\n]/g, " ") + str.slice(b);
+  if (rel.endsWith(".html")) {
+    let out = src;
+    for (const re of [/<!--[\s\S]*?-->/g, /\/\*[\s\S]*?\*\//g]) {
+      out = out.replace(re, (m) => m.replace(/[^\n]/g, " "));
+    }
+    return out;
+  }
+  let out = src;
+  for (const seg of classify(src)) {
+    if (seg.type !== "string") out = blank(out, seg.start, seg.end);
+  }
+  return out;
+}
 
 function scanRegisterFile(rel, content) {
   const failures = [];
-  content.split("\n").forEach((line, i) => {
+  maskToSpeech(rel, content).split("\n").forEach((line, i) => {
     if (!PRONOUN_RE.test(line)) return;
     if (isLeadingComment(line)) return;
-    if (REGISTER_LINE_ANCHORS.some((a) => line.includes(a))) return;
-    if (rel === REGISTER_IDENT_FILE && REGISTER_IDENT_FRAGMENTS.some((f) => line.includes(f))) return;
+    const raw = content.split("\n")[i];
+    if (REGISTER_LINE_ANCHORS.some((a) => raw.includes(a))) return;
+    if (rel === REGISTER_IDENT_FILE && REGISTER_IDENT_FRAGMENTS.some((f) => raw.includes(f))) return;
     // out-of-character chrome (F1 labels, G16 notices) — scoped per file, so a chrome fragment can
     // never excuse a spoken string in a different file, and never excuses any OTHER line in its own
     // file either
-    if (REGISTER_CHROME_EXCEPTIONS.some((e) => e.rel === rel && line.includes(e.anchor))) return;
+    if (REGISTER_CHROME_EXCEPTIONS.some((e) => e.rel === rel && raw.includes(e.anchor))) return;
     failures.push(`D-29-REGISTER: ${rel}:${i + 1} — a player-facing string still reads the pre-conversion 2nd-person register; convert it to ye/yer (art-review/narration-audit.html's PIRATE_MAP is the spec)`);
   });
   return failures;
@@ -364,7 +408,14 @@ const LAYOUT_WIDE_EXPECTED = [
   // 4 -> 5 (P6, Wyatt 2026-08-01): #btnMute moved out of #controlsRow to a direct #layout child
   // so the page grid can place it — below the captains box when stacked, and back inline beside the
   // clock in the wide layout. That wide-layout override is the 5th usage. Deliberate, not drift.
-  { rel: "index.html", count: 5 },
+  //
+  // 5 -> 4 (MUTE-01, Wyatt 2026-08-02: "the mute button is still misaligned"): that 5th usage is
+  // GONE. Keying the button's placement on the sidebar-layout class was the bug — the class answers
+  // "does the sidebar fit a row of ingredient chips", not "does the controls row fit one button",
+  // and at 1000x700 the two disagree. #btnMute is back inside #controlsRow, where its cqw-based
+  // styling always assumed it lived, and flex-wrap answers the fit question directly. What remains
+  // is the three genuine wide-layout rules plus one mention in a comment.
+  { rel: "index.html", count: 4 },
   { rel: path.join("src", "ui", "board.js"), count: 1 },
 ];
 
@@ -1491,7 +1542,18 @@ function drill() {
 if (process.argv.includes("--drill")) {
   drill();
 } else {
-  const results = runAll(REAL_ROOT);
+  /* WHICH TREE — added at the 2026-08-26 cutover, through the shared picker rather than a local
+     flag (rule 23: one spelling of "which tree", scripts/lib/pick_tree.js).
+     This gate has only ever run BARE, which meant the root tree, which meant the v1 game. The
+     cutover made root the promoted game, and it fails 24 of these assertions — 2 retained globals
+     and ~22 player-facing strings still in the pre-conversion you/your register. Those are REAL
+     findings, recorded in .planning/BACKLOG.md; they are not silently adopted by moving a flag.
+     Pointing this at `classic` preserves EXACTLY the coverage that existed the day before the
+     cutover — no more, and importantly no less. Promoting it to guard the live game means fixing
+     the game, which is a separate and deliberate act. */
+  const picked = pickTree(process.argv);
+  console.log(treeLine(picked));
+  const results = runAll(picked.root);
   const failed = results.filter((r) => !r.ok);
   if (failed.length) {
     console.error("\nFAILURES:");

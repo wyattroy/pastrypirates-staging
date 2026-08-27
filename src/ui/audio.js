@@ -11,7 +11,7 @@
 // inside initAudio(), isMuted() and setMuted() — never at module load, and never anywhere else in
 // this file. That is what makes the module import cleanly under plain Node (where window,
 // document and AudioContext are all undefined) — a hard structural requirement from
-// 21-VALIDATION.md, not a style preference: scripts/audio_mapping_test.js (Task 2) cannot exist
+// 21-VALIDATION.md, not a style preference: scripts/audio_mapping_test.js (Task 2) cannot exist  [UNGATED-IN-4: audio_mapping_test.js reads the root tree, not this one]
 // without it. It also keeps the second tier rule intact: this file imports nothing from anywhere
 // under src/ — scripts/module_graph_check.js auto-scans every new file under src/ against that
 // shape with no registration needed.
@@ -25,6 +25,10 @@
 
 /* ================= Pure data — safe to import headlessly, nothing built at load ================= */
 
+// sfx/ — the repo root's set, exactly as assets are shared (this game IS the root since the 2026-08-26 cutover). /3 has no sfx/ of its own, and a
+// page-relative "sfx/" 404s silently for every stem. The same bug shipped in /v2/ and /v2bakeoff/
+// (no sfx dir exists in git under either) until it was found here by a headless probe on
+// 2026-08-09 and fixed in all three builds at Wyatt's word.
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
@@ -32,13 +36,28 @@ const SFX_FILES = ["battle-swords", "coin-flip", "fishing", "ship-move", "store-
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
+// DEFECT-3 (docs/AUDIO.md §1): every value was still 1, so the six stems had never been levelled
+// against each other — a 15.6 dB spread, measured EBU R128. The sword clash was about six times
+// louder than a crate being loaded, and the two extremes sat in the worst possible places: the
+// LOUDEST file is what fires when you run out of time, and the QUIETEST is the victory sound.
+// These are the doc's measured figures, not guesses. Integrated / true peak / gain:
+//   battle-swords   -16.3 LUFS / +0.2 dBFS (clipped IN THE FILE) -> 0.46
+//   fishing         -21.2      / -4.3                            -> 0.81
+//   storm           -21.7      / -1.5                            -> 0.86
+//   coin-flip       -26.8      / -4.3                            -> 1.45  (near the ceiling)
+//   ship-move       -27.7      / -11.3                           -> 1.72
+//   store-ingredient -31.9     / -12.4                           -> 2.79
+// Gains above 1 are safe here BECAUSE the true peaks are so far down: the largest boost, 2.79x on
+// store-ingredient (+8.9 dB against a -12.4 dBFS peak), still lands near -3.5 dBFS.
+// STILL OUTSTANDING and NOT fixed by a gain: battle-swords is clipped inside the file itself
+// (+0.2 dBFS). Turning it down fixes the balance, never the distortion — that needs a fresh export.
 const SFX_VOLUME = {
-  "battle-swords": 1,
-  "coin-flip": 1,
-  "fishing": 1,
-  "ship-move": 1,
-  "store-ingredient": 1,
-  "storm": 1,
+  "battle-swords": 0.46,
+  "coin-flip": 1.45,
+  "fishing": 0.81,
+  "ship-move": 1.72,
+  "store-ingredient": 2.79,
+  "storm": 0.86,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -89,11 +108,16 @@ const EVENT_SOUND = {
   // D-01 (fishing); D-03 (dropping anchor in a storm); D-21 (the anchor holding — same family)
   fish: "fishing", anchor: "fishing", anchorHold: "fishing",
   // D-04: running aground / shipwrecked both borrow storm
-  aground: "storm", shipwrecked: "storm",
+  // v2.1: nothing runs aground any more — the storm keeps its own cue via `newround`
+  shipwrecked: "storm",
   // D-22 — see SHOTCLOCK_SOUND_PLACEHOLDER above. Referenced by constant, never repeated inline.
   shotclock: SHOTCLOCK_SOUND_PLACEHOLDER, shotclockskip: SHOTCLOCK_SOUND_PLACEHOLDER,
   // D-06 — explicit silence, not merely absent from the table
   blocked: null, moored: null, turn: null, newround: null, tradewind: null, bakeoff: null,
+  // playtest 21 item 3: the storm's one summary line. Deliberately SILENT — every ship in it has
+  // already played its own cue (windmove/blownOut -> ship-move, anchorHold -> fishing) as it moved,
+  // so a sound here would be a fifth noise describing four that just happened.
+  stormSummary: null,
   end: null, finish: null,
   // 260801-7f4 — explicit silence, not an oversight. The `battle` event only fires once the whole
   // fight has resolved (src/engine/index.js:581), which is exactly why the clash used to land at
@@ -102,6 +126,32 @@ const EVENT_SOUND = {
   battle: null,
   // D-21 — explicit silence: an offer is not a deal; sidebet is already narration-suppressed
   parley: null, sidebet: null,
+  // v2 events, explicit silence rather than merely absent (D-06). `purse` especially: it exists
+  // only to push a fresh state snapshot to the Captains panel mid-turn and is invisible by design,
+  // so it must never become audible if the unmapped default ever changes.
+  purse: null, idle: null, openoffer: null, collab: null,
+  // NOTE: `anchorHold: "storm"` used to sit here, and it was the whole of DEFECT-1 and DEFECT-2 in
+  // docs/AUDIO.md. `anchorHold` is already mapped to "fishing" above, and in a JS object literal the
+  // LAST key wins — so this line silently overrode it, which (a) stranded fishing.mp3, downloaded
+  // and decoded every game and triggerable by nothing, and (b) made every anchoring ship play the
+  // 8.0-second storm bed. The comment that stood here claimed it "rides the storm bus"; it did not.
+  // soundForEvent() routes to the quiet storm bus ONLY for the pair newround+storm, so STORM_VOLUME
+  // (0.35) never applied and it landed ~3x louder than the storm is mixed to sit. noteStormOutcome()
+  // is per player, so three captains anchoring in one storm stacked three of them on top of the
+  // storm cue that had already played, and fadeStorm() could retire none of them (stormNode is only
+  // set on the newround path). Deleting one line fixed both. DO NOT RE-ADD IT.
+  // the ocean look and a blown-into-berth rescue are moments, but quiet ones — the narration and
+  // the board already carry them
+  pass: null,
+  // a battle that ends with nobody hit has no hit to sound; the paid re-fire is covered by the
+  // flip that follows it
+  battlenull: null, refire: null,
+  // v2.1: the ovens going cold rides the battle sound of the raid that caused it — it is the
+  // consequence of that same broadside, one beat later, not a second event to be scored.
+  unfinish: null,
+  // v2.1 bake-off: EXPLICIT silence, not an omission (D-06 — the two are different things here).
+  // Whether a successful bake earns its own cue is a design call for Wyatt, not a side effect.
+  ovens: null, bake: null,
 };
 
 // PURE — no ctx, no DOM, no side effect, safe to call under plain Node. Returns null, or an
@@ -258,7 +308,38 @@ function fadeStorm() {
 // module: all dedup/fade state (stormNode above) lives in this file's own module-locals, never on
 // an object game.ev() produced or that netPushEvent carries — that risks drifting the determinism
 // corpus the v1.3 engine fence exists to protect.
+/* ONCE PER EVENT, IN EVERY MODE — Wyatt, 2026-08-20: "board sounds should be played in consistent
+   places across the different game modes", and, on the symptom: "the same audio file at the
+   beginning of sailing, and again at the beginning of a pass... sometimes they sound robotic as a
+   result when they play twice right on top of each other."
+
+   Two near-identical copies of one waveform a few milliseconds apart interfere — that is the
+   "robotic" he hears, and it is the tell that the SAME sound played twice, not that two sounds
+   played.
+
+   THE CAUSE, and the comment above this function was already asserting the fix as though it were
+   true: this is called "once per event that just arrived", but on the host it is reached through
+   liveRender() (ui/panel.js:302), which plays the sound for whatever the LATEST event is — every
+   time it is called. liveRender() has ~50 call sites. Any two of them firing without a new event
+   in between replay the same sound. Two that do exactly that:
+     ui/flow.js:1896-1898  ev({t:"sail"}); liveRender();  then  tradewind(p) ... liveRender();
+     ui/flow.js:2001       if(appState.passAndPlay) liveRender();   <- no new event at all
+   The second is why pass-and-play is worse, which is exactly where he reported it worst.
+
+   THE FIX BELONGS HERE, NOT IN THE 50 CALLERS. Sound has two triggers — liveRender() on the host,
+   watchEvents() on a guest — and putting the rule in either one leaves the other free to drift.
+   This function is the single place both tiers pass through, so "once per event" becomes true for
+   solo, pass-and-play, host and guest at once, and stays true for a 51st caller nobody has written
+   yet. That is the consistency he asked for, enforced in one place rather than promised in fifty.
+
+   IDENTITY, deliberately: game.ev() mints a fresh object per event, and the guest's watchEvents
+   receives each event once as its own object (child-added, pushed at :1263), so the same reference
+   can only ever mean "this exact event again". Nothing is written onto the event object — the module
+   header forbids it, because an event field would risk drifting the determinism corpus. */
+let lastSounded = null;
 function playForEvent(e) {
+  if (e === lastSounded) return;                 // the same event replayed by a second liveRender()
+  lastSounded = e;
   // The arrival of the next round header or the voyage's end is the exact game-state signal that
   // the storm moment has resolved — fade whatever storm sound is in flight BEFORE possibly
   // starting a fresh one for THIS event, so a freshly-started storm cue is never immediately

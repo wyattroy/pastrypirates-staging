@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#
+# Publish the current working tree to STAGING — staging.playpastrypirates.com.
+#
+#   scripts/deploy-staging.sh "commit message"
+#
+# ============================================================================
+#  WHY THIS SCRIPT EXISTS — read before "simplifying" it
+# ============================================================================
+#
+# Two separate Claude sessions have now come within one command of publishing
+# this repo's CNAME file into the staging repo. Both were hand-rolling an
+# rsync. The second one caught it only because `git status` was read carefully
+# before pushing; there was nothing stopping it.
+#
+# WHAT WOULD HAVE HAPPENED. CNAME contains `playpastrypirates.com`. GitHub
+# Pages treats a CNAME file as a claim on that custom domain. Two repositories
+# claiming one domain does not "merge" or "fail safe" — GitHub unsets the
+# domain on the loser, and the LIVE GAME goes down for real players. Recovery
+# means re-adding the domain and waiting on DNS/certificate re-issue, which is
+# not instant. This is a production outage caused by a preview deploy.
+#
+# It is an easy mistake precisely because everything about it looks right:
+# the staging repo IS a copy of this repo, so "copy everything across" is the
+# obvious instinct, and CNAME is a 21-byte file nobody scrolls to in a
+# 130-file diff.
+#
+# So the rule is mechanical, not remembered: DO NOT hand-roll this sync.
+# Use this script. It refuses to copy CNAME, and it verifies afterwards that
+# no CNAME reached the checkout — belt and braces, because the whole point is
+# that the human/model doing the deploy is the part that failed twice.
+#
+set -euo pipefail
+
+STAGING_REPO="wyattroy/pastrypirates-staging"
+PROD_HOST="playpastrypirates.com"
+STAGING_HOST="staging.playpastrypirates.com"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MSG="${1:-Update staging}"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# SITE-IDENTITY FILES. None of these ever leave this repo: each one tells the outside world
+# "this deployment is playpastrypirates.com", which is a lie on the preview and an actively
+# harmful one. rsync protects --exclude'd paths from --delete, so the preview keeps its OWN
+# versions of these rather than losing them.
+#
+# robots.txt/sitemap.xml were added after the first real run of this script republished them:
+# the preview carries `Disallow: /` to stay out of search, and this repo's copy says `Allow: /`
+# plus a sitemap pointing at the live domain. Copying them across would have invited Google to
+# index the preview as duplicate content competing with the real game — the same failure as
+# CNAME wearing different clothes, and it went unnoticed until the deploy diff was read.
+#
+# ============================================================================
+#  THE SECOND HALF OF THE EXCLUDES IS DERIVED, NOT TYPED — added 2026-08-26
+# ============================================================================
+# This list was hand-kept, written 2026-08-02, and by 2026-08-26 it had rotted
+# into a live hazard: the QA runs that landed after it produced
+#   seed-drill-shots  4.1G
+#   sea-trial-shots   3.1G
+#   crew-phone-shots  546M
+#   mp-rig-shots      6.5M
+# — 7.7 GB of probe screenshots, every one of them ALREADY in .gitignore and
+# none of them in this list. rsync copies the WORKING TREE, not the index, so
+# `.gitignore` does not protect a preview deploy. Running this script that day
+# would have pushed 7.7 GB into the staging repo.
+#
+# That is the same shape as the two faults found the same day (a doc-check
+# scanning a hand-kept list of five files; a profile ignore listing three of
+# seven names): A HAND-KEPT LIST OF WHAT TO EXCLUDE ROTS EXACTLY LIKE THE THING
+# IT GUARDS, AND NOTHING SAYS SO. So the transient-output half is now derived
+# from .gitignore itself — one place says what is junk, and this follows it.
+#
+# WHAT IS NOT DERIVED, AND MUST NEVER BE. The site-identity files and the
+# tracked directories below are excluded EXPLICITLY, because they are NOT in
+# .gitignore and never will be: CNAME/robots.txt/sitemap.xml are tracked on
+# purpose (they identify the live site), and .planning/, .claude/ and
+# art-review/ are tracked on purpose too. Deriving these away would be the
+# outage this script exists to prevent.
+EXCLUDES=(
+  --exclude=CNAME          # ← THE ONE THAT MATTERS. See the header.
+  --exclude=robots.txt     # preview must stay Disallow:/ — do not publish the live Allow:/
+  --exclude=sitemap.xml    # lists playpastrypirates.com URLs; meaningless on the preview
+  --exclude=.git/
+  --exclude=.planning/
+  --exclude=.claude/
+  --exclude=art-review/
+  --exclude=notes/
+  --exclude=node_modules/
+  --exclude=.DS_Store
+)
+
+# Everything .gitignore calls junk is junk here too. Comments and blank lines
+# dropped; negations (!foo) skipped rather than mis-translated, because rsync's
+# include/exclude ordering is not git's and a wrong guess here is silent.
+while IFS= read -r pat; do
+  case "$pat" in
+    ''|'#'*|'!'*) continue ;;
+  esac
+  EXCLUDES+=( "--exclude=$pat" )
+done < "$SRC/.gitignore"
+
+echo "    excludes: ${#EXCLUDES[@]} (3 site-identity + tracked dirs + everything .gitignore lists)"
+
+echo "==> staging deploy: $STAGING_REPO"
+[ -f "$SRC/CNAME" ] && echo "    (this repo owns CNAME -> $(cat "$SRC/CNAME") — it will NOT be copied)"
+
+git -C "$SRC" diff --quiet || echo "    note: working tree has uncommitted changes; deploying them as-is"
+
+gh repo clone "$STAGING_REPO" "$WORK/staging" -- -q
+rsync -a --delete "${EXCLUDES[@]}" "$SRC/" "$WORK/staging/"
+
+# --- THE GUARD. Never remove; this is the whole reason the script exists. ---
+#
+# IT CHANGED SHAPE ON 2026-08-26 AND THE REASON MATTERS. It used to be "a CNAME
+# here at all is fatal", which was correct while the destination was an anonymous
+# github.io preview owning no domain. Staging now HAS a domain, so it legitimately
+# owns a CNAME — and the old guard would have refused every deploy forever.
+#
+# The danger was never "a CNAME exists". It is "THIS repo's CNAME reached the
+# other repo", because two repos claiming ONE hostname makes GitHub unset the
+# domain on one of them and the LIVE game goes down for real players. A SUBDOMAIN
+# is a different hostname and does not contest the apex. So the guard now checks
+# CONTENT: staging's CNAME must say the staging host and must never say the
+# production host.
+#
+# rsync --exclude=CNAME already protects the destination's own file from --delete,
+# so staging keeps its CNAME across every deploy. This verifies that it did.
+if [ ! -e "$WORK/staging/CNAME" ]; then
+  echo "FATAL: staging has no CNAME. It should contain $STAGING_HOST." >&2
+  echo "       Without it GitHub serves staging at wyattroy.github.io and the" >&2
+  echo "       custom domain silently stops working. Restore it; do not proceed." >&2
+  exit 1
+fi
+GOT="$(tr -d '[:space:]' < "$WORK/staging/CNAME")"
+if [ "$GOT" = "$PROD_HOST" ]; then
+  echo "FATAL: staging's CNAME says '$PROD_HOST' — the PRODUCTION host." >&2
+  echo "       Publishing this contests the live domain and can take the game" >&2
+  echo "       offline for real players. This is the exact outage this script" >&2
+  echo "       exists to prevent. Refusing to push." >&2
+  exit 1
+fi
+if [ "$GOT" != "$STAGING_HOST" ]; then
+  echo "FATAL: staging's CNAME says '$GOT', expected '$STAGING_HOST'." >&2
+  echo "       Refusing to push something nobody intended." >&2
+  exit 1
+fi
+echo "    guard passed: staging CNAME is '$GOT' (not the production host)"
+
+cd "$WORK/staging"
+if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
+  echo "==> nothing changed; not pushing."
+  exit 0
+fi
+git add -A
+git status --short | sed 's/^/    /'
+git commit -q -m "$MSG"
+git push -q origin HEAD:main
+echo "==> pushed. https://$STAGING_HOST/"
+echo "    (GitHub Pages takes a minute or two to rebuild.)"

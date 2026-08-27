@@ -8,6 +8,13 @@ results). This says **how** to drive it. Read both before a browser pass.
 
 ---
 
+> **BEFORE YOU WRITE A PROBE, READ [`QA-PROCESS.md` → THE WHOLE LOOP](QA-PROCESS.md).** This file
+> tells you how to drive the game; that one tells you how not to fool yourself with what you
+> measure. On 2026-08-26 three probes written against this manual could not have failed — one began
+> sampling after the animation it was timing had finished, one used an emoji with no artwork so it
+> never became the image it was testing, and one resolved "the card" to the full-screen container.
+> **Red-proof every probe: feed it the broken case and watch it go red.**
+
 ## 1. Serve it, and use a port you have never loaded
 
 ```bash
@@ -46,9 +53,53 @@ document.getElementById('nameModalInput').value = 'Wyatt';
 document.getElementById('btnNameConfirm').click();
 ```
 
+**Two traps in those three lines, both of which cost a run on 2026-08-14:**
+
+**`btnNameConfirm` is in the DOM from boot.** Waiting on `!!document.getElementById('btnNameConfirm')`
+returns immediately, so the confirm fires before the modal has opened, does nothing, and the probe
+sits on the welcome screen for the rest of its timeout with no error. Wait for it to be **visible**:
+
+```js
+(() => { const b = document.getElementById('btnNameConfirm'); return !!(b && b.offsetParent); })()
+```
+
+**The welcome screen runs its own all-bot attract board on `appState.game`.** So "a game exists" is
+not the signal that your solo game has started — inject into it and you have posed the demo. Wait
+for a game with a HUMAN seat in it:
+
+```js
+appState.game.players.some(p => p.strategy === 'human')
+```
+
 Hosting instead: `document.getElementById('choiceHost').click()` creates a real Firebase room on the
 first click. **Delete the room afterwards** — `appState.db.ref('rooms/'+room).remove()` — or use the
 back link on the room screen, which calls `abandonRoom()` and tears it down properly.
+
+## 3b. STARTING A CREW GAME — "Start the voyage!" is not the button that starts the voyage
+
+Added 2026-08-20 after it cost a run of the two-window rig, silently. `#btnStart` opens a
+**confirmation** — *"Set sail? / Everyone's aboard? / Wait, not yet"* — and the button that actually
+begins the game is **`#btnConfirmStart`**. It is **not** an `#actionPanel .apBtn`, so a probe that
+clicks Start and then waits for a panel button sits on the lobby screen until it times out, with no
+error and nothing in the console. The failure looks exactly like a hung game.
+
+```js
+document.getElementById('btnStart').click();
+await sleep(900);
+await waitFor(`(()=>{const b=document.getElementById('btnConfirmStart');
+                     return !!(b&&b.getBoundingClientRect().width>10)})()`);
+document.getElementById('btnConfirmStart').click();
+```
+
+Same family as 4a below: **the control you need is not the element whose label matches the verb.**
+
+### 3c. A recipe card takes TWO taps
+
+The first tap highlights that recipe's docks on the board (*"Tap a recipe to highlight its docks"*);
+the second, on the **"Bake this!"** overlay the first tap reveals, commits it. A driver that clicks
+each card once leaves the picker standing and the whole intro stalls behind it — **and the half-tapped
+card renders with dock highlights the other client does not have, which reads exactly like a
+host/guest divergence and is not one.** One was nearly filed as a defect on 2026-08-20.
 
 ## 4. The turn loop — and the two things that stall every naive driver
 
@@ -75,18 +126,24 @@ loops there forever. Filter it out:
 [...document.querySelectorAll('#actionPanel .apBtn')].filter(b => !/back|←|‹/i.test(b.textContent))
 ```
 
-### 4c. Sailing — derive the grid cell from the rect
+### 4c. Sailing — read the grid cell straight off the element
 
-Highlighted squares are `.sailCell` rects. Their geometry comes from `sailHighlightRect()`
-(`src/ui/flow.js`), which insets by `SAIL_HL_SCALE`, so invert that to get board coordinates:
+**STALE UNTIL 2026-08-21, corrected here after D-31's verification pass found real drivers reading
+it.** `.sailCell` used to be an SVG `<rect>`, positioned/sized in board units, so a driver had to
+invert `sailHighlightRect()`'s own `SAIL_HL_SCALE` inset arithmetic to recover which square it was.
+It is an **HTML `<div>` now** (`sailHighlightRect()`, `src/ui/flow.js`) — sized in `cqw` against
+`#boardwrap`'s own container query, same geometry, same inset, no scale factor to keep in sync on
+resize — and it carries its grid coordinates directly, so there is nothing left to invert:
 
 ```js
-const side  = parseFloat(rect.getAttribute('width'));
-const px    = (side / 0.9) + 4;          // 0.9 === SAIL_HL_SCALE
-const inset = (px - side) / 2;
-const gx = Math.round((parseFloat(rect.getAttribute('x')) - inset) / px);
-const gy = Math.round((parseFloat(rect.getAttribute('y')) - inset) / px);
+const gx = +cell.dataset.gx, gy = +cell.dataset.gy;   // cell = a `.sailCell` element
 ```
+
+`mouse_qa.mjs`'s own `cellOf()` reads `data-gx`/`data-gy` this way — copy it rather than
+re-deriving the old rect arithmetic. **`mp_rig.mjs`'s `DRIVER_SRC` does NOT** — its `cellOf()` still
+does the old SVG-rect inversion (`r.getAttribute('width'|'x'|'y')`), which returns `null`/`NaN`
+against an HTML `<div>` with no such attributes. Found during D-31's verification (2026-08-21),
+out of D-31's scope to fix (test infrastructure, not game code) — logged as a deferred item.
 
 ### 4d. Battle prompts use `.btlBtn`, not `.apBtn`.
 
@@ -299,6 +356,87 @@ This technique is what closed Phase 13's checks 2 and 3. The measured traces are
 `.planning/milestones/v1.2-phases/13-multiplayer-turn-clock/13-VERIFICATION.md` — that archive copy
 is the one that survives a `/gsd-cleanup`. Read the numbers there; they are not restated here.
 
+## 5e. INJECT THE STATE YOU WANT TO TEST — do not play your way to it
+
+**This is the first thing to reach for when a feature only appears in a rare or late game state.**
+Wyatt, 2026-08-02, after watching a session burn five minutes waiting for a voyage to end and then
+report a FAIL: *"we already have a process for triggering storms and end-of-game full recipes using
+code injections."* Sessions have used the recipe fill routinely; it had simply never been written
+down here, which is the only reason it got re-derived the hard way.
+
+A full solo voyage takes **many minutes** — four captains, narration holds, and per-square animation
+on every move. Almost nothing worth testing needs the whole voyage; it needs the *state*. Reach into
+the live engine and put the game there.
+
+The live `appState` (and through it the live `Game`) is reachable from any page context:
+
+```js
+const st = (await import('/src/state/index.js')).appState;
+```
+
+### End of Voyage — fill the recipe
+
+`checkFinish(p)` (`src/engine/index.js`) is `!this.needs(p).length && man(p.pos, this.home) <= 1`,
+and `needs(p)` is `p.recipe.filter(i => !p.ing.includes(i))`. So handing a seat its own recipe ends
+its hunt immediately:
+
+```js
+const st = (await import('/src/state/index.js')).appState;
+const me = st.game.players[st.mySeat];
+me.ing = [...me.recipe];          // needs(me) is now empty
+```
+
+Then let the §5b driver run. Its `target()` already returns `g.home` the moment `needs` is empty, so
+it beelines for Tortuga, and `checkFinish` fires after your next turn. Rounds still take real time —
+budget minutes, not seconds.
+
+**Do NOT also set `p.pos`.** Tried and rejected: the sail prompt's highlighted cells come from the
+engine's own position, so a hand-set `pos` and the cells the driver clicks disagree, and the ship
+sails back out of the finish zone. Fill the recipe and let it steer.
+
+### Storms — raise the probability on the LIVE cfg
+
+`rollStorm(g)` is `g.r() < g.cfg.storm`, so:
+
+```js
+(await import('/src/state/index.js')).appState.game.cfg.storm = 1;   // set back to 0.125 after
+```
+
+**Prefer this to the old method.** Earlier sessions forced storms by editing `roundCfg` in
+`src/engine/index.js` and reverting — scaffolding so dangerous to ship that Phase 14 carries a
+dedicated verification row proving it did not (`14-VERIFICATION.md` row 8: *"The forced-storm test
+scaffolding (`cfg.storm=1`) does not ship"*). A live mutation cannot ship, needs no revert, and
+leaves `git status` clean.
+
+Two things that will make it look broken when it is not: the storm rolls **at a round boundary**, so
+nothing happens until the next round starts (minutes); and `rollStorm` refuses a third consecutive
+storm (`stormStreak >= 2`), so you get storms, not every round.
+
+### RED-PROOF THE INJECTION — get to a known-negative state first
+
+The first storm check written for this section **passed without proving anything**: it set
+`cfg.storm = 1`, saw `stormNow === true`, and reported success — but `stormNow` was *already* true
+before the injection. It could not have failed. Force the negative first (`cfg.storm = 0`, wait for
+`stormNow === false`), *then* inject. Same flaw the original Check B had (§5d) and the same fix.
+
+### Where injection is and is not safe
+
+| | |
+|---|---|
+| **Solo / decorative** | Safe. Nothing else is watching the state. |
+| **Multiplayer** | **No.** The host is the sole authority (D-06); mutating a guest desyncs it, and mutating the host desyncs the broadcast against the `dlog`. |
+| **Replay / determinism** | **No.** Injection changes state without consuming the RNG the fixtures recorded. Never inject while capturing a determinism baseline. |
+| **Shipping** | Never. That is the point of doing it live rather than in source. |
+
+### Generalise it
+
+The pattern is: find the predicate the feature keys on, then set its inputs directly. `needs()` and
+`man(pos, home)` gate the End of Voyage; `cfg.storm` gates the weather; `p.coins` gates every
+can-I-afford-it branch; `p.done` and `finishOrder` gate the final round. Anything reachable from
+`st.game` can be posed. **Ask "what state does this feature read?" before "how do I play until it
+happens?"** — and when a check fails, first establish whether the state you meant to create actually
+exists, rather than concluding the feature is broken.
+
 ## 6. Inspecting state
 
 `window.__pp_app_state_debug()` returns a **shallow copy** of `appState` (`src/main.js`). Also
@@ -358,6 +496,18 @@ leverage tool in this document.
 curl -s http://127.0.0.1:9333/json/version    # confirm it is up
 ```
 
+> **`--user-data-dir` GOES IN `/tmp`, AND NEVER INSIDE THE REPO.** A Chrome profile is ~10 MB and
+> ~700 files of browser bookkeeping, and it carries `Cookies`, `Login Data` and `History` alongside
+> the parts you want. On **2026-08-26** a playtest pointed it at
+> `.planning/phases/02.2-…/playtest-…/prof-*` and the whole run was committed: **15 profiles, 10,713
+> files, 142 MB**, in commit `5d82213`. At 3:50am GitHub emailed Wyatt *"Possible valid secrets
+> detected"* — its scanner had found, in `Default/shared_proto_db/000003.log`, the Google API key
+> **baked into every copy of Chrome** (sent as `X-Goog-Api-Key` to
+> `optimizationguide-pa.googleapis.com`). It is Google's key, not ours, so nothing needed rotating —
+> but the repo is public, the profiles' `Cookies` and `Login Data` were empty only because they were
+> newly made, and it cost 142 MB and an alert. `.gitignore` now carries `prof-*/` and
+> `chrome-probe*/`. **Keep profiles in `/tmp` and they cannot be added by accident.**
+
 Headless **does** run rAF and CSS animations properly. Confirm the environment before trusting a
 reading — a wrong answer here invalidates everything downstream:
 
@@ -365,6 +515,55 @@ reading — a wrong answer here invalidates everything downstream:
 matchMedia('(prefers-reduced-motion: reduce)').matches   // must be false, or you are measuring
                                                          // the reduced-motion code path
 ```
+
+### MEASURING COST IS NOT MEASURING LAYOUT — two traps that both report ZERO
+
+The launch line above is right for **sequencing and layout** work (what ran, in what order, did the
+box move). It is **wrong for measuring how expensive something is**, and both failures below produce
+a confident, plausible, wrong number rather than an error. Each cost a wrong conclusion on
+2026-08-01/02.
+
+**1. Drop `--disable-gpu` when measuring cost.** With it, the welcome screen measured **1.6% CPU**
+and the real culprit was invisible. With the GPU on, the same state measured **7.6%** and the cause
+was obvious. Launch a separate probe for cost work:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless=new --remote-debugging-port=9336 \
+  --user-data-dir=/tmp/chrome-cost --no-first-run about:blank &
+```
+
+**2. YOU MUST DRIVE FRAMES.** An idle headless page stops producing them, so every CSS animation
+costs exactly nothing and `LayoutCount` never moves. Measured minutes apart on the same build:
+
+| same page, same 5s window | CPU | layouts |
+|---|---|---|
+| no rAF loop running | 0.2% | **2 (0/s)** |
+| rAF loop running | **11.1%** | **300 (60/s)** |
+
+The first reading is not a small error — it is the entire cost missing. Inject a ticker for the whole
+window and cancel it afterwards:
+
+```js
+window.__f=0;(function t(){window.__f++;window.__raf=requestAnimationFrame(t);})();
+// ...measure...
+(()=>{const v=window.__f;cancelAnimationFrame(window.__raf);return v;})()   // also gives you fps
+```
+
+**Always report the fps you actually achieved beside any cost number.** If it is not ~60 the page was
+not rendering, and the number underneath it means nothing. A cost measurement with no frame count
+beside it is not evidence.
+
+**Attribute by ablation, never by reading code.** Remove one suspect, re-measure, compare. Three
+times now the thing everyone was sure of was not the cause: the `drawBoard()` teardown was not the
+in-play cost (the ripple was); `transform-box: fill-box` was not why the ripple forced layout (Chrome
+simply never composites SVG transform animations, and `will-change` cannot promote an SVG child); and
+the welcome screen's cost was neither the blur nor the board rebuild but **four leftover victory
+pastries** left dancing behind it.
+
+**Compare like with like.** "Idle at a human prompt" and "mid-turn with bots moving" are different
+measurements; the same build reads 2 layouts/sec as the first and 10–20 as the second. State which
+one a number is, and never compare across them.
 
 ### Talk to it — Node has everything you need
 

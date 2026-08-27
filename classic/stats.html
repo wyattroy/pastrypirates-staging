@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Private usage dashboard (Wyatt, 2026-08-10). Kept off search like /lab.html: robots.txt
+     disallows it AND this tag instructs crawlers directly. It is not linked from the game. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Pastry Pirates — usage</title>
+<!--
+  READS four nodes the game writes (see src/ui/usage.js in each build):
+    visits/<ts>-<pid> = build            one per page boot
+    starts/<ts>-<pid> = {b,h,m}          one per new voyage; key doubles as the gid
+    fins/<gid>        = {t,b}            one per completed voyage
+    gamelogs/<ts>     = {...names,bots}  the long-standing completed-voyage log (for captain names)
+
+  "YOU" IS AUTOMATIC: this page is served from the same origin as the game, so it reads this
+  device's own pp_id from localStorage and splits you out. Tap any id chip in the footer to mark
+  another device (your laptop, say) as also-you; the choice is stored locally (pp_stats_me).
+
+  IF EVERY PANEL SHOWS A READ ERROR the database rules don't allow public reads. Firebase
+  console -> Realtime Database -> Rules; the nodes this page needs are:
+      "visits":   { ".read": true, ".write": true },
+      "starts":   { ".read": true, ".write": true },
+      "fins":     { ".read": true, ".write": true },
+      "gamelogs": { ".read": true, ".write": true }
+-->
+<style>
+  :root{--teal:#0e7a86;--ink:#233;--sub:#6b7b80;--line:#dbe7e9;--me:#d6337f;--bg:#f4f9f9;}
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px;font:15px/1.45 -apple-system,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+  h1{font-size:19px;margin:0 0 2px;color:var(--teal)}
+  .sub{color:var(--sub);font-size:12.5px;margin-bottom:12px}
+  .range button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;margin-right:6px;font-size:14px;color:var(--ink)}
+  .range button.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .cards{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+  .card{flex:1 1 30%;min-width:96px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+  .card b{display:block;font-size:22px}
+  .card span{font-size:11.5px;color:var(--sub)}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+  th,td{padding:7px 8px;text-align:right;border-top:1px solid var(--line)}
+  th{background:#eef6f7;color:var(--sub);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+  th:first-child,td:first-child{text-align:left}
+  .day-wrap{overflow-x:auto;margin-bottom:14px}
+  .muted{color:var(--sub)}
+  .warn{background:#fff3f6;border:1px solid #f2c2d4;border-radius:10px;padding:10px;font-size:13px;margin:10px 0}
+  .chip{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;margin:3px 4px 0 0;font-size:12px;cursor:pointer}
+  .chip.me{background:var(--me);border-color:var(--me);color:#fff}
+  h2{font-size:14px;margin:18px 0 6px}
+  .cap{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+</style>
+</head>
+<body>
+<h1>Pastry Pirates — usage</h1>
+<div class="sub">Finished + unfinished voyages and page visits, by day (your timezone). This device is excluded from "others" automatically.</div>
+<div class="range" id="range"></div>
+<div id="out"><p class="muted">Loading…</p></div>
+<script>
+"use strict";
+const DB="https://pastry-pirates-default-rtdb.firebaseio.com";
+const $=(s)=>document.querySelector(s);
+let DAYS=14;
+
+function myIds(){
+  const ids=new Set();
+  try{const id=localStorage.getItem("pp_id");if(id)ids.add(id);}catch(e){}
+  try{JSON.parse(localStorage.getItem("pp_stats_me")||"[]").forEach(i=>ids.add(i));}catch(e){}
+  return ids;
+}
+function toggleMe(pid){
+  let extra=[];try{extra=JSON.parse(localStorage.getItem("pp_stats_me")||"[]");}catch(e){}
+  const i=extra.indexOf(pid);
+  if(i>=0)extra.splice(i,1);else extra.push(pid);
+  try{localStorage.setItem("pp_stats_me",JSON.stringify(extra));}catch(e){}
+  load();
+}
+async function get(node,since){
+  const r=await fetch(`${DB}/${node}.json?orderBy="$key"&startAt="${since}"`);
+  const j=await r.json();
+  if(j&&j.error)throw new Error(node+": "+j.error);
+  return j||{};
+}
+const day=(ts)=>{const d=new Date(+ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+const pidOf=(key)=>key.slice(key.indexOf("-")+1);
+const tsOf=(key)=>+key.slice(0,key.indexOf("-"));
+
+async function load(){
+  const out=$("#out");
+  out.innerHTML='<p class="muted">Loading…</p>';
+  const since=String(Date.now()-DAYS*86400e3);
+  let visits,starts,fins,logs,err=null;
+  try{
+    [visits,starts,fins,logs]=await Promise.all([get("visits",since),get("starts",since),get("fins",since),get("gamelogs",since)]);
+  }catch(e){err=e.message;}
+  if(err){
+    out.innerHTML=`<div class="warn"><b>Can't read the database:</b> ${err}.<br><br>
+      If this says <i>Permission denied</i>, the data is being written but the rules don't allow
+      public reads. Firebase console &rarr; Realtime Database &rarr; Rules, and give
+      <code>visits</code>, <code>starts</code>, <code>fins</code> and <code>gamelogs</code>
+      <code>".read": true</code> (details in this page's source comment).</div>`;
+    return;
+  }
+  const me=myIds();
+  const days={};
+  const D=(d)=>days[d]=days[d]||{visits:0,uniq:new Set(),uniqOthers:new Set(),starts:0,startsOthers:0,fins:0,finsOthers:0,builds:{},caps:new Set()};
+  for(const k in visits){const d=D(day(tsOf(k))),p=pidOf(k);d.visits++;d.uniq.add(p);if(!me.has(p))d.uniqOthers.add(p);d.builds[visits[k]]=(d.builds[visits[k]]||0)+1;}
+  const finSet=new Set(Object.keys(fins));
+  let unfinished=0,unfinishedOthers=0;
+  for(const k in starts){
+    const d=D(day(tsOf(k))),p=pidOf(k),other=!me.has(p);
+    d.starts++;if(other)d.startsOthers++;
+    const done=finSet.has(k);
+    if(done){d.fins++;if(other)d.finsOthers++;}
+    else if(tsOf(k)<Date.now()-3*3600e3){unfinished++;if(other)unfinishedOthers++;} // a voyage <3h old may simply still be running
+  }
+  // fins whose start-gid we never saw (mid-game refresh lost the gid): still finished voyages
+  for(const k in fins){if(!starts[k]){const d=D(day(tsOf(k)));d.fins++;if(!me.has(pidOf(k)))d.finsOthers++;}}
+  for(const k in logs){
+    const g=logs[k];if(!g||!g.names)continue;
+    const d=D(day(+(g.ts||k)));
+    g.names.forEach((n,i)=>{if(n&&!(g.bots&&g.bots[i]))d.caps.add(n);});
+  }
+  const keys=Object.keys(days).sort().reverse();
+  const tot=(f)=>keys.reduce((a,k)=>a+f(days[k]),0);
+  const allOthers=new Set();keys.forEach(k=>days[k].uniqOthers.forEach(p=>allOthers.add(p)));
+  let html=`<div class="cards">
+    <div class="card"><b>${allOthers.size}</b><span>unique players besides you (${DAYS}d)</span></div>
+    <div class="card"><b>${tot(d=>d.startsOthers)}</b><span>voyages started by others</span></div>
+    <div class="card"><b>${tot(d=>d.finsOthers)}</b><span>finished by others</span></div>
+  </div><div class="day-wrap"><table><tr>
+    <th>day</th><th>visitors<br>(others)</th><th>boots</th><th>started<br>(others)</th><th>finished<br>(others)</th><th>builds</th></tr>`;
+  for(const k of keys){
+    const d=days[k];
+    const b=Object.entries(d.builds).map(([n,c])=>`${n}:${c}`).join(" ");
+    html+=`<tr><td>${k}</td><td>${d.uniq.size} (${d.uniqOthers.size})</td><td>${d.visits}</td>
+      <td>${d.starts} (${d.startsOthers})</td><td>${d.fins} (${d.finsOthers})</td><td class="muted">${b}</td></tr>`;
+  }
+  html+=`</table></div>
+  <div class="muted" style="font-size:12px">Unfinished voyages older than 3h: <b>${unfinished}</b> (${unfinishedOthers} by others).
+  Visit/start pings began 2026-08-10 — days before that show only finished games from the long-standing log.</div>`;
+  const capsAll=new Set();keys.forEach(k=>days[k].caps.forEach(c=>capsAll.add(c)));
+  if(capsAll.size)html+=`<h2>Captains seen (from finished-game logs)</h2><div class="cap">${[...capsAll].join(", ")}</div>`;
+  // id chips: tap to mark a device as "also me"
+  const pids=new Map();
+  for(const k in visits){const p=pidOf(k);pids.set(p,(pids.get(p)||0)+1);}
+  html+=`<h2>Devices (tap to toggle "this is me")</h2><div>`;
+  [...pids.entries()].sort((a,b)=>b[1]-a[1]).slice(0,30).forEach(([p,n])=>{
+    html+=`<span class="chip ${me.has(p)?"me":""}" onclick="toggleMe('${p}')">${p} · ${n}</span>`;
+  });
+  html+=`</div>`;
+  out.innerHTML=html;
+}
+function drawRange(){
+  $("#range").innerHTML=[7,14,30].map(n=>`<button class="${n===DAYS?"on":""}" onclick="DAYS=${n};drawRange();load()">${n}d</button>`).join("");
+}
+drawRange();load();
+</script>
+</body>
+</html>

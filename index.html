@@ -5,14 +5,12 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="shortcut icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="favicon.png">
+<!-- /3 is the v3 BOT-BRAIN TEST build living on the live domain. robots.txt asks crawlers to
+     skip it; this tag instructs them to. Both, because it must never rank against the real game. -->
 <title>Pastry Pirates on the Sugar Seas — Online</title>
 <meta name="description" content="A free browser pirate board game. Sail the Caribbean, collect baking ingredients, battle rival captains, and race home to become the Best Baker in the Caribbean. Play online with friends — 2-4 players, bots fill empty seats.">
-<link rel="canonical" href="https://playpastrypirates.com/">
-<!-- max-image-preview:large is what permits a LARGE image beside the Google result. Without any
-     robots meta tag Google defaults to a small thumbnail or none, which is why og:image alone never
-     produced one (Google largely ignores Open Graph for result thumbnails — those tags serve
-     iMessage/Slack/Facebook). max-snippet:-1 lifts the text-snippet cap at the same time. -->
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="https://playpastrypirates.com/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Pastry Pirates on the Sugar Seas">
 <meta property="og:description" content="Sail the Sugar Seas, plunder ingredients, and out-bake rival pirate captains — free, no login, 1-4 players.">
@@ -27,6 +25,9 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"VideoGame","name":"Pastry Pirates on the Sugar Seas","url":"https://playpastrypirates.com/","description":"A free browser pirate board game — sail the Caribbean, collect baking ingredients, battle rival captains, and race home to become the Best Baker.","image":"https://playpastrypirates.com/og-image.jpg","genre":"Board Game","gamePlatform":"Web Browser","numberOfPlayers":"2-4","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
 </script>
+<!-- Phase 2 (Multiplayer Revival): the Firebase SDK tags are restored here — fbInit() now finds
+     a real global and every net path in src/net/ (left on disk untouched while the tags were gone)
+     comes back live. -->
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-database-compat.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -60,13 +61,61 @@
     grid-template-areas: "board" "controls" "narration" "stats" "captains" "mute" "chat"; }
   #left { grid-area: board; min-width: 0; }
   #controlsRow { grid-area: controls; display: flex; gap: 10px; align-items: stretch;
+    container-type: inline-size; container-name: controls; }
+  /* MUTE-01 (Wyatt, 2026-08-02: "the mute button is still misaligned").
+   *
+   * P6 had placed this as a GRID item with two homes — `grid-area: mute` (its own row under the
+   * captains box) and a wide-layout override putting it back beside the clock. The bug was the
+   * CONDITION: that override keyed on the sidebar-layout class, which syncBoardSizing() toggles on
+   * whether the SIDEBAR has room for a row of ingredient chips — not the same question as whether
+   * the CONTROLS ROW has room for one small button. Measured at 1000x700, a wide window, the class
+   * was absent, so the button dropped to its own row at x=28 while the clock sat at x=382. That is
+   * Wyatt's screenshot.
+   *
+   * A container query on #controlsRow was the obvious instrument and could not work: container
+   * queries only style DESCENDANTS, and P6 had moved this element out of that row.
+   *
+   * Two things settled it. Measured, the button FITS INLINE AT EVERY SIZE — 333px needed against a
+   * 334px row even at 390px phone portrait — so "below the captains box" was never a space
+   * requirement. And its styling (`flex: 0 0 auto`, `align-self: center`, every size in `cqw`) was
+   * written for this row and never updated when it left: as a grid child of #layout there was no
+   * container ancestor, so those cqw units had been silently resolving against the VIEWPORT.
+   *
+   * TWO EARLIER ATTEMPTS, kept because each named a real constraint:
+   *   - flex-wrap inside #controlsRow got the inline case right at every width, but the WRAP case
+   *     stranded the button in a gap under the clock. Wyatt, with screenshots at 327 and 300px:
+   *     "this is exactly why i wanted this work to be done properly."
+   *   - A 460px container query then fixed the fallback but broke the condition, pushing the button
+   *     down at 391px where he could see 11px of room. The number came from a stale measurement.
+   * See the #muteSlot rule below for what replaced them, and why it is measured rather than guessed.
+   */
+  /* WHERE THE MUTE BUTTON LIVES. Wyatt's rule, verbatim (2026-08-02): "if there is room ON THE SAME
+   * LINE as the turn clock, put it there. if not, move it down."
+   *
+   * It is measured, not guessed. placeMuteButton() (src/ui/board.js) asks whether the button plus
+   * the row's standard gap fits in what is left of #controlsRow, and MOVES the button between the
+   * two homes below. Two earlier attempts got this wrong and both failures are worth keeping:
+   *
+   *   - Keying on the sidebar-layout class asked "does the SIDEBAR fit ingredient chips", a
+   *     different question, so a wide-but-stacked window sent the button to its own row.
+   *   - Then a 460px container query — a number derived from a stale measurement, taken while the
+   *     button sat OUTSIDE the row where its cqw units resolved against the viewport and reported
+   *     75px instead of ~60px. It pushed the button down at 391px where 11px of room was visible on
+   *     screen. A guessed threshold cannot track content that clamps with its container; only
+   *     measurement can.
+   *
+   * #muteSlot is `container-type: inline-size` and carries #controlsRow's exact width/max-width/
+   * margin trio ON PURPOSE: the button's own sizing is in cqw, so without this its width would
+   * depend on which home it currently occupies — and "does it fit" would depend on where it already
+   * is. Matching the boxes makes the button the same size in both places and breaks that circle. */
+  #muteSlot { grid-area: mute; width: 100%; max-width: var(--boardW, 100%);
+    margin-left: auto; margin-right: auto; display: flex; justify-content: flex-start;
     container-type: inline-size; }
-  /* P6 (Wyatt, 2026-08-01, second pass): "it does sit below on narrow, but it should sit inline on
-     widescreen." Stacked layout -> its own row under the captains box. Wide/sidebar layout -> back
-     up beside the clock, which is where it always belonged there and where it never overflowed.
-     The wide layout has no `mute` area at all, so the override below is what places it. */
-  #btnMute { grid-area: mute; justify-self: start; }
-  #game.layoutWide #btnMute { grid-area: controls; justify-self: start; align-self: end; }
+  /* dropped: left-aligned under the captains box (Wyatt's pick), just above the footer links */
+  #muteSlot:empty { display: none; } /* no empty 14px grid row while the button is up in the clock row */
+  /* inline: snug after the clock with the row's own gap, bottom edges level with it (his words:
+     "snug next to the clock, bottom-aligned with the bottom of the clock") */
+  #controlsRow > #btnMute { align-self: flex-end; }
   #actionPanel { grid-area: narration; }
   /* container for the chip-row query below — the captains box responds to ITS OWN width,
      not the viewport's, so the layout switches wherever the box is actually too narrow. */
@@ -134,6 +183,14 @@
      (index.html ~146-147) so every primary button reads as one house pattern, not a fourth orange. */
   button.primary { border: 1.5px solid #e89827; background: #fdf3e3; color: #8a5a12; }
   button.primary:hover { background: #fae7cb; }
+  /* T-21 (Wyatt, 2026-08-26): "Change the styling of the 'wait not yet' button to blue. this is an
+     inconsistent design element and it's brighter than the orange, which is confusing."  It was
+     taking the bare `button` default — lemon on a teal border — which put the LOUDER colour on the
+     control that backs out, beside the warm primary that sails. Blue is the same recipe as
+     .primary (soft ground, darker ink, matching border), one hue along, so a decline reads as
+     quieter than the commit without reading as disabled. */
+  #btnCancelStart { border: 1.5px solid #2b8ca8; background: #e8f4f8; color: #14576b; }
+  #btnCancelStart:hover { background: #d5eaf2; }
   button:disabled { opacity: .4; cursor: default; }
   /* UI-01: top padding was 4px. #footerRow is a SIBLING of #layout, not a grid item, so the space
      above it is #layout's own 14px bottom padding PLUS this — 18px, against the 14px rhythm every
@@ -179,6 +236,10 @@
   .rulegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; font-size: 13.5px; }
   .rulegrid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; }
   .rulegrid label span { flex: 1; }
+  /* a flex column purely so applyCaptainOrder() can resort the rows with `order` in Pass & Play
+     (see src/ui/util.js). Stacking and full-width rows are identical to the block layout it
+     replaces — with no `order` set anywhere, every row is 0 and DOM order stands. */
+  #players { display: flex; flex-direction: column; }
   .player-row { padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; border: 2px solid transparent; box-sizing: border-box; transition: border-color .25s ease, box-shadow .25s ease; }
   .player-row.activeTurn { border-color: var(--rowcol, var(--accent)); box-shadow: 0 0 0 2px var(--rowcol, var(--accent)) inset, 0 0 6px rgba(0,0,0,.12); }
   /* fixed dot/name/coins columns keep money and hold aligned across all captains regardless of
@@ -249,36 +310,111 @@
     text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px;
     white-space: nowrap; }
   .narrRecipeLink:hover { filter: brightness(1.12); text-decoration-color: var(--accent); }
-  #recipeModalBody .recipeModalThumb { display: block; width: 100%; height: 220px; object-fit: contain;
-    margin: 15px 0 10px; }
-  #recipeModalBody h2 { font-size: 20px; font-weight: 800; letter-spacing: .3px; color: #5b3a1f;
-    font-family: Georgia, "Times New Roman", serif; margin: 0 0 9px; padding-bottom: 9px;
-    border-bottom: 3px double #b48a52; text-shadow: 0 1px 0 rgba(255,250,235,.5); }
-  #recipeModalBody .recipeModalDesc { font-size: 13px; line-height: 1.45; margin-bottom: 10px;
-    font-family: Georgia, "Times New Roman", serif; font-style: italic; color: #6b4a2c; opacity: 1; }
-  #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #8a6535; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 4px; }
-  #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #4a3223; margin: 10px 0 2px; }
-  #recipeModalBody ul, #recipeModalBody ol { margin: 4px 0 0; padding-left: 22px; font-size: 13.5px; line-height: 1.5; color: #4a3223; }
-  #recipeModalBody li { margin-bottom: 3px; padding-bottom: 4px; border-bottom: 1px dashed rgba(120,80,40,.3); }
+  /* ================= § recipeModal — D-35, option C =================
+     ONE VARIABLE IS THE WHOLE OF HIS CHANGE (a). --descLine is the description's line-height, and
+     the gap above the description is calc(var(--descLine) * 1em) — literally one of its own lines,
+     not a pixel number standing next to it. His words were "increase the padding around the bottom
+     of the image (It's too cramped against the italicised description)", and D-35 says derive it
+     from the card's own type scale rather than typing a constant (rule 9). If the modal's type ever
+     moves, the gap moves with it and nobody has to remember. */
+  #recipeModalBody { --descLine: 1.45; --cardPad: 22px; }
+  /* HIS CHANGE (b), and it is TWO requirements, not one restated.
+     1. THE GRADIENT REACHES THE SEPARATOR. The wrap is the first thing inside .recipeModalIn and
+        .recipeModalIn carries NO top padding, so the wrap's top edge and the title row's border-box
+        bottom are the same line. Zero gap, by construction rather than by a tuned number — which
+        is what the sketch's `margin: 14px -22px 4px` got wrong: that 14px top margin was the band
+        of plain card above the gradient, i.e. his "messy-looking edge".
+     2. IT FADES OUT BEFORE ITS OWN BOX EDGE. Closing the gap is necessary and not sufficient — a
+        gradient that fills the gap and then stops at a visible boundary is the same complaint moved
+        somewhere else. The far stop is fully transparent at 72%, so there is nothing for the eye to
+        see it end against. The negative side margins bleed it to the card's own edges (his original
+        item-9 constraint: the gradient must REACH THE BOX EDGES). */
+  #recipeModalBody .recipeModalThumbWrap { margin: 0 calc(-1 * var(--cardPad));
+    padding: 0 var(--cardPad);
+    background: radial-gradient(ellipse 118% 96% at 50% 34%,
+      rgba(253,182,61,.155), rgba(253,182,61,.055) 42%, rgba(253,182,61,0) 72%); }
+  #recipeModalBody .recipeModalThumb { display: block; width: 100%; height: 220px;
+    object-fit: contain; margin: 0 auto; }
+  #recipeModalBody .recipeModalDesc { font-size: 13px; line-height: var(--descLine);
+    margin-top: calc(var(--descLine) * 1em); margin-bottom: 0.8em;
+    font-family: Georgia, "Times New Roman", serif; font-style: italic; color: #e8d3ae; opacity: 1; }
+  /* THE STICKY TITLE ROW — option C's whole mechanism. It scrolls away with the title at first,
+     then locks to the top of the scrolling body and stays there, so the two controls are always
+     reachable without giving them a row of their own. The 3px double rule is the SAME separator
+     that used to be the h2's own border-bottom, moved out to the row now that the two icons share
+     that line (rule 8: the double rule is this card's signature and is not swapped for the
+     sketch's plain 2px). Its border-box bottom edge IS "the line separating the title". */
+  #recipeModalBody .recipeModalTitleRow { position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; gap: 10px; text-align: left;
+    margin: 0; padding: 14px var(--cardPad) 10px;
+    /* FULLY OPAQUE, and the missing 3% was visible. At rgba(...,.97) the YIELD heading scrolling
+       underneath ghosted through the row as a smudge — caught by reading the scrolled screenshot,
+       not by any assertion. Wyatt has reported exactly this shape of fault before ("it looks like
+       something is hovering behind the top ribbon"), so a sticky bar over scrolling content gets
+       no transparency at all. */
+    background: linear-gradient(165deg, #4a2f18, #2c1a0c);
+    border-bottom: 3px double #b48a52; }
+  #recipeModalBody h2 { font-size: 19px; font-weight: 800; letter-spacing: .3px; color: #fff6c0;
+    font-family: Georgia, "Times New Roman", serif; margin: 0; padding: 0; border: none;
+    flex: 1; line-height: 1.25; text-shadow: 0 1px 0 rgba(0,0,0,.45); }
+  /* Icon-only, round, and NOT given D-32's sail pulse — a decided answer, not an omission. These
+     act ON the card (print it, mail it); they are not the game asking a question, and the pulse
+     vocabulary means "answer this". Two things pulsing for two different meanings would cost the
+     vocabulary exactly the clarity D-32 was bought for. */
+  #recipeModalBody .recipeIconBtn { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 50%;
+    border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); color: #fff6c0;
+    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  #recipeModalBody .recipeIconBtn:hover { background: rgba(255,255,255,.18); }
+  #recipeModalBody .recipeModalIn { padding: 0 var(--cardPad) var(--cardPad); text-align: left; }
+  #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #f5a623; text-transform: uppercase; letter-spacing: .5px; margin: 1.1em 0 .3em; }
+  #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #ffd98a; margin: .8em 0 .15em; }
+  #recipeModalBody ul, #recipeModalBody ol { margin: .3em 0 0; padding-left: 22px; font-size: 13.5px; line-height: 1.5; color: #f0e3c8; }
+  #recipeModalBody li { margin-bottom: 3px; padding-bottom: 4px; border-bottom: 1px dashed rgba(253,182,61,.22); }
   #recipeModalBody li:last-child { border-bottom: none; }
   /* long recipes (multi-part ingredients + many steps) can be taller than the viewport — scroll
      the body internally instead of the whole page, so the action buttons stay put right below it */
+  /* D-35 / his original item 9: THE CARD GRADIENT REACHES THE BOX EDGES AND DARKENS, NOT LIGHTENS.
+     That is his constraint in his own words, and it is why this card is no longer the tea-stained
+     parchment it used to be — option C, the sketch he picked, is a dark chocolate card and he chose
+     it against two lighter alternatives. padding:0 because the sticky title row and .recipeModalIn
+     each own their own, which is what lets the title row sit flush to the card's top corners and
+     the image gradient bleed to its sides. */
   #recipeModal .modalCard { display: flex; flex-direction: column; max-height: 85vh;
-    border-color: #a07a45; border-radius: 12px;
-    /* same mottled, tea-stained parchment as the draft-pick recipe cards (§ recipeCard) */
-    background:
-      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
-      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
-      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
-      linear-gradient(160deg, #f7edd2, #ecd9ac);
-    box-shadow: inset 0 0 30px rgba(120,80,35,.30), 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18); }
-  #recipeModalBody { overflow-y: auto; padding-right: 6px; }
+    border-color: var(--teal); border-radius: 16px; padding: 0; overflow: hidden;
+    background: linear-gradient(165deg, #3d2817 0%, #1f130a 100%);
+    box-shadow: 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18); }
+  #recipeModalBody { overflow-y: auto; }
+  /* THE PRINT PATH, AND IT IS THE ONE THING A DARK CARD BREAKS (threat T-02.2-39). Download PDF is
+     one of the two icons this card now pins into its title row, so it is not a path anybody can
+     skip checking. Browsers do not print background images by default, so a dark card with pale
+     text prints as pale text on WHITE — invisible. So print gets the ink back explicitly, loses the
+     gradients and the sticky positioning, and hides the two icons (which used to be hidden as
+     #recipeModalBtns, an element that no longer exists). */
   @media print {
     body > *:not(#recipeModal) { display: none !important; }
     #recipeModal { position: static; display: block !important; background: none; }
-    #recipeModal .modalCard { border: none; box-shadow: none; max-width: 100%; max-height: none; display: block; }
+    #recipeModal .modalCard { border: none; box-shadow: none; max-width: 100%; max-height: none;
+      display: block; background: none; overflow: visible; }
     #recipeModalBody { overflow: visible; }
-    #recipeModalBtns { display: none !important; }
+    #recipeModalBody .recipeIconBtn { display: none !important; }
+    #recipeModalBody .recipeModalTitleRow { position: static; background: none;
+      border-bottom: 3px double #b48a52; padding-left: 0; padding-right: 0; }
+    #recipeModalBody .recipeModalIn { padding-left: 0; padding-right: 0; }
+    #recipeModalBody .recipeModalThumbWrap { background: none; margin: 0; padding: 0; }
+    /* The page's own background is not a sibling of #recipeModal and so is not hidden by the rule
+       above. It does not reach a real printer (backgrounds are off by default) but it DOES reach a
+       PDF with "background graphics" ticked, which is what the 🖨️ icon is for. */
+    html, body { background: #fff !important; }
+    .modalX { display: none !important; }
+    #recipeModalBody h2 { color: #3a2600; text-shadow: none; }
+    #recipeModalBody .recipeModalDesc { color: #4a3223; }
+    /* NOT #8a6535. Read off the printed page rather than assumed: the YIELD and STEPS headings are
+       12.5px uppercase with letter-spacing, and at that weight a mid-gold washes out on white to
+       the point of being skimmed past. They take the same ink as the title. */
+    #recipeModalBody .recipeModalYield { color: #5b3a1f; }
+    #recipeModalBody .recipeModalSub { color: #4a3223; }
+    #recipeModalBody ul, #recipeModalBody ol { color: #222; }
+    #recipeModalBody li { border-bottom-color: rgba(120,80,40,.3); }
   }
   .crown { font-size: 15px; }
   .crown img { width: 15px; height: 15px; vertical-align: -3px; object-fit: contain; }
@@ -329,6 +465,11 @@
   #apGridInner { overflow: hidden; min-height: 0; padding: 0 10px; }
   @media (prefers-reduced-motion: reduce) { #apGrid { transition: none; } }
   .apMsg { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  /* emojify() wraps an icon and the punctuation glued to its right in this, so the browser cannot
+     break the line between them. An <img> is a replaced element and a break straight after one is
+     allowed — which stranded a lone "." on its own line under "for 10 [coin]", caught by the sea
+     trial's vision judge on two separate legs, 2026-08-26. Carries no text, only the rule. */
+  .pp4Cling { white-space: nowrap; }
   /* notes/edits #4b: a parenthetical aside like "(1 broadside)" must never split across a line
      break — wrap it in this class at the string-building level wherever it appears. */
   .nobrk { white-space: nowrap; }
@@ -383,6 +524,20 @@
      matches. It has to: a media query cannot reach a JS timer, so without that read a
      reduced-motion user would get a blank 180ms gap AND no fade — the worst of both. */
   @media (prefers-reduced-motion: reduce) { .apMsg.fadeOut { display: none; } }
+  /* THE QUANTITY SLIDER (playtest 21 item 7). Wyatt: "Move the plus minus coins out of the arc
+     instead and style those differently, potentially with a slider or some other mechanic."
+     It is deliberately NOT circular and NOT the fan's colours — a control that sets a number must
+     not be mistakable for a control that commits an action, which is the whole bug. */
+  .apSliderWrap { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
+  .apSlider { -webkit-appearance: none; appearance: none; flex: 1 1 auto; height: 6px;
+    border-radius: 999px; background: linear-gradient(90deg, #f5a623, #ffd894); outline: none; }
+  .apSlider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+    width: 30px; height: 30px; border-radius: 50%; background: #fffdf2; border: 3px solid #f5a623;
+    box-shadow: 0 3px 10px rgba(0,0,0,.32); cursor: grab; }
+  .apSlider::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: #fffdf2;
+    border: 3px solid #f5a623; box-shadow: 0 3px 10px rgba(0,0,0,.32); cursor: grab; }
+  .apSliderOut { min-width: 2.2em; text-align: center; font-weight: 900; font-size: 15px;
+    color: #8a5a12; font-variant-numeric: tabular-nums; }
   .apBtns { display: flex; gap: 8px; flex-wrap: wrap; }
   .apBtn { background: #fff; font-size: 14px; }
   .apBtn:hover { background: #eafbf4; }
@@ -390,8 +545,41 @@
      recipe above for every in-panel primary button (items 10-12 of the enumerated sites). */
   .apBtn.primary:hover { background: #fae7cb; }
   /* #5d: a too-poor Attack shows greyed and non-clickable rather than vanishing */
-  .apBtn.apDisabled, .apBtn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
-  .apBtn.apDisabled:hover, .apBtn:disabled:hover { background: #fff; }
+  /* playtest 21 item 5: greyed options carry aria-disabled now, not the `disabled` attribute — a
+     real disabled button fires no click, so it could never be tapped to ask why. The look is
+     unchanged; the selector gains the aria form alongside the old one. `cursor: help` rather than
+     `not-allowed`, because the button now DOES do something when ye tap it. */
+  /* T-29 (Wyatt, 2026-08-26): "the cursor turns into a '?' but nothing happens when buttons are
+     clicked. IF nothing happens, it should not change into a ?"
+
+     He is right, and the rule above says why without noticing: `cursor: help` was chosen "because
+     the button now DOES do something when ye tap it" — which is true of the ARIA form and false of
+     the real `disabled` attribute, because a genuinely disabled button fires no click event at all.
+     The selector carried both, so the bake-off's Ready button (built with a real `disabled`) and
+     every other truly-dead control offered a "?" that could never be answered. Split: the ones that
+     can explain themselves keep the help cursor, the ones that cannot stop pretending. */
+  .apBtn.apDisabled, .apBtn[aria-disabled="true"] {
+    opacity: .45; cursor: help; filter: grayscale(.4); }
+  .apBtn:disabled:not(.apDisabled):not([aria-disabled="true"]) {
+    opacity: .45; cursor: default; filter: grayscale(.4); }
+  /* T-29, the other half: a WATCHER's crates are not theirs to open. The pointer cursor said they
+     were. bakeoff.js flashes "Now yer just watchin'" into the hint line if one is clicked anyway. */
+  .bkoWatching .bkoBowl { cursor: default; }
+  .apBtn.apDisabled:hover, .apBtn:disabled:hover, .apBtn[aria-disabled="true"]:hover { background: #fff; }
+  /* The reason a greyed circle is greyed, spoken AT that circle. Wyatt's screenshot had one helper
+     line explaining one of several greyed buttons from across the board; a bubble with a tail
+     cannot be misread that way. pointer-events:none so it never eats the tap that dismisses it. */
+  .apWhy { position: fixed; z-index: 60; pointer-events: none; max-width: min(260px, 78vw);
+    background: #fffdf2; color: #4a3223; border: 2px solid #177; border-radius: 11px;
+    padding: 7px 11px; font-size: 12.5px; font-style: italic; line-height: 1.35; font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0,0,0,.34); animation: apWhyIn .16s ease-out both; }
+  .apWhy::after { content: ""; position: absolute; left: var(--tailX, 50%); bottom: -8px;
+    width: 12px; height: 12px; margin-left: -6px; background: #fffdf2;
+    border-right: 2px solid #177; border-bottom: 2px solid #177; transform: rotate(45deg); }
+  .apWhy.below::after { bottom: auto; top: -8px;
+    border-right: none; border-bottom: none; border-left: 2px solid #177; border-top: 2px solid #177; }
+  @keyframes apWhyIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .apWhy { animation: none; } }
   /* #5c: helper line under the action buttons */
   .apSub { margin-top: 8px; font-size: 12.5px; opacity: .8; font-style: italic; }
   /* small, consistent "back" affordance for every back-able decision — deliberately lower-key
@@ -413,20 +601,73 @@
        types in, not after ("the Back button should appear first ... this is not arbitrary").
      .apSub JOINS it: the italic helper line sits under the message and above the buttons, and was
        painting instantly, ahead of the text it explains ("it should honestly appear with the
-       buttons"). */
-  #actionPanel.pendingReveal .apBtns, #actionPanel.pendingReveal .apSub { visibility: hidden; }
-  .ahoyGlow { animation: ahoyglow 1.4s ease-in-out infinite; }
-  @keyframes ahoyglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,45,.6); } 50% { box-shadow: 0 0 0 8px rgba(245,159,45,0); } }
+       buttons").
+     .bkoCard LEFT this gate on playtest 16: the intro's recipe card moved INSIDE .apMsg (Wyatt:
+       "The recipe is not inside the white narration box, but it should be!"), so the typewriter
+       now walks it natively — its lines type in top to bottom after the sentence introducing
+       them, which is the reveal-order rule satisfied at the source. Gating it here as well would
+       hold the card invisible through its own typing and pop it in whole at the end.
+     The bench shell's own .bkoCard is likewise untouched: it carries .bkoBtns rather than
+       .apBtns precisely so panel() never gates it (see .bkoBtns below), so pendingReveal is
+       never added there and the card shows immediately, as it should. */
+  /* playtest 21 item 7: the quantity slider joins the gate. It sits BETWEEN the message and the
+     buttons, and the standing rule is that the narration box reveals top to bottom — so a control
+     that edits the message must not appear before the message it edits has finished arriving.
+     Measured before this line existed: apPendingReveal true, slider visibility "visible". */
+  #actionPanel.pendingReveal .apBtns, #actionPanel.pendingReveal .apSub,
+  #actionPanel.pendingReveal .pp4RecipeHint,
+  #actionPanel.pendingReveal .apSliderWrap { visibility: hidden; }
+  /* ONE EXCEPTION, and it is measured (Wyatt, 2026-08-08: "The 'to the bench!' Button doesn't
+     respond quickly and i often have to push it twice — why?").
+     Because it was not there. Sampled every 100ms: the button sits visibility:hidden — which takes
+     no pointer events at all — for 4022ms after the card opens, because the gate holds it until the
+     ~200-character message has finished typing. The first tap lands on #apGridInner and vanishes;
+     the second one, after it appears, works. Nothing was slow; the tap had nowhere to go.
+     Hiding is right for the ORDER rule and wrong for the hand. Shown-but-inert says the same thing
+     to the reveal order and something honest to the thumb: it is coming, it is not ready. Same
+     treatment "Ready to bake!" already got for its own ghost window. */
+  #actionPanel.pendingReveal .bkoIntroBtns { visibility: visible; opacity: .4; pointer-events: none; }
+  .bkoIntroBtns { transition: opacity .2s ease; }
+  /* .ahoyGlow is assigned in THE ATTENTION VOCABULARY block (end of this stylesheet) — it used
+     to carry its own private @keyframes ahoyglow, the second of three hand-rolled copies of the
+     same orange ring. One definition now: pp4Glow. */
   /* ---- battle scoreboard ---- */
   .btl { text-align: center; }
   .btl-hd { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
-  .btl-hd .rnd { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .55; font-weight: 700; }
   .btl-body { display: flex; align-items: flex-start; justify-content: center; gap: 8px; }
-  .btl-col { flex: 1 1 0; max-width: 190px; padding: 8px 6px; border-radius: 12px; border: 2px solid transparent; transition: background .2s, border-color .2s, box-shadow .2s; }
+  /* min-width:0 IS LOad-BEARING — playtest 22 (Wyatt: "the battles box is clipping at the edges"),
+     with the attacker's name cut to "ough Hook" on one side and "ties collide" cut on the other.
+     A flex item defaults to min-width:auto, so it refuses to shrink below its own content; the wind
+     tag below is `width: max-content`, so a long one ("CROSSWIND · ties collide") set the column's
+     intrinsic width and BOTH columns then pushed the row wider than the card. .btl-body centres its
+     children, so the overflow spilled equally off both ends — which is why it read as the box being
+     clipped at the edges rather than as one column being too wide. Letting the columns shrink puts
+     the tag's own max-width:100% back in charge. */
+  .btl-col { flex: 1 1 0; min-width: 0; max-width: 190px; padding: 8px 6px; border-radius: 12px; border: 2px solid transparent; transition: background .2s, border-color .2s, box-shadow .2s; }
   .btl-col.live { background: #fff; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,166,35,.18); }
   .btl-col .who { font-weight: 800; font-size: 14px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .btl-col .role { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .5; margin-bottom: 7px; }
-  .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 30px; }
+  /* playtest 20: the wind, on the card, before a coin is tapped. A two-heads tie goes to the
+     downwind ship (rule 9) and ~25% of fights are decided that way, so the edge is named where
+     the fight is watched rather than only in the line that follows it.
+     playtest 23 item 2: ONE pill, centred BENEATH both columns, rather than one per captain. It
+     left the columns, so it is scoped to .btl-wind — the min-width:0 note above no longer applies
+     to it (a centred row cannot set a column's intrinsic width), but the columns keep that rule
+     because the captain names still can. `.up` is gone rather than left unused: a single pill
+     names the downwind ship, so there is no side left to label upwind. */
+  .btl-wind { display: flex; justify-content: center; margin-top: 8px; }
+  .btl-wind .windTag { font-size: 10px; font-weight: 800; letter-spacing: .6px; border-radius: 999px;
+    padding: 3px 10px; width: max-content; max-width: 100%; line-height: 1.35; }
+  .btl-wind .windTag.dw { background: #f5a623; color: #3a2600; border: 1px solid #c9821a; }
+  .btl-wind .windTag.cross { background: rgba(31,66,73,.10); color: #1f4249; opacity: .65; }
+  /* VS HOLDS ITS PLACE AGAINST THE COINS, and 9px is a measurement rather than a guess. The pill
+     leaving the column shortened it 160px -> 138px, so the old 30px over-corrected. Swept in the
+     live page at 430px and read off a Range over the glyph — NOT off the flex box, which
+     align-self:center pins to the line centre and which therefore reads the same at every padding
+     (that mis-measurement reported a flat -13 for 0px through 40px and nearly shipped a wrong number):
+       before, padding 30px -> VS sits  9.1px above the coin's centre
+       after,  padding  9px -> VS sits  8.5px above the coin's centre  */
+  .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 9px; }
   .coin { width: 74px; height: 74px; margin: 0 auto 9px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 13px; letter-spacing: .5px; border: 3px solid; position: relative; }
   .coin.wait { background: #f4f4f4; border-color: #dcdcdc; color: #c2c2c2; font-size: 24px; }
@@ -454,8 +695,10 @@
   #flipCoinWrap.active { border-color: var(--accent); background-color: #f5a623;
     background-size: cover; background-position: center;
     color: #f5a623; text-shadow: 0 1px 2px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.7), 0 0 1px #000;
-    font-weight: 800; cursor: pointer; animation: flipglow 1s ease-in-out infinite; }
-  @keyframes flipglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,45,.5); } 50% { box-shadow: 0 0 0 9px rgba(245,159,45,0); } }
+    font-weight: 800; cursor: pointer; }
+  /* the coin's glow is assigned in THE ATTENTION VOCABULARY block (end of this stylesheet) —
+     the same pp4Glow every stage button breathes. plankglow stays: it is the plank SURFACE
+     echoing the coin, an inset compound, not a button cue. */
   @keyframes plankglow { 0%, 100% { box-shadow: inset 0 2px 5px rgba(0,0,0,.28), 0 0 0 0 rgba(245,159,45,.65); }
     50% { box-shadow: inset 0 2px 5px rgba(0,0,0,.28), 0 0 0 14px rgba(245,159,45,0); } }
   /* ---- shot clock: a brass ship's gauge, left-aligned like a real instrument readout ---- */
@@ -472,6 +715,24 @@
     background: rgba(0,0,0,.25); cursor: pointer; }
   #scPause:hover { background: rgba(0,0,0,.4); }
   #scPause img { width: 60%; height: 60%; object-fit: contain; }
+  /* THE PAUSED BEACON (Wyatt, 2026-08-06). A stopped game must announce itself: a player who steps
+     away from the tab comes back to a board that is simply not moving, with nothing saying why.
+     The clock face already goes silver and reads "paused"; this makes the one control that FIXES it
+     impossible to miss.
+     Glow + breath rather than a hard flash: a blinking control reads as an error, and this is an
+     invitation. The ring pulses amber — the same #f5a623 family the clock's own `warming` glow uses,
+     so it belongs to the clock rather than arriving as a new colour.
+     box-shadow and transform ONLY. Both composite (PERF-01's standing rule for anything that moves
+     on this screen), and neither triggers layout on a button pinned in the clock's corner.
+     Honours prefers-reduced-motion by dropping to a STATIC glow rather than to nothing at all —
+     the whole point is visibility, so the message must survive the animation being switched off. */
+  @keyframes scPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(245,166,35,.65); transform: scale(1); }
+    50%     { box-shadow: 0 0 10px 4px rgba(245,166,35,.15); transform: scale(1.14); } }
+  #scPause.scPulse { animation: scPulse 1.4s ease-in-out infinite;
+    border-color: #f5a623; background: rgba(245,166,35,.35); }
+  @media (prefers-reduced-motion: reduce) {
+    #scPause.scPulse { animation: none; box-shadow: 0 0 8px 3px rgba(245,166,35,.5); } }
   #scTimerToggle img { width: 60%; height: 60%; object-fit: contain; vertical-align: middle; }
   /* #7: timer off/on toggle — sits in the bottom-right corner, clear of the "turn clock" label
      text in the top-left (which it used to overlap) and of #scPause in the top-right */
@@ -518,9 +779,20 @@
      (no min-width clamp, unlike #btnPlayAgain), so it reads as a control beside the clock rather
      than a second panel. Same border-radius/padding clamp idiom as #btnPlayAgain so it drops into
      the row without the layout jumping. */
-  #btnMute { flex: 0 0 auto; align-self: center;
-    border-radius: clamp(8px,3cqw,14px); padding: clamp(5px,2cqw,9px) clamp(7px,2.5cqw,12px);
-    border: 2px solid #d9a84e; font-size: clamp(14px,4.5cqw,20px); line-height: 1;
+  /* MUTE-02 (Wyatt, 2026-08-02): "can you make the mute button 50% smaller too now? it's almost the
+     same size as the flippenator, but it really doesn't have to be."
+     Halved in BOTH dimensions, per his pick: 65x58 -> ~33x29 on a phone.
+     His second ruling was "trim padding first, keep the icon legible", and at half size those two
+     partly conflict — with a border and any padding at all, a ~29px-tall box cannot hold a 26px
+     icon. So the size wins (it was the actual request) and the padding is cut to near-nothing so
+     the icon keeps as much of the smaller box as geometry allows: it lands ~20px rather than the
+     ~17px a proportional shrink would have given. The border also drops 2px -> 1.5px, which is a
+     whole pixel of icon back on each axis at this scale.
+     The icon is what carries mute state (D-14's megaphone/slashed-megaphone pair), so it is the
+     last thing that should shrink — see #btnMute::after for the tap target that keeps it usable. */
+  #btnMute { flex: 0 0 auto; align-self: center; position: relative;
+    border-radius: clamp(5px,1.7cqw,8px); padding: clamp(2px,0.9cqw,3px) clamp(3px,1.3cqw,5px);
+    border: 1.5px solid #d9a84e; font-size: clamp(9px,2.9cqw,13.5px); line-height: 1;
     background: linear-gradient(160deg, rgba(138,95,47,.6), rgba(92,61,28,.6));
     color: #ffe9b8; cursor: pointer; }
   #btnMute:hover { filter: brightness(1.15); }
@@ -530,6 +802,15 @@
      scaffold never exposed this because text is sized by font-size. em keeps the icon tied to the
      button's own clamp()ed font-size, so the narrow-viewport bump below still works. */
   #btnMute img { width: 1.5em; height: 1.5em; object-fit: contain; vertical-align: middle; }
+  /* MUTE-02: the button is now ~33x29 visually, which is below the ~44px that is comfortable to tap.
+     This pseudo-element extends the HIT AREA to 44x44 without changing the button's layout box — so
+     the row still only spends ~33px on it, and placeMuteButton()'s fit test (src/ui/board.js) keeps
+     measuring the visible size rather than a padded one. Growing the button with padding instead
+     would have made every measurement report 44px and pushed the button below the captains box
+     earlier than it needs to go.
+     It overflows into the row's 10px gap by ~5.5px a side, which stays clear of the clock. */
+  #btnMute::after { content: ""; position: absolute; left: 50%; top: 50%;
+    width: 44px; height: 44px; transform: translate(-50%,-50%); }
   /* standalone, matches #shotClockPanel's footprint (min-width/padding/border-radius) so it
      drops into the same #controlsRow slot without the layout jumping */
   #btnPlayAgain { flex: 0 0 auto; min-width: clamp(70px,26cqw,118px);
@@ -565,7 +846,152 @@
      circles — see that markup for the measurement. The TIMING NOTES ABOVE ARE UNCHANGED AND STILL
      BINDING: 2.7s linear, and the stagger is still duration/3 = 0.9s. Only the element type
      changed; do not re-tune either number on the strength of that. */
-  #rippleHost { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  /* THE BOARD'S PAINT ORDER, and it is deliberate at every step (PERF-01, 2026-08-02):
+   *
+   *   #board        (static)  ocean art, grid, islands, docks, compass HUD
+   *                           ...plus everything appended at RUNTIME: sail highlights
+   *                           (src/ui/flow.js) and emoji pops (src/ui/board.js popEmoji).
+   *                           Wyatt, 2026-08-02: "i like the fact that the sail highlights and
+   *                           emoji pops are below the ships -- that makes sense to me
+   *                           graphically." So they stay here, under the boats, on purpose.
+   *   #rippleHost   z 3       the active-turn sonar rings
+   *   #boardShips   z 4       the boats — ABOVE the rings, which is the whole point of the split
+   *   #stormOverlay z 5       rain falls over everything on the water
+   *   #chatBubbles  z 6       speech sits on top of all of it
+   *
+   * The two SVGs share `viewBox="0 0 640 640"` and #boardwrap's box, so a ship's coordinates mean
+   * the same thing in either one and nothing had to be recomputed when the ships moved out.
+   *
+   * #rippleHost was briefly z-index 5, which tied with #stormOverlay and won on DOM order — so the
+   * rings drew over the rain, which the SVG original never did. Fixed by this ordering too. */
+  /* playtest 20, and it is PERF-01 a second time. The sail highlights were SVG rects whose
+     UI-06 bounce animates transform:scale — measured at a phone viewport with the GPU on, that
+     ONE animation was the entire idle layout cost of the board:
+         shipped (transform + opacity)   59.9 layouts/sec
+         animation: none                  0.0
+         OPACITY only                     0.0
+         TRANSFORM only                  60.1     <- all of it
+     Chrome never composites an SVG transform animation and will-change cannot promote an SVG
+     child, exactly as PERF-01 found for the sonar rings. It ran while a human sail prompt was up,
+     which is precisely when a player sits still on a phone and thinks.
+     So the highlights are HTML divs now, in this host, and the bounce is unchanged — Wyatt kept
+     the look (2026-08-13) and only the element type moved.
+     Z-INDEX 2 is load-bearing: below #rippleHost(3) and #boardShips(4), so the squares still sit
+     UNDER the boats — "i like the fact that the sail highlights and emoji pops are below the
+     ships" (Wyatt, 2026-08-02). The host ignores pointer events; the squares themselves take them.
+     Sizes are cqw against #boardwrap (container-type: inline-size), so 640 board units == 100cqw
+     and every call site keeps the board coordinates it already had. */
+  #sailHost { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  /* THE TRADE-WIND CURRENT (playtest 21 item 9 / WIND-02). Every animated property here is
+     transform or opacity on an HTML element — compositor work, zero layout. Nothing in this block
+     may ever animate width/height/top/left, which is what would quietly hand the board back the
+     62 layouts/sec that moving the sail squares out of SVG bought back. */
+  #rimHost { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  #rimHost > div { position: absolute; }
+  #rimHost img { display: block; width: 100%; height: 100%; }
+  /* the wrapper holds the tangent rotation and NEVER animates; the img drifts along that rotated
+     local axis, so each arrow travels its own stretch of channel rather than all of them sliding
+     the same way across the board */
+  /* THE RING IS ALWAYS COMPLETE; THE WAVE IS A BRIGHTENING THAT TRAVELS IT.
+     playtest 21 (Wyatt): "the trade winds are missing most of their arrows... They should all be
+     there from the start."
+     The fade used to bottom out at opacity 0, so at any instant — measured in Chrome, 36 arrows —
+     about 23 read clearly, ~6 were faint and ~1 was invisible. A fifth of the channel was missing
+     at all times BY DESIGN, which on a phone reads as a broken ring rather than a moving one.
+     The floor is .35 (his pick, against .6 and against keeping the full fade): every arrow is
+     always drawn, and the current still plainly moves. The ±42% slide is unchanged, also his pick —
+     it is what makes the ring read as carrying ships clockwise rather than a row of blinking signs.
+
+     NO will-change, deliberately, and this is a fix rather than a tidy-up. It promoted all 40 rim
+     elements to permanent compositor layers; a running transform/opacity animation is composited
+     anyway, so the hint bought nothing and asked an iPhone for 40 layers it creates lazily under
+     memory pressure — the likeliest reason arrows appeared over ~15 seconds instead of at once.
+     Chrome measured identical without it (0 layouts/sec, 68 recalcs/sec both ways).
+     The rim was the outlier: every other will-change in /4 is either a handful of elements (the
+     ripple rings, whose own note defends theirs) or transient (storm rain), or defaults off (the
+     wind-dot HUD). */
+  /* THEY MUST APPEAR AS SMOOTHLY AS THEY LEAVE — playtest 22 (Wyatt): "the animation for the trade
+     wind arrows should fade them in as smoothly as it fades them out — currently they appear
+     jerkily." Two separate faults, and only one of them was the fade curve.
+
+     1. THE RAMPS WERE NOT THE SAME LENGTH, and both had corners. In one 2.6s cycle the rise ran
+        0->22% (0.572s) and the fall 72->100% (0.728s) — the exit was 27% longer than the entrance —
+        and `linear` put a hard corner at each end of the plateau. Now 3->24% and 76->97%: 0.546s
+        each way, eased, no corner anywhere.
+
+     2. THE ARROW TELEPORTED ON THE FRAME IT BEGAN BRIGHTENING. translateX runs -42% -> +42% and
+        then resets, which is a jump of 84% of the arrow's own width — and the old floor meant it
+        made that jump at opacity .35, PLAINLY VISIBLE. The fade-out ended smoothly in place; the
+        fade-in opened with a snap. That is exactly the asymmetry he described, and no amount of
+        easing the curve would have touched it.
+
+     TWO ANIMATIONS ON ONE ELEMENT, which is what lets both be right at once. The drift stays
+     strictly `linear` — the current must read as steady, not as something that surges and eases —
+     while the opacity gets its own shape and its own `ease-in-out`. Written as one animation, the
+     per-keyframe timing needed for the fade would have been applied to the drift as well and made
+     the ring's speed pulse. A single `animation-delay` still governs both, so board.js's per-cell
+     stagger is unchanged and the two stay in phase.
+
+     THE FLOOR IS STILL .35, AND THE 3% BLINK AT EACH END IS A NAMED EXCEPTION TO IT (Wyatt's call,
+     2026-08-14, choosing "hide the snap-back" with the floor kept "everywhere else in the cycle").
+     His ruling above is that the ring is never missing arrows; it was earned against a design where
+     a fifth of the channel was faint or gone AT ALL TIMES. This costs 6% of one arrow's cycle below
+     the floor — measured on the real board, ~2 of 36 arrows at any instant, each for 0.16s — and
+     buys a reset nobody can see. Do not widen the 3% to smooth it further: that is the number that
+     keeps this a blink rather than the gap he rejected. */
+  .rimFlow img { animation: rimDrift 2.6s linear infinite, rimPulse 2.6s ease-in-out infinite; }
+  @keyframes rimDrift {
+    from { transform: translateX(-42%); }
+    to   { transform: translateX(42%); }
+  }
+  @keyframes rimPulse {
+    0%   { opacity: 0; }    /* the reset instant — the jump happens here, and nothing is drawn for it */
+    3%   { opacity: .35; }
+    24%  { opacity: .9; }
+    76%  { opacity: .9; }
+    97%  { opacity: .35; }
+    100% { opacity: 0; }
+  }
+  /* The whirlpool at each quadrant's drop-off — where the ride ends, so it turns rather than drifts.
+     playtest 21 (Wyatt): "increase the size of the whirlpools so they take up their entire square,
+     and spin them a little faster."
+     The SCALE is on the wrapper, not the img, and that split is load-bearing: the img's own
+     transform is the spin keyframe, so a scale written there would be overwritten every frame the
+     animation runs. The wrapper is otherwise static for a swirl, so it is free to hold it.
+     1.35 rather than 1.0 because the asset carries transparent padding — at 100% of its cell the
+     drawn spiral sits well inside the square it is meant to fill.
+     BOTH NUMBERS ARE SETTLED, not placeholders: Wyatt played them on 2026-08-14 and said
+     "whirlpools look good". Size and speed are his call — do not re-tune either without asking. */
+  .rimSwirl { transform: scale(1.35); }
+  .rimSwirl img { animation: rimSpin 6s linear infinite; opacity: .95; }   /* no will-change, same reason as .rimFlow above */
+  @keyframes rimSpin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .rimFlow img { animation: none; opacity: .9; }
+    .rimSwirl img { animation: none; }
+  }
+  #rippleHost { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  /* THE STORM WARNING. The forecast chip below the compass goes red when weather is coming, and
+     breathes so the eye is caught by it even mid-glance. Only transform/opacity animate, so it
+     composites and costs no layout (PERF-01's rule for anything that moves on this board). */
+  @keyframes fcPulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: .82; } }
+  .fcStorm { animation: fcPulse 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+  @media (prefers-reduced-motion: reduce) { .fcStorm { animation: none; } }
+  /* THE HIDDEN STORM DIRECTION (Wyatt, 2026-08-06). v2.1 stopped forecasting which way a storm
+     will blow, and the chip has to say that the omission is DELIBERATE. A bare "??" was tried on
+     paper and rejected by Wyatt himself for the right reason: it reads as doubt about whether a
+     storm is coming at all, when the storm is the one certain part. So the certainty stays where it
+     already lived — the red box, the cloud, the breathing — and the doubt goes into an arrow that
+     never settles. A direction glyph that won't stop turning says "the direction" rather than "the
+     forecast", with no new symbol for a player to learn.
+     4s per turn, deliberately slower than the 1.2s pulse it sits inside: two animations at the same
+     tempo would beat against each other, and this one must read as drifting, not spinning.
+     transform-box/transform-origin match .fcStorm exactly — an SVG <g> otherwise rotates about the
+     USER-SPACE origin, which would throw the glyph clean off the chip. */
+  @keyframes fcSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .fcSpin { animation: fcSpin 4s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+  @media (prefers-reduced-motion: reduce) { .fcSpin { animation: none; } }
+  #boardShips { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    width: 100%; height: 100%; overflow: visible; }
   /* the thing that MOVES — carries the same translate() the SVG <g> used to, and the same
      transition the trade-wind sweep retunes (src/ui/board.js setShipGlideMs). */
   #rippleRing { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
@@ -574,22 +1000,25 @@
      r=cell*.4 did. will-change is what keeps each ring on its own compositor layer. */
   .hrip { position: absolute; left: 0; top: 0; border-style: solid; border-color: #fff;
     border-radius: 50%; animation: rippleOut 2.7s linear infinite; will-change: transform, opacity; }
-  /* PERF-01 follow-up (Wyatt, 2026-08-02): "the css rings are smooth, but they look weird on top of
-     the boats" — asking for a bigger smallest ring so there is less overlap. (His note is trimmed
-     rather than quoted whole: the D-29 register gate scans this file for 2nd-person pronouns and
-     cannot tell a quoted message from player-facing copy.)
-     START .55 -> 1.25, and 1.25 is DERIVED, not taste: the ring's base diameter is cell*0.8
-     (r=cell*.4 in the SVG original) and the boat <image> is exactly one cell square (boatSize=cell
-     in drawBoard), so a ring clears the boat's whole image box when 0.8*s >= 1 — i.e. s >= 1.25. At
-     the old .55 the innermost ring was 0.44 of a cell, sitting ENTIRELY INSIDE the boat, which is
-     why it read as painted across it. The 2.7 end and the 2.7s linear timing are untouched, so the
-     rings still finish exactly where they always did; only the innermost one moved out. */
-  @keyframes rippleOut { 0% { transform: scale(1.25); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
+  /* PERF-01 follow-up (Wyatt, 2026-08-02). The start briefly went .55 -> 1.25 to hold the smallest
+     ring clear of the boat; that is REVERTED here, back to the original .55.
+     Widening it was treating a symptom. The innermost ring is 0.44 of a cell and has ALWAYS begun
+     inside the boat — invisible only because the SVG rings drew BEHIND the ships, so the boat hid
+     the small ring's full-opacity first frames. Moving to an HTML overlay put it on top and exposed
+     them, and that is what he actually objected to: the smallest ring appearing at full opacity.
+     Restoring the paint order (#boardShips, below) hides it again for exactly the reason it was
+     always hidden, so his tuned .55 -> 2.7 travel above stands untouched. */
+  @keyframes rippleOut { 0% { transform: scale(.55); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
   /* UI-03: boat emojis linger 2x longer — both the rise and the fade are slower (1.25s → 2.5s,
      and the splash variant 1.9s → 3.8s below). The JS removal timeouts are doubled to match. */
   /* UI-06: sail-destination squares — juicy, bouncing, clearly clickable */
-  .sailCell { opacity: .5; animation: sailBounce 1.15s ease-in-out infinite;
-    transform-box: fill-box; transform-origin: center;
+  /* playtest 20: HTML now, not an SVG rect (see #sailHost for the measurement). The bounce, the
+     hover and the timing are all unchanged — transform-box/transform-origin go because an HTML box
+     already scales about its own centre, and the colour moves from a `fill` attribute to a
+     background. cqw units keep the geometry identical to the 640-unit board. */
+  .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
+    background: #ffc23a; border-radius: 6px; opacity: .5;
+    animation: sailBounce 1.15s ease-in-out infinite;
     transition: opacity .12s ease, filter .12s ease; }
   /* UI-04: a more distinct hover. Was opacity .85 + brightness 1.12 + a 4px glow, which on an
      already-pulsing square read as "slightly brighter" rather than "this one". Now the hovered
@@ -597,13 +1026,36 @@
      instead of one, and the outline is the one that survives on a busy board. Hover cannot use a
      transform: `animation-play-state: paused` freezes the bounce mid-frame and the frozen keyframe
      transform would win over anything set here. */
-  .sailCell:hover { opacity: 1; stroke: #fff; stroke-width: 2;
+  .sailCell:hover { opacity: 1; box-shadow: inset 0 0 0 2px #fff;
     filter: brightness(1.18) drop-shadow(0 0 6px rgba(255,178,40,1)) drop-shadow(0 0 14px rgba(255,178,40,.55));
     animation-play-state: paused; }
+  /* sailBounce is the SAIL SQUARES' own bounce and nothing else's — Wyatt, 2026-08-24, item 23:
+     "don't touch the sail squares." The prompt buttons used to borrow these keyframes (that is
+     what the --pulseLo/--pulseHi custom properties were for); they now pulse from THE ATTENTION
+     VOCABULARY block at the end of this stylesheet instead. The fallback values below ARE the
+     sail squares' animation — a translucent overlay breathing opacity .5 -> .72 with its scale. */
   @keyframes sailBounce {
-    0%, 100% { transform: scale(1); opacity: .5; }
-    50%      { transform: scale(1.11); opacity: .72; } }
+    0%, 100% { transform: scale(1); opacity: var(--pulseLo, .5); }
+    50%      { transform: scale(1.11); opacity: var(--pulseHi, .72); } }
   @media (prefers-reduced-motion: reduce) { .sailCell { animation: none; } }
+  /* playtest 20: a sail square that sits in the TRADE-WIND RIM does not park you there — the
+     current sweeps you to that arc's clockwise end (RULES-V2 line 24). It used to be drawn in the
+     same amber as every other legal square, so the one square that costs you the rest of your turn
+     looked exactly like the safe ones. Now it reads as water, not as a berth: the sea-blue of the
+     current rather than the amber of "land here", plus a dashed edge that says "this does not
+     hold you". Hover keeps the white outline (the cue that survives a busy board) but throws the
+     glow in the current's own colour, so the two square types never look alike at any moment. */
+  .sailCell.sailSwept { background: #59c3d8; outline: 2px dashed rgba(255,255,255,.9); outline-offset: -3px; }
+  .sailCell.sailSwept:hover { box-shadow: inset 0 0 0 2px #fff;
+    filter: brightness(1.18) drop-shadow(0 0 6px rgba(89,195,216,1)) drop-shadow(0 0 14px rgba(89,195,216,.55)); }
+  /* the ride preview: a dotted track from the tapped square to the whirlpool it carries you to,
+     and a ghost of your own hull waiting at the far end. Drawn only on the first tap. */
+  .sweepPath { fill: none; stroke: #59c3d8; stroke-width: 3; stroke-linecap: round;
+    stroke-dasharray: 7 7; opacity: .95; animation: sweepFlow 1s linear infinite; }
+  @keyframes sweepFlow { to { stroke-dashoffset: -28; } }
+  .sweepEnd { fill: rgba(89,195,216,.22); stroke: #59c3d8; stroke-width: 3; }
+  .sweepGhost { opacity: .55; }
+  @media (prefers-reduced-motion: reduce) { .sweepPath { animation: none; } }
   /* UI-02, REWRITTEN 2026-07-31 to Wyatt's spec. The icon now APPEARS above the boat and then goes
      INTO it: it pops into existence in the square north of the ship, scaling up from nothing with a
      bounce, then travels down into the hull, shrinking and fading as it arrives.
@@ -778,6 +1230,19 @@
   /* ---- welcome modal + online lobby ---- */
   #game { padding:14px; transition: filter .45s ease, transform .45s ease; }
   #game.bg-blurred { filter: blur(7px) saturate(1.15) brightness(.97); pointer-events: none; user-select: none; transform: scale(1.015); }
+  /* LOAD-03 (Wyatt's proposal, 2026-08-01): the welcome and lobby screens sit on a STATIC blurred
+     picture instead of a live game that is built, laid out and composited only to be hidden behind
+     a card. Same filter values as .bg-blurred above, so the look does not change.
+     A still is the HONEST thing to show as well as the cheap one: that backdrop was never the
+     player's game. renderDecorativeBoard() and startSinglePlayer() draw two independent random
+     seeds (src/ui/board.js, src/ui/flow.js), so the board behind the card was always a different
+     voyage from the one about to start — Wyatt spotted it from two screenshots.
+     512x512, 71KB, captured from the real board so the art is the game's own. It is upscaled to
+     cover and then blurred 7px, which is exactly the case where low resolution costs nothing
+     visible. scale(1.06) hides the soft edge a blur leaves at the frame. */
+  #welcomeBackdrop { position: fixed; inset: 0; z-index: 0; display: none; pointer-events: none;
+    background: url(assets/welcome-backdrop.jpg) center / cover no-repeat;
+    filter: blur(7px) saturate(1.15) brightness(.97); transform: scale(1.06); }
   .modalOverlay { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center;
     padding: 24px; overflow-y: auto;
     background: radial-gradient(ellipse at 50% 12%, rgba(69,223,166,.22), rgba(41,163,178,.40) 68%); }
@@ -820,15 +1285,155 @@
     /* AUDIO-02 (phase 21): #btnMute joins the same narrow-viewport bump — 21-03 made the timer
        toggle visible in solo for the first time, so this row now carries one more control than
        it ever has at this width. */
-    #btnMute { font-size: clamp(21px,6.75cqw,30px);
-      padding: clamp(7.5px,3cqw,13.5px) clamp(10.5px,3.75cqw,18px);
-      border-radius: clamp(12px,4.5cqw,21px); }
+    /* MUTE-02: halved along with the base rule. The narrow bump exists because this row carries one
+       more control than it used to at this width; the button still steps up here, just from a much
+       smaller base. */
+    #btnMute { font-size: clamp(12px,4.1cqw,14px);
+      padding: clamp(2.5px,1.1cqw,3px) clamp(4px,1.6cqw,5px);
+      border-radius: clamp(6px,2.2cqw,10px); }
     #scLabel { font-size: clamp(10.5px,3cqw,15px); }
     #shotClockNum { font-size: clamp(24px,9cqw,45px); }
     #scUnit { font-size: clamp(10.5px,3.3cqw,18px); }
     #shotClockSub { font-size: clamp(10.5px,3.3cqw,16.5px); }
     #btnPlayAgain { min-width: clamp(105px,39cqw,177px); border-radius: clamp(12px,4.5cqw,21px);
       padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px); font-size: clamp(16.5px,5.25cqw,24px); }
+  }
+  /* ================= THE BAKE-OFF (v2.1, experimental) =================
+     Five mixing bowls inside #actionPanel. Only transform and opacity animate (PERF-01 — the Safari
+     rain-overlay regression is the cautionary tale), and every animation has a reduced-motion
+     opt-out that DOES NOT collapse to zero: the swaps must stay countable or the puzzle stops being
+     hard and starts being arbitrary. */
+  .bko { text-align: left; }
+  .bkoHd { font-weight: 700; font-size: 14px; color: var(--teal); display: flex; align-items: center; gap: 6px; }
+  .bkoHd img { width: 18px; height: 18px; object-fit: contain; }
+  .bkoAtt { margin-left: auto; font-weight: 600; font-size: 12px; opacity: .7; }
+  /* The recipe card. One line per step: ordinal, the ingredient's own icon, the wording. Sits ABOVE
+     the bowls so the thumb never covers it while tapping (Wyatt, 2026-08-06). */
+  .bkoCard { list-style: none; margin: 6px 0 8px; padding: 0; }
+  .bkoCard li { display: flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.5; }
+  .bkoCard li b { width: 12px; color: var(--teal); font-size: 11.5px; }
+  /* 24px, not the 17px first shipped. Measured at 360px: the icon under a lifted bowl renders at
+     38.3px, and matching card-icon to bowl-icon IS the interaction — at 17px the eye was comparing
+     a thumbnail to a picture. Truly identical sizes are not affordable (five 38px rows would add
+     ~105px to a panel that already overruns the board budget), so this closes the gap from 2.25x to
+     1.6x, which is close enough to read as the same object at a glance. */
+  .bkoCard li img { width: 24px; height: 24px; object-fit: contain; flex: 0 0 auto; }
+  .bkoCard li span { overflow: visible; text-overflow: clip; white-space: normal; }
+  /* FLEX, NOT CONTAINER QUERIES. #actionPanel is not a `container-type` element and none of its
+     ancestors is, so a cqw unit here would resolve against the VIEWPORT — 17cqw would be 238px per
+     bowl on a desktop. The five bowls simply divide whatever the row has and cap at 64px, which
+     needs no media query and responds to the panel's real width on every device. */
+  /* HORIZONTAL, and back here on purpose. A vertical column was built and measured — it fitted, at
+     342px against 365px of room — and then reverted (Wyatt, 2026-08-08: "you're right, we don't
+     want to confuse people about which ingredient goes where. Let's keep the layout horizontal").
+     Side-by-side columns put each bowl beside a recipe step, which reads as a pairing; the bowls are
+     about to be shuffled out of exactly that order, so the layout would have been quietly lying
+     during the one moment the player is trying to memorise the truth. A row says nothing about
+     which bowl belongs to which step, which is the honest thing for it to say.
+     13px of top margin is CLEARANCE, not spacing: it is what the dome rises into. The lift is a
+     PERCENTAGE of the bowl and this margin is fixed, so the worst case is the widest bowl —
+     18% of the 64px cap = 11.5px. Raise it if .bkoBowl's max-width ever grows. */
+  .bkoRow { display: flex; flex-direction: row; gap: 6px; justify-content: center; margin: 13px 0 8px; }
+  .bkoBowl { flex: 1 1 0; min-width: 0; max-width: 64px; aspect-ratio: 1;
+    position: relative; padding: 0; border: none; background: none; cursor: pointer;
+    border-radius: 10px; }
+  .bkoBowl.locked { cursor: default; }
+  /* T-27: a bowl in mid-swap paints OVER the ones standing still. Siblings in a flat flex row paint
+     in DOM order, so a crate travelling past a solved bowl went behind it — "this looks messy",
+     and it said the wrong thing: the settled guesses should read as locked in, behind. Applied by
+     bakeoff.js for the length of the swap only. */
+  .bkoBowl.bkoSwapping { z-index: 4; }
+  .bkoIng { position: absolute; inset: 12%; width: 76%; height: 76%; object-fit: contain; z-index: 1; }
+  /* THE GHOST BOWL (Wyatt, 2026-08-08: "Make the 'bowls' appear at 50% opacity behind the
+     ingredients on this screen, so that the helper text (which refers to bowls) makes more sense").
+     The study screen said "Study the bowls" over five bare ingredients on an empty bench — the
+     bowls did not exist yet on screen, so the sentence pointed at nothing.
+     A SEPARATE ELEMENT from .bkoDome, deliberately. The dome has to sit IN FRONT to hide an
+     ingredient when it comes down; this has to sit BEHIND so the ingredient stays crisp and is
+     merely resting in a bowl. Doing both with one node would mean flipping z-index mid-transition,
+     which pops. Same shape and colours, so they read as the same object at two moments. */
+  .bkoBack { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0;
+    border-radius: 7px; background: linear-gradient(160deg, #c98a4b, #9c6231);
+    border: 2px solid #6f4520; opacity: 0; transition: opacity .26s ease; }
+  .bkoRow.bkoStudy .bkoBack { opacity: .5; }
+  /* The dome is drawn, not an asset — there is no bowl art in assets/ and none needs commissioning
+     to ship this. It sits ABOVE the ingredient and slides down over it.
+     HEIGHT IS 100%, NOT 82%. At 82% the dome's top edge sat at 18% while .bkoIng starts at 12%, so
+     the top of every ingredient poked out over a "covered" bowl — a screenshot at 360px showed the
+     cinnamon sticks' tips and the cocoa pod plainly readable through the gap. A puzzle you can
+     partly see the answer to is not the puzzle. */
+  /* WOODEN CRATES, not bowls (Wyatt, 2026-08-08: "Change the 'bowls' into wooden crates (they can
+     simply be brown squares) to retain game consistency"). A crate is what this game already puts
+     ingredients in — the board is covered in them and 📦 is the raid icon — so a teal dome was
+     inventing a second container for the same idea. Square, because that is what he asked for and
+     what reads as a crate at 56px; the slat lines are two flat gradients, no new art. */
+  .bkoDome { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 2;
+    border-radius: 7px;
+    background:
+      linear-gradient(to bottom, transparent 30%, rgba(90,52,22,.55) 30%, rgba(90,52,22,.55) 34%, transparent 34%,
+                                 transparent 64%, rgba(90,52,22,.55) 64%, rgba(90,52,22,.55) 68%, transparent 68%),
+      linear-gradient(160deg, #c98a4b, #9c6231);
+    border: 2px solid #6f4520;
+    /* LIFT AND FADE, rather than the -118% eject first shipped. Ejecting moved the dome a full bowl
+       height upward — straight over the recipe card, which the reveal screenshot showed obscuring
+       steps 4 and 5 exactly when the player most wants to check them. A short rise plus a fade reads
+       as "the bowl comes off" without ever leaving the bench's own row. Still transform+opacity
+       only (PERF-01). */
+    transform: translateY(-18%); opacity: 0;
+    transition: transform .26s ease, opacity .26s ease; }
+  .bkoBowl.covered .bkoDome { transform: translateY(0); opacity: 1; }
+  /* z-index 3 puts the badge IN FRONT of the crate (Wyatt, 2026-08-08: "The numbers are now behind
+     the bowls, put them back in front"). They were not always: the crate lid gained z-index 2 when
+     the ghost crate was added, and .bkoNum had none, so the badges silently fell behind a thing
+     that had just started stacking. A z-index added anywhere obliges every sibling to declare one.
+     var(--teal) is the same blue as the recipe list's step numbers (.bkoCard li b), so the number
+     on a crate and the number on the line it answers are visibly the same number. */
+  .bkoNum { position: absolute; top: -4px; right: -4px; min-width: 19px; height: 19px; z-index: 3;
+    border-radius: 50%; background: var(--teal); color: #fff; font-size: 12px; font-weight: 700;
+    line-height: 19px; text-align: center; opacity: 0; transition: opacity .15s ease;
+    box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+  /* The badge shows for three different reasons and colours itself accordingly: YELLOW while the
+     player is assigning it, green once that step is banked, RED where it went wrong.
+
+     T-31 (Wyatt, 2026-08-26): "the bakeoff correct/incorrect guess colors look a bit strange on my
+     laptop screen -- the pink should be redder -- pink doesn't seem like 'bad'. And instead of
+     using blue to select, use yellow, so it looks more different than the green."
+
+     Both were real. WRONG was #d6337f, a magenta-pink that reads as a highlight rather than a
+     fault. SELECTED had no colour of its own at all: it inherited the base badge's var(--teal),
+     which is the same blue as the recipe list's step numbers — so "I am choosing this one" and
+     "this step is banked" were a blue and a green sitting side by side, the two hardest states to
+     tell apart at a glance. Yellow is now the only warm state on the bench, so a pick cannot be
+     mistaken for a result.
+
+     The sentence above this used to claim the assigning badge was ORANGE. It was teal. Corrected
+     rather than deleted — the false version is why the collision survived (rule 6).
+
+     Yellow takes dark ink, not the white the base badge sets: white on #eaa60f fails contrast at
+     this size, and the number has to be readable to be worth showing. */
+  .bkoBowl.picked .bkoNum, .bkoBowl.locked .bkoNum,
+  .bkoBowl.right .bkoNum, .bkoBowl.wrong .bkoNum { opacity: 1; }
+  .bkoBowl.picked .bkoNum { background: #eaa60f; color: #3a2600; }
+  .bkoBowl.locked .bkoNum, .bkoBowl.right .bkoNum { background: #3aa76d; }
+  .bkoBowl.wrong .bkoNum { background: #c9372c; }
+  /* `covered` is the ONE switch that raises or drops a dome. The right/wrong/locked states used to
+     each re-declare their own lift transform, which meant four places could disagree about where a
+     dome sits — and after the lift changed above they would have quietly reinstated the old eject.
+     The JS removes `covered` for all three, so the base rule already has them uncovered. */
+  .bkoBowl.right { outline: 3px solid #3aa76d; outline-offset: 1px; }
+  .bkoBowl.wrong { outline: 3px solid #c9372c; outline-offset: 1px; }   /* T-31: redder than pink */
+  .bkoBowl.locked { outline: 3px solid #3aa76d; outline-offset: 1px; opacity: .88; }
+  .bkoBowl.flash { animation: bkoFlash .34s ease; }
+  @keyframes bkoFlash { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .bkoHint { font-size: 12px; font-style: italic; opacity: .82; margin-bottom: 6px; }
+  /* .bkoBtns, NOT .apBtns: panel() adds `pendingReveal` whenever it sees .apBtns and index.html
+     hides them until the typewriter resolves. With no .apMsg here that resolves on the next
+     microtask — a one-frame flicker rather than a deadlock — but avoiding the class avoids it. */
+  .bkoBtns { display: flex; }
+  .bkoGo { font-weight: 700; }
+  @media (prefers-reduced-motion: reduce) {
+    .bkoDome, .bkoNum, .bkoBowl, .bkoBack { transition: none; }
+    .bkoBowl.flash { animation: none; outline: 3px solid var(--orange); }
   }
   .modalTitle { line-height: 1.25; }
   .modalLogo { width: 100%; height: auto; border-radius: 14px; }
@@ -837,6 +1442,13 @@
   .nameLabel { display:block; text-align:left; font-size:13px; font-weight:700; color:var(--teal); margin-bottom:18px; }
   .nameLabel input { width:100%; margin-top:5px; font-size:16px; padding:9px 11px; border:1.5px solid var(--line);
     border-radius:9px; font-family:inherit; box-sizing:border-box; }
+  /* item 16 / D-19 — the inline "that name's taken" line, UNDER the box it belongs to. One rule for
+     both mounts (#joinNameWarn, #nameModalWarn), because it is one message in two places, not two
+     messages (rule 8). It sits below the input in DOM order, so it is revealed after the field it is
+     about, per the standing top-to-bottom rule. Not font-weight:700 like the label above it — this
+     is the game telling ye something, not a field name. */
+  .nameWarn { margin-top:7px; font-size:13px; font-weight:600; line-height:1.4; color:#c0392b; }
+  .nameLabel input.nameWarned { border-color:#c0392b; }
   .choiceRow { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   .choiceCard { flex: 1 1 120px; min-width: 118px; display:flex; flex-direction:column; align-items:center; gap:4px;
     padding: 16px 8px 14px; border-radius: 14px; border: 2px solid transparent; font-family: inherit;
@@ -870,8 +1482,13 @@
   .ppHint { font-size:11px; opacity:.6; margin:-6px 0 16px 19px; text-align:left; }
   /* ---- pass & play hand-off overlay: same look as the lobby modal, blurs the board behind it ---- */
   #passOverlay .modalCard { max-width: 380px; }
+  /* WHITE, not the house brown (Wyatt, 2026-08-09: "for some reason it is brown, but i dont know
+     why and its hard to read"). The why: this button carries class `primary`, whose text colour is
+     #8a5a12 for the pale house fill — but passGate() overwrites the background inline with the
+     seat colour, so the brown was left sitting on a saturated teal/pink/green/orange field. The
+     background is ALWAYS a solid seat colour here, so the text is always white. */
   #passHelmBtn { font-size:19px; padding:16px 22px; width:100%; margin-top:6px; border-radius:14px;
-    font-weight:800; letter-spacing:.3px; box-shadow: 0 8px 18px rgba(0,0,0,.25); }
+    font-weight:800; letter-spacing:.3px; box-shadow: 0 8px 18px rgba(0,0,0,.25); color:#fff; }
   /* ---- pass & play in-box recipe lock ---- */
   .checkRecipeBtn { font-size:11.5px; padding:4px 9px; border-radius:7px; font-weight:700; }
   .fbnote { margin-top: 14px; font-size: 12px; text-align:left; color: #8a5a00; background:#fff6d8;
@@ -929,6 +1546,1003 @@
   .recipeList .rn { flex: 1; }
   .recipeList .rc { font-size: 12px; font-weight: 500; font-style: italic; color: #9a6f3e;
     flex: 0 0 auto; padding-left: 8px; }
+
+  /* ================= /4 stage ================= */
+  body.pp4Stage { overflow:hidden; background:#3d7d99; }
+  /* D-31 (2026-08-21) — REPLACES the item-22 stopgap (D-18). Wyatt's ruling: two real desktop
+     sizes, both DERIVED from the window's own geometry, never a breakpoint table. The mechanism
+     item 22 built stays — it is exactly right, just fed a computed number instead of a literal one.
+     Every piece of the stage — #boardwrap, #pp4Ribbon, #pp4Prompt, #pp4Cap, #pp4Pill,
+     #pp4ChatSheet — is `position:fixed` and attaches directly to <body> (buildStage() in stage.js
+     appends every one of them to document.body, never to #game/#layout/#boardwrap), so capping
+     any DESCENDANT's width would leave every fixed sibling still spanning the true viewport. The
+     one ancestor common to all of them is <body> itself.
+     `transform` on an ancestor makes IT the containing block for `position:fixed` descendants
+     (CSS spec) — the only construct that can narrow a `position:fixed` box at all. So capping
+     <body>'s own width AND giving it a transform turns <body> into the "screen" every fixed
+     element on the stage is measured against, with no change to a single one of them — and
+     therefore no change to `stageCappedRect()`/`vwPx()`/`vhPx()`/`fixedOrigin()`/`fixedRect()`/
+     `toScreen()` (util.js/stage.js) either: they already derive everything from body's OWN
+     rendered rect, never from the literal 430px, so widening that rect from a phone-shaped column
+     to a derived square is invisible to all of them — this is the one seam the RED ALERT fix
+     (`.planning/debug/resolved/desktop-radial-fan-offset.md`) already made truthful, and D-31
+     keeps it that way rather than opening a second one.
+     `translateZ(0)` is the least visually eventful transform that still qualifies — it does not
+     rotate, scale or skew anything, so it is a no-op everywhere except establishing the containing
+     block this rule exists for. Scoped to `body.pp4Stage`, so the welcome/lobby screens (before a
+     game exists) are completely untouched, and to `min-width:601px` so a phone never sees this at
+     all — the existing `max-width:600px`/`480px` rules already own that territory and are
+     untouched (D-18/D-31: the phone layout must stay pixel-identical).
+     `--pp4W` is written by `computeStageGeometry()` (stage.js) every resize and every ~600ms while
+     the stage is live, from `innerHeight` (the board's own square side — the ribbon overlays it
+     rather than displacing it, exactly as it already does on phone, so no ribbon-height subtraction
+     belongs in this number) and the captains panel's OWN rendered content (never a typed number).
+     The 430px fallback covers only the one frame before that first measurement lands. */
+  @media (min-width: 601px) {
+    /* THE SEA AROUND THE BOARD (Wyatt, 2026-08-21: "the background color is pretty gruesome — use a
+       blue scattered radial gradient that matches the board better"). Every colour below is SAMPLED
+       FROM assets/board.png rather than picked by eye — the art's own dominant blues, in order of
+       how much of the ocean they cover: #186078 (deep, ~44% of sea pixels), #306090, #307890,
+       #4890a8, with #60a8a8 as the rare highlight. The base is a darkened #186078 so the board
+       still reads as the brightest thing on screen, and the scattered ellipses echo the swirl of
+       the water without competing with it. Desktop only — the phone's board fills the viewport, so
+       there is no surround to paint (D-18/D-31: the phone stays byte-identical). */
+    html {
+      background-color:#0c3442;
+      background-image:
+        radial-gradient(ellipse 55% 45% at 12% 16%, rgba(48,120,144,.50), transparent 70%),
+        radial-gradient(ellipse 48% 40% at 88% 24%, rgba(48,96,144,.45), transparent 72%),
+        radial-gradient(ellipse 62% 46% at 80% 84%, rgba(24,96,120,.55), transparent 74%),
+        radial-gradient(ellipse 50% 38% at 18% 86%, rgba(72,144,168,.28), transparent 70%),
+        radial-gradient(circle at 50% 52%, rgba(96,168,168,.13), transparent 62%);
+      background-attachment:fixed;
+    }
+    /* min-height, not height: <body> holds no in-flow content once the stage is up (every stage
+       element is position:fixed, per the note above), so its own box collapses to near-0 tall
+       without this — and util.js's vwPx()/vhPx() read that same box, so a collapsed body would
+       have handed every camera/layout calculation on the page a ~56px-tall "screen". */
+    body.pp4Stage { max-width:var(--pp4W, 430px); min-height:100vh; margin:0 auto;
+      transform:translateZ(0); --pp4CapGap:14px; }   /* the gap between board and captains column — read by computeStageGeometry() too, so it is written once */
+  }
+  /* D-31 SIDE-BY-SIDE — computeStageGeometry() adds this class only when the window is wide
+     enough, by its own derived threshold (innerWidth >= the board's full-height square side +
+     the captains panel's own measured natural width), to hold both at once. #pp4Cap becomes a
+     fixed sibling positioned OUTSIDE body's own capped box: `left:100%` is relative to body's own
+     containing-block box (CSS spec), which is exactly body's own rect — the same rect
+     stageCappedRect() already reads — so the board-anchored overlays stay completely unaware
+     anything sits beside them (rule 23, ONE DISPLAY PATH: nothing about what draws on the board
+     changed, only where a second, un-board-anchored panel lives). `overflow:visible` on this one
+     variant undoes body's own `overflow:hidden` (present everywhere else purely to suppress page
+     scroll — there is no in-flow content on the stage for it to scroll) so the column is not
+     clipped to body's own narrower box now that a sibling is deliberately placed outside it. */
+  body.pp4Stage.pp4Side { overflow:visible; margin:0 0 0 var(--pp4Left, auto); }   /* the board+column PAIR is centred (computeStageGeometry), not the board alone */
+  /* MOUNT 2 — THE DESKTOP COLUMN (D-50). D-31 built the space beside the board "with room for
+     chat/log later"; the menu is what lands in it first, below the captains card. #pp4Cap and
+     #footerRow are MOVED into this one fixed column (stage.js's mountColumn) in side-by-side only,
+     so the two are a single flex stack with one derived gap between them — no measured `top` for
+     the menu that could drift out of step when a captain row is opened, which is the class of
+     seam this project keeps paying for. The column carries the position #pp4Cap used to carry;
+     the card inside it goes back to being an ordinary block. */
+  #pp4Col { display:none; }
+  body.pp4Stage.pp4Side #pp4Col { display:flex; flex-direction:column; gap:var(--pp4CapGap);
+    position:fixed; left:calc(100% + var(--pp4CapGap)); top:var(--pp4Top, 0px);
+    width:var(--pp4CapColW, 300px); max-height:calc(100vh - var(--pp4Top, 0px) - 16px);
+    /* item 21 (his pick): the column fills the page's height so the menu can bottom-align */
+    height:calc(100vh - var(--pp4Top, 0px) - 16px);
+    overflow-y:auto; z-index:22; }
+  body.pp4Stage.pp4Side #pp4Col > #pp4Cap { position:static; left:auto; right:auto; top:auto;
+    bottom:auto; width:auto; max-width:none; max-height:none; overflow:visible; flex:0 0 auto; }
+  /* item 21 (his pick): bottom-aligned with the page, and NO surface of its own — the sea is the
+     background. The rows go light to stand on it; Leave game keeps its red, in a shade that reads
+     on the dark water. */
+  body.pp4Stage.pp4Side #pp4Col > #footerRow { display:flex; flex:0 0 auto; margin-top:auto;
+    background:none; box-shadow:none; padding:6px 0; }
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList .footerBtn,
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList #btnMute { color:#d9eef2; }
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList .footerBtn:hover,
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList #btnMute:hover { background:rgba(255,255,255,.10); }
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList button.footerLeave { color:#ffb4ae;
+    border-top:1px solid rgba(255,255,255,.16); }
+  body.pp4Stage.pp4Side #footerRow.pp4MenuList #pp4Stamp { color:rgba(255,255,255,.45); }
+  /* nothing is left behind the hamburger on a full desktop, so the hamburger goes with it */
+  body.pp4Stage.pp4Side #pp4Menu { display:none; }
+  body.pp4Stage.pp4Side #pp4Cap {
+    left:calc(100% + var(--pp4CapGap)); right:auto;
+    /* HUG THE CONTENT, do not fill the height. Pinning bottom:0 made the card a full-height empty
+       cream tower (935px of box behind 148px of rows) — Wyatt, 2026-08-21: "look at this screenshot."
+       top + height:auto sizes it to its four rows; the max-height/scroll is only a backstop for an
+       impossibly tall roster, never reached at four captains. */
+    top:var(--pp4Top, 0px); bottom:auto; height:auto;
+    max-height:calc(100vh - var(--pp4Top, 0px) - 16px); overflow-y:auto;
+    width:var(--pp4CapColW, 300px); max-width:none;
+    border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.28);
+  }
+  /* D-31 REOPENED (2026-08-21): on DESKTOP the captain name grows to fit and never scrolls — "avy
+     Sco" / "ough Hook" (a 2px marquee overflow) was the first thing Wyatt saw. The name marquee
+     exists for the PHONE, where an 18-char name (MAX_NAME_LEN) genuinely cannot fit the 106px
+     column; on desktop the card is measured wide enough for the longest name, so the name track
+     grows to its content and `overflow:visible` lets a sub-pixel rounding overhang show rather than
+     trip the scroll. refreshNameMarquees() (util.js) skips the marquee entirely above 600px to
+     match. Scoped to `min-width:601px` — index.html's own desktop boundary — so the phone is
+     byte-identical (D-18/D-31). */
+  @media (min-width: 601px) {
+    body.pp4Stage .prowTop { grid-template-columns:minmax(106px, max-content) 40px 1fr; }
+    /* overflow:visible + a real gap to the coins: the name track is max-content, and a sub-pixel
+       rounding left the glyph box ~2px wider than the track (Dough Hook "83px in 81px"), so the
+       last letter kissed the coin. padding-right makes the box always exceed the text AND reads as
+       a deliberate gap. box-sizing:border-box so the padding is inside the measured column. */
+    body.pp4Stage .player-row .pname { overflow:visible; padding-right:6px; box-sizing:border-box; }
+  }
+  body.pp4Stage #layout, body.pp4Stage #left { display:block; }
+  /* THE BOARD STRIP CLIPS ITS OWN LAYERS — playtest 22 (Wyatt: "the trade winds are not occluded
+     by the board area"), a chevron of the current sitting on the wind/forecast pill above the sea.
+     The two SVG layers clip themselves (an <svg> viewport does), but the three camera-carrying HTML
+     overlays do not: stage.js composes the camera into them as `scale(640/w) translate(-vy…)` with
+     transform-origin 0 0, so everything ABOVE the camera's top edge renders at a negative offset —
+     outside #boardwrap, over the ribbon, with nothing to stop it. One clip on the strip covers all
+     three (#rimHost, #sailHost, #rippleHost) rather than three rules that can drift apart; it must
+     live on the untransformed ancestor, because overflow on a layer clips in that layer's own space
+     and is then scaled up with it. Stage only: without the camera transform the overlays are
+     inset:0 and cannot overflow, and the classic layout's chat bubbles ride over the board edge on
+     purpose. #pp4Prompt and the narration bubbles are position:fixed on <body>, so the clip cannot
+     reach them. */
+  /* ITEM 22 (D-18): `inset:0` alone already stretches a position:fixed box to fill its containing
+     block with no explicit width/height needed — the explicit `100vw`/`100vh` this used to carry
+     did the same thing whenever body has no transformed ancestor (every case before this stopgap),
+     but pins the box to the TRUE viewport regardless of ancestors, exactly what would have made
+     this ignore the phone-shaped cap on body.pp4Stage above. Letting inset:0 do the sizing means
+     this box automatically follows whichever containing block is actually in force — the viewport
+     normally, body's own capped column once the desktop stopgap's transform applies. */
+  body.pp4Stage #boardwrap { position:fixed; inset:0; max-width:none;
+    margin:0; border-radius:0; z-index:5; overflow:hidden; }
+  body.pp4Stage #board { width:100%; height:100%; }
+  /* D-52, AND IT IS THE THING HIS SCREENSHOT SHOWED THAT HE DID NOT FLAG (rule 22): in the
+     STACKED branch the captains card sat FLUSH against the bottom of the window, and was 84px
+     taller than its own rows — measured at 820×1180, box 315px behind 231px of content.
+     The mechanism, measured rather than guessed: camFrame() writes `top` inline every frame so the
+     card RISES TO MEET the board, and the base rule below pins `bottom:0`. A position:fixed box
+     with two explicit insets and `height:auto` does not ask its content how tall it is — per the
+     CSS spec it stretches to fill the gap. That is right on a phone, where the letterboxed board
+     leaves a void the card's own height; on a tall tablet window it is a slab of dead cream with
+     no air under it. (measureCapNaturalHeight's own comment records this exact spec behaviour
+     biting from the other direction — it is the same trap, one branch over.)
+     Releasing `bottom` lets height:auto mean what it says, and the card is then spaced by the SAME
+     --pp4CapGap the side-by-side column beside the board already uses — so the two desktop
+     branches draw the same component with the same air around it (rule 8), instead of one floating
+     card and one wall-to-wall slab. computeStageGeometry() reserves that gap when it derives the
+     board's size, so the air is never squeezed to nothing.
+     Desktop only. The phone keeps the full-bleed card pinned to the bottom edge, byte-identical
+     (D-18/D-31). */
+  @media (min-width: 601px) {
+    body.pp4Stage:not(.pp4Side) #pp4Cap {
+      left:var(--pp4CapGap); right:var(--pp4CapGap); bottom:auto; height:auto;
+      border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.28); }
+  }
+  #pp4Cap { position:fixed; left:0; right:0; bottom:0; z-index:22; background:rgba(255,253,242,.97);
+    border-radius:14px 14px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,.28);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom)); overflow:auto; display:none; }
+  body.pp4Stage #pp4Cap { display:block; }
+  body.pp4Stage #captainsPanel { display:block; margin:0; }
+  /* THE RESTING PROMPT IS OPAQUE. `.96` was never a look anybody chose — it arrived as a side
+     effect of building hold-to-peek (78778e1, 2026-08-11: "Base card opacity drops to .96",
+     one clause in a commit about the gesture) and it is the reason the recipe picker is
+     see-through: at 4% the CAPTAINS card behind the sheet reads clean through the cards, so
+     "CAPTAINS", "Davy Scones" and "Peg Leg Meg" ghost under the recipe titles. Six judge findings
+     on the 2026-08-21 phone legs (solo-phone-004/005, passplay-phone-004/005/007/008), all this
+     one property. The peek fade is untouched — it has its own value below and its own transition,
+     which is where the gesture's whole effect belongs. The radial fan never used this: it already
+     sets `opacity:1` on itself, so nothing about the circles or the ask pill changes here. */
+  #pp4Prompt { position:fixed; z-index:30; display:none; opacity:1; transition:opacity .16s; }
+  /* playtest 15 item 4 (CONSISTENCY): hold-the-sea fades EVERY floating box the same way —
+     prompts in every style, narration bubbles, the stay-put confirm, and (D-07, 02-05) the chat
+     flash. The two sanctioned exceptions (Wyatt's pick): centre-stage intros and the flip ceremony
+     stay solid. */
+  body.pp4Peek #pp4Prompt,
+  body.pp4Peek .pp4Bub,
+  body.pp4Peek #pp4ChatFlash,
+  /* item 8 (D-14, CLAUDE.md rule 8): the end-of-voyage card is a floating box like every other one
+     here, so a hold on the sea fades it exactly the same way — it is NOT one of the two sanctioned
+     exceptions (centre-stage intros, the flip veil), and this is in addition to, not instead of,
+     its own pull-to-park gesture below. */
+  body.pp4Peek #statsWrap { opacity:.13; pointer-events:none; }
+  body.pp4Peek #pp4Prompt.pp4Center { opacity:1; pointer-events:auto; }
+  #pp4Prompt.centered { left:50% !important; top:44% !important; transform:translate(-50%,-50%);
+    width:min(348px, 94vw) !important; max-height:78vh; overflow:auto; }
+  #pp4Prompt #actionPanel { margin:0; box-shadow:0 10px 30px rgba(0,0,0,.35); border-radius:13px; }
+  /* N4 radial: the menu blooms around the ship as circular choices */
+  /* ITEM 22 (D-18): 100%, not 100vh — see the #boardwrap note above; a percentage height on a
+     position:fixed box follows whatever containing block is actually in force (body's capped
+     column once item 22's desktop stopgap applies, the true viewport everywhere else). */
+  #pp4Prompt.radial { height:100%; pointer-events:none; opacity:1; }
+  #pp4Prompt.radial #actionPanel { background:none; border:none; box-shadow:none; padding:0; margin:0; }
+  /* playtest 10: sub and back survive the radial — the sub as a small note under the pill (it
+     explains greyed circles), the back as its own little circle beside the pill */
+  /* playtest 21 item 7: in the radial prompt the slider becomes a floating bar under the ask pill
+     — the one place a quantity control can sit without joining the arc, which is now actions only.
+     pointer-events:auto because .radial makes the panel itself inert. */
+  #pp4Prompt.radial .apSliderWrap { display:flex; position:fixed; pointer-events:auto;
+    background:rgba(255,253,242,.96); border:2px solid #177; border-radius:999px;
+    padding:6px 14px; box-shadow:0 5px 16px rgba(0,0,0,.3); margin:0; width:max-content;
+    max-width:min(300px,84vw); }
+  #pp4Prompt.radial .apSlider { width:170px; }
+  /* RED ALERT FIX (2026-08-21, D-18 follow-up): 80%, not 80vw — this is the exact element behind
+     Wyatt's report ("the tool top 'No one's holding card to trade for yet' is floating nowhere near
+     its button"). Its LEFT/TOP were the coordinate-offset bug (stage.js's toScreen(), see
+     util.js's fixedOrigin() note); this is the other half of the same bug class item 22 (94adceb)
+     already fixed for #boardwrap/.radial/.pp4Center — a raw vw unit ignores the capped column
+     entirely. `.apSub` is `position:fixed` right here in this rule, so once the stopgap is active
+     its containing block is body and `%` follows the capped column the same way `100%` already does
+     elsewhere; on phone (no transformed ancestor) `%` resolves against the true viewport, same as
+     `vw` did — no change there (D-18). */
+  #pp4Prompt.radial .apSub { display:block; position:fixed; background:rgba(255,253,242,.9);
+    border-radius:9px; padding:4px 10px; font-size:11px; font-style:italic; color:#4a3223;
+    width:max-content; max-width:80%; box-shadow:0 4px 12px rgba(0,0,0,.25); margin:0; }
+  #pp4Prompt.radial .apBack { display:flex; position:fixed; width:38px; height:38px;
+    border-radius:50%; align-items:center; justify-content:center; pointer-events:auto;
+    background:#fffdf2; border:2.5px solid #177; color:#0e3b3b; font-size:20px; padding:0;
+    box-shadow:0 5px 14px rgba(0,0,0,.3); }
+  /* RED ALERT FIX (2026-08-21, D-18 follow-up): 88%, not 88vw — found while verifying the toScreen()
+     fix (util.js's fixedOrigin() note has the full account), on a battle-call prompt ("Call Flaky
+     Jack" / "Call Crustbeard") whose ask pill rendered 562px wide on a 430px-capped column, spilling
+     54% of its own width past the column's right edge. Same bug item 22 (94adceb) already found and
+     fixed for #boardwrap/.radial/.pp4Center's 100vw/100vh — this ONE vw sizing on .apMsg was missed
+     by that sweep. `msg` is made position:fixed by JS a few lines below (stage.js), so once item
+     22's stopgap is active its containing block is body — `%` follows that capped column exactly
+     the way `100%` already does for the other three; on phone (no transformed ancestor) `%` resolves
+     against the true viewport, same as `vw` did, so this is a no-op there (D-18: byte-identical). */
+  #pp4Prompt.radial .apMsg { background:rgba(255,253,242,.97); border:2px solid #177;
+    border-radius:11px; padding:7px 12px; font-size:13px; width:max-content; max-width:88%;
+    margin:0; box-shadow:0 5px 16px rgba(0,0,0,.3); }
+  /* The panel reveals .apBtns only after the (hidden) message types. The radial bloom used to
+     force itself visible unconditionally — "radial IS the reveal" — which meant the ONE prompt
+     style that positions itself against the moving board was also the one style that ignored the
+     gate telling it when the board had stopped moving.
+     playtest 21 item 2 (Wyatt: "only appear the action prompt fan buttons AFTER the boat has
+     finished moving — currently, they appear before it has finished and they recalculate position
+     and glitch out in the final few ms of travel, which looks bad"). The circles are placed
+     through the camera, and the camera is tweening across to follow the ship for the whole of
+     that travel, so every frame moves them.
+     The bloom still IS the reveal — it just waits for pendingReveal to lift, which now means both
+     "the ask has finished typing" and "the boat has arrived" (src/ui/panel.js, and stageSettled()
+     in src/ui/stage.js). Both arms are stated explicitly rather than relying on the base rule's
+     specificity, because the whole bug was an !important quietly winning an argument. */
+  #pp4Prompt.radial #actionPanel:not(.pendingReveal) .apBtns,
+  #pp4Prompt.radial #actionPanel:not(.pendingReveal) .apBtn { visibility:visible !important; }
+  #pp4Prompt.radial #actionPanel.pendingReveal .apBtns,
+  #pp4Prompt.radial #actionPanel.pendingReveal .apSliderWrap,
+  #pp4Prompt.radial #actionPanel.pendingReveal .apBtn { visibility:hidden !important; }
+  #pp4Prompt.radial .apBtn { pointer-events:auto; width:66px; height:66px; border-radius:50%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    padding:4px; font-size:10px; font-weight:800; line-height:1.05; text-align:center;
+    background:#fffdf2; border:2.5px solid #177; color:#0e3b3b;
+    box-shadow:0 6px 18px rgba(0,0,0,.35); }
+  /* playtest 12 item 8: circle contents sized to FIT the circle */
+  #pp4Prompt.radial .apBtn { font-size:9.5px; line-height:1; gap:0; padding:5px; }
+  #pp4Prompt.radial .apBtn img { width:17px; height:17px; }
+  #pp4Prompt.radial .apBtn.apDisabled { filter:grayscale(.7); opacity:.55; }
+  /* ITEM 23, THE THIRD RULING (Wyatt, 2026-08-24, and the one that ends the series): the prompt
+     buttons' attention animation is assigned in THE ATTENTION VOCABULARY block at the end of this
+     stylesheet, and ONLY there. The history that earned that block, kept short: D-32 gave the
+     radial fan a scale-only pulse; item 13 swapped it for a scale+ring hybrid; both were
+     measured RUNNING and still read as dead — scale 1.09 of a 66px circle with a 28%-alpha ring
+     is invisible over the open sea (and visible over dock sand, which is why "the pulsing DOES
+     happen only during docks" — same animation, different background). Meanwhile the orange ring
+     itself existed as THREE private copies (flipglow, ahoyglow, pp4StagePulse's shadow half).
+     His ruling: glow on stage, grow over board, defined once. The graveyard note that survives
+     from the old rules: the recipe cards must NEVER pulse (Group G fault 4 — a 276px card scaling
+     1.11 sliced the hint line above it and collided the two cards by 34px at peak). */
+  /* playtest 12 item 8: hold-the-sea peeks EVERY prompt style, radial included — one gesture,
+     one behaviour (this replaces the old radial exemption) */
+  body.pp4Stage #footerRow { display:none; }
+  /* ONE LIST, ONE LOOK, TWO MOUNTS (D-50, rule 23). Wyatt, 2026-08-21: "in desktop, move the menu
+     options out of the hamburger menu and put them neatly below the captain's box."
+     `pp4MenuList` is stamped on #footerRow once, in buildStage, so the card look belongs to the
+     LIST rather than to either of its homes — change it here and the phone sheet and the desktop
+     column change together. There is no second list of items anywhere and there must never be:
+     stage.js MOVES this node between mounts. Only `display` and POSITION are per-mount, below.
+     (playtest 12 item 6: one clean column, uniform widths.) */
+  /* ITEM 21, HIS PICK (2026-08-24, from three rendered variants): the QUIET LIST — plain rows,
+     left-aligned, no per-button pill borders — bottom-aligned with the page, and on desktop "no
+     background — just use the page as its background". ONE structure for both mounts (rows below);
+     only the SURFACE is per-mount, because the mounts stand on different ground: the ☰ sheet
+     floats OVER the board and keeps its cream card, the desktop column sits on the open sea and
+     wears nothing (his words). The desktop colours live in the pp4Side block further down. */
+  #footerRow.pp4MenuList { flex-direction:column; align-items:stretch; gap:2px;
+    background:#fffdf2; border-radius:14px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.4); }
+  #footerRow.pp4MenuList .footerBtn { width:100%; box-sizing:border-box; margin:0;
+    border:none; background:none; box-shadow:none; border-radius:8px;
+    display:flex; align-items:center; justify-content:flex-start; gap:10px; text-align:left;
+    padding:8px 14px; font-size:14px; font-weight:500; color:#2c4a55; }
+  #footerRow.pp4MenuList .footerBtn:hover { background:rgba(42,105,125,.10); }
+  /* the destructive action stands apart, in the standard way */
+  #footerRow.pp4MenuList button.footerLeave { color:#a8352e; margin-top:6px;
+    border-top:1px solid rgba(44,74,85,.18); border-radius:0 0 8px 8px; }
+  #footerRow.pp4MenuList #pp4Stamp { order:99; }
+  /* MOUNT 1 — the ☰ sheet, over the board. Phone and the stacked/tablet branch (D-18/D-31: the
+     phone stays exactly as it is; the tablet has no column to put a menu in). */
+  body.pp4Foot #footerRow { display:flex; position:fixed; left:12px; right:12px; top:64px; z-index:60; }
+  /* D-06 (02-05): chat's slide-up sheet. #chatPanel (Scuttlebutt — #chatLog/#chatForm/#chatInput,
+     unchanged ids) is re-parented into this container by stage.js's buildStage(), the same
+     "build the container here, move the existing node into it" pattern buildStage already uses
+     for #pp4Cap/#pp4Prompt below. #chatPanel's OWN `.panel` styling (index.html:174 — background,
+     border, shadow, padding) already supplies the card look, so this sheet only needs to be the
+     fixed, bottom-anchored, closeable FRAME — no second set of card values to invent.
+     No slide-in transition: body.pp4Foot's own toggle (the ☰ menu, just above) is this codebase's
+     only other toggleable sheet and it has none either. Matching it is the smallest honest version
+     D-06 asks for; inventing a hand-picked transition duration nothing else uses would be exactly
+     the "constant nobody chose" this project keeps paying for (CLAUDE.md §2). */
+  #pp4ChatSheet { position:fixed; left:12px; right:12px; bottom:0; z-index:61; display:none;
+    max-height:70vh; overflow:auto; padding-bottom:env(safe-area-inset-bottom); }
+  body.pp4Chat #pp4ChatSheet { display:block; }
+  /* SEATBELT, not a repair — Wyatt, 2026-08-19: "it looks like something is hovering behind the top
+     ribbon", which was the Scuttlebutt heading stranded at the top of the page. It did not reproduce
+     in Chrome across three driven runs (host, guest and solo, per-frame recorded: zero frames with a
+     visible box), and a reload on his side cleared it — the signature of Safari serving a CACHED
+     index.html against a FRESH stage.js, so the sheet's rules above did not exist while the script
+     that re-parents into the sheet did.
+
+     Why the rule earns its place anyway: `body.pp4Stage` never hides the classic layout wholesale —
+     #layout stays an ordinary padded block and every classic node is dealt with individually, most
+     by being physically MOVED OUT of it in buildStage(). So any classic node left behind in #layout
+     renders at the top of the page, under the fixed ribbon. That was measured by forcing it: put
+     #chatPanel back in #layout with display:'' and the heading appears at (41,39) — his screenshot.
+     There is also a real 80ms window on a guest between beginGame()'s display write and the
+     re-parent, where the panel genuinely is visible in #layout.
+
+     Once buildStage() moves the panel, this selector stops matching, so the sheet opens and closes
+     exactly as before. Scoped to body.pp4Stage, so the classic layout is untouched. */
+  body.pp4Stage #layout > #chatPanel { display:none; }
+  body.pp4Stage #chatBubbles { display:none; }
+  body.pp4Stage .fcChip, body.pp4Stage .ppHud { display:none; }  /* the pill is the instrument now */
+  body.pp4Stage #controlsRow { display:none; }  /* coin + clock left the sheet: ceremony + menu toggle */  /* sea-creature bubbles don't track the camera yet */
+  #pp4Ribbon { position:fixed; top:0; left:0; right:0; z-index:20; display:flex; align-items:center;
+    gap:10px; padding:9px 12px calc(7px + env(safe-area-inset-top)); color:#fff; font-weight:800;
+    background:linear-gradient(180deg,rgba(10,40,48,.88),rgba(10,40,48,.5) 75%,transparent);
+    display:none; }
+  body.pp4Stage #pp4Ribbon { display:flex; }
+  #pp4Round { font-size:13px; letter-spacing:1px; }
+  .pp4Boats { display:flex; gap:5px; align-items:center; }
+  .pp4Boat { width:24px; height:24px; border-radius:50%; background:rgba(255,255,255,.35); padding:2px; opacity:.7; }
+  .pp4Boat.on { background:rgba(255,255,255,.95); opacity:1; outline:2px solid #f5a623; }
+  #pp4Menu { margin-left:auto; font-size:17px; padding:3px 10px; background:rgba(255,255,255,.16);
+    border:none; border-radius:8px; color:#fff; }
+  /* playtest 12 item 7: clear air between the captain boats and the wind pill */
+  #pp4Pill { position:fixed; top:calc(52px + env(safe-area-inset-top)); left:50%; transform:translateX(-50%);
+    z-index:19; background:rgba(9,42,52,.62); color:#fff; font-weight:800; font-size:12.5px;
+    letter-spacing:.4px; padding:5px 12px; border-radius:9px; white-space:nowrap; pointer-events:none;
+    display:none; }
+  body.pp4Stage #pp4Pill { display:block; }
+  /* THE WIND RIDES IN THE HEADER ROW WHEREVER THERE IS ROOM FOR IT (Wyatt, 2026-08-21: "the wind
+     forecast should move up into the header row whenever there's space. on mobile there isn't — but
+     on desktop and tablet, there is."). The ribbon carries DAY + the captain boats on the left and
+     the ☰ on the right; its middle is empty at every width above the phone breakpoint, which is
+     exactly the space he means. The pill stays `position:fixed` and centred — it simply sits ON the
+     ribbon's row instead of below it, so nothing about how it is built or updated changes.
+     It also gives the board back the ~45px band the pill used to occupy: camFrame()'s topBandPx()
+     takes the LOWER of the ribbon's bottom and the pill's, so a pill inside the ribbon stops
+     pushing the board down at all — the square simply grows. No code needed for that; it falls out
+     of the one measurement both the camera and computeStageGeometry() already share. */
+  /* D-47 + D-52 ARE ONE FAULT, AND THIS IS THE STRUCTURAL HALF OF THE FIX (2026-08-22).
+     Design note 2 moved the pill visually INTO the header row and left it `position:fixed;
+     left:50%` — drawn in the row but not part of it. Two symptoms followed, and Wyatt reported
+     both separately: the ribbon's own `linear-gradient` washed over the pill (D-47: at z-index 19
+     under the ribbon's 40 it was behind the paint), and the ribbon's flex children, which cannot
+     know the pill exists, walked straight into it — his Safari screenshot of a tall stacked window
+     reads `WI[⏩]NOW: S↓ · FORECAST: ↗`, the fast-forward button eating the "ND" of WIND (D-52).
+     A z-index bump cures the gradient and leaves the ⏩ on top of it; only being a real child of
+     the row cures both, and the whole collision class with them, because flex spacing and
+     document paint order then come free.
+     stage.js's pillTick() re-parents the node on exactly this boundary, read through
+     matchMedia("(min-width:601px)") rather than typed a second time — one decision, read twice.
+     THE PHONE KEEPS ITS OWN FIXED PILL BELOW THE RIBBON (D-18/D-31: the phone stays as it is).
+     `margin:0 auto` on a flex item absorbs the row's free space on both sides, so the pill centres
+     itself between the left group (DAY + boats) and the right group (clock, ⏩, 💬, ☰) and can
+     never reach either. #pp4Menu's own `margin-left:auto` has to stand down while the pill is
+     there, or three auto margins share the space three ways and the pill sits left of centre. */
+  #pp4Ribbon > #pp4Pill { position:static; top:auto; left:auto; transform:none; z-index:auto;
+    margin:0 auto; background:rgba(9,42,52,.34); max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  #pp4Ribbon > #pp4Pill ~ #pp4Menu { margin-left:0; }
+  /* THE MENU IS A CARD, AND NOTHING SHOULD BE SAWN IN HALF BY IT. Found 2026-08-20 while
+     screenshotting the ☰ menu to prove the mute button had come back: the wind pill sits at the top
+     of the stage on z-index 19, the menu card lands over it, and "WIND NOW: E→ • FORECAST: N↑" was
+     left cut clean through the middle by the card's top edge — reading as a rendering fault rather
+     than a thing behind another thing.
+     Faded rather than hidden, matching the hold-the-sea family (`body.pp4Peek` above), which is the
+     one already-decided answer for "a floating box while something else owns the screen". */
+  #pp4Pill { transition:opacity .16s; }
+  body.pp4Foot #pp4Pill { opacity:0; }
+  .pp4Spin { display:inline-block; animation:pp4spin 4s linear infinite; }
+  @keyframes pp4spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+  @media (prefers-reduced-motion: reduce){ .pp4Spin{ animation:none; opacity:.6; } }
+  /* D-07: the incoming-message flash under the ribbon. Card look copied from .pp4Bub's own
+     values below (background/border/radius/shadow/font/line-height/weight/transition) — but NOT
+     its class: stage.js's own `document.querySelector(".pp4Bub")` (the radial prompt's own-line
+     de-dupe check) specifically means the LIVE NARRATION bubble, and a second element sharing that
+     class would be a real hazard there, not just cosmetic duplication.
+     position:fixed (not .pp4Bub's own position:absolute-inside-#pp4Fx), because the flash is
+     ribbon-anchored, not board-anchored (docs/BOARD-RENDERING.md) — it does not belong in the
+     board-clipped/camera-mapped host and does not join CAM_HTML_LAYERS (stage.js) either, same as
+     #pp4Pill and #pp4Ribbon just above, which are fixed-on-body for the identical reason.
+     Top anchor is .pp4Bub.ambient's own 74px-under-the-ribbon offset (below), reused because it is
+     already the value this codebase picked to clear #pp4Pill's OWN 52px band — reusing #pp4Pill's
+     anchor instead would sit the flash directly on top of the wind pill, which is on screen for
+     nearly the whole game. */
+  #pp4ChatFlash { position:fixed; z-index:26; left:50%; transform:translateX(-50%);
+    top:calc(74px + env(safe-area-inset-top)); max-width:min(320px,86vw);
+    background:rgba(9,42,52,.87); color:#fff; border:2px solid rgba(255,255,255,.25);
+    border-radius:13px; padding:9px 12px; box-shadow:0 8px 26px rgba(0,0,0,.33); font-size:14px;
+    line-height:1.45; font-weight:600; transition:opacity .35s; cursor:pointer; }
+  #pp4ChatFlash.out { opacity:0; }
+
+  /* #pp4ClockRow's rule was HERE and is deleted with the row itself (D-51, Wyatt 2026-08-21:
+     "remove the 'Turn clock: OFF – no rush' button in the menu, it's already visible always in the
+     header row"). Two controls for one state is the consistency fault rule 8 exists to catch. The
+     sound row below inherited its box values from that rule by hand-copy, so it now carries them
+     on its own — the same values, not new ones, and now with only one place to change them. */
+  /* THE SOUND CONTROL READS LIKE ITS NEIGHBOURS. Wyatt's pick, 2026-08-20: in the ☰ menu it was a
+     bare 34×28 icon floating above a stack of full-width rows, so the one control in that list that
+     did not look like a control was the only one you might actually want mid-voyage.
+
+     It used to share its box values with #pp4ClockRow, the menu's other live toggle, so the two
+     read as a pair. D-51 removed that row (the header chip is the one control now), so the sound
+     row is the menu's only toggle and owns these values outright. They are unchanged; what has
+     gone is the second copy of them.
+
+     THE LABEL IS CSS, NOT innerHTML, AND THAT IS THE POINT. setClockUI() (src/ui/panel.js) already
+     writes the megaphone pair into this button twice a second and already writes aria-pressed to
+     carry the mute state. Adding a second writer for the words would be two sources for one fact —
+     they would drift the first time someone changed one. `content` keyed off aria-pressed means the
+     words are DERIVED from the state the button already publishes, so they cannot disagree with the
+     icon beside them.
+
+     ::after is the tap-target pseudo-element (see #btnMute::after above) — a 44×44 invisible hit
+     area that exists because the icon button is ~33px. A full-width row is already far past 44px in
+     both directions, so here it is repurposed rather than fought with: position:static returns it
+     to the flow as the label. Nothing outside the open menu is affected. */
+  #footerRow.pp4MenuList #muteSlot { display:block !important; width:100%; margin:0; }
+  /* item 21: the sound row wears the same quiet-list row as its neighbours — one look, one list */
+  #footerRow.pp4MenuList #btnMute { display:flex; align-items:center; justify-content:flex-start; gap:10px;
+    width:100%; box-sizing:border-box; font-family:inherit; font-size:14px; font-weight:500;
+    padding:8px 14px; border:none; border-radius:8px; background:none; box-shadow:none;
+    color:#2c4a55; line-height:1.2; }
+  #footerRow.pp4MenuList #btnMute:hover { background:rgba(42,105,125,.10); filter:none; }
+  #footerRow.pp4MenuList #btnMute img { width:20px; height:20px; }
+  /* @copy misc.stage.soundrow — plain register, matching "Turn clock: ON — 30s a turn" beside it.
+     The ☰ menu speaks to the person holding the device, not to a captain. */
+  #footerRow.pp4MenuList #btnMute::after { content:"Sound: ON"; position:static; width:auto;
+    height:auto; transform:none; font:inherit; }
+  #footerRow.pp4MenuList #btnMute[aria-pressed="true"]::after { content:"Sound: OFF"; }
+  body.pp4Stage #actionPanel { margin:0; }
+
+  /* playtest 22 item 7: the clipped host every board-anchored floater lives in. It spans the
+     board's visible window — below the wind ribbon, above the captains box — and stage.js resizes
+     it from boardBand() on the same tick the camera moves. overflow:hidden is the whole point: a
+     bubble for a ship that has been zoomed off the bottom of the board is now CUT by the board's
+     edge instead of painting over the captains box. Children are pointer-events:auto individually
+     if they ever need taps; the host itself must never eat one. */
+  #pp4Fx { position:fixed; left:0; right:0; overflow:hidden; pointer-events:none; z-index:21; }
+  #pp4Fx > * { pointer-events:auto; }
+  .pp4Bub { position:absolute; z-index:26; background:#fffdf2; border:2px solid #177; border-radius:13px;
+    padding:9px 12px; box-shadow:0 8px 26px rgba(0,0,0,.33); font-size:14px; line-height:1.45;
+    font-weight:600; color:#1f2d33; transition:opacity .35s; }
+  .pp4Bub.ambient { left:50%; transform:translateX(-50%); top:calc(74px + env(safe-area-inset-top));
+    max-width:min(320px,86vw); background:rgba(9,42,52,.87); color:#fff; border-color:rgba(255,255,255,.25); }
+  .pp4Bub.out { opacity:0; }
+  /* item 4: below its ship, the tail points UP at the boat it belongs to */
+  .pp4Bub.below .pp4Tail { top:-9px; bottom:auto; transform:rotate(225deg); }   /* 45 + 180: the base tail is already rotated 45, so a bare 180 would square it off */
+  .pp4Tail { position:absolute; bottom:-9px; width:15px; height:15px; background:#fffdf2;
+    border-right:2px solid; border-bottom:2px solid; transform:rotate(45deg); }
+  /* --pp4CerGapMax is the RESTING air between the ceremony's four rows, and it is a variable
+     because stage.js's cerBandTick() has to read the ceiling rather than carry a second copy of it:
+     on a phone the column is taller than the board band, so the gap closes up to whatever fits and
+     saturates back to this value the moment there is room (Group G fault 1). */
+  #pp4Veil { position:fixed; inset:0; z-index:44; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; --pp4CerGapMax:26px; gap:var(--pp4CerGapMax);
+    background:radial-gradient(circle at 50% 44%,rgba(20,50,60,.6),rgba(4,16,22,.92)); }
+  .pp4CerTop { color:#ffd76b; font-weight:800; font-size:15px; letter-spacing:3px; text-align:center; }
+  .pp4CerSub { color:#e8f4ee; font-weight:700; font-style:italic; font-size:14px; text-align:center;
+    transition:opacity .3s; }
+  #pp4Veil.resolving .pp4CerSub { opacity:0; }
+  #pp4CerSlot #flipPanel { margin:0 !important; transform:scale(2.2); transform-origin:center;
+    filter:drop-shadow(0 16px 34px rgba(0,0,0,.55)); }
+  #pp4CerSlot { padding:56px 0; }
+  #pp4CerSlot #shotClockPanel, #pp4CerSlot #muteSlot, #pp4CerSlot #btnMute { display:none !important; }
+  /* playtest 10 item 5: the old prompt card never shows through the veil — its words move onto it */
+  body.pp4Cer #pp4Prompt { visibility:hidden; }
+  /* ITEM 7 (Wyatt, 2026-08-23c): "shouldn't all narration boxes only appear after the veil
+     disappears?" — yes. A bubble born (or standing) while the flip-ceremony veil is up used to sit
+     UNDER it, readable in slivers around the coin — the "things happening behind the stage"
+     feeling he named. Hidden by the same body class that hides the prompt, so every bubble appears
+     the frame the veil drops; their reading clocks already wait for that same moment (stageFlash's
+     veil-deferred hold), so nothing is ever retired unseen. */
+  body.pp4Cer #pp4Fx .pp4Bub { visibility:hidden; }
+  .pp4CerTitle { color:#ffe9b0; font-weight:800; font-size:16px; text-align:center;
+    max-width:86vw; line-height:1.4; text-shadow:0 2px 8px rgba(0,0,0,.7); }
+  .pp4CerStakes { color:#e8dcc0; font-size:12.5px; font-style:italic; text-align:center;
+    max-width:82vw; line-height:1.55; text-shadow:0 1px 4px rgba(0,0,0,.7); }
+  .pp4CerTitle img, .pp4CerStakes img { width:18px; height:18px; vertical-align:-3px; }
+  /* playtest 10 item 6: the landed face hits like a gavel — shudder + golden flare */
+  #pp4CerSlot #flipCoinWrap.pp4Land { animation:pp4LandFx .62s ease-out; }
+  @keyframes pp4LandFx {
+    0%   { transform:none; filter:none; }
+    16%  { transform:scale(1.14) rotate(-2.5deg); filter:drop-shadow(0 0 18px rgba(255,205,90,.95)); }
+    34%  { transform:scale(1.06) rotate(2deg);    filter:drop-shadow(0 0 13px rgba(255,205,90,.8)); }
+    52%  { transform:scale(1.1)  rotate(-1deg);   filter:drop-shadow(0 0 9px rgba(255,205,90,.6)); }
+    100% { transform:none; filter:none; }
+  }
+  /* playtest 10 item 1: the recipe chooser is a BOTTOM sheet — the sea it asks you to read stays
+     visible above it, and holding a finger on the sea peeks behind the cards */
+  #pp4Prompt.pp4Recipes #actionPanel { overflow-y:auto; }
+  /* playtest 21 item 2: the sea hint sits OVER THE SEA, high on the board, instead of in the gap
+     above the sheet where it named a surface it was nowhere near. Fixed to the viewport (stage.js
+     measures the board's own rect and sets `top`) so it is not dragged around by the sheet. */
+  .pp4PeekHint { position:fixed; left:0; right:0; display:flex; justify-content:center;
+    pointer-events:none; z-index:6; }
+  /* RED ALERT SWEEP (2026-08-21, D-18 follow-up): 92%, not 92vw — same bug class as .apMsg/.apSub
+     above (util.js's fixedOrigin() note has the full account), found while sweeping every
+     board-anchored overlay rather than reported directly. The parent `.pp4PeekHint` is
+     `left:0;right:0` against ITS OWN containing block (body, once item 22's stopgap is active), so
+     `%` here tracks that same capped column; `vw` would not (D-18: unaffected on phone, where the
+     parent's width already equals the true viewport either way). */
+  .pp4PeekHint span { background:rgba(9,42,52,.78); color:#fffdf2; font-size:11.5px;
+    font-style:italic; border-radius:999px; padding:3px 12px; width:max-content; max-width:92%; }
+  /* playtest 21 item 4: the recipe hint moves INSIDE the card — small italics under the ask and
+     above the cards it is about. Muted, because it explains the choice rather than being part of it. */
+  .pp4RecipeHint { font-size:11.5px; font-style:italic; font-weight:600; color:#6b7f86;
+    text-align:center; padding:1px 10px 5px; line-height:1.35; }
+  /* playtest 21 item 3 (Wyatt): "there should be NO YELLOW BACKGROUND action prompts any more!
+     They should all use the white background styling."
+     The yellow was #actionPanel.needsAction, and in /4 only ONE prompt still painted a panel at all
+     — the recipe sheet — because radial and centre-stage both blank it. Both gradients (the mint
+     resting one and the yellow needsAction one) are replaced by the same warm white the centre-stage
+     card already uses, so every surface in /4 that shows a panel shows the same one. The teal border
+     stays: it is the card's edge everywhere else too. */
+  body.pp4Stage #actionPanel,
+  body.pp4Stage #actionPanel.needsAction { background:#fffdf2; }
+  /* playtest 12 (2.2): the picked recipe pulses orange — tap it AGAIN to confirm */
+  body.pp4Stage #actionPanel .apBtn.pp4Focus { outline:3px solid #f5a623;
+    animation:pp4FocusPulse 1s ease-in-out infinite; }
+  @keyframes pp4FocusPulse {
+    0%,100% { outline-color:#f5a623; box-shadow:0 0 0 0 rgba(245,166,35,0); }
+    50% { outline-color:#ffc964; box-shadow:0 0 0 7px rgba(245,166,35,.35); }
+  }
+  /* playtest 12 item 1/3: intro barriers play CENTER STAGE — dim sea, message centred, the
+     button pulsing hard right beneath it */
+  /* ITEM 22 (D-18): 100%, not 100vw/100vh — same reasoning as the two notes above; this is the
+     board-dimming backdrop itself, so leaving it in viewport units would have dimmed the true full
+     desktop width while the capped column of content sat centred in only part of it. */
+  #pp4Prompt.pp4Center { left:0 !important; top:0 !important; width:100% !important; height:100%;
+    background:rgba(4,16,22,.6); display:flex; align-items:center; justify-content:center; }
+  /* WIDTH IS DECIDED BY THE STAGE, NOT BY WHAT HAS FINISHED LOADING — playtest 22 item 11 (Wyatt):
+     "something strange happens with the bakeoff screen when you reveal the ingredients — it gets
+     too narrow... This was temporary; after a few seconds, it glitched to the correct width."
+     The panel is a flex ITEM with only a max-width, so its width was its CONTENT's width — and the
+     bake-off's content is a row of bowls whose intrinsic size is the size of images that may not
+     have arrived yet. A cold cache therefore lays the card out narrow and re-lays it wide the
+     moment the art lands, which is exactly "temporary, then glitched to the correct width".
+     A definite width cannot be renegotiated by a late image.
+     NOT REPRODUCED LOCALLY, and said plainly: on a warm local server the art is there before the
+     first layout, and the card measured a stable 420px for the whole reveal. This removes the
+     dependency rather than the symptom, which is the only fix available without his network. */
+  #pp4Prompt.pp4Center #actionPanel { background:none; border:none; box-shadow:none; margin:0;
+    padding:0 18px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:26px; width:min(420px, 94vw); max-width:420px; box-sizing:border-box; min-height:0 !important; }
+  #pp4Prompt.pp4Center .apMsg { background:#fffdf2; border:2px solid #177; border-radius:14px;
+    padding:16px 18px; font-size:16.5px; line-height:1.5; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  /* THE BOWLS FILL THE CARD — the other half of playtest 22 item 11, and the half his screenshot
+     actually shows.
+     MEASURED through a whole bake: with the card pinned wide the bowls row still came out 260px
+     inside a 404px card, each bowl 47px against its own 64px cap. The panel is a COLUMN flex with
+     align-items:center, so every child is content-sized — and .bkoBowl is `flex:1 1 0`, whose
+     content width is whatever the bowl art happens to measure. The row therefore collapses to the
+     art rather than the card, and the bowls never reach their intended size.
+     Before the card was pinned, the panel was content-sized too, so the WHOLE CARD shrank to that
+     collapsed row: ~267px, which is exactly the width in his screenshot (the card and the bowls row
+     are nearly the same width there, while a healthy card is much wider than its bowls). And "after
+     a few seconds it glitched to the correct width" is the art finishing its decode and changing
+     the intrinsic width everything had been sized from.
+     Stretching the shell and the row breaks the circularity: the row is as wide as the card, so
+     `flex:1 1 0` divides a REAL width and each bowl grows to its 64px cap.
+
+     WHICH element was content-sized took a measurement to find, and it was NOT the one I stretched
+     first. The real chain, read off a live bake:
+         #actionPanel   404px   (pinned by the rule above)
+         #apGrid        316px   <- content-sized: a grid child of a column flex with
+         #apGridInner   316px      align-items:center, so it never filled the panel
+         .bko           296px
+         .bkoRow        260px
+         .bkoBowl        47px   against its own 64px cap
+     #apGrid is the one that has to stretch; everything under it is block-level and follows. */
+  #pp4Prompt.pp4Center #apGrid,
+  #pp4Prompt.pp4Center .bko,
+  #pp4Prompt.pp4Center .bkoRow,
+  #pp4Prompt.pp4Center .bkoCard { align-self:stretch; width:100%; box-sizing:border-box; }
+  /* :not(.pendingReveal) since the blank-space-lag fix (2026-08-24): centre-stage cards are now
+     VISIBLE while their text types in (pendingStage lifts before pendingReveal), so this force-
+     visible must not defeat the button gate — buttons still arrive after the text, top-to-bottom
+     rule intact. Before that fix the whole box was hidden through the reveal, so the !important
+     here never showed anything early. */
+  #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtns,
+  #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtn { visibility:visible !important; }
+  #pp4Prompt.pp4Center .apBtns { display:flex; justify-content:center; width:100%; }
+  #pp4Prompt.pp4Center .apBtn { width:110px; height:110px; border-radius:50%; border:3px solid #177;
+    background:#fffdf2; color:#0e3b3b; font-size:15px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; }
+  /* the centre-stage button's glow is assigned in THE ATTENTION VOCABULARY block (end of this
+     stylesheet) — a stage button breathes the coin's orange ring, not a private pulse. The old
+     pp4StagePulse keyframes (scale 1.09 + a 16px ring at 28% alpha) are gone with it. */
+  /* playtest 19 item 1 (Wyatt: "the first stage seems to be cut off vertically — visible in the
+     attention ring animating, but also with the appearing of the text box itself").
+     EVERY prompt draws inside #apGridInner, which is overflow:hidden inside #apGrid's pinned px row
+     — the smooth-resize machinery the in-panel narration box needs (BUG-01 above). On the centre
+     stage that clip box is simply wrong, and it was failing in two compounding ways at once,
+     measured on the hand-off ceremony at 390x844:
+       - the row was pinned to 176.75px against 206px of real content, so 29.6px of the "At the
+         helm!" circle was sliced flat off its bottom, permanently;
+       - at the top of the pulse the ring reaches 36.8px past that same edge.
+     Forcing max-content fixes the first for good — it cannot be re-broken by a height measured at
+     the wrong moment, which is the fault enterCenterStage() already has one workaround for — and
+     dropping the clip fixes the second. Dropping it is safe HERE and nowhere else: the stage card
+     floats alone on a full-screen dim layer, so there is nothing for it to spill onto.
+     The entry is Wyatt's pick (2026-08-13): "appear whole, fade + gentle scale in" — a ceremony
+     card is never drawn part-built. src/ui/panel.js skips its RESIZING phase while this is on, so
+     the reveal is not held up waiting for a transition that can no longer fire. */
+  #pp4Prompt.pp4Center #apGrid { grid-template-rows:max-content !important; transition:none !important; }
+  #pp4Prompt.pp4Center #apGridInner { overflow:visible; }
+  #pp4Prompt.pp4Center #actionPanel { animation:pp4CenterIn .3s cubic-bezier(.2,.85,.3,1.03) both; }
+  @keyframes pp4CenterIn {
+    from { opacity:0; transform:scale(.93); }
+    to   { opacity:1; transform:scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { #pp4Prompt.pp4Center #actionPanel { animation:none; } }
+  /* playtest 16: THE BAKE-OFF PLAYS ON THE CENTRE STAGE — same dim sea, same white box; the old
+     yellow card is gone. The shell keeps its own working controls: its two .apBtn are a confirm
+     row inside the box, so the 110px pulsing stage circle is undone for them (the crates
+     themselves are .bkoBowl, never .apBtn, and need nothing here). */
+  #pp4Prompt.pp4Center .bko { background:#fffdf2; border:2px solid #177; border-radius:14px;
+    padding:14px 16px; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  #pp4Prompt.pp4Center .bkoBtns { gap:8px; justify-content:flex-end; margin-top:4px; }
+  #pp4Prompt.pp4Center .bkoBtns .apBtn { width:auto; height:auto; min-height:42px; border-radius:12px;
+    animation:none; font-size:14px; padding:8px 14px; }
+  /* the stage's display:flex on .apBtn defeats the [hidden] UA rule — restated here so "Watch
+     again" stays genuinely hidden until the shuffle has run once (its click is not wired before) */
+  #pp4Prompt.pp4Center .apBtn[hidden] { display:none !important; }
+  /* THE PASS-THE-WHEEL CARD FITS ITS OWN WORDS. Wyatt, 2026-08-20: it is "far too big", and his
+     pick was "fit the words" — shrink the card to its text, drop the line break, and make the helm
+     button an ordinary pill instead of the 110px stage circle.
+
+     Scoped to [data-pp4-hand] (stamped in src/ui/lobby.js's passGate) rather than loosened for
+     every centre-stage card, because the 420px pin above is LOAD-BEARING for the bake-off: it is
+     what stops a row of bowls whose art has not arrived yet deciding the card's width (playtest 22
+     item 11). This card is six words, one <b> and one 18px icon — all fixed-size — so there is no
+     late image here to renegotiate a content width, which is exactly why width:auto is safe on
+     this one and not on that one.
+
+     The button mirrors .bkoBtns .apBtn above, which already undoes the stage circle for the one
+     other place a centre-stage card carries an ordinary confirm button — same recipe, so the two
+     do not drift (consistency is a core value). The pulse stays: it is how a stage button says
+     "tap me", and a pill pulses just as well as a circle. */
+  #pp4Prompt.pp4Center #actionPanel[data-pp4-hand] { width:auto; max-width:min(320px,90vw); gap:18px; }
+  #pp4Prompt.pp4Center #actionPanel[data-pp4-hand] #apGrid { align-self:auto; width:auto; }
+  #pp4Prompt.pp4Center #actionPanel[data-pp4-hand] .apMsg { text-align:center; }
+  #pp4Prompt.pp4Center #actionPanel[data-pp4-hand] .apBtn { width:auto; height:auto; min-height:44px;
+    border-radius:12px; font-size:15px; padding:10px 22px; }
+  /* the intro's recipe now sits INSIDE the stage message box — a touch larger than the shell's
+     compact card, since it is the recipe's first and only unhurried read */
+  #pp4Prompt.pp4Center .apMsg .bkoCard li { font-size:13.5px; }
+  /* the helper line sits under the stage button, on the dim sea — light text so it reads there */
+  #pp4Prompt.pp4Center .apSub { color:#fffdf2; opacity:.9; text-align:center; font-size:13px;
+    text-shadow:0 1px 8px rgba(0,0,0,.6); }
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { min-width:0; box-sizing:border-box; padding:5px 5px 6px; }
+  /* D-46 fault 5 — THE TWO RECIPES ARE ONE TABLE, SO THEIR ROWS LINE UP.
+     Measured at 390x664: "Vanilla Bean Crème Brûlée" wraps to two lines, "Mexican Chocolate Torte"
+     to three, and the two ingredient lists therefore start 7.8px apart — so Hot Cinnamon sits half
+     a row above Speckled Eggs and every line after it is out of step. Only visible now that the
+     picker is opaque (260821-qwv fixed the ghosting that was hiding it).
+     A min-height on the title would be a typed number that is wrong for the first four-line recipe
+     anybody writes. SUBGRID is the version with no number in it: the two cards adopt the ROW track
+     of the grid that already holds them, so the title row is as tall as the taller title and the
+     lists begin on the same line by construction — one grid, not two kept in step (rule 23).
+     The three in-flow children are the thumb, the title and the list; .recipeDesc is display:none
+     here and the "Bake this!" pill is position:absolute, so neither is a track.
+     @supports-gated, so a browser without subgrid (Safari before 16) gets exactly today's layout
+     rather than a broken one — this is a cosmetic alignment, never a reason to risk the picker. */
+  @supports (grid-template-rows: subgrid) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { grid-template-rows:auto auto 1fr; }
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
+      display:grid; grid-row:span 3; grid-template-rows:subgrid; align-content:start; }
+  }
+  body.pp4Stage #actionPanel .apBtn .recipeTitle { font-size:12.5px; line-height:1.2; }
+  body.pp4Stage #actionPanel .apBtn .recipeThumb { height:54px; width:auto; display:block; margin:0 auto 2px; }
+  body.pp4Stage #actionPanel .apBtn .recipeDesc { display:none; }
+  /* playtest 21 item 5: every ingredient of both recipes has to be readable WITHOUT SCROLLING, now
+     that the hint line sits above the cards as well. The savings are taken from padding and leading
+     — the type size is untouched, because a recipe nobody can read is not a fix. */
+  body.pp4Stage #actionPanel .apBtn .recipeList { padding:2px 8px 3px; }
+  body.pp4Stage #actionPanel .apBtn .recipeList li { font-size:10.5px; line-height:1.3; padding:2px 0; gap:6px; }
+  body.pp4Stage #actionPanel .apBtn .recipeList .ri img { width:17px; height:17px; }
+  body.pp4Stage #actionPanel .apBtn .recipeList .rc { display:none; }
+  body.pp4Stage #actionPanel .apBtn.pp4Focus { outline:3px solid #f5a623; }
+  /* playtest 19 item 2: the "Bake this!" pill, over the pastry art of the tapped card (Wyatt's
+     pick). It is a SPAN dressed as a button and deliberately INERT — the card is itself the
+     <button>, so a nested one is invalid HTML and gets hoisted out, and pointer-events:none means
+     the tap falls through to the card, i.e. straight into the second-tap confirm that already
+     exists. One code path, two doors. See recipeGuard() in src/ui/stage.js.
+     The card needs a positioning context for it; nothing else here is positioned. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { position:relative; }
+  /* playtest 21 item 1 (Wyatt: "the same bright color as the rings around the island" — his
+     clarification: "the orange color that the circles around the docks that show when you select
+     a recipe"). That is #f5a623, written by recipeGuard() in src/ui/stage.js as both the stroke
+     and the 18% fill of each dock ring. The pill and the rings are drawn by the SAME first tap,
+     so they now say the same thing in the same colour: these docks, this recipe, bake it.
+     It was #177 before — the identical dark teal as the radial fan's rings, which is what made it
+     read as chrome rather than as the way in.
+     Ink and edge are NOT invented here: #3a2600 on #f5a623 with a #c9821a border is already this
+     codebase's pairing for text on this orange (.btl-col .windTag.dw, the downwind battle tag).
+     White would have been the obvious choice and fails contrast on it (~2.2:1). */
+  .pp4Bake { position:absolute; left:50%; top:35px; z-index:2; pointer-events:none;
+    background:#f5a623; color:#3a2600; border:2px solid #c9821a; border-radius:999px;
+    padding:7px 13px; font-size:13px; font-weight:800; letter-spacing:.02em; white-space:nowrap;
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    animation:pp4BakeIn .22s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes pp4BakeIn {
+    from { opacity:0; transform:translate(-50%,-50%) scale(.8); }
+    to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pp4Bake { animation:none; transform:translate(-50%,-50%); }
+  }
+  #choicePassPlay.pp4Off { filter:grayscale(.75) brightness(.92); position:relative; cursor:default; }
+  .pp4OffNote { font-size:11.5px; font-weight:700; color:#fff; opacity:.95; margin-top:6px; font-style:italic; }
+  /* playtest 11/13: End of Voyage sits ABOVE the captains box and the prompts (it was z19,
+     under pp4Cap's 22 — the captains box ate its bottom half and the scroll never reached the
+     end). The ribbon rides above it so the ☰ stays reachable. */
+  body.pp4Stage #statsWrap { position:fixed; left:0; right:0; bottom:0;
+    top:calc(44px + env(safe-area-inset-top)); z-index:32; overflow:auto;
+    background:rgba(232,244,238,.98); padding:14px;
+    /* item 8 (D-14): the A+C park gesture, wired in stage.js's wireEovDrag(). touch-action:pan-y
+       keeps the browser's own vertical-scroll recognition (so scrolling down to the below-the-fold
+       content stays free and native) while the JS only takes over once the pull goes PAST the top —
+       the same shape as a native pull-to-refresh. transform is the only thing either gesture ever
+       animates, so this never triggers layout mid-drag (HARD-WON-LESSONS: compositor-only motion). */
+    touch-action:pan-y; transition:transform .25s cubic-bezier(.2,.9,.3,1.15); }
+  /* mid-drag: no transition, or the card would lag a live finger/mouse by 250ms */
+  body.pp4Stage #statsWrap.pp4EovDrag { transition:none; }
+  /* parked: freeze the internal scroll so the strip's own content can't drift under it while it
+     sits over #pp4Cap's old spot — only the translateY set by wireEovDrag ever moves it now */
+  body.pp4Stage #statsWrap.pp4EovParked { overflow:hidden; cursor:pointer; }
+  body.pp4Stage #pp4Ribbon { z-index:40; }
+  /* playtest 13: the big way out at the bottom of End of Voyage.
+     D-46 fault 2 — AND IT MUST NEVER BE THE THING THE SCREEN EDGE CUTS IN HALF. On the honest
+     390x664 phone the summary is taller than the window, so this button sat below the fold and the
+     vision judge read it as "a bottom toolbar clipped by the screen edge" on two separate screens
+     (solo-phone-024, solo-phone-eov). D-43's accepted line — "a scrollable card may be cut at the
+     bottom" — is about CONTENT; this is the one CONTROL on the card, and D-38's ruling is that a
+     control you cannot hit is the one unacceptable outcome.
+     Sticky inside #statsWrap, which is already the scroll container, so the way out is on screen
+     from the first frame at any window height and the awards still scroll freely behind it. The
+     backdrop is the card's own background colour, so nothing reads through it as it passes under. */
+  #statsPanel .pp4Again { display:block; width:100%; margin:18px 0 0; padding:16px;
+    font-size:18px; font-weight:800; border-radius:14px; border:3px solid #0e5c5c;
+    background:#177; color:#fffdf2; box-shadow:0 8px 24px rgba(0,0,0,.25);
+    position:sticky; bottom:0; z-index:1; }
+  /* the air under a sticky button has to belong to the SCROLLER, not to the button, or the button
+     lifts off the card's bottom edge by its own margin and floats.
+     THE RULE ABOVE IS RIGHT AND THIS SELECTOR WAS WRONG: #statsPanel does not scroll. #statsWrap
+     does (overflow-y:auto), so this 10px reserved nothing against the 66px button and ~52px of the
+     stats list could never be scrolled out from under it — caught by the sea trial's vision judge
+     on the END OF VOYAGE screen, 2026-08-26. The real reservation is now made in stage.js, from the
+     button's MEASURED height, because that height moves with the font, padding and border (rule 9).
+     This 10px stays only as the small gap between the last row and the panel edge. */
+  body.pp4Stage #statsPanel { padding-bottom:10px; }
+  /* playtest 13: the recipe scroll hints at more — a parchment fade at the cut edge */
+  #recipeModalBody::after { content:""; position:sticky; bottom:-1px; display:block; height:30px;
+    margin-top:-30px; background:linear-gradient(to bottom, rgba(31,19,10,0), rgba(31,19,10,.95));
+    pointer-events:none; }
+  @media print { #recipeModalBody::after { display:none; } }
+  /* playtest 11: suppress the iOS text-selection loupe over the board and prompts — nothing on
+     the stage is meant to be selected (form fields keep selection) */
+  body.pp4Stage, body.pp4Stage #boardwrap, body.pp4Stage #pp4Prompt, body.pp4Stage #pp4Cap {
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  body.pp4Stage input, body.pp4Stage textarea { -webkit-user-select:text; user-select:text; }
+  /* playtest 11: the turn clock lives in the ribbon, right of the captain boats, flashing near 0 */
+  /* THE RIBBON CHIP — ONE box shared by the turn clock and the ⏩, so the two cannot drift apart.
+     playtest 21 item 8 (Wyatt: "make the slip button's size match the timer box's size — its
+     weirdly short"). They were two independently hand-written boxes and every metric disagreed:
+     the clock inherited the ribbon's line-height and carried min-width:34px, while the ⏩ set
+     line-height:1 and no min-width at all — so it came out both shorter and narrower than its
+     neighbour for no reason anybody chose.
+     The fix is structural rather than a matched pair of numbers: box metrics live in this one
+     rule, and the two ids below carry ONLY what genuinely differs (font size, weight, cursor
+     behaviour). An explicit line-height is what makes it hold — without it the ⏩'s larger
+     font-size silently makes its box taller than the clock's again, which is the same
+     two-hand-synced-numbers trap this project keeps paying for. */
+  #pp4Clock, #pp4FF, #pp4Chat { box-sizing:border-box; align-items:center; justify-content:center;
+    min-width:34px; padding:3px 8px; line-height:18px; border:none; border-radius:8px;
+    background:rgba(255,255,255,.16); color:#fff; font-family:inherit; text-align:center; }
+  #pp4Clock { display:none; font-size:13px; font-weight:800; letter-spacing:.5px;
+    font-variant-numeric:tabular-nums; cursor:pointer; }
+  #pp4Clock.on { display:inline-flex; }
+  #pp4Clock.off { opacity:.45; }               /* playtest 12: tapped off — dim, tap to re-arm */
+  #pp4Clock.urgent { color:#ffd0c4; animation:pp4ClockFlash .5s steps(2,jump-none) infinite; }
+  @keyframes pp4ClockFlash { 0% { background:rgba(214,69,42,.85); } 100% { background:rgba(255,255,255,.16); } }
+  /* ⏩ fast-forward: appears in the ribbon only while a bot holds the wheel (stage.js ribbonTick);
+     lights orange while a one-shot skip runs so a second tap can't double-arm */
+  #pp4FF { display:none; font-size:15px; cursor:pointer; }
+  #pp4FF.on { background:rgba(245,166,35,.85); }
+  /* D-06: the 💬 chip shares #pp4Clock/#pp4FF's ONE box rule above (playtest 21 item 8's own
+     ruling against a third hand-written box) and adds only what genuinely differs from #pp4FF —
+     nothing, in fact, but position:relative to anchor the unread dot to its own corner. Visibility
+     (crew games only) is written inline in ribbonTick, same explicit-value pattern as #pp4FF. */
+  #pp4Chat { display:none; font-size:15px; cursor:pointer; position:relative; }
+  #pp4ChatDot { display:none; position:absolute; top:-2px; right:-2px; width:9px; height:9px;
+    border-radius:50%; background:#f5a623; box-shadow:0 0 0 2px rgba(10,40,48,.9); }
+  #pp4ChatDot.on { display:block; }
+  /* playtest 11: one-line captain rows — name · coins · hold; the recipe line hides until the
+     row is tapped (the rows are stable elements, so the toggle survives re-renders) */
+  body.pp4Stage .prowTop { display:flex; flex-wrap:wrap; align-items:center; gap:3px 8px; }
+  body.pp4Stage .prowTop .pname { flex:0 1 auto; max-width:36%; }
+  body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
+  body.pp4Stage .prowTop .chips { flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; gap:3px; justify-content:flex-end; }
+  body.pp4Stage .chip { width:26px; height:26px; border-radius:6px; }
+  body.pp4Stage .prowTop .prowRecipe { display:none; flex-basis:100%; }
+  body.pp4Stage .player-row.pp4Open .prowRecipe { display:block; }
+  body.pp4Stage .player-row { cursor:pointer; }
+  /* the tap-your-own-ship confirm pair (.pp4Stay) lived here until the item-21 redesign
+     (2026-08-24): tapping the boat now reveals the normal Stay put petal instead, and the yellow
+     .pp4StayCell square under the boat (a sail-square sibling, same host, same bounce) is the
+     standing indicator. No styles needed: the square IS a .sailCell. */
+
+  /* ═══════════════════════ THE ATTENTION VOCABULARY — ONE BLOCK, TWO CUES ═══════════════════════
+     Wyatt's ruling, 2026-08-24 (item 23, his words): "ALL MODES LOOK and behave THE SAME…
+     every clickable button that is on a STAGE [gets] the orange glow, and every action prompt
+     button that is over the board [gets] a scale pulse… an action prompt button that is clickable
+     should always call one display function, which we only change once."
+
+     THIS BLOCK IS THAT ONE PLACE. To make a new surface glow or grow, add its selector here —
+     never write a new @keyframes or a per-surface animation rule elsewhere. The drift this
+     replaces: the orange ring existed as three private copies (flipglow, ahoyglow, and the shadow
+     half of pp4StagePulse), and button attention was assigned by four scattered rules whose radial
+     result was measured RUNNING yet invisible over the sea.
+
+     DELIBERATELY NOT HERE, each with its reason:
+       - the sail squares (sailBounce) — his explicit "don't touch the sail squares";
+       - the plank behind the coin (plankglow) — a surface echo of the coin's glow, not a button;
+       - .pp4Focus (pp4FocusPulse) — feedback on a tap already made, not a call for one;
+       - disabled/greyed controls and the .apBack escape circle — a button that is not asking for
+         a tap must not pulse (pulsing there is a lie);
+       - the draft-pick recipe cards — Group G fault 4: a 276px card scaling 1.11 sliced the hint
+         line above it and collided the two cards by 34px at peak. Cards never pulse. */
+
+  /* THE GLOW — on a stage, whatever you may press breathes the coin's orange ring.
+     The stage owns the whole screen, so the glow needs no motion — it IS the coin's ceremony cue,
+     now shared by every stage control: the coin itself, the Ahoy barrier button, centre-stage
+     circles, battle buttons, and the Start-the-voyage buttons of every mode's setup screen. */
+  @keyframes pp4Glow {
+    0%,100% { box-shadow: 0 0 0 0 rgba(245,159,45,.55); }
+    50%     { box-shadow: 0 0 0 10px rgba(245,159,45,0); } }
+
+  /* ============================ THE REVEAL RACE (2026-08-25) ============================
+     WHY EVERY ATTENTION RULE BELOW SAYS `#actionPanel:not(.pendingReveal)`.
+
+     Wyatt, 2026-08-25: "the pulsing still doesn't work AFTER sailing", then the control that
+     turned it into a switch — "if i stay put instead of sail, the pass/trade buttons DO swell."
+
+     MEASURED ON HIS PHONE, not inferred. The ?debug=pulse beacon on iOS 18.7 (AppleWebKit
+     605.1.15) reported, on a dead turn menu:
+         Trade:none(pp4Grow/running)   Pass +1:none(pp4Grow/running)
+     Three facts that cannot all be true: the stylesheet grants pp4Grow, the computed play-state
+     is `running`, and `getAnimations()` on the button returns NOTHING. The animation was never
+     CREATED. It is not frozen — it does not exist.
+
+     The cause is the reveal gate doing its job. panel() adds `pendingReveal` to #actionPanel and
+     the buttons sit at `visibility:hidden` until BOTH the typewriter and stageSettled() resolve —
+     and stageSettled() is the camera tween plus the ship's glide. Stay put and that wait is zero,
+     so the button is drawn and its animation is created normally. SAIL and the button spends up
+     to SETTLE_CAP_MS (1400ms) declared-but-not-drawn; this WebKit never goes back to start the
+     animation once the element finally paints, and the button is parked at scale(1) for life.
+     His whole recording is this: 5 of 7 turn menus dead, every one of them after a sail, while
+     the trade fans later in the SAME turn — built on a still board — all swell at 1.15.
+
+     WHY NO PROBE EVER CAUGHT IT. Three engines were driven at this bug and all three were
+     innocent: WebKitGTK 2.52, and WebKit 26.5 both in isolation (twelve birth conditions,
+     including this exact one) and playing real voyages. They are a generation NEWER than his
+     phone and they create the animation correctly. The engine in the fault is only reachable on
+     his device, which is why his beacon log is the only thing that could have found this.
+
+     THE RULE THAT FIXES IT: never grant an attention animation to a button that is not being
+     drawn yet. Declaring it at reveal instead of at build means the element always has a box
+     when the animation lands, so there is nothing for an engine to decline. It costs nothing on
+     engines that were already correct.
+
+     THIS IS SETTLED DESIGN. It was written as a stopgap, and Wyatt closed that question the same
+     day (D-57, `.planning/phases/02.2-.../02.2-CONTEXT.md`). He had proposed building nothing until
+     the camera anchors; shown this selector as the interim, he ruled: "this is no longer open... I
+     approve of the current architecture, i like that the narration arrives before the camera
+     settles." The early-build path STAYS, prompts continue to travel with the director, and there
+     is no follow-up change that deletes these `:not(.pendingReveal)` selectors.
+
+     KEEP THEM. Removing one re-opens the pulse bug on his phone, and no engine you can reach will
+     tell you so. ========================================================================== */
+  #flipCoinWrap.active,
+  .ahoyGlow,
+  #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]),
+  #actionPanel .btlBtn:not(:disabled):not([aria-disabled="true"]),
+  #btnStart:not(:disabled),
+  #btnConfirmStart:not(:disabled),
+  #btnStartPassPlay:not(:disabled) {
+    animation: pp4Glow 1.1s ease-in-out infinite; }
+
+  /* THE GROW — over the live board, the buttons asking for your answer visibly swell.
+     Scale ONLY, no ring: the golden ring belongs to the stage (his pick: "strong grow, no ring").
+     The swing is set per geometry IN THIS BLOCK ONLY: a 66px radial petal needs a big swell to
+     read at arm's length over open water (1.09 was measured invisible); a full-width card row at
+     the same scale would collide with its neighbours, so it swells gently.
+     LITERAL VALUES ONLY IN THESE KEYFRAMES — never var(). Wyatt's Safari screen recording of
+     build 24d showed the swell dead flat (121px in all 16 frames across 3.6 cycles) while every
+     Chromium probe measured it running; WebKit spent years unable to resolve custom properties
+     inside @keyframes, and a transform it cannot resolve leaves the button at scale(1) forever.
+     Two @keyframes for one cue is deliberate and stays — they are the same gesture at two
+     amplitudes, side by side here so they cannot drift apart. */
+  @keyframes pp4Grow {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.15); } }
+  @keyframes pp4GrowSoft {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.05); } }
+  /* the peak, declared ONCE for everything that is not a keyframe: the radial fan's layout
+     (stage.js) reads this to reserve the room the swell will use, so circles never kiss at the
+     top of the pulse. It MUST equal pp4Grow's 50% literal above — the literal exists only
+     because Safari cannot resolve var() inside @keyframes. Change them together. */
+  :root { --pp4GrowPeak: 1.15; }
+  /* the two selectors are MUTUALLY EXCLUSIVE (:not(.radial) vs .radial) rather than relying on
+     specificity to pick a winner — the first draft did, the card rule's extra :not() outweighed
+     the radial one, and every petal quietly got the gentle swell (caught by the probe, 66→69.3px
+     instead of 66→76). */
+  #pp4Prompt:not(.pp4Center):not(.radial) #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]):not(.recipeCard) {
+    animation: pp4GrowSoft 1.1s ease-in-out infinite; }
+  #pp4Prompt.radial #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]) {
+    animation: pp4Grow 1.1s ease-in-out infinite; }
+
+  /* Hover pauses the pulse (a transform in a running keyframe beats anything :hover sets — the
+     sail squares' own lesson). REDUCE MOTION swaps the grow for the STILL glow rather than for
+     nothing: the pulse is information — "this is the button being asked of you" — and a player
+     who turns motion off must not lose the answer, only the movement. A fading ring does not
+     move. (The old rules silenced the radial pulse outright under Reduce Motion while the dock
+     coin and centre-stage circles kept glowing — which is precisely "the pulsing only ever
+     happens during docks" for anyone with that setting on.) */
+  #actionPanel .apBtn:hover, #actionPanel .btlBtn:hover,
+  #btnStart:hover, #btnConfirmStart:hover, #btnStartPassPlay:hover { animation-play-state: paused; }
+
+  /* ============ TWO CORRECTIONS TO THE VOCABULARY (Wyatt, 2026-08-26 playtest) ============
+
+     T-16 — "no orange glow on start button."  The ceremony's Start button IS given the right
+     class: netIntroBarrier() builds it with cls:"primary ahoyGlow" (flow.js), and `.ahoyGlow` is
+     named in the glow rule above. The class was never the problem — SPECIFICITY was. `.ahoyGlow`
+     alone is (0,1,0); the two GROW rules above also set `animation`, on selectors carrying an id
+     plus five or six pseudo-classes. Wherever the ceremony's prompt is not `.pp4Center`, the grow
+     rule wins the `animation` property outright and the button quietly scales instead of glowing.
+     One class cannot out-rank that, so the glow is restated here at a weight that can.
+
+     WHY RESTATED RATHER THAN MOVED: the block above is the single definition of the vocabulary
+     (his ruling, 2026-08-24 — "one CSS block"). This does not introduce a second gesture; it is
+     the SAME pp4Glow keyframe, re-asserted for the one button that was losing the cascade. If the
+     grow selectors are ever simplified, delete this and check the ceremony again.
+
+     T-30 — "remove the orange attention glow from the watch again button."  #bkoWatch carries
+     .apBtn so it inherits the fan's attention cue, but it is not what the game is asking of you —
+     the bake is. It keeps its shape and loses the pulse. `animation:none` covers BOTH the glow and
+     the grow, so it cannot come back through the other rule. ========================== */
+  #actionPanel .apBtn.ahoyGlow:not(:disabled):not([aria-disabled="true"]),
+  #pp4Prompt #actionPanel .apBtn.ahoyGlow:not(:disabled):not([aria-disabled="true"]) {
+    animation: pp4Glow 1.1s ease-in-out infinite; }
+  #actionPanel .apBtn.bkoWatch,
+  #pp4Prompt #actionPanel .apBtn.bkoWatch,
+  #pp4Prompt.pp4Center .bkoBtns .apBtn.bkoWatch { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #pp4Prompt:not(.pp4Center) #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]):not(.recipeCard) {
+      animation: pp4Glow 1.1s ease-in-out infinite; } }
 </style>
 </head>
 <body>
@@ -956,6 +2570,10 @@
         <button class="choiceCard passplay" id="choicePassPlay" type="button">
           <div class="ccIcon"><img src="assets/icons/stool.png" alt=""></div><div class="ccTitle">Pass & Play</div><div class="ccSub">share one device</div>
         </button>
+        <!-- Phase 2 (Multiplayer Revival), D-08: "Host a Crew" and "Join a Crew" restored, in the
+             live game's order (Solo, Pass & Play, Host, Join) — measured to wrap 2x2 at phone width
+             (.choiceCard is flex:1 1 120px / min-width:118px with a 10px gap, :1310-1312). The click
+             wiring was already guarded and live at src/ui/flow.js:2391. -->
         <button class="choiceCard host" id="choiceHost" type="button">
           <div class="ccIcon"><img src="assets/icons/map.png" alt=""></div><div class="ccTitle">Host a Crew</div><div class="ccSub">start a multiplayer game</div>
         </button>
@@ -963,8 +2581,7 @@
           <div class="ccIcon"><img src="assets/icons/key.png" alt=""></div><div class="ccTitle">Join a Crew</div><div class="ccSub">enter a friend's code</div>
         </button>
       </div>
-      <div class="muted" style="font-size:12px;margin-top:10px;margin-bottom:8px"><img class="narrIcon" src="assets/icons/magnifying-glass.png" alt=""> Thanks for playtesting! Anonymized move data is recorded to help improve the game — nothing beyond the name you confirm after picking how to play is collected.</div>
-      <div style="text-align:center;margin-bottom:8px"><a id="lnkAboutWelcome" href="about.html" style="font-size:12px;color:var(--teal);text-decoration:underline">About Pastry Pirates</a></div>
+      <div class="muted" style="font-size:12px;margin-top:10px;margin-bottom:8px"><img class="narrIcon" src="assets/icons/magnifying-glass.png" alt=""> Anonymised move data is recorded to help improve the game — nothing beyond the name ye confirm after picking how to play is collected.</div>
       <div id="fbnote" class="fbnote" style="display:none"><img class="narrIcon" src="assets/icons/gear.png" alt=""> Multiplayer needs a one-time Firebase setup — see <code>ONLINE_SETUP.md</code>. Solo play works right now!</div>
       <div id="busynote" class="fbnote" style="display:none"><img class="narrIcon" src="assets/icons/sailboat.png" alt=""> Lots of crews out sailing right now — multiplayer may be slow to sync. <b>Play Solo</b> works instantly and never waits on the crowd!</div>
     </div>
@@ -985,7 +2602,12 @@
       <h3><img class="narrIcon" src="assets/icons/key.png" alt=""> Join a Crew</h3>
       <div class="fieldRow"><input type="text" id="joinCode" maxlength="6" placeholder="CODE"></div>
       <label class="nameLabel">Yer captain name
-        <input type="text" id="joinName" maxlength="40" placeholder="e.g. Davy Scones"></label>
+        <input type="text" id="joinName" maxlength="40" placeholder="e.g. Davy Scones">
+        <!-- item 16 / D-19: a name another HUMAN already holds is refused HERE, under the box it was
+             typed in — never with a blocking alert(). Empty and hidden until setNameWarning() fills
+             it (src/ui/lobby.js), which writes textContent, never innerHTML: the string in it is
+             player-authored and every other client renders it too (T-02.2-22). -->
+        <div class="nameWarn" id="joinNameWarn" role="alert" hidden></div></label>
       <button class="primary big" id="btnJoin" type="button">Join the voyage</button>
     </div>
 
@@ -996,7 +2618,7 @@
       <!-- F1 (Wyatt-approved 2026-07-29): the LABEL class — this placeholder identifies WHICH field
            belongs to the reader, so it is UI chrome rather than the game speaking, and takes the
            plain second-person pronoun rather than D-29's ye/yer. src/ui/lobby.js's renderSeatList
-           carries the full rule; scripts/ui_contract_check.js anchors and gates this exact line.
+           carries the full rule; scripts/ui_contract_check.js anchors and gates this exact line.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
            (Worded without the pronoun on purpose: an HTML comment has no per-line marker, so the
            register scan cannot tell a continuation line from real copy.) -->
       <div class="ppNameRow"><div class="ppSeatDot" style="background:#f2679e"></div><input type="text" id="ppName0" maxlength="40" placeholder="Player 1 (you)"></div>
@@ -1019,7 +2641,11 @@
     <div class="modalStep">
       <h3>What do they call ye, captain?</h3>
       <label class="nameLabel">Yer captain name
-        <input type="text" id="nameModalInput" maxlength="40" placeholder="e.g. Davy Scones"></label>
+        <input type="text" id="nameModalInput" maxlength="40" placeholder="e.g. Davy Scones">
+        <!-- The SECOND MOUNT of the same warning line, not a second design (rule 8). This modal is
+             the only way to rename yourself mid-lobby, so a rename refused for the same reason must
+             say so in the same words, in the same place relative to the same box. -->
+        <div class="nameWarn" id="nameModalWarn" role="alert" hidden></div></label>
       <button class="primary big" id="btnNameConfirm" type="button">Aye, that's me name</button>
     </div>
   </div>
@@ -1062,26 +2688,27 @@
     <div class="modalTitle" style="text-align:center">📖 How to play</div>
     <div style="margin-top:14px;max-height:60vh;overflow-y:auto">
       <h4>🎯 The goal</h4>
-      <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. First baker home wins!</p>
+      <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. First baker home fires up the ovens!</p>
       <h4>⚓ Setting sail</h4>
-      <p>Each captain gets a recipe map (5 ingredients), 3 gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — when they're gone, they're gone.</p>
+      <p>Each captain gets a recipe map (5 ingredients), 3 gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — and the fewer that are left, the dearer they get.</p>
       <h4>Yer turn: sail → act</h4>
-      <p><b>🌬️ Wind.</b> Each round the wind picks a direction and holds it. It doesn't move ye — it sets yer sailing budget: cheap with the wind, dear against it, in between across it.</p>
-      <p><b>⛵ Sail.</b> Pay 1🌕 to move using a 9-point budget: 2 pts/square with the wind (up to 4 squares), 3 pts/square across it (up to 3), 4 pts/square against it (up to 2) — mix directions freely as long as ye can afford the total. An island upwind of ye cuts yer budget to 7. Sail past other ships, but don't end on one. No coins? Ye can't sail this turn — better go fishing!</p>
+      <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's — storms and all. That forecast is never wrong, so ye can plan around it.</p>
+      <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b>4 squares</b> in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b>2</b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
       <p><b>⚓ Act</b> — choose one:</p>
-      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip: heads take a crate; tails take 3🌕 — or pay 3🌕 to buy the crate anyway. Stay as long as ye like and keep flipping. Ship's hold: ye may take crates that aren't on yer recipe — they make excellent trade bait...</p>
-      <p><b>Attack</b> — fight an adjacent ship! Pay 2🌕 powder, then flip head-to-head: heads beats tails (1 point). Both heads? The captain firing <b>downwind</b> lands the shot — that's the wind advantage; a crosswind clash cancels. On a double-miss (both tails) the defender may pay 1🌕 to flee to safety instead of fighting on. First to 2 points wins; loser hands over a crate (winner picks) or 5🌕 — loser's choice. Can't pay in full? Winner takes everything. Nobody changes squares — win or lose, every ship holds its position. Spectators can call the winner for a free dubloon at the Lookout's Call — or back their call with coin for double or nothing.</p>
-      <p><b>Trade</b> — hail any captain, anywhere, and make a deal: crates, coins, or both together. When a trade is struck, both captains collect +1🌕 from the bank.</p>
-      <p><b>Fish</b> — flip: heads nets 2🌕, tails... just a candycrab (1🌕).</p>
+      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b>3🌕</b>; <b>tails</b> ye spend the turn workin' the docks for <b>1🌕</b>. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
+      <p><b>💰 Crate prices rise.</b> A crate costs <b>6🌕 minus however many are left on that island</b> — so the first off a full island is 3🌕, the next 4🌕, and the last one 5🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
+      <p><b>Attack</b> — fight an adjacent ship! Pay 2🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b>2🌕 to load another broadside</b> and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody, not even a captain who's already fired up the ovens. Ye can't attack a ship with an empty hold; there's nothing to take.</p>
+      <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b>2🌕</b> from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
+      <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — crates, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
       <p><b>Start yer bakery!</b> — at the Isle of Tortuga with yer whole recipe? Declare victory! <img class="narrIcon" src="assets/icons/cupcake.png" alt=""></p>
       <h4><img class="narrIcon" src="assets/icons/current-swirl.png" alt=""> The trade winds</h4>
       <p>The sea around the rim of the world flows in a mighty clockwise current, in arcs of varying length each game. Sail (or get blown) into it and yer instantly swept to the far corner of that stretch — a daring shortcut for captains in a hurry!</p>
       <h4>⛈️ Storms</h4>
-      <p>Roughly 3 in 20 rounds brews a storm — the only time the wind moves ye without yer say-so: it forcibly pushes everyone 2 squares, then spins and pushes 2 more. Moored ships are safe — if ye docked last turn, sit at a berth, or are at the Isle of Tortuga, the storm can't push ye into land. Otherwise, blown at an island ye must pay 1🌕 to dodge or flip: heads drop anchor safely, tails run aground — lose half yer coins, or a crate if yer broke, or the whole turn to repairs if yer hold's empty too! The wind never blows ye onto a full dock.</p>
+      <p>The compass warns ye a full day ahead, so a storm is never a surprise. At the top of the day it blows <b>every ship at once</b>, <b>3 squares</b>, all the <b>same direction</b>, before anyone acts. <b>Land and other ships stop ye short</b> — that's the whole of it. Nobody loses a turn, and a dock is just water the storm can push ye onto or off. Mind the rim, though: blown into the trade winds and yer swept clean across the sea.</p>
       <h4>⏰ The shot clock</h4>
       <p>Take too long on yer turn and ye'll lose a random ingredient from yer hold (or 5🌕 if yer out of ingredients) and miss the turn.</p>
       <h4><img class="narrIcon" src="assets/icons/crown.png" alt=""> Winning</h4>
-      <p>When the first baker docks home, everyone else gets one last turn. If more than one makes it: BAKEOFF! Flip head-to-head, first to 3 points takes the crown.</p>
+      <p>When the first baker docks home, everyone else gets one last turn. If more than one makes it, there's no contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
       <p><i>May yer flips be heads and yer rivals be broke.</i></p>
     </div>
   </div>
@@ -1138,11 +2765,12 @@
 <!-- ===================== RECIPE (modal) ===================== -->
 <div id="recipeModal" class="modalOverlay" style="display:none">
   <div class="modalCard" style="max-width:480px;text-align:left">
+    <!-- D-35 / option C: Download PDF and Email are no longer a row below the recipe. They are two
+         round icon buttons pinned into the card's own sticky title row, built by recipeModalHTML()
+         and wired by delegation in wireRecipeModal(). His item-9 constraint — the buttons must
+         clearly sit ABOVE the scrolling recipe — is met by the sticky row instead of by a row of
+         their own, which is the whole difference between option C and options A and B. -->
     <div id="recipeModalBody"></div>
-    <div id="recipeModalBtns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
-      <button class="big recipeModalBtn" id="btnRecipePdf" type="button">🖨️ Download PDF</button>
-      <button class="big recipeModalBtn" id="btnRecipeEmail" type="button">✉️ Email to myself</button>
-    </div>
   </div>
 </div>
 
@@ -1182,6 +2810,12 @@
   </div>
 </div>
 
+<!-- LOAD-03: the static blurred backdrop the welcome and lobby screens sit on, in place of a live
+     game rendered only to be hidden. Declared BEFORE #game and at z-index 0 so it sits behind
+     everything; the modals are z-index 1000+. See its CSS above for why a still is both cheaper and
+     more honest than the live board. -->
+<div id="welcomeBackdrop" aria-hidden="true"></div>
+
 <!-- ===================== GAME ===================== -->
 <div id="game" style="display:none">
   <div id="syncnote" class="fbnote" style="display:none"><img class="narrIcon" src="assets/icons/gear.png" alt=""> Trouble syncing with the crew — a move may not have gone through. Refresh to reconnect if this doesn't clear up on its own.</div>
@@ -1202,7 +2836,21 @@
              layer; transform-box/transform-origin candidates all measured identical. As HTML it
              costs ZERO layouts. Positions come in `cqw` against #boardwrap (container-type:
              inline-size), so board user units still map 1:1 and every call site keeps its numbers. -->
+        <!-- playtest 21 item 9 (WIND-02): the trade-wind current, in HTML for the same reason the
+             sail squares above are — an animated transform on an SVG child costs ~62 layouts/sec
+             and cannot be composited, while the identical animation on HTML costs zero. Sits at
+             z-index 1: above the water and the grid, below the sail squares(2), rings(3) and
+             boats(4), because a current is scenery and must never cover a choice or a ship. -->
+        <div id="rimHost" aria-hidden="true"></div>
+        <div id="sailHost" aria-hidden="true"></div>
         <div id="rippleHost" aria-hidden="true"><div id="rippleRing"></div></div>
+        <!-- PERF-01 (2026-08-02): the boats, split out of #board into their own SVG so they paint
+             ABOVE the ripple rings. Moving the rings to HTML had put them over the boats, which
+             read wrong. Same viewBox as #board and the same box, so every ship coordinate means
+             exactly what it did before — drawBoard() simply appends the ship groups here instead.
+             Only the ships live here: sail highlights and emoji pops stay in #board, below the
+             boats, which is where Wyatt wants them. -->
+        <svg id="boardShips" viewBox="0 0 640 640" aria-hidden="true"></svg>
         <!-- chat speech bubbles, one per seat, positioned over that seat's boat -->
         <div id="chatBubbles"></div>
       </div>
@@ -1225,20 +2873,26 @@
            Bare 🔊/🔇 emoji scaffold (D-14): the real speaker icon + blocked-slash overlay is
            Wave 5's job and needs Wyatt's art pipeline; this ships behaviour complete now with no
            broken image and no borrowed icon (horn.png already carries the 📯 meaning). Visible
-           content set every tick by setClockUI(); click bound once in wireLobby(). -->
+           content set every tick by setClockUI(); click bound once in wireLobby().
+           MUTE-01 (2026-08-02): the button itself lives in #muteSlot, a #layout grid child, so it can
+           sit under the captains box when the row is too narrow — see the #muteSlot rule. Its cqw
+           sizing still resolves against this row, because #muteSlot shares this row's box. -->
       <button id="btnPlayAgain" type="button" style="display:none">🔁 Play again</button>
     </div>
     <div id="actionPanel" style="display:none"><div id="apGrid"><div id="apGridInner"></div></div></div>
     <div class="panel" id="captainsPanel">
-      <h3>Captains</h3>
+      <!-- The "Captains" heading is GONE — Wyatt, 2026-08-23c (problem 4): "remove the 'Captains'
+           line of text in the captains box to save space." The rows are self-explanatory (a name,
+           a purse, a hold), and on a phone the heading's height came straight out of the board's
+           square. Do not restore it. -->
       <div id="players"></div>
     </div>
-    <!-- P6 (Wyatt, 2026-08-01: "on narrow screens the mute button can go off-screen. fix: on narrow
-         screens, put mute button below captain's box"). Moved OUT of #controlsRow to be a direct
-         #layout child so the page grid can place it: below the captains box in the stacked layout,
-         and on its own row under the controls in the wide/sidebar layout. It cannot sit inside the
-         controls flex row AND be grid-placed elsewhere — one element, one home. -->
-    <button id="btnMute" type="button" style="display:none">🔊</button>
+    <!-- MUTE-01 (Wyatt, 2026-08-02): "when the screen size is too narrow to have the mute button
+         appear in line with the turn clock, move it underneath the captain's box, just above the
+         footer links." #muteSlot is the grid item that makes that possible while still letting the
+         button align with the clock row when there IS space — see its CSS for why the wrapper
+         exists. Placed here, after the captains box, so DOM order matches the narrow reading order. -->
+    <div id="muteSlot"><button id="btnMute" type="button" style="display:none">🔊</button></div>
     <div class="panel" id="statsWrap" style="display:none">
       <h3>End of voyage</h3>
       <div id="statsPanel"></div>

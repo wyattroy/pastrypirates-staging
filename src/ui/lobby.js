@@ -22,7 +22,7 @@
 // here (flow.js's wireWelcome imports both from this file, extending its existing import).
 //
 // Purity bar for src/ui/: reads DOM and game state, NEVER imports src/net/ (D-07).
-// scripts/module_graph_check.js and scripts/ui_contract_check.js both gate this mechanically.
+// scripts/module_graph_check.js and scripts/ui_contract_check.js both gate this mechanically.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
 //
 // Deviation ($ duplicate, mirrors 11-01/11-03/11-04's precedent): `$` is a classic-script-local
 // `const $=id=>document.getElementById(id)` (index.html:863, pre-11-07), used ~120+ times across
@@ -38,11 +38,18 @@ import {
   HEXCOL, DEVICE_IMG, ANCHOR_IMG, CLOCK_IMG, FLIP_SOCKET_IMG, HOURGLASS_IMG,
   CLOSE_X_IMG, iconImg, emojify, unusedDefaultName,
 } from "../shared/index.js";
-import { pname, pn, getLastName, saveLastName } from "./util.js";
+import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN } from "./util.js";
 // F2/UI-06 (2026-07-29): escHtml's only use here was the duplicate seat-name rendering that this
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
 import { syncBoardSizing } from "./board.js";
+// playtest 18: passGate's /4 form is a centre-stage ceremony built through panel() — same
+// hand-built stage pattern as the bake-off intro and the black-market beat. No cycle: panel.js
+// imports nothing from this file.
+import { panel } from "./panel.js";
+// T-12: the stage layer lives on document.body, outside #game, so leaving a voyage has to take it
+// down explicitly. stage.js does not import lobby.js (only names it in comments), so no cycle.
+import { hideStageLayer, showStageLayer } from "./stage.js";
 
 const $=id=>document.getElementById(id);
 
@@ -88,6 +95,23 @@ export function openKofi(){
 /* ================= welcome modal ================= */
 export function showStep(id){
   ["stepChoose","stepHost","stepJoin","stepPassPlay"].forEach(s=>{$(s).style.display=(s===id?"":"none");});
+  /* T-22 (Wyatt, 2026-08-26): "the focus cursor automatically lands in the top text box (either
+     name or crew code) on all pre-game mode modals."
+
+     WIRED HERE, NOT PER SCREEN. The name modal already focused its own field (openNameModal), and
+     the join and pass-and-play steps did not — one screen having the courtesy and its neighbours
+     not is the consistency rule as a bug. Every step goes through this one function, so no future
+     step can be added without it.
+
+     Reads the first visible text input rather than a hard-coded id, so a step that gains or
+     reorders fields keeps working. rAF, because the step is unhidden on the line above and an
+     element cannot take focus in the same frame it stops being display:none. */
+  requestAnimationFrame(()=>{
+    const step=$(id); if(!step)return;
+    const first=[...step.querySelectorAll('input[type="text"], input:not([type])')]
+      .find(e=>{const r=e.getBoundingClientRect();return r.width>1&&r.height>1&&!e.disabled&&!e.readOnly;});
+    if(first){try{first.focus();first.select();}catch(err){}}
+  });
 }
 // FIX-01: the single read chokepoint every caller goes through. Was a direct read of the
 // welcome-screen input's value — that field is gone (D-01); the persisted last-used name
@@ -99,8 +123,45 @@ export function requireName(){
   // captain via unusedDefaultName(null,0) rather than DEFAULT_NAMES[0] directly, so the
   // collision-safe helper stays the single source of default names — deterministic, and can't
   // clash with the bots that fill seats 1-3.
-  return v?v.slice(0,40):unusedDefaultName(null,0);
+  return v?v.slice(0,MAX_NAME_LEN):unusedDefaultName(null,0);
 }
+
+/* ================= the inline name warning (item 16 / D-19) ================= */
+
+// setNameWarning(inputId, text) — THE ONE WAY the game tells a captain their name is spoken for.
+//
+// Wyatt's ruling (D-19): a name another HUMAN already holds is refused with a warning UNDER the Yer
+// Captain Name box — not a blocking popup. There are two boxes in this game that write
+// seats/$seat/name (JOIN VOYAGE's #joinName and the name modal's #nameModalInput, which is how a
+// rename happens), so there are two mounts and ONE builder. Never two messages for one situation.
+//
+// IT IS NOT alert(), AND THAT IS NOT A STYLE PREFERENCE. Elsewhere in the join path alert() is the
+// established pattern and is deliberately NOT followed here: a blocking alert() has already frozen a
+// page mid-probe in this project and the tab looked hung (T-02.2-23). This writes a line and returns.
+//
+// textContent, NEVER innerHTML. The string carries a name a player typed, and that same name is
+// rendered by every other client in the lobby and the ribbon (T-02.2-22). textContent escapes it by
+// construction, which is stronger than remembering to call escHtml at each of two call sites.
+export function setNameWarning(inputId,text){
+  const el=$(inputId+"Warn"),input=$(inputId);
+  if(!el)return;
+  el.textContent=text||"";
+  el.hidden=!text;
+  if(input)input.classList.toggle("nameWarned",!!text);
+}
+// Clear it the moment they start fixing it. A warning about a name that is no longer in the box is
+// a warning about nothing, and leaving it up reads as "still refused" while they retype.
+export function wireNameWarnings(){
+  ["joinName","nameModalInput"].forEach(id=>{
+    const input=$(id);
+    if(input)input.addEventListener("input",()=>setNameWarning(id,""));
+  });
+}
+// @copy misc.mperror.nametaken — inside the game world, so pirate register (the credits and the
+// About page are the only places that are not). It names the name back so there is no doubt WHICH
+// one is spoken for, and it promises nothing the 18-character cap would then refuse — it asks for
+// another name rather than suggesting a way to decorate this one.
+export const nameTakenMsg=(nm)=>`Arrgh — a captain aboard already sails as ${nm}. Pick another name, matey.`;
 
 /* ================= name modal (FIX-01) ================= */
 // D-03: the same modal appears before all four mode cards. Each caller in wireWelcome() opens it
@@ -121,13 +182,22 @@ let pendingNameAction=null;
 // instead. `null` means the player typed something of their own, which is always honoured verbatim.
 let autoOfferedName=null;
 export function pendingAutoName(){return autoOfferedName;}
-export function openNameModal(next){
+// `warn` (item 16 / D-19) — re-opening the modal to say why the last name was refused. A rename is
+// only reachable through this modal, and by the time renameMySeat learns the name is spoken for the
+// modal has already closed, so the refusal is delivered by opening it again with the reason under
+// the box. Absent, any stale warning is cleared — a modal opened fresh must not still be shouting
+// about a name from ten minutes ago.
+export function openNameModal(next,warn){
   pendingNameAction=next;
   const saved=(getLastName()||"").trim();
   // Only a name the player has actually chosen before counts as chosen now; a blank store means the
   // value below is ours, not theirs.
   autoOfferedName=saved?null:unusedDefaultName(null,0);
-  $("nameModalInput").value=saved?saved.slice(0,40):autoOfferedName;
+  // Same reason as #joinName in flow.js's wireWelcome: this modal's name reaches seats/$seat/name
+  // for a host and a joiner alike, and the database refuses anything longer than MAX_NAME_LEN.
+  $("nameModalInput").maxLength=MAX_NAME_LEN;
+  $("nameModalInput").value=saved?saved.slice(0,MAX_NAME_LEN):autoOfferedName;
+  setNameWarning("nameModalInput",warn||"");
   $("nameModal").style.display="flex";
   $("nameModalInput").focus();
   $("nameModalInput").select();
@@ -136,7 +206,7 @@ export function confirmName(){
   // guard: a second invocation with no pending action (e.g. a stray dismiss handler firing twice)
   // is a no-op, not a throw.
   if(!pendingNameAction)return;
-  const raw=($("nameModalInput").value||"").trim().slice(0,40);
+  const raw=($("nameModalInput").value||"").trim().slice(0,MAX_NAME_LEN);
   // Unchosen == left blank, or confirmed exactly as offered. Either way the displayed name stays
   // the friendly default so the player still sees a captain rather than an empty field — it is only
   // the DOWNSTREAM treatment that differs.
@@ -196,6 +266,9 @@ let nameModalWired=false;
 export function wireNameModal(){
   if(nameModalWired)return; // idempotent: a second call adds no second button, no duplicate listener
   nameModalWired=true;
+  // item 16: both name boxes clear their own warning as soon as the captain starts retyping. Wired
+  // here rather than at each box, so neither can be given the behaviour and the other forgotten.
+  wireNameWarnings();
   const overlay=$("nameModal");
   if(!overlay)return;
   const card=overlay.querySelector(".modalCard");
@@ -215,20 +288,60 @@ export function wireNameModal(){
 }
 
 /* ================= lobby / room ================= */
+// LOAD-03 (Wyatt's proposal, 2026-08-01): behind the welcome and lobby cards sits a STATIC blurred
+// picture, not the live game. `.bg-blurred` put a filter over the WHOLE of #game — board SVG,
+// captains panel and controls — and a filter forces that subtree into its own compositing layer,
+// so ANY invalidation inside it re-rasterises AND re-blurs the entire surface. The game was being
+// built, laid out and composited purely to be hidden behind a card.
+//
+// #game is now hidden outright on these screens rather than blurred, so there is no live surface to
+// invalidate. `.bg-blurred` stays on the element: it is what the game view removes on the way in,
+// and leaving it set keeps that transition honest if #game is ever shown while a card is still up.
+const showBackdrop=on=>{const b=$("welcomeBackdrop");if(b)b.style.display=on?"block":"none";};
+
+// LOAD-03b: the boot loader's job is to COVER THE GAP UNTIL THERE IS SOMETHING REAL TO SHOW, so
+// every function that paints a real destination lifts it. It used to hide on an art-download timer
+// instead, which got both journeys wrong:
+//
+//   * A first-time visitor waited behind it for ~7.7MB of board art the welcome screen does not
+//     even display any more (the backdrop is one 71KB still).
+//   * A player refreshing MID-GAME could have the loader fade onto the WELCOME SCREEN — because
+//     boot() called showHome() unconditionally, and on a multiplayer resume the room read is async,
+//     so the art often finished first. Their voyage then appeared a moment later. That flash is
+//     exactly the "did my game get lost?" moment, and it was reachable before this change.
+//
+// hideBootLoader() is idempotent (it returns if already hidden), so calling it from all three of
+// these is safe no matter which one wins the race to paint.
+/* T-12: hiding #game is NOT hiding the game. The ribbon, wind pill, captains box, chat sheet, fx
+   layer, ceremony veil and prompt are all appended to document.body — outside #game — so a captain
+   sent back to port kept every one of them painted behind the welcome card (his screenshot:
+   "DAY 4", the captains box, and a live "wy2: tap to sail" bubble under the Play Solo buttons).
+   Both screens that leave a voyage take the stage down; the one that enters a voyage puts it back.
+   Wired in these three functions rather than at each caller, because every route to these screens
+   goes through them and a route added later cannot forget. */
 export function showHome(){
   showStep("stepChoose");
   $("lobby").style.display="flex";$("lobbyRoom").style.display="none";
-  $("game").style.display="";$("game").classList.add("bg-blurred");
+  showBackdrop(true);
+  $("game").style.display="none";$("game").classList.add("bg-blurred");
+  hideStageLayer();
+  hideBootLoader();
 }
 export function showRoom(){
   $("lobby").style.display="none";$("lobbyRoom").style.display="flex";
-  $("game").style.display="";$("game").classList.add("bg-blurred");
+  showBackdrop(true);
+  $("game").style.display="none";$("game").classList.add("bg-blurred");
+  hideStageLayer();
   $("roomCode").textContent=appState.room;
+  hideBootLoader();
 }
 export function showGameView(){
   $("lobby").style.display="none";$("lobbyRoom").style.display="none";
+  showBackdrop(false);
   $("game").style.display="";$("game").classList.remove("bg-blurred");
+  showStageLayer();
   syncBoardSizing();
+  hideBootLoader();
 }
 
 /* ================= pass & play: hand the device to the next seat ================= */
@@ -240,6 +353,39 @@ export function passGate(seatIdx){
   if(!appState.passAndPlay||seatIdx===appState.mySeat)return Promise.resolve();
   if(appState.replaying){appState.mySeat=seatIdx;return Promise.resolve();} // silently keep mySeat in sync so it's
   // already correct the moment replay catches up to the live edge — no UI shown mid-replay
+  // The outgoing captain's turn is over, so their checked recipe locks the moment the wheel
+  // changes hands — playtest 18's "reveal lasts the turn" rule, and the reason nothing private
+  // can be on screen while the ceremony (or the old blur) holds the board.
+  appState.recipeRevealed=false;
+  // /4 (Wyatt's pick, 2026-08-13): the hand-off is a CENTRE-STAGE CEREMONY like every other —
+  // dim sea, minimal white card (name + button, no briefing), the button in the incoming
+  // captain's own boat color. The v2 blur overlay below survives only as the non-stage fallback,
+  // so a missing stage still fails safe to something that hands the device over.
+  if(document.body.classList.contains("pp4Stage")){
+    return new Promise(res=>{
+      const ap=$("actionPanel");
+      ap.dataset.pp4Stage="1";
+      /* THE HAND-OFF CARD IS SIZED BY ITS OWN WORDS. Wyatt, 2026-08-20: the "Pass the wheel to /
+         wy" box is "far too big". It was two faults wearing one coat: this hard line break, which
+         put a two-letter name on a line of its own, and the centre-stage card's pinned 420px width
+         plus its 110px pulsing circle — both of which are RIGHT for the bake-off and the ceremony
+         barriers and far too much for six words and a button.
+         The stamp below is what index.html's #actionPanel[data-pp4-hand] rules key off, so only
+         this one card shrinks and every other centre-stage card keeps the width it was given.
+         NO WORDS CHANGE: the @copy block is approved as written and the break is not a word. */
+      ap.dataset.pp4Hand="1";
+      if(window.__pp4&&window.__pp4.stageCenterNow)window.__pp4.stageCenterNow();
+      // @copy misc.lobby.passmessage4 — APPROVED as written, Wyatt 2026-08-14
+      panel(`<div class="apMsg">${iconImg(DEVICE_IMG)} Pass the wheel to
+        <b style="color:${HEXCOL[seatIdx]}">${pname(seatIdx)}</b></div>
+        <div class="apBtns"><button class="apBtn" id="passHelmGo" type="button"
+          style="border-color:${HEXCOL[seatIdx]};color:${HEXCOL[seatIdx]}">At the helm!</button></div>`,true);
+      const go=$("passHelmGo");
+      const took=()=>{delete ap.dataset.pp4Stage;delete ap.dataset.pp4Hand;panel("");appState.mySeat=seatIdx;res();};
+      if(!go){took();return;}
+      go.onclick=()=>{go.onclick=null;took();};
+    });
+  }
   return new Promise(res=>{
     $("game").classList.add("bg-blurred");
     // NARR-01/D-25 (Wyatt-approved 2026-07-29).
@@ -269,12 +415,12 @@ export function renderSeatList(seats){
     // D-29 RESOLVED (Wyatt-approved 2026-07-29): every player-facing string in this file speaks the
     // pirate register — the 2nd-person pronouns become ye/yer/yers/yerself. Applied as a one-time source
     // transformation using art-review/narration-core.js's own PIRATE_RE/PIRATE_MAP as the spec — the one
-    // declaration site in the repo, imported by the audit page, the health gate and ui_contract_check.js
+    // declaration site in the repo, imported by the audit page, the health gate and ui_contract_check.js  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
     // alike (the
     // page ran it LIVE at render, so a card tagged `keep` displayed the converted text — under D-25 that
     // converted text is what he approved). No runtime helper is shipped for it: a pirateVoice() nothing
     // calls would be dead code, which D-33/D-34/D-40 exist to prevent. Comments and identifiers are out
-    // of scope. scripts/ui_contract_check.js now gates this permanently.
+    // of scope. scripts/ui_contract_check.js now gates this permanently.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
     // F1 + UI-06 (Wyatt-approved 2026-07-29, 15-PLAYTEST-NOTES.md): two fixes in two lines.
     //
     // F1 — THE LABEL CLASS. The pirate register (D-29) applies to text the game SPEAKS. This is not
@@ -283,7 +429,7 @@ export function renderSeatList(seats){
     // not pirate, it is a grammar error: `ye` is a pronoun standing in for a person, so a bare
     // `Wyatt — ye` reads "Wyatt — thou" rather than "Wyatt — that's the one that's you". The ~50
     // in-sentence ADDRESS sites in this codebase are correct as ye/yer and none of them change.
-    // scripts/ui_contract_check.js carries a named, content-anchored, staleness-checked exception
+    // scripts/ui_contract_check.js carries a named, content-anchored, staleness-checked exception  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
     // for exactly these three label sites, so a later pass cannot "fix" them back.
     //
     // F2/UI-06 — ONE NAME PER SEAT. `label` used to begin with the seated player's name while the

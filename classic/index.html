@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="shortcut icon" href="../favicon.ico">
+<link rel="apple-touch-icon" href="../favicon.png">
+<title>Pastry Pirates — the classic voyage</title>
+<meta name="description" content="A free browser pirate board game. Sail the Caribbean, collect baking ingredients, battle rival captains, and race home to become the Best Baker in the Caribbean. Play online with friends — 2-4 players, bots fill empty seats.">
+<link rel="canonical" href="https://playpastrypirates.com/classic/">
+<!-- max-image-preview:large is what permits a LARGE image beside the Google result. Without any
+     robots meta tag Google defaults to a small thumbnail or none, which is why og:image alone never
+     produced one (Google largely ignores Open Graph for result thumbnails — those tags serve
+     iMessage/Slack/Facebook). max-snippet:-1 lifts the text-snippet cap at the same time. -->
+<meta name="robots" content="noindex, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Pastry Pirates on the Sugar Seas">
+<meta property="og:description" content="Sail the Sugar Seas, plunder ingredients, and out-bake rival pirate captains — free, no login, 1-4 players.">
+<meta property="og:url" content="https://playpastrypirates.com/classic/">
+<meta property="og:image" content="https://playpastrypirates.com/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="663">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pastry Pirates on the Sugar Seas">
+<meta name="twitter:description" content="Sail the Sugar Seas, plunder ingredients, and out-bake rival pirate captains — free, no login, 1-4 players.">
+<meta name="twitter:image" content="https://playpastrypirates.com/og-image.jpg">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"VideoGame","name":"Pastry Pirates on the Sugar Seas","url":"https://playpastrypirates.com/classic/","description":"A free browser pirate board game — sail the Caribbean, collect baking ingredients, battle rival captains, and race home to become the Best Baker.","image":"https://playpastrypirates.com/og-image.jpg","genre":"Board Game","gamePlatform":"Web Browser","numberOfPlayers":"2-4","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
+</script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-database-compat.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --teal: #29a3b2; --mint: #45dfa6; --orange: #fdb63d; --lemon: #fef48b; --pink: #fdaecb;
+    --sea: #d3f0f4; --sea2: #bfe8ee; --ink: #1f4249; --parch: #ffffff; --paleblue: #dff3fb;
+    --parch2: #fff6c0; --line: #cfe7eb; --accent: #f59f2d;
+    --p0: #f2679e; --p1: #1d96a6; --p2: #27c78d; --p3: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif;
+    background: linear-gradient(160deg, #dcece9 0%, #e6efe1 45%, #f5f0dd 100%); background-attachment: fixed;
+    color: var(--ink); }
+  /* #6: first-paint loader (no image dependencies of its own so it shows instantly) */
+  #bootLoader { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: linear-gradient(160deg, var(--sea) 0%, var(--sea2) 100%);
+    transition: opacity .5s ease; }
+  #bootLoader.hidden { opacity: 0; pointer-events: none; }
+  #bootLoader .bootShip { font-size: 54px; animation: bootBob 1.6s ease-in-out infinite; }
+  #bootLoader .bootShip img { width: 54px; height: 54px; object-fit: contain; }
+  #bootLoader .bootMsg { font-weight: 800; font-size: 16px; color: var(--teal); letter-spacing: .5px; }
+  #bootLoader .bootBar { width: 180px; height: 8px; border-radius: 999px; background: rgba(31,66,73,.12); overflow: hidden; }
+  #bootLoader .bootBarFill { width: 40%; height: 100%; border-radius: 999px; background: var(--teal);
+    animation: bootSlide 1.1s ease-in-out infinite; }
+  @keyframes bootBob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-8px) rotate(4deg); } }
+  @keyframes bootSlide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+  @media (prefers-reduced-motion: reduce) { #bootLoader .bootShip, #bootLoader .bootBarFill { animation: none; } }
+  #layout { display: grid; gap: 14px; padding: 14px; grid-template-columns: 1fr;
+    grid-template-areas: "board" "controls" "narration" "stats" "captains" "mute" "chat"; }
+  #left { grid-area: board; min-width: 0; }
+  #controlsRow { grid-area: controls; display: flex; gap: 10px; align-items: stretch;
+    container-type: inline-size; container-name: controls; }
+  /* MUTE-01 (Wyatt, 2026-08-02: "the mute button is still misaligned").
+   *
+   * P6 had placed this as a GRID item with two homes — `grid-area: mute` (its own row under the
+   * captains box) and a wide-layout override putting it back beside the clock. The bug was the
+   * CONDITION: that override keyed on the sidebar-layout class, which syncBoardSizing() toggles on
+   * whether the SIDEBAR has room for a row of ingredient chips — not the same question as whether
+   * the CONTROLS ROW has room for one small button. Measured at 1000x700, a wide window, the class
+   * was absent, so the button dropped to its own row at x=28 while the clock sat at x=382. That is
+   * Wyatt's screenshot.
+   *
+   * A container query on #controlsRow was the obvious instrument and could not work: container
+   * queries only style DESCENDANTS, and P6 had moved this element out of that row.
+   *
+   * Two things settled it. Measured, the button FITS INLINE AT EVERY SIZE — 333px needed against a
+   * 334px row even at 390px phone portrait — so "below the captains box" was never a space
+   * requirement. And its styling (`flex: 0 0 auto`, `align-self: center`, every size in `cqw`) was
+   * written for this row and never updated when it left: as a grid child of #layout there was no
+   * container ancestor, so those cqw units had been silently resolving against the VIEWPORT.
+   *
+   * TWO EARLIER ATTEMPTS, kept because each named a real constraint:
+   *   - flex-wrap inside #controlsRow got the inline case right at every width, but the WRAP case
+   *     stranded the button in a gap under the clock. Wyatt, with screenshots at 327 and 300px:
+   *     "this is exactly why i wanted this work to be done properly."
+   *   - A 460px container query then fixed the fallback but broke the condition, pushing the button
+   *     down at 391px where he could see 11px of room. The number came from a stale measurement.
+   * See the #muteSlot rule below for what replaced them, and why it is measured rather than guessed.
+   */
+  /* WHERE THE MUTE BUTTON LIVES. Wyatt's rule, verbatim (2026-08-02): "if there is room ON THE SAME
+   * LINE as the turn clock, put it there. if not, move it down."
+   *
+   * It is measured, not guessed. placeMuteButton() (src/ui/board.js) asks whether the button plus
+   * the row's standard gap fits in what is left of #controlsRow, and MOVES the button between the
+   * two homes below. Two earlier attempts got this wrong and both failures are worth keeping:
+   *
+   *   - Keying on the sidebar-layout class asked "does the SIDEBAR fit ingredient chips", a
+   *     different question, so a wide-but-stacked window sent the button to its own row.
+   *   - Then a 460px container query — a number derived from a stale measurement, taken while the
+   *     button sat OUTSIDE the row where its cqw units resolved against the viewport and reported
+   *     75px instead of ~60px. It pushed the button down at 391px where 11px of room was visible on
+   *     screen. A guessed threshold cannot track content that clamps with its container; only
+   *     measurement can.
+   *
+   * #muteSlot is `container-type: inline-size` and carries #controlsRow's exact width/max-width/
+   * margin trio ON PURPOSE: the button's own sizing is in cqw, so without this its width would
+   * depend on which home it currently occupies — and "does it fit" would depend on where it already
+   * is. Matching the boxes makes the button the same size in both places and breaks that circle. */
+  #muteSlot { grid-area: mute; width: 100%; max-width: var(--boardW, 100%);
+    margin-left: auto; margin-right: auto; display: flex; justify-content: flex-start;
+    container-type: inline-size; }
+  /* dropped: left-aligned under the captains box (Wyatt's pick), just above the footer links */
+  #muteSlot:empty { display: none; } /* no empty 14px grid row while the button is up in the clock row */
+  /* inline: snug after the clock with the row's own gap, bottom edges level with it (his words:
+     "snug next to the clock, bottom-aligned with the bottom of the clock") */
+  #controlsRow > #btnMute { align-self: flex-end; }
+  #actionPanel { grid-area: narration; }
+  /* container for the chip-row query below — the captains box responds to ITS OWN width,
+     not the viewport's, so the layout switches wherever the box is actually too narrow. */
+  #captainsPanel { grid-area: captains; container-type: inline-size; container-name: captains; }
+  #statsWrap { grid-area: stats; }
+  #chatPanel { grid-area: chat; }
+  /* below-the-board panels track the board's own rendered width; in the stacked/narrow layout they
+     (and the board) are centered on the page together via margin auto — so the whole game column
+     sits centered while every element still shares the same edges as before (#21). A no-op in the
+     wide layout: there they live in the sidebar column (var(--sideW)), already narrower than
+     --boardW and filled at width:100%, except #footerRow, whose more specific .layoutWide override
+     below wins and spans the full board+sidebar width as intended. */
+  #controlsRow, #actionPanel, #captainsPanel, #statsWrap, #chatPanel, #footerRow {
+    width: 100%; max-width: var(--boardW, 100%); margin-left: auto; margin-right: auto;
+  }
+  /* "wide" layout is toggled by JS (syncBoardSizing), not a viewport media query — whether the
+     board+sidebar sit side by side depends on the sidebar actually having room for a full row of
+     5 ingredient chips, which is a function of the computed board size, not raw viewport width. */
+  #game.layoutWide #layout { grid-template-columns: var(--boardW, 1fr) var(--sideW, 300px);
+      grid-template-areas: "board captains" "board controls" "board narration" "board chat" "board stats";
+      width: calc(var(--boardW, 820px) + 14px + var(--sideW, 300px)); max-width: 100%; margin: 0 auto;
+      align-items: start; }
+  #game.layoutWide #boardwrap { max-width: none !important; width: 100%; }
+  #game.layoutWide #footerRow { width: calc(var(--boardW, 820px) + 14px + var(--sideW, 300px)); max-width: 100%; margin: 0 auto; }
+  #flipPanel { flex: 0 0 auto; }
+  #shotClockPanel { flex: 0 0 auto; }
+  #board { background: linear-gradient(160deg, var(--sea), var(--sea2)); display: block; width: 100%; height: auto; border-radius: 10px; border: 1.5px solid var(--line); overflow: hidden; }
+  /* #1b: storm overlay — a light dark tint + two rain layers that fall in the wind's direction.
+     The rain angle/travel is driven by CSS vars set per-storm from the wind (see render()).
+     Fades in/out rather than snapping on/off. Purely decorative. */
+  #stormOverlay { position: absolute; inset: 0; pointer-events: none; border-radius: 10px; overflow: hidden;
+    opacity: 0; transition: opacity .8s ease; z-index: 5; background: rgba(18, 24, 45, 0.4);
+    /* --slant is set per-storm (render) to the wind direction; --drop is one dash period of the tile */
+    --slant: 0deg; --speed: 0.75s; --drop: 113px; }
+  #boardwrap.storming #stormOverlay { opacity: 1; }
+  /* notes/edits BUG-01: the rain used to be a live CSS build — a huge repeating-linear-gradient
+     masked by another gradient with an animated mask-position and a blur filter. Safari re-rasterizes
+     AND re-blurs that whole 220%-sized masked layer on the CPU every single frame (Chrome
+     GPU-accelerates it; Safari doesn't), so any active storm dragged the board to ~2fps — with the
+     game paused and nothing else happening. The rain is now a pre-rendered, seamlessly-tiling PNG
+     (assets/rain-streaks.png, soft edges baked in) that we simply TILE and slide with a
+     compositor-only transform:translateY. No mask, no filter, no live gradient — the GPU tiles one
+     small cached texture and moves it. Each .rlayer varies only cheap, compositor-friendly things
+     (scale, speed, offset, opacity) for depth; rotate(--slant) aims them at the wind. */
+  #stormOverlay .rlayer { position: absolute; left: -60%; top: -60%; width: 220%; height: 220%;
+    background: url(../assets/rain-streaks.png) repeat; background-size: 240px 226px;
+    transform: rotate(var(--slant)) translate3d(0,0,0);
+    animation: rainFall var(--speed) linear infinite; animation-play-state: paused; will-change: transform; }
+  #boardwrap.storming #stormOverlay .rlayer { animation-play-state: running; } /* only spin the animation while it's visible */
+  /* slide by one dash period (--drop): the streaks are vertical so a vertical shift is invisible to
+     them, and the drop dashes repeat every --drop, so the loop is seamless */
+  @keyframes rainFall {
+    from { transform: rotate(var(--slant)) translate3d(0,0,0); }
+    to   { transform: rotate(var(--slant)) translate3d(0, var(--drop), 0); } }
+  @media (prefers-reduced-motion: reduce) { #boardwrap.storming #stormOverlay .rlayer { animation-play-state: paused; } }
+  .panel { background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(41,163,178,.08); }
+  .panel h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 2px solid var(--mint); padding-bottom: 5px; color: var(--teal); }
+  details.panel summary { cursor: pointer; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--teal); font-weight: bold; border-bottom: 2px solid var(--mint); padding-bottom: 5px; margin-bottom: 8px; }
+  #scrub { width: 100%; margin-top: 8px; }
+  #controls { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font-family: inherit; font-size: 14px; padding: 6px 14px; border: 1.5px solid var(--teal); border-radius: 7px; background: var(--lemon); cursor: pointer; color: var(--ink); }
+  button:hover { background: #fdea6d; }
+  /* FIX-06: outline + faded-fill recipe, borrowed VERBATIM from .footerKofi/.footerKofi:hover
+     (index.html ~146-147) so every primary button reads as one house pattern, not a fourth orange. */
+  button.primary { border: 1.5px solid #e89827; background: #fdf3e3; color: #8a5a12; }
+  button.primary:hover { background: #fae7cb; }
+  button:disabled { opacity: .4; cursor: default; }
+  /* UI-01: top padding was 4px. #footerRow is a SIBLING of #layout, not a grid item, so the space
+     above it is #layout's own 14px bottom padding PLUS this — 18px, against the 14px rhythm every
+     other section keeps. Zero here makes that gap exactly 14px like all the others. The 14px sides
+     match #layout's horizontal padding so the buttons line up with the panels above them, and the
+     18px bottom is deliberate breathing room at the end of the page, not a rhythm step. */
+  #footerRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-start; align-items: flex-start;
+    padding: 0 14px 18px; }
+  /* P12 (Wyatt, 2026-08-01): every button in this row must be the SAME height. They already shared
+     padding and font-size, but each one leads with a different emoji and emoji glyph boxes are not
+     uniform — 🍪 is taller than 📖/🎗️/📜, so "Buy me a cookie" stood proud of its neighbours.
+     inline-flex + a fixed line-height makes the box height depend on the declared line-height
+     rather than on whichever glyph happens to be inside it. */
+  .footerBtn { font-family: inherit; font-size: 13px; padding: 6px 13px; border-radius: 7px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    line-height: 20px; border: 1.5px solid var(--teal); background: #fff;
+    color: var(--ink); }
+  .footerHow, .footerCredits, .footerLog { border: 1.5px solid #4a7fa6; background: #eaf2f8; color: #355e7e; }
+  .footerHow:hover, .footerCredits:hover, .footerLog:hover { background: #dcebf5; }
+  .footerFeedback { border: 1.5px solid #3f9d6e; background: #e8f7ee; color: #2c6e4d; }
+  .footerFeedback:hover { background: #d9f1e5; }
+  /* KOFI-01. Wyatt's Ko-Fi brand colour is #e89827 (from the widget snippet he supplied); this
+     border/background/text trio is that hue carried through the SAME light-tint recipe every other
+     footer button uses, so "styled the same" means the same shape, size and weight as its
+     neighbours rather than Ko-Fi's own pill dropped into the row. */
+  .footerKofi { border: 1.5px solid #e89827; background: #fdf3e3; color: #8a5a12; }
+  .footerKofi:hover { background: #fae7cb; }
+  /* Ko-Fi's embed is a fixed-width panel; give it room without letting it push the modal wider than
+     its siblings. Height is theirs, not ours — too short and the donate form scrolls inside itself. */
+  .kofiPanel { margin-top: 12px; min-height: 560px; }
+  .kofiPanel iframe { width: 100%; height: 560px; border: none; display: block; background: transparent; }
+  .recipeModalBtn { border: 1.5px solid #3f9d6e; background: #e8f7ee; color: #2c6e4d; }
+  .recipeModalBtn:hover { background: #d9f1e5; }
+  /* FIX-06: the `button.` prefix (not a bare class selector) ties this rule's specificity with
+     `button.primary` above so the leave-game confirm button — which keeps its existing primary
+     class, see the markup comment there — resolves to this red recipe by source order (this rule
+     is declared later), with no change to the primary-button count. */
+  button.footerLeave { border: 1.5px solid #b56464; background: #f8eaea; color: #7e3535; }
+  button.footerLeave:hover { background: #f2dada; }
+  input[type=range] { accent-color: var(--accent); }
+  #scrub { width: 100%; margin-top: 8px; }
+  select, input[type=number] { font-family: inherit; font-size: 13px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+  .rulegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; font-size: 13.5px; }
+  .rulegrid label { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; }
+  .rulegrid label span { flex: 1; }
+  .player-row { padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; border: 2px solid transparent; box-sizing: border-box; transition: border-color .25s ease, box-shadow .25s ease; }
+  .player-row.activeTurn { border-color: var(--rowcol, var(--accent)); box-shadow: 0 0 0 2px var(--rowcol, var(--accent)) inset, 0 0 6px rgba(0,0,0,.12); }
+  /* fixed dot/name/coins columns keep money and hold aligned across all captains regardless of
+     name length or how many ingredients they're holding. The recipe name is a second grid row
+     inside the same .prowTop grid (not a separate row/div) so its placement — above the chips
+     on wide/medium screens, tucked under the name on narrow ones — is a pure CSS/media-query
+     concern with zero extra DOM height beyond the one text line it actually needs. */
+  /* FIX-17: the swatch column is gone (name/coins/chips only, 3 columns) — the recipe row's
+     leading empty cell that used to skip past the swatch column is gone with it; recipe now
+     simply starts at the first (name) column, which is exactly where it already tucked to. */
+  .prowTop { display: grid; grid-template-columns: 106px 40px 1fr; gap: 6px 6px;
+    grid-template-areas: ".    .     recipe" "name coins chips"; align-items: center; }
+  /* PDF item 3c / notes/edits #11 + FIX-09 D-03: when the captains box is too narrow to lay the
+     hold out on one line, the recipe drops under the captain's name and the ingredient chips take
+     their OWN full-width row beneath that. Chips keep their full 34px — they never wrap into a
+     tall column beside the name.
+
+     D-03 RESOLVED — Wyatt chose Treatment B, 2026-08-01: "I LOVE true — it's so much better."
+     Treatment A (26px shrunk chips inside the existing grid) is deleted per plan 18-06's own
+     instruction that exactly one treatment survives. Do not reintroduce a shrunk .chip here.
+
+     WHY A CONTAINER QUERY, NOT @media (Wyatt, 2026-08-01: "use it whenever the captains box would
+     have the ingredients stacking vertically"). The old rule fired at viewport <=480px, but the
+     chips stack whenever the BOX is short of room — which happens at far wider viewports, because
+     the box is sized from the board (--boardW) or sits in the narrow sidebar column (--sideW).
+     Wyatt hit exactly that: chips stacked on screen while the fix sat switched off. A container
+     query asks the right question.
+
+     THE 460px THRESHOLD, derived not guessed:
+       name 106px + coins 40px + two 6px gaps        = 158px before the chips start
+       one chip 34px, 3px gap  ->  N chips need 37N-3
+       5 chips (a full recipe) = 182  -> 340px    7 chips = 256 -> 414px
+       6 chips                 = 219  -> 377px    8 chips = 293 -> 451px
+     460px clears 8 chips, so a hold carrying three extras beyond the five-ingredient recipe still
+     lays out inline above the threshold. Raise this number if `.chip.extra` holds ever run longer;
+     the arithmetic above is the whole story. */
+  @container captains (max-width: 460px) {
+    .prowTop { grid-template-areas: "name coins ." "recipe recipe recipe" "chips chips chips"; }
+  }
+  .prowTop .pname { grid-area: name; }
+  .prowTop .coinsWrap { grid-area: coins; }
+  .prowTop .chips { grid-area: chips; }
+  /* visibility is driven directly from JS (see render(), the .hasRecipe toggle) rather than a
+     :has(:empty) relational selector — Safari has had reactivity gaps where :has() doesn't
+     re-evaluate after a purely textContent-driven mutation, leaving the recipe stuck hidden even
+     once the text is set (only reproduces via file:// in Safari, not over http/in Chrome) */
+  .prowRecipe:not(.hasRecipe) { display: none; }
+  .player-row .pname { font-weight: bold; overflow: hidden; white-space: nowrap; position: relative; }
+  .pnameInner { display: inline-block; }
+  .pname.marquee .pnameInner { animation: pnamescroll 9s ease-in-out infinite; }
+  @keyframes pnamescroll { 0%, 11% { transform: translateX(0); } 44%, 66% { transform: translateX(calc(-1 * var(--scrollDist, 0px))); } 100% { transform: translateX(0); } }
+  .coinsWrap { display: flex; align-items: center; gap: 3px; }
+  .player-row .coins { font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+  .chip { width: 34px; height: 34px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; padding: 1px; border-radius: 8px; background: #fbe1e0; border: 1px solid #e8a6a3; opacity: .7; }
+  .chip img { width: 95%; height: 95%; object-fit: contain; }
+  .narrIcon { width: 18px; height: 18px; vertical-align: -4px; object-fit: contain; margin: 0 1px; }
+  .chip.have { opacity: 1; background: #dcfaee; border-color: #27c78d; }
+  .chip.extra { opacity: 1; background: #fff6c0; border-color: #f0d060; }
+  .prowTop .prowRecipe { grid-area: recipe; }
+  .prowRecipe { font-size: 11px; line-height: 1.15; font-weight: bold; color: var(--ink); opacity: .65; align-self: start; }
+  .prowRecipe:not(:empty) { cursor: pointer; color: var(--teal); opacity: .9;
+    text-decoration: underline; text-decoration-color: var(--teal); text-underline-offset: 2px; }
+  .prowRecipe:not(:empty):hover { opacity: 1; text-decoration-thickness: 2px; }
+  /* #22: recipe links inside narration (esp. the victory message) must read as obviously tappable
+     — a bold teal link with a solid underline and a 📜 cue, not the near-invisible dotted style. */
+  .narrRecipeLink { cursor: pointer; color: var(--teal); font-weight: 800;
+    text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px;
+    white-space: nowrap; }
+  .narrRecipeLink:hover { filter: brightness(1.12); text-decoration-color: var(--accent); }
+  #recipeModalBody .recipeModalThumb { display: block; width: 100%; height: 220px; object-fit: contain;
+    margin: 15px 0 10px; }
+  #recipeModalBody h2 { font-size: 20px; font-weight: 800; letter-spacing: .3px; color: #5b3a1f;
+    font-family: Georgia, "Times New Roman", serif; margin: 0 0 9px; padding-bottom: 9px;
+    border-bottom: 3px double #b48a52; text-shadow: 0 1px 0 rgba(255,250,235,.5); }
+  #recipeModalBody .recipeModalDesc { font-size: 13px; line-height: 1.45; margin-bottom: 10px;
+    font-family: Georgia, "Times New Roman", serif; font-style: italic; color: #6b4a2c; opacity: 1; }
+  #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #8a6535; text-transform: uppercase; letter-spacing: .5px; margin: 14px 0 4px; }
+  #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #4a3223; margin: 10px 0 2px; }
+  #recipeModalBody ul, #recipeModalBody ol { margin: 4px 0 0; padding-left: 22px; font-size: 13.5px; line-height: 1.5; color: #4a3223; }
+  #recipeModalBody li { margin-bottom: 3px; padding-bottom: 4px; border-bottom: 1px dashed rgba(120,80,40,.3); }
+  #recipeModalBody li:last-child { border-bottom: none; }
+  /* long recipes (multi-part ingredients + many steps) can be taller than the viewport — scroll
+     the body internally instead of the whole page, so the action buttons stay put right below it */
+  #recipeModal .modalCard { display: flex; flex-direction: column; max-height: 85vh;
+    border-color: #a07a45; border-radius: 12px;
+    /* same mottled, tea-stained parchment as the draft-pick recipe cards (§ recipeCard) */
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #f7edd2, #ecd9ac);
+    box-shadow: inset 0 0 30px rgba(120,80,35,.30), 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18); }
+  #recipeModalBody { overflow-y: auto; padding-right: 6px; }
+  @media print {
+    body > *:not(#recipeModal) { display: none !important; }
+    #recipeModal { position: static; display: block !important; background: none; }
+    #recipeModal .modalCard { border: none; box-shadow: none; max-width: 100%; max-height: none; display: block; }
+    #recipeModalBody { overflow: visible; }
+    #recipeModalBtns { display: none !important; }
+  }
+  .crown { font-size: 15px; }
+  .crown img { width: 15px; height: 15px; vertical-align: -3px; object-fit: contain; }
+  .pulse { animation: rowpulse .5s ease; }
+  @keyframes rowpulse { 0% { transform: scale(1); } 35% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  #log { max-height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.45; }
+  #boardwrap { position: relative; width: 100%; max-width: var(--boardW, min(820px, calc(100vh - 210px))); margin: 0 auto; container-type: inline-size; }
+  /* ---- chatbox: text chat between human players, plus on-board speech bubbles ---- */
+  #chatLog { max-height: 160px; overflow-y: auto; font-size: 13px; line-height: 1.4; margin-bottom: 8px; }
+  #chatLog > div { margin-bottom: 3px; word-wrap: break-word; }
+  #chatForm { display: flex; gap: 6px; }
+  #chatInput { flex: 1 1 auto; min-width: 0; font-family: inherit; font-size: 13px; padding: 6px 9px;
+    border: 1.5px solid var(--line); border-radius: 7px; }
+  #chatForm button { flex: 0 0 auto; }
+  /* one absolutely-positioned overlay spanning the board; individual bubbles opt back into
+     pointer-events so they stay clickable-to-dismiss without the (empty) overlay itself ever
+     intercepting clicks meant for the board underneath */
+  #chatBubbles { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+  .bubble { position: absolute; transform: translate(-50%, -112%); pointer-events: auto; cursor: pointer;
+    background: #fff; border: 2px solid var(--teal); border-radius: 9px; padding: 3px 9px;
+    font-size: 12px; font-weight: 500; line-height: 1.35; max-width: 42%;
+    box-shadow: 0 2px 6px rgba(31,66,73,.18); transition: opacity .35s; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -5px;
+    border: 5px solid transparent; border-top-color: inherit; border-bottom: none; }
+  .bubble.fadeOut { opacity: 0; }
+  /* UI-01: was `margin: 8px auto`. #layout is a grid with `gap: 14px`, so that 8px was ADDED to the
+     gap and the narration box alone sat 22px from its neighbours while every other panel sat 14px.
+     The horizontal `auto` is kept — it is what centres the panel in the stacked layout. */
+  /* The horizontal inset is DELIBERATELY SPLIT with #apGridInner below: 2px here, 10px there, so the
+     total is still 12px and nothing moves — but the 10px now sits INSIDE the clipping box, giving
+     .ahoyGlow's expanding ring somewhere to render. Wyatt: the orange rings were "cut off on the
+     left". Keep the two numbers summing to 12 if either is touched. */
+  #actionPanel { margin: 0 auto; background: linear-gradient(160deg, #eafaf3, #cdf0e2);
+    border: 2px solid var(--teal); border-radius: 10px; padding: 8px 2px; transition: background .25s; }
+  #actionPanel.needsAction { background: linear-gradient(160deg, #fff6c2, #ffe066); }
+  /* notes/edits BUG-01: the narration box smoothly resizes to each message's height — but ONCE per
+     message, not per character. panel() measures the finished message's full height and animates the
+     grid row straight to that fixed px, so the typewriter then fills a pre-sized box with zero
+     per-character reflow. (The earlier per-character 1fr grow was briefly blamed for the Safari storm
+     hitch; the real cause was the rain overlay, now fixed — so the smooth resize is back, done the
+     frame-safe way.) */
+  #apGrid { display: grid; grid-template-rows: 0px; transition: grid-template-rows .18s ease; }
+  /* overflow:hidden is LOAD-BEARING — it is what keeps content from spilling while the grid row
+     animates to each message's height (BUG-01, and the Safari-sensitive path). It cannot simply be
+     removed, and overflow-x:visible is not an option either: mixing hidden and visible makes the
+     visible axis compute to auto and adds a scrollbar. So the ring is given room INSIDE the clip
+     instead, via padding — see #actionPanel above. */
+  #apGridInner { overflow: hidden; min-height: 0; padding: 0 10px; }
+  @media (prefers-reduced-motion: reduce) { #apGrid { transition: none; } }
+  .apMsg { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  /* notes/edits #4b: a parenthetical aside like "(1 broadside)" must never split across a line
+     break — wrap it in this class at the string-building level wherever it appears. */
+  .nobrk { white-space: nowrap; }
+  /* notes/edits #1: every narration/prompt message types in one character at a time (real DOM
+     text-node reveal via typewriterReveal() in panel() — see there for why).
+     G8 (Wyatt-approved 2026-07-30): this rule now dresses the GHOST — the clone panel() makes of
+     the OUTGOING message when, and only when, a new line replaces it. It is never applied to a
+     live message, so a trailing line still never fades (F6). History of this number: .5s -> .18s
+     (G8, "draggy") -> .8s (G28, below).
+     G17 (Wyatt-approved 2026-07-30, superseding G8's overlap): he asked for a STRICT sequence —
+     "please fade the current line, THEN show the next" — so the incoming line no longer types in
+     UNDERNEATH this fade; panel() delays the incoming reveal by exactly this duration.
+     G28 (Wyatt-approved 2026-07-30, watched live): .18s -> .8s. 180ms was too quick to register,
+     and he named the fade's actual JOB — "the point of it is to let the player know that the text
+     is about to leave, so they can hurry up and read it". A warning nobody notices is not a
+     warning. The hold was cut to pay for it (msgHoldMs, src/ui/util.js: ceiling 3200ms), so the
+     worst case on screen is 3200 + 800 = 4000ms rather than the old ~5040 + 180.
+     >>> THIS NUMBER LIVES IN EXACTLY TWO PLACES: this .8s, and GHOST_FADE_MS=800 in
+     src/ui/panel.js. MOVE THEM TOGETHER — a strict sequence is only strict while they agree; if
+     this one grows, the next line starts typing before the old one has finished fading.
+     >>> AND IT IS NOT THE ONLY .18s IN THIS FILE. #apGrid's grid-template-rows transition (the
+     panel-height animation, above) shares the value by coincidence and must NOT move with it —
+     a blind find-and-replace of ".18s" hits five sites including two comments. Change this rule
+     by hand.
+     position:absolute takes the ghost OUT OF FLOW, which is what keeps resizePanel's
+     inner.offsetHeight measuring only the incoming message — the panel height still animates
+     exactly once per message. Being out of flow is also why it needs its own top/left/width: with
+     no inset shorthand it would otherwise collapse to #apGridInner's padding-box corner (0,0),
+     which is FIX-16's "jump left" bug. panel() (src/ui/panel.js, 18-01 Task 2) now sets
+     top/left/width per-instance from a snapshot taken while the ghost was still live in flow,
+     BEFORE inner.innerHTML wiped it — pinning width too, not just position, so the
+     out-of-flow ghost doesn't re-wrap and change line count mid-fade. Because the ghost is out of
+     flow, resizePanel()'s own measurement never sees it either — so panel() also passes an
+     explicit activeGhostFloor height as resizePanel()'s minHeight, holding the row at the taller
+     of the two until the ghost's own drop() clears the floor and re-measures (still ONE
+     max-content probe per resizePanel() call — see resizePanel()'s own comment).
+     pointer-events is load-bearing, not tidiness: panel() also renders action prompts with buttons,
+     and a ghost that swallowed the first click on a prompt would be a far worse bug than the one
+     this fixes. */
+  .apMsg.fadeOut { animation: apMsgFadeOut .8s ease both; position: absolute; pointer-events: none; }
+  /* P2 (Wyatt, 2026-08-01): "the text flashes before the fade starts — as if it disappears
+     completely, then comes back at full opacity in order to start its fade." With only a `to`
+     keyframe the start value is whatever the computed style happens to be when the animation is
+     picked up, one frame after the ghost is appended and positioned. An explicit `from` removes
+     that ambiguity — the fade provably begins at full opacity. */
+  @keyframes apMsgFadeOut { from { opacity: 1; } to { opacity: 0; } }
+  /* the ghost is positioned against the inner box, not the page. No offsets, so flow is unchanged. */
+  #apGridInner { position: relative; }
+  /* with motion reduced there is no fade at all — an instant swap, not a ghost sitting opaque
+     over the new line for the belt's duration. panel()'s setTimeout still removes it.
+     G17: panel() ALSO reads this same media query in JS and zeroes the reveal delay when it
+     matches. It has to: a media query cannot reach a JS timer, so without that read a
+     reduced-motion user would get a blank 180ms gap AND no fade — the worst of both. */
+  @media (prefers-reduced-motion: reduce) { .apMsg.fadeOut { display: none; } }
+  .apBtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .apBtn { background: #fff; font-size: 14px; }
+  .apBtn:hover { background: #eafbf4; }
+  /* FIX-06: was re-flooding to solid accent + brightness filter on hover, undoing the pale-fill
+     recipe above for every in-panel primary button (items 10-12 of the enumerated sites). */
+  .apBtn.primary:hover { background: #fae7cb; }
+  /* #5d: a too-poor Attack shows greyed and non-clickable rather than vanishing */
+  .apBtn.apDisabled, .apBtn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+  .apBtn.apDisabled:hover, .apBtn:disabled:hover { background: #fff; }
+  /* #5c: helper line under the action buttons */
+  .apSub { margin-top: 8px; font-size: 12.5px; opacity: .8; font-style: italic; }
+  /* small, consistent "back" affordance for every back-able decision — deliberately lower-key
+     than the real choices below it (a chevron-in-a-circle, iOS-nav-bar style), not another
+     button competing for attention in the main row */
+  .apBack { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+    padding: 0; margin-bottom: 6px; border-radius: 50%; background: #fff; font-size: 17px;
+    font-weight: 800; line-height: 1; }
+  .apBack:hover { background: #eafbf4; }
+  /* FIX-03/D-01: buttons wait for the typewriter to finish. visibility:hidden — never
+     display:none — because a hidden box must still occupy its layout space, which is what keeps
+     resizePanel()'s inner.offsetHeight measuring the buttons' full space whether this class is
+     present or not (18-01 Task 1). Toggled from panel() itself in src/ui/panel.js, off a .then()
+     on the same _revealDone promise flash() already awaits. Under prefers-reduced-motion the class
+     is never added at all — see panel()'s `reduced` read. */
+  /* P1 + P4 (Wyatt, 2026-08-01) — the box reveals TOP TO BOTTOM, in visual order:
+       back button -> message text -> helper text -> action buttons.
+     .apBack LEAVES this gate: it sits at the very top, so it must be there before the message
+       types in, not after ("the Back button should appear first ... this is not arbitrary").
+     .apSub JOINS it: the italic helper line sits under the message and above the buttons, and was
+       painting instantly, ahead of the text it explains ("it should honestly appear with the
+       buttons"). */
+  #actionPanel.pendingReveal .apBtns, #actionPanel.pendingReveal .apSub { visibility: hidden; }
+  .ahoyGlow { animation: ahoyglow 1.4s ease-in-out infinite; }
+  @keyframes ahoyglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,45,.6); } 50% { box-shadow: 0 0 0 8px rgba(245,159,45,0); } }
+  /* ---- battle scoreboard ---- */
+  .btl { text-align: center; }
+  .btl-hd { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
+  .btl-hd .rnd { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .55; font-weight: 700; }
+  .btl-body { display: flex; align-items: flex-start; justify-content: center; gap: 8px; }
+  .btl-col { flex: 1 1 0; max-width: 190px; padding: 8px 6px; border-radius: 12px; border: 2px solid transparent; transition: background .2s, border-color .2s, box-shadow .2s; }
+  .btl-col.live { background: #fff; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,166,35,.18); }
+  .btl-col .who { font-weight: 800; font-size: 14px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btl-col .role { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .5; margin-bottom: 7px; }
+  .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 30px; }
+  .coin { width: 74px; height: 74px; margin: 0 auto 9px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; letter-spacing: .5px; border: 3px solid; position: relative; }
+  .coin.wait { background: #f4f4f4; border-color: #dcdcdc; color: #c2c2c2; font-size: 24px; }
+  /* the flippenator's wood socket art already reads as "empty, waiting for a flip" on its own —
+     no placeholder circle/mark needed on top of it (unlike the battle scoreboard's bare .coin.wait
+     circles above, which have no socket art behind them and still want the plain placeholder) */
+  #flipCoinWrap.wait { background: transparent; border-color: transparent; }
+  .coin.spin { border-color: #e0a500; color: transparent; background-size: cover; background-position: center; animation: coinspin .34s linear infinite; }
+  .coin.heads { border-color: #d98e00; color: transparent; background-size: cover; background-position: center; }
+  .coin.tails { border-color: #1c2530; color: transparent; background-size: cover; background-position: center; }
+  .coin.win { box-shadow: 0 0 0 4px rgba(39,199,141,.55); }
+  @keyframes coinspin { 0% { transform: rotateX(0); } 100% { transform: rotateX(360deg); } }
+  .coin .bs { position: absolute; top: -9px; right: -9px; font-size: 16px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+  /* ---- flippenator: the one physical spot every coin flip happens — the coin IS the
+     button, so the whole thing is a single circle on the wood plank, not two elements ---- */
+  .flipPlank { display: flex; align-items: center; justify-content: center; width: fit-content;
+    border-radius: 14%; background: var(--flip-socket-img) center/cover; background-color: #8a5f2f;
+    padding: clamp(6px,2.4cqw,11px); box-shadow: 0 2px 5px rgba(0,0,0,.28); overflow: hidden; }
+  .flipPlank:has(#flipCoinWrap.active) { animation: plankglow 1s ease-in-out infinite; }
+  #flipCoinWrap.coin { width: clamp(36px,13cqw,64px); height: clamp(36px,13cqw,64px);
+    font-size: clamp(6px,1.9cqw,11px); margin: 0; }
+  #flipCoinWrap.coin.spin { font-size: clamp(11px,3.5cqw,22px); }
+  /* UI-09: the coin shows its plain heads art now (no orange wash). Only the word FLIP is orange,
+     with a dark outline so it stays legible over the gold coin. */
+  #flipCoinWrap.active { border-color: var(--accent); background-color: #f5a623;
+    background-size: cover; background-position: center;
+    color: #f5a623; text-shadow: 0 1px 2px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.7), 0 0 1px #000;
+    font-weight: 800; cursor: pointer; animation: flipglow 1s ease-in-out infinite; }
+  @keyframes flipglow { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,159,45,.5); } 50% { box-shadow: 0 0 0 9px rgba(245,159,45,0); } }
+  @keyframes plankglow { 0%, 100% { box-shadow: inset 0 2px 5px rgba(0,0,0,.28), 0 0 0 0 rgba(245,159,45,.65); }
+    50% { box-shadow: inset 0 2px 5px rgba(0,0,0,.28), 0 0 0 14px rgba(245,159,45,0); } }
+  /* ---- shot clock: a brass ship's gauge, left-aligned like a real instrument readout ---- */
+  /* UI-01: the gauge art fills the panel exactly (100% 100%) rather than `cover`, which was
+     scaling it up and cropping the left/right edges of the frame off. */
+  #shotClockPanel { background: linear-gradient(160deg, rgba(138,95,47,.6), rgba(92,61,28,.6)), var(--clock-img) center/100% 100% no-repeat;
+    border: 2px solid #d9a84e;
+    border-radius: clamp(8px,3cqw,14px); padding: clamp(5px,2cqw,9px) clamp(8px,3cqw,14px);
+    min-width: clamp(70px,26cqw,118px); position: relative; }
+  #shotClockPanel.idle { opacity: .55; }
+  #scPause { position: absolute; top: 3px; right: 4px; width: 16px; height: 16px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #d9a84e; border-radius: 50%;
+    background: rgba(0,0,0,.25); cursor: pointer; }
+  #scPause:hover { background: rgba(0,0,0,.4); }
+  #scPause img { width: 60%; height: 60%; object-fit: contain; }
+  #scTimerToggle img { width: 60%; height: 60%; object-fit: contain; vertical-align: middle; }
+  /* #7: timer off/on toggle — sits in the bottom-right corner, clear of the "turn clock" label
+     text in the top-left (which it used to overlap) and of #scPause in the top-right */
+  #scTimerToggle { position: absolute; bottom: 3px; right: 4px; width: 16px; height: 16px; padding: 0;
+    line-height: 13px; font-size: 9px; border: 1px solid #d9a84e; border-radius: 50%;
+    background: rgba(0,0,0,.25); color: #ffe9b8; cursor: pointer; }
+  #scTimerToggle:hover { background: rgba(0,0,0,.4); }
+  #shotClockPanel.urgent { background: linear-gradient(160deg, rgba(90,95,102,.72), rgba(37,40,44,.72)), var(--clock-img) center/100% 100% no-repeat;
+    border-color: #e2564c;
+    animation: clockurgent 0.9s ease-in-out infinite; }
+  /* notes/edits #11: paused always reads as silver/inert, regardless of whose turn it was paused
+     on or whether it was already urgent — distinct from both the normal brass panel and .urgent */
+  #shotClockPanel.paused { background: linear-gradient(160deg, rgba(154,161,168,.72), rgba(107,114,120,.72)), var(--clock-img) center/100% 100% no-repeat;
+    border-color: #c7ccd1;
+    animation: none; opacity: 1; }
+  #shotClockPanel.paused #scLabel, #shotClockPanel.paused #shotClockSub { color: #e8ebee; }
+  #shotClockPanel.paused #shotClockNum, #shotClockPanel.paused #scUnit { color: #fff; }
+  #scLabel { font-size: clamp(7px,2cqw,10px); color: #e0c58f; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2; }
+  #shotClockPanel.urgent #scLabel { color: #ff9b93; }
+  /* UI-02: outer edge radiates orange as the 20s window counts to 0 (--heat 0→1, set in setClockUI) */
+  #shotClockPanel.warming { box-shadow: 0 0 calc(4px + var(--heat,0) * 22px) calc(var(--heat,0) * 6px) rgba(245,159,45,calc(.15 + var(--heat,0) * .6)); }
+  #scRow { display: flex; align-items: baseline; gap: 4px; line-height: 1; margin: 1px 0; }
+  #shotClockNum img { width: 1em; height: 1em; object-fit: contain; vertical-align: middle; }
+  #shotClockNum { font-size: clamp(16px,6cqw,30px); font-weight: 700; font-variant-numeric: tabular-nums; color: #ffe9b8;
+    display: inline-block; min-width: 2ch; }
+  #shotClockPanel.urgent #shotClockNum { color: #ff8f86; }
+  /* CLOCK-02 UX: while paused the frozen number is click-to-resume (setClockUI adds .tappable) —
+     the ⏸-symbol paused branch already reads as a button, but this numeric branch did not. Dotted
+     underline + hover lift signal it's tappable without disturbing the tabular-nums layout. */
+  #shotClockNum.tappable { cursor: pointer; text-decoration: underline dotted rgba(255,255,255,.65);
+    text-underline-offset: 3px; border-radius: 6px; padding: 0 2px;
+    transition: background .12s ease, transform .12s ease; }
+  #shotClockNum.tappable:hover { background: rgba(255,255,255,.2); transform: scale(1.05); }
+  @media (prefers-reduced-motion: reduce) { #shotClockNum.tappable { transition: none; }
+    #shotClockNum.tappable:hover { transform: none; } }
+  /* reserve room for the widest label ("seconds"/"or lose your turn") so the panel doesn't
+     narrow when the idle state clears these to shorter placeholder text */
+  #scUnit { font-size: clamp(7px,2.2cqw,12px); color: #e0c58f; display: inline-block; min-width: 7ch; }
+  #shotClockPanel.urgent #scUnit { color: #ff9b93; }
+  #shotClockSub { font-size: clamp(7px,2.2cqw,11px); color: #e0c58f; line-height: 1.2; min-width: 18ch; }
+  #shotClockPanel.urgent #shotClockSub { color: #ff9b93; }
+  @keyframes clockurgent { 0%, 100% { box-shadow: 0 0 0 0 rgba(226,75,74,.65); } 50% { box-shadow: 0 0 0 9px rgba(226,75,74,0); } }
+  /* AUDIO-02/D-15 (phase 21): standalone #controlsRow sibling, right of the clock — narrow
+     (no min-width clamp, unlike #btnPlayAgain), so it reads as a control beside the clock rather
+     than a second panel. Same border-radius/padding clamp idiom as #btnPlayAgain so it drops into
+     the row without the layout jumping. */
+  /* MUTE-02 (Wyatt, 2026-08-02): "can you make the mute button 50% smaller too now? it's almost the
+     same size as the flippenator, but it really doesn't have to be."
+     Halved in BOTH dimensions, per his pick: 65x58 -> ~33x29 on a phone.
+     His second ruling was "trim padding first, keep the icon legible", and at half size those two
+     partly conflict — with a border and any padding at all, a ~29px-tall box cannot hold a 26px
+     icon. So the size wins (it was the actual request) and the padding is cut to near-nothing so
+     the icon keeps as much of the smaller box as geometry allows: it lands ~20px rather than the
+     ~17px a proportional shrink would have given. The border also drops 2px -> 1.5px, which is a
+     whole pixel of icon back on each axis at this scale.
+     The icon is what carries mute state (D-14's megaphone/slashed-megaphone pair), so it is the
+     last thing that should shrink — see #btnMute::after for the tap target that keeps it usable. */
+  #btnMute { flex: 0 0 auto; align-self: center; position: relative;
+    border-radius: clamp(5px,1.7cqw,8px); padding: clamp(2px,0.9cqw,3px) clamp(3px,1.3cqw,5px);
+    border: 1.5px solid #d9a84e; font-size: clamp(9px,2.9cqw,13.5px); line-height: 1;
+    background: linear-gradient(160deg, rgba(138,95,47,.6), rgba(92,61,28,.6));
+    color: #ffe9b8; cursor: pointer; }
+  #btnMute:hover { filter: brightness(1.15); }
+  /* D-14: em, NOT %. The button is flex:0 0 auto so it is content-sized; a percentage on its own
+     content is circular and an <img> resolves it with its intrinsic size — the 167x128 megaphone
+     blew the button from 49x43 to 200x101, wider than the clock panel beside it. The emoji
+     scaffold never exposed this because text is sized by font-size. em keeps the icon tied to the
+     button's own clamp()ed font-size, so the narrow-viewport bump below still works. */
+  #btnMute img { width: 1.5em; height: 1.5em; object-fit: contain; vertical-align: middle; }
+  /* MUTE-02: the button is now ~33x29 visually, which is below the ~44px that is comfortable to tap.
+     This pseudo-element extends the HIT AREA to 44x44 without changing the button's layout box — so
+     the row still only spends ~33px on it, and placeMuteButton()'s fit test (src/ui/board.js) keeps
+     measuring the visible size rather than a padded one. Growing the button with padding instead
+     would have made every measurement report 44px and pushed the button below the captains box
+     earlier than it needs to go.
+     It overflows into the row's 10px gap by ~5.5px a side, which stays clear of the clock. */
+  #btnMute::after { content: ""; position: absolute; left: 50%; top: 50%;
+    width: 44px; height: 44px; transform: translate(-50%,-50%); }
+  /* standalone, matches #shotClockPanel's footprint (min-width/padding/border-radius) so it
+     drops into the same #controlsRow slot without the layout jumping */
+  #btnPlayAgain { flex: 0 0 auto; min-width: clamp(70px,26cqw,118px);
+    padding: clamp(5px,2cqw,9px) clamp(8px,3cqw,14px); border-radius: clamp(8px,3cqw,14px);
+    border: 2px solid #d98e00; font-size: clamp(11px,3.5cqw,16px); font-weight: 800;
+    white-space: nowrap; color: #5c3d1c;
+    background: linear-gradient(160deg, #ffe9a8, #f5c451);
+    box-shadow: 0 3px 8px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.4); }
+  #btnPlayAgain:hover { filter: brightness(1.08); }
+  .pips { display: flex; justify-content: center; gap: 6px; }
+  .pip { width: 15px; height: 15px; border-radius: 50%; background: #ececec; border: 2px solid #d2d2d2; transition: transform .2s, box-shadow .2s; }
+  .pip.on { box-shadow: 0 0 7px rgba(0,0,0,.28); transform: scale(1.14); }
+  .btl-result { margin-top: 11px; font-weight: 700; font-size: 13.5px; min-height: 19px; }
+  .btl-result .score { color: #1c9e63; }
+  .btl-result .cancel { color: #8a8a8a; }
+  /* battle decisions live inside the scoreboard — coins stay visible above them */
+  .btl-prompt { margin-top: 11px; text-align: center; }
+  .btl-prompt .msg { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+  .btl-prompt .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .btlBtn { font-size: 14px; }
+  .btl-wait { margin-top: 11px; font-weight: 700; font-size: 13.5px; color: #8a8a8a; }
+  /* THE EASING IS THE WHOLE TRICK — do not put ease-out back. Wyatt, on the 3.6s ease-out version:
+     "the rings bunch up. and then they pause." That was not a timing problem. ease-out sprints then
+     crawls, so three rings spaced evenly in TIME arrive clumped in SPACE near the outer edge, and
+     the slow tail plus the gap before the next ring leaves the centre reads as a stall. LINEAR is
+     what makes a sonar ripple look evenly spaced and continuous.
+     Speed: 3.6s -> 2.7s (33% faster, his "re-increase 30%"), chosen over 2.77 so the stagger lands
+     on clean thirds. Travel widened .6->2.4 to .55->2.7 so the gaps between rings read larger, which
+     is the "more gap between them" half of the note.
+     The stagger in src/ui/board.js is duration/3 = 0.9s. CHANGE ONE AND THE OTHER MUST FOLLOW.
+
+     PERF-01 (2026-08-02): these rings are now HTML divs (#rippleHost in #boardwrap), not SVG
+     circles — see that markup for the measurement. The TIMING NOTES ABOVE ARE UNCHANGED AND STILL
+     BINDING: 2.7s linear, and the stagger is still duration/3 = 0.9s. Only the element type
+     changed; do not re-tune either number on the strength of that. */
+  /* THE BOARD'S PAINT ORDER, and it is deliberate at every step (PERF-01, 2026-08-02):
+   *
+   *   #board        (static)  ocean art, grid, islands, docks, compass HUD
+   *                           ...plus everything appended at RUNTIME: sail highlights
+   *                           (src/ui/flow.js) and emoji pops (src/ui/board.js popEmoji).
+   *                           Wyatt, 2026-08-02: "i like the fact that the sail highlights and
+   *                           emoji pops are below the ships -- that makes sense to me
+   *                           graphically." So they stay here, under the boats, on purpose.
+   *   #rippleHost   z 3       the active-turn sonar rings
+   *   #boardShips   z 4       the boats — ABOVE the rings, which is the whole point of the split
+   *   #stormOverlay z 5       rain falls over everything on the water
+   *   #chatBubbles  z 6       speech sits on top of all of it
+   *
+   * The two SVGs share `viewBox="0 0 640 640"` and #boardwrap's box, so a ship's coordinates mean
+   * the same thing in either one and nothing had to be recomputed when the ships moved out.
+   *
+   * #rippleHost was briefly z-index 5, which tied with #stormOverlay and won on DOM order — so the
+   * rings drew over the rain, which the SVG original never did. Fixed by this ordering too. */
+  #rippleHost { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+  #boardShips { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    width: 100%; height: 100%; overflow: visible; }
+  /* the thing that MOVES — carries the same translate() the SVG <g> used to, and the same
+     transition the trade-wind sweep retunes (src/ui/board.js setShipGlideMs). */
+  #rippleRing { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
+  /* size, border width and the negative centring margin are all set from board.js in cqw, because
+     they derive from `cell` (640/grid) and must scale with the board exactly as stroke-width:2 and
+     r=cell*.4 did. will-change is what keeps each ring on its own compositor layer. */
+  .hrip { position: absolute; left: 0; top: 0; border-style: solid; border-color: #fff;
+    border-radius: 50%; animation: rippleOut 2.7s linear infinite; will-change: transform, opacity; }
+  /* PERF-01 follow-up (Wyatt, 2026-08-02). The start briefly went .55 -> 1.25 to hold the smallest
+     ring clear of the boat; that is REVERTED here, back to the original .55.
+     Widening it was treating a symptom. The innermost ring is 0.44 of a cell and has ALWAYS begun
+     inside the boat — invisible only because the SVG rings drew BEHIND the ships, so the boat hid
+     the small ring's full-opacity first frames. Moving to an HTML overlay put it on top and exposed
+     them, and that is what he actually objected to: the smallest ring appearing at full opacity.
+     Restoring the paint order (#boardShips, below) hides it again for exactly the reason it was
+     always hidden, so his tuned .55 -> 2.7 travel above stands untouched. */
+  @keyframes rippleOut { 0% { transform: scale(.55); opacity: .85; } 100% { transform: scale(2.7); opacity: 0; } }
+  /* UI-03: boat emojis linger 2x longer — both the rise and the fade are slower (1.25s → 2.5s,
+     and the splash variant 1.9s → 3.8s below). The JS removal timeouts are doubled to match. */
+  /* UI-06: sail-destination squares — juicy, bouncing, clearly clickable */
+  .sailCell { opacity: .5; animation: sailBounce 1.15s ease-in-out infinite;
+    transform-box: fill-box; transform-origin: center;
+    transition: opacity .12s ease, filter .12s ease; }
+  /* UI-04: a more distinct hover. Was opacity .85 + brightness 1.12 + a 4px glow, which on an
+     already-pulsing square read as "slightly brighter" rather than "this one". Now the hovered
+     square goes FULLY opaque, gains a white outline, and throws a wider two-stage glow — three cues
+     instead of one, and the outline is the one that survives on a busy board. Hover cannot use a
+     transform: `animation-play-state: paused` freezes the bounce mid-frame and the frozen keyframe
+     transform would win over anything set here. */
+  .sailCell:hover { opacity: 1; stroke: #fff; stroke-width: 2;
+    filter: brightness(1.18) drop-shadow(0 0 6px rgba(255,178,40,1)) drop-shadow(0 0 14px rgba(255,178,40,.55));
+    animation-play-state: paused; }
+  @keyframes sailBounce {
+    0%, 100% { transform: scale(1); opacity: .5; }
+    50%      { transform: scale(1.11); opacity: .72; } }
+  @media (prefers-reduced-motion: reduce) { .sailCell { animation: none; } }
+  /* UI-02, REWRITTEN 2026-07-31 to Wyatt's spec. The icon now APPEARS above the boat and then goes
+     INTO it: it pops into existence in the square north of the ship, scaling up from nothing with a
+     bounce, then travels down into the hull, shrinking and fading as it arrives.
+
+     WHAT WAS WRONG BEFORE, so it does not come back: the previous version rose UPWARD out of the
+     boat and, after an earlier pass added a 1-second full-opacity hold, sat motionless partway
+     through its travel. Wyatt: "the icons pause for a moment in the middle of their travel up."
+     That hold is gone — the motion is now continuous from spawn to landing, and the whole thing is
+     1.5s instead of 2.5s, which is what made it read as sluggish.
+
+     The two distances are CSS custom properties set per-element in popEmoji() (src/ui/board.js),
+     derived from the live cell size, so the travel scales with the board instead of being the
+     hardcoded -32px this used to use. --pop-rise is how far above the anchor it spawns;
+     --pop-sink is how far below the anchor the hull sits. Their sum is roughly one full square. */
+  /* Wyatt's retune: "the icon should really BURST into existence — and then it should look like it
+     really has inertia when it shrinks into the boat."
+     Three acts across 2s. The TIMING FUNCTION IS PER-KEYFRAME (linear on the element, overridden at
+     each stop) — that is what buys the springiness; a single easing across the whole animation
+     cannot both overshoot on arrival and accelerate on departure.
+       BURST   0-31%   scale 0 -> 1.5 in ~140ms, then a damped bounce 0.86 / 1.12 / 0.96 -> 1.
+                       Overshoot then undershoot then settle is what reads as "sprung" rather than
+                       "grew"; a single overshoot reads as a wobble.
+       HOLD    31-62%  ~620ms at rest, the extra half-second he asked for.
+       INERTIA 62-100% a small anticipation lift (the classic wind-up — it pulls UP before it drops,
+                       which is what sells weight), then an ease-IN so it accelerates into the hull
+                       instead of drifting there, shrinking and fading as it lands.
+     Distances are the --pop-* custom properties set per element in popEmoji(), derived from the live
+     cell size. CHANGE THE 2s DURATION AND EVERY PERCENTAGE ABOVE SHIFTS WITH IT. */
+  .pop { animation: popfloat 2s linear forwards; pointer-events: none; }
+  @keyframes popfloat {
+    0%   { opacity: 0; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(0);
+           animation-timing-function: cubic-bezier(.15,.85,.35,1.5); }
+    7%   { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1.5);
+           animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    14%  { transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(.86);
+           animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    20%  { transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1.12);
+           animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    26%  { transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(.96);
+           animation-timing-function: cubic-bezier(.45,0,.55,1); }
+    31%  { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1);
+           animation-timing-function: linear; }
+    62%  { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1);
+           animation-timing-function: cubic-bezier(.3,-0.7,.7,.1); }
+    70%  { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px) - 7px)) scale(1.07);
+           animation-timing-function: cubic-bezier(.6,0,.85,.35); }
+    100% { opacity: 0; transform: translateY(var(--pop-sink, 17px)) scale(0); }
+  }
+  /* the arrival bounce is the point of this animation; with motion reduced it simply appears and
+     goes, in the same place and the same time, so nothing is lost but the overshoot */
+  @media (prefers-reduced-motion: reduce) {
+    .pop { animation: popfade 2s ease-out forwards; }
+    @keyframes popfade {
+      0%   { opacity: 0; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1); }
+      12%  { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1); }
+      62%  { opacity: 1; transform: translateY(calc(-1 * var(--pop-rise, 22px))) scale(1); }
+      100% { opacity: 0; transform: translateY(var(--pop-sink, 17px)) scale(.6); }
+    }
+  }
+  /* a bigger, bouncier pop for "you just lost treasure" moments (#5/#6 — a slow or aground
+     captain's crate tumbling overboard and splashing back onto its island), so the cause and
+     effect are impossible to miss. */
+  .pop.splash { animation: popsplash 3.8s cubic-bezier(.25,1.5,.45,1) forwards; }
+  @keyframes popsplash {
+    0%   { opacity: 0; transform: translate(0, 10px) scale(.4) rotate(-12deg); }
+    14%  { opacity: 1; transform: translate(0, -6px) scale(1.9) rotate(8deg); }
+    30%  { opacity: 1; transform: translate(0, 0) scale(1.5) rotate(-5deg); }
+    55%  { opacity: 1; transform: translate(0, -8px) scale(1.7) rotate(3deg); }
+    100% { opacity: 0; transform: translate(0, -40px) scale(1.4) rotate(0deg); }
+  }
+  .dancingPastry { animation: pastrydance 1s ease-in-out infinite; }
+  @keyframes pastrydance {
+    0%, 100% { transform: rotate(-15deg); }
+    50% { transform: rotate(15deg); }
+  }
+  #log .line { padding: 1.5px 4px; border-radius: 4px; }
+  #log .line.cur { background: var(--lemon); }
+  #log .battle { color: #d6337f; }
+  #log .trade { color: #147a8a; }
+  #log .roundhdr { font-weight: bold; opacity: .65; margin-top: 4px; border-top: 1px dashed var(--line); }
+  #statsPanel table, #batchPanel table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  #statsPanel td, #batchPanel td, #batchPanel th { padding: 2.5px 6px; border-bottom: 1px solid #e3f2f5; text-align: left; }
+  #batchPanel th { border-bottom: 1.5px solid var(--line); }
+  /* EOV-02/EOV-05: the one-off victory box — recipe pictured, celebratory framing */
+  .victoryBox { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+  .victoryRecipe { max-width: 160px; max-height: 130px; object-fit: contain;
+    filter: drop-shadow(0 3px 10px rgba(0,0,0,.28)); animation: victoryPop .55s cubic-bezier(.25,1.5,.45,1) both; }
+  .victoryText { font-weight: 700; line-height: 1.35; }
+  /* The banner is a centred flex column, which sizes each child to its CONTENT — so a long sentence
+     stays on one line, overflows the card, and the card's own `overflow:hidden` (there for the gold
+     shimmer) clips both ends of it. Caught in the browser: "Wyatt baked a" was cut off on the left
+     and "the Caribbean!" on the right. Constraining the children to the card's width lets the text
+     wrap instead of running past the edges. */
+  .winner-banner > * { max-width: 100%; }
+  /* width:100% is what lets it wrap; text-align re-centres it, because a full-width flex child no
+     longer inherits centring from `align-items` and would otherwise sit left while the crown, the
+     name and the picture above it are all centred. */
+  .winner-banner .victoryText { width: 100%; text-align: center; }
+  @keyframes victoryPop { 0% { transform: scale(.4) rotate(-6deg); opacity: 0; }
+    60% { transform: scale(1.12) rotate(3deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .victoryRecipe { animation: none; } }
+  /* 2026-07-31: the gold banner now carries three stacked pieces — the "wins!" line, the winner's
+     recipe picture, and the Best Baker sentence — since the win moved in here out of the blue box.
+     A column flex keeps them centred and spaced; it was a single line of text before. */
+  .winner-banner { display: flex; flex-direction: column; align-items: center; gap: 6px;
+    font-size: 16px; font-weight: bold; padding: 8px 10px; margin-bottom: 8px;
+    position: relative; overflow: hidden; border: 1.5px solid #c9971f; border-radius: 8px;
+    /* TWO problems have been fixed here, in two passes. Both were about SCROLLING A REPEATING
+       GRADIENT, which is seam-prone by construction — so the second pass stopped doing that.
+
+       Pass 1 (the vertical line): the gradient ran at 120deg while `background-size` made it repeat
+       horizontally, so every tile boundary cut across the diagonal bands as a straight vertical edge.
+
+       Pass 2 (the stutter Wyatt caught on video): the loop distance was not a whole number of tiles.
+       With `background-size: 220%` the tile is 2.2W wide, and animating background-position from 0%
+       to 220% shifts the image by (W - 2.2W) x 2.2 = -2.64W. 2.64 / 2.2 = 1.2 TILES — so every cycle
+       ended a fifth of a tile out of phase and snapped back to realign. One visible jump per period.
+
+       The fix is structural rather than arithmetic. The gold is now a STATIC base layer, and the
+       shimmer is a single soft highlight on its own `no-repeat` layer that travels from fully
+       off-screen on one side to fully off-screen on the other. At both ends of the animation the
+       highlight is outside the box, so the wrap has nothing to show and A SEAM CANNOT OCCUR — it is
+       seamless by construction, not because two numbers happen to divide evenly.
+
+       Speed halved (3s -> 6s) and the highlight softened to rgba .42, per Wyatt: "classier and more
+       subtle". If the duration changes again, nothing else needs to move — the endpoints are
+       off-screen at any speed. */
+    background:
+      linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.42) 50%, rgba(255,255,255,0) 62%),
+      linear-gradient(to right, #ffeec0 0%, #ffdd8c 50%, #ffeec0 100%);
+    background-size: 200% 100%, 100% 100%;
+    background-repeat: no-repeat, no-repeat;
+    animation: goldShimmer 6s linear infinite; }
+  .winner-banner::before, .winner-banner::after {
+    content: "✨"; position: absolute; font-size: 13px; opacity: 0;
+    animation: winnerSparkle 1.8s ease-in-out infinite; }
+  .winner-banner::before { top: 3px; left: 14%; animation-delay: .2s; }
+  .winner-banner::after { bottom: 2px; right: 16%; animation-delay: .95s; }
+  /* Both endpoints put the highlight ENTIRELY outside the box, so the wrap is invisible whatever
+     the duration. With background-size 200%, offset = (W - 2W) x P = -W x P, so:
+       P = -100%  ->  offset +W   -> highlight spans [W, 3W]   — fully off the RIGHT edge
+       P = +200%  ->  offset -2W  -> highlight spans [-2W, 0]  — fully off the LEFT edge
+     The static gold layer is pinned at 0 in both frames so only the highlight moves. */
+  @keyframes goldShimmer {
+    0%   { background-position: -100% 0, 0 0; }
+    100% { background-position: 200% 0, 0 0; }
+  }
+  @keyframes winnerSparkle { 0%, 100% { opacity: 0; transform: scale(.5) rotate(0deg); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+  /* notes/edits EOV-04: the redesigned end-of-voyage honours — bigger emblem, pirate name, byline,
+     then the winning captain's name (big, colored, no seat dot) filling the card above a rule, with
+     the plain stat beneath it. One award per captain (see assignBadges). */
+  .awardsRow { display: flex; gap: 9px; flex-wrap: wrap; margin: 0 0 12px; }
+  .awardCard { flex: 1 1 120px; display: flex; flex-direction: column; align-items: center; text-align: center;
+    border: 2px solid; border-radius: 13px; padding: 11px 9px 9px; background: #fff; gap: 4px; }
+  .awardEmblem { width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,.18)); }
+  .awardName { font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 13px; line-height: 1.15;
+    color: #3a2a17; text-wrap: balance; }
+  .awardByline { font-size: 10.5px; line-height: 1.3; opacity: .68; }
+  .awardCaptain { font-weight: 800; font-size: 19px; line-height: 1.05; width: 100%; padding: 1px 0 5px;
+    letter-spacing: -.2px; text-wrap: balance; }
+  .awardRule { width: 100%; height: 0; border: 0; border-top: 1px solid rgba(0,0,0,.14); margin: 0; }
+  .awardStat { font-size: 11px; opacity: .72; padding-top: 4px; }
+  /* FIX-21: def.unit carries a LEADING space (" sq", " rounds", " tails", " heads"), so the value
+     and its unit are two separately-breakable words inside this <b> unless pinned together. */
+  .awardStat b { font-weight: 700; opacity: .95; white-space: nowrap; }
+  .windbox { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  .muted { opacity: .6; font-size: 12px; }
+  .rules { font-size: 13.5px; line-height: 1.55; }
+  .rules h4 { margin: 12px 0 4px; color: var(--teal); font-size: 14px; }
+  .rules p { margin: 6px 0; }
+  .num3 { width: 58px; }
+  /* ---- welcome modal + online lobby ---- */
+  #game { padding:14px; transition: filter .45s ease, transform .45s ease; }
+  #game.bg-blurred { filter: blur(7px) saturate(1.15) brightness(.97); pointer-events: none; user-select: none; transform: scale(1.015); }
+  /* LOAD-03 (Wyatt's proposal, 2026-08-01): the welcome and lobby screens sit on a STATIC blurred
+     picture instead of a live game that is built, laid out and composited only to be hidden behind
+     a card. Same filter values as .bg-blurred above, so the look does not change.
+     A still is the HONEST thing to show as well as the cheap one: that backdrop was never the
+     player's game. renderDecorativeBoard() and startSinglePlayer() draw two independent random
+     seeds (src/ui/board.js, src/ui/flow.js), so the board behind the card was always a different
+     voyage from the one about to start — Wyatt spotted it from two screenshots.
+     512x512, 71KB, captured from the real board so the art is the game's own. It is upscaled to
+     cover and then blurred 7px, which is exactly the case where low resolution costs nothing
+     visible. scale(1.06) hides the soft edge a blur leaves at the frame. */
+  #welcomeBackdrop { position: fixed; inset: 0; z-index: 0; display: none; pointer-events: none;
+    background: url(../assets/welcome-backdrop.jpg) center / cover no-repeat;
+    filter: blur(7px) saturate(1.15) brightness(.97); transform: scale(1.06); }
+  .modalOverlay { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center;
+    padding: 24px; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 12%, rgba(69,223,166,.22), rgba(41,163,178,.40) 68%); }
+  /* NAME-02 (Wyatt, 2026-08-01): "i think maybe the modal pops up BEHIND the join crew modal —
+     because the background blur changes color, but i cannot see it until i click back."
+     Exactly right. Every .modalOverlay shares z-index:1000, so which one wins is decided purely by
+     DOM order — and #lobbyRoom (line ~995) is declared AFTER #nameModal (line ~975), so it painted
+     over it. Harmless until the room screen gained "Change yer name", because until then the name
+     modal was never open at the same time as another overlay.
+     The name modal is a modal OVER a screen, never a peer of one, so it wins outright rather than
+     being reordered in the markup — a fix that cannot be undone by someone moving the markup. */
+  #nameModal { z-index: 1001; }
+  .modalCard { background: linear-gradient(175deg, #ffffff, var(--parch2) 250%); border: 3px solid var(--teal);
+    border-radius: 20px; padding: 26px 28px 22px; max-width: 440px; width: 100%; text-align: center;
+    box-shadow: 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18); }
+  /* #2: top-right close affordance on in-game modals (added in JS). Sits above the card content. */
+  .modalX { position: absolute; top: 10px; right: 12px; width: 30px; height: 30px; padding: 0;
+    border: none; background: transparent; color: var(--ink); font-size: 19px; line-height: 1;
+    cursor: pointer; opacity: .45; border-radius: 50%; z-index: 2; }
+  .modalX:hover { opacity: 1; background: rgba(0,0,0,.08); }
+  .modalX img { width: 60%; height: 60%; object-fit: contain; vertical-align: middle; }
+  /* small screens: a centering flexbox clips the top of tall content with no way to scroll
+     up to it, so switch to top-aligned with generous margin instead of vertical centering */
+  @media (max-width: 600px) {
+    .modalOverlay { align-items: flex-start; padding: 40px 16px; }
+    .modalCard { margin: 0 auto; }
+  }
+  /* super-narrow phones: the flippenator + shot clock read as too small to tap accurately —
+     bump every dimension here ~1.5x over their normal clamp() ranges */
+  @media (max-width: 480px) {
+    .flipPlank { padding: clamp(9px,3.6cqw,16.5px); }
+    #flipCoinWrap.coin { width: clamp(54px,19.5cqw,96px); height: clamp(54px,19.5cqw,96px);
+      font-size: clamp(9px,2.85cqw,16.5px); }
+    #flipCoinWrap.coin.spin { font-size: clamp(16.5px,5.25cqw,33px); }
+    #shotClockPanel { border-radius: clamp(12px,4.5cqw,21px);
+      padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px);
+      min-width: clamp(105px,39cqw,177px); }
+    #scPause { width: 24px; height: 24px; }
+    #scTimerToggle { width: 24px; height: 24px; line-height: 20px; font-size: 13.5px; }
+    /* AUDIO-02 (phase 21): #btnMute joins the same narrow-viewport bump — 21-03 made the timer
+       toggle visible in solo for the first time, so this row now carries one more control than
+       it ever has at this width. */
+    /* MUTE-02: halved along with the base rule. The narrow bump exists because this row carries one
+       more control than it used to at this width; the button still steps up here, just from a much
+       smaller base. */
+    #btnMute { font-size: clamp(12px,4.1cqw,14px);
+      padding: clamp(2.5px,1.1cqw,3px) clamp(4px,1.6cqw,5px);
+      border-radius: clamp(6px,2.2cqw,10px); }
+    #scLabel { font-size: clamp(10.5px,3cqw,15px); }
+    #shotClockNum { font-size: clamp(24px,9cqw,45px); }
+    #scUnit { font-size: clamp(10.5px,3.3cqw,18px); }
+    #shotClockSub { font-size: clamp(10.5px,3.3cqw,16.5px); }
+    #btnPlayAgain { min-width: clamp(105px,39cqw,177px); border-radius: clamp(12px,4.5cqw,21px);
+      padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px); font-size: clamp(16.5px,5.25cqw,24px); }
+  }
+  .modalTitle { line-height: 1.25; }
+  .modalLogo { width: 100%; height: auto; border-radius: 14px; }
+  .modalTitleSub { display:block; font-size: 13.5px; font-weight: 500; font-style: italic; color: var(--teal); opacity: .75; margin-top: 2px; }
+  .modalByline { font-size: 13.5px; line-height: 1.5; color: var(--ink); opacity: .85; margin: 10px 2px 20px; }
+  .nameLabel { display:block; text-align:left; font-size:13px; font-weight:700; color:var(--teal); margin-bottom:18px; }
+  .nameLabel input { width:100%; margin-top:5px; font-size:16px; padding:9px 11px; border:1.5px solid var(--line);
+    border-radius:9px; font-family:inherit; box-sizing:border-box; }
+  .choiceRow { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .choiceCard { flex: 1 1 120px; min-width: 118px; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding: 16px 8px 14px; border-radius: 14px; border: 2px solid transparent; font-family: inherit;
+    cursor: pointer; color: #fff; font-weight: 700; transition: transform .15s, box-shadow .15s; }
+  .choiceCard:hover { transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,.22); }
+  .choiceCard.solo { background: linear-gradient(160deg, var(--mint), #1fb37f); }
+  .choiceCard.host { background: linear-gradient(160deg, var(--orange), #e0791a); }
+  .choiceCard.join { background: linear-gradient(160deg, var(--pink), #e0568f); }
+  .choiceCard.passplay { background: linear-gradient(160deg, var(--teal), #1c7480); }
+  .choiceCard.disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.5); transform:none !important; box-shadow:none !important; }
+  .ccIcon { font-size: 29px; }
+  .ccIcon img { width: 29px; height: 29px; object-fit: contain; }
+  .ccTitle { font-size: 14.5px; }
+  .ccSub { font-size: 10.5px; font-weight:500; opacity:.9; }
+  .modalStep h3 { margin: 2px 0 14px; color: var(--teal); font-size: 17px; }
+  .backLink { display:block; text-align:left; background:none; border:none; color: var(--teal); font-weight:700;
+    font-size:12.5px; cursor:pointer; padding:0 0 12px; font-family:inherit; }
+  /* The room screen's back link sits inside the Captains card rather than floating over the board,
+     so it gets a little breathing room from the heading above and the first captain below, plus a
+     hover state — on a white card a bare teal word reads as a label rather than a control. */
+  .roomBack { padding: 2px 0 10px; }
+  .roomBack:hover { text-decoration: underline; }
+  .fieldRow { margin: 6px 0 18px; font-size: 14px; }
+  .fieldRow select, .fieldRow input[type=text] { font-size:16px; padding:6px 9px; border:1.5px solid var(--line);
+    border-radius:8px; font-family:inherit; margin-left:4px; }
+  #joinCode { text-transform: uppercase; letter-spacing: 3px; width: 130px; text-align:center; }
+  .ppNameRow { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .ppNameRow .ppSeatDot { width:11px; height:11px; border-radius:50%; flex:0 0 auto; }
+  .ppNameRow input { flex:1; font-size:15px; padding:8px 10px; border:1.5px solid var(--line);
+    border-radius:9px; font-family:inherit; box-sizing:border-box; }
+  .ppHint { font-size:11px; opacity:.6; margin:-6px 0 16px 19px; text-align:left; }
+  /* ---- pass & play hand-off overlay: same look as the lobby modal, blurs the board behind it ---- */
+  #passOverlay .modalCard { max-width: 380px; }
+  #passHelmBtn { font-size:19px; padding:16px 22px; width:100%; margin-top:6px; border-radius:14px;
+    font-weight:800; letter-spacing:.3px; box-shadow: 0 8px 18px rgba(0,0,0,.25); }
+  /* ---- pass & play in-box recipe lock ---- */
+  .checkRecipeBtn { font-size:11.5px; padding:4px 9px; border-radius:7px; font-weight:700; }
+  .fbnote { margin-top: 14px; font-size: 12px; text-align:left; color: #8a5a00; background:#fff6d8;
+    border:1.5px solid var(--orange); border-radius:9px; padding:8px 10px; }
+  .fbnote code { background:#fff0c4; padding:1px 4px; border-radius:4px; }
+  .roomCard { background:#fff; border:1.5px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px;
+    box-shadow:0 1px 4px rgba(41,163,178,.1); }
+  .big { display:block; width:100%; margin:8px 0; padding:10px; font-size:15px; }
+  #roomCode { font-size:30px; letter-spacing:6px; color:var(--accent); font-weight:bold; }
+  .seat { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; margin:5px 0; border:1.5px solid var(--line); }
+  .seat .nm { flex:1; font-weight:600; }
+  .seat.me { background:var(--lemon); border-color:var(--accent); }
+  /* NAME-02 (Wyatt, 2026-08-01): "put the Change yer name inside your pill, so it's easier to see,
+     and wrap it in a standard styling blue button." It rides in the reader's OWN seat row, which
+     .seat's existing flex + `.nm{flex:1}` right-aligns with no layout work.
+     SOLID teal rather than the house outline-and-faded-fill pattern (button.primary / .footerKofi):
+     that pattern fills with --lemon, and this button sits ON --lemon, so an outline button would
+     have all but vanished against the pill it lives in. Teal is the house blue, so the fill is the
+     palette's, not a new colour. */
+  .seat .seatRename { flex:0 0 auto; padding:4px 11px; font-size:12.5px; font-weight:700;
+    border:1.5px solid var(--teal); background:var(--teal); color:#fff; border-radius:7px; }
+  .seat .seatRename:hover { background:#22909e; border-color:#22909e; }
+  .who { font-size:11px; font-weight:normal; opacity:.7; }
+  /* ---- recipe draft cards: an aged treasure-map recipe leaf ---- */
+  .apBtns.recipes { gap: 14px; }
+  .recipeCard { flex: 1 1 200px; min-width: 190px; text-align: left; padding: 0; overflow: hidden;
+    border: 2px solid #a07a45; border-radius: 7px; color: #4a3223;
+    /* mottled, tea-stained parchment built from stacked radial stains */
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #f7edd2, #ecd9ac);
+    box-shadow: inset 0 0 24px rgba(120,80,35,.30), 0 2px 7px rgba(70,45,20,.22); }
+  .recipeCard:hover { border-color: #8a6535;
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #fbf0d4, #f0dcac);
+    box-shadow: inset 0 0 24px rgba(120,80,35,.30), 0 7px 18px rgba(90,55,20,.34); }
+  .recipeThumb { display: block; width: 100%; height: 130px; object-fit: contain; margin-top: 15px; }
+  .recipeTitle { color: #5b3a1f; font-weight: 800; font-size: 16px; letter-spacing: .3px;
+    font-family: Georgia, "Times New Roman", serif; padding: 12px 12px 9px; margin: 0 10px;
+    display: flex; align-items: center; justify-content: center; gap: 7px; text-align: center;
+    border-bottom: 3px double #b48a52; text-shadow: 0 1px 0 rgba(255,250,235,.5); }
+  .recipeDesc { padding: 9px 14px 3px; font-size: 12.5px; line-height: 1.45; color: #6b4a2c;
+    font-style: italic; font-family: Georgia, "Times New Roman", serif; }
+  .recipeList { list-style: none; margin: 0; padding: 8px 14px 12px; }
+  .recipeList li { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 14px;
+    font-weight: 600; color: #4a3223; border-bottom: 1px dashed rgba(120,80,40,.35); }
+  .recipeList li:last-child { border-bottom: none; }
+  .recipeList .ri { font-size: 19px; width: 24px; text-align: center; flex: 0 0 auto; }
+  .recipeList .ri img { width: 22px; height: 22px; vertical-align: middle; object-fit: contain; }
+  .recipeList .rn { flex: 1; }
+  .recipeList .rc { font-size: 12px; font-weight: 500; font-style: italic; color: #9a6f3e;
+    flex: 0 0 auto; padding-left: 8px; }
+</style>
+</head>
+<body>
+
+<!-- #6: first-paint loader — covers the screen while the core art preloads so the board doesn't
+     pop in piecemeal on slow connections. Removes itself once assets are ready (or after a hard
+     timeout, so it can never hang the game). -->
+<div id="bootLoader">
+  <div class="bootShip"><img src="../assets/icons/sailboat.png" alt=""></div>
+  <div class="bootMsg">Hoisting the sails…</div>
+  <div class="bootBar"><div class="bootBarFill"></div></div>
+</div>
+
+<!-- ===================== WELCOME MODAL ===================== -->
+<div id="lobby" class="modalOverlay" style="display:none">
+  <div class="modalCard">
+    <div class="modalTitle"><a id="lnkAboutLogo" href="../about.html" target="_blank" rel="noopener" aria-label="About Pastry Pirates (opens in a new tab)" style="display:block"><img src="../assets/logo.jpg" alt="Pastry Pirates" class="modalLogo"></a></div>
+
+    <div id="stepChoose" class="modalStep">
+      <div class="modalByline">Ye came to the sunny shores of Tortuga to start a bakery — but yer pantry is empty! Sail the Sugar Seas, gather ingredients, and battle other pirates to be crowned Best Baker in the Caribbean.</div>
+      <div class="choiceRow">
+        <button class="choiceCard solo" id="choiceSolo" type="button">
+          <div class="ccIcon"><img src="../assets/icons/anchor.png" alt=""></div><div class="ccTitle">Play Solo</div><div class="ccSub">vs. bot captains</div>
+        </button>
+        <button class="choiceCard passplay" id="choicePassPlay" type="button">
+          <div class="ccIcon"><img src="../assets/icons/stool.png" alt=""></div><div class="ccTitle">Pass & Play</div><div class="ccSub">share one device</div>
+        </button>
+        <button class="choiceCard host" id="choiceHost" type="button">
+          <div class="ccIcon"><img src="../assets/icons/map.png" alt=""></div><div class="ccTitle">Host a Crew</div><div class="ccSub">start a multiplayer game</div>
+        </button>
+        <button class="choiceCard join" id="choiceJoin" type="button">
+          <div class="ccIcon"><img src="../assets/icons/key.png" alt=""></div><div class="ccTitle">Join a Crew</div><div class="ccSub">enter a friend's code</div>
+        </button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:10px;margin-bottom:8px"><img class="narrIcon" src="../assets/icons/magnifying-glass.png" alt=""> Thanks for playtesting! Anonymized move data is recorded to help improve the game — nothing beyond the name you confirm after picking how to play is collected.</div>
+      <div style="text-align:center;margin-bottom:8px"><a id="lnkAboutWelcome" href="../about.html" style="font-size:12px;color:var(--teal);text-decoration:underline">About Pastry Pirates</a></div>
+      <div id="fbnote" class="fbnote" style="display:none"><img class="narrIcon" src="../assets/icons/gear.png" alt=""> Multiplayer needs a one-time Firebase setup — see <code>ONLINE_SETUP.md</code>. Solo play works right now!</div>
+      <div id="busynote" class="fbnote" style="display:none"><img class="narrIcon" src="../assets/icons/sailboat.png" alt=""> Lots of crews out sailing right now — multiplayer may be slow to sync. <b>Play Solo</b> works instantly and never waits on the crowd!</div>
+    </div>
+
+    <!-- UI-05: NO LONGER REACHABLE from "Host a Crew" — that card now calls createRoom() directly
+         (src/ui/flow.js wireWelcome). This step existed only to show a single "Create the game"
+         button, i.e. to ask the player to confirm the thing they had just clicked. Kept, not
+         deleted, because showStep() enumerates it by id and #btnCreate is still wired in
+         src/orchestrator.js; removing either is a separate cleanup, not part of UI-05. -->
+    <div id="stepHost" class="modalStep" style="display:none">
+      <button class="backLink" type="button" data-back>← back</button>
+      <h3><img class="narrIcon" src="../assets/icons/map.png" alt=""> Host a Crew</h3>
+      <button class="primary big" id="btnCreate" type="button"><img class="narrIcon" src="../assets/icons/anchor.png" alt=""> Create the game</button>
+    </div>
+
+    <div id="stepJoin" class="modalStep" style="display:none">
+      <button class="backLink" type="button" data-back>← back</button>
+      <h3><img class="narrIcon" src="../assets/icons/key.png" alt=""> Join a Crew</h3>
+      <div class="fieldRow"><input type="text" id="joinCode" maxlength="6" placeholder="CODE"></div>
+      <label class="nameLabel">Yer captain name
+        <input type="text" id="joinName" maxlength="40" placeholder="e.g. Davy Scones"></label>
+      <button class="primary big" id="btnJoin" type="button">Join the voyage</button>
+    </div>
+
+    <div id="stepPassPlay" class="modalStep" style="display:none">
+      <button class="backLink" type="button" data-back>← back</button>
+      <h3><img class="narrIcon" src="../assets/icons/stool.png" alt=""> Pass & Play</h3>
+      <div class="modalByline" style="margin-top:0">Everyone sitting at the table types their name below, then passes the device around when it's their turn. Leave a box blank to fill that seat with a bot captain instead.</div>
+      <!-- F1 (Wyatt-approved 2026-07-29): the LABEL class — this placeholder identifies WHICH field
+           belongs to the reader, so it is UI chrome rather than the game speaking, and takes the
+           plain second-person pronoun rather than D-29's ye/yer. src/ui/lobby.js's renderSeatList
+           carries the full rule; scripts/ui_contract_check.js anchors and gates this exact line.
+           (Worded without the pronoun on purpose: an HTML comment has no per-line marker, so the
+           register scan cannot tell a continuation line from real copy.) -->
+      <div class="ppNameRow"><div class="ppSeatDot" style="background:#f2679e"></div><input type="text" id="ppName0" maxlength="40" placeholder="Player 1 (you)"></div>
+      <div class="ppNameRow"><div class="ppSeatDot" style="background:#1d96a6"></div><input type="text" id="ppName1" maxlength="40" placeholder="Player 2"></div>
+      <div class="ppNameRow"><div class="ppSeatDot" style="background:#27c78d"></div><input type="text" id="ppName2" maxlength="40" placeholder="Player 3 (or leave blank for a bot)"></div>
+      <div class="ppNameRow"><div class="ppSeatDot" style="background:#f5a623"></div><input type="text" id="ppName3" maxlength="40" placeholder="Player 4 (or leave blank for a bot)"></div>
+      <button class="primary big" id="btnStartPassPlay" type="button"><img class="narrIcon" src="../assets/icons/anchor.png" alt=""> Start the voyage</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== NAME MODAL (FIX-01) ===================== -->
+<!-- D-01/D-02/D-03: the ONLY place a player names themself, opened after picking a mode (not
+     before). Dismissing it — the X, Escape, or a backdrop click, all wired in wireNameModal()
+     (src/ui/lobby.js) — counts as CONFIRMING the name shown, same as the button. This is the
+     first modal in the codebase that is both dismissible and gates a flow; it is deliberately NOT
+     added to src/orchestrator.js's close-only .modalX injection array. -->
+<div id="nameModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalStep">
+      <h3>What do they call ye, captain?</h3>
+      <label class="nameLabel">Yer captain name
+        <input type="text" id="nameModalInput" maxlength="40" placeholder="e.g. Davy Scones"></label>
+      <button class="primary big" id="btnNameConfirm" type="button">Aye, that's me name</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PASS-THE-DEVICE HAND-OFF ===================== -->
+<div id="passOverlay" class="modalOverlay" style="display:none">
+  <div class="modalCard">
+    <div class="modalTitle" id="passOverlayMsg"><img class="narrIcon" src="../assets/icons/device.png" alt=""> Pass the device</div>
+    <button class="primary big" id="passHelmBtn" type="button"><img class="narrIcon" src="../assets/icons/anchor.png" alt=""> At the helm!</button>
+  </div>
+</div>
+
+<!-- ===================== ROOM (pre-game) ===================== -->
+<div id="lobbyRoom" class="modalOverlay" style="display:none">
+  <div style="max-width:420px;width:100%">
+    <div class="roomCard" style="text-align:center">
+      <div class="muted">share this code with yer crew</div>
+      <div id="roomCode">----</div>
+    </div>
+    <div class="roomCard">
+      <h3 style="margin-top:0;color:var(--teal)">Captains at the table</h3>
+      <!-- UI-05 follow-up: this screen had no way out. Since "Host a Crew" now creates the room on
+           the first click, backing out has to tear the room down as well as change screens — see
+           abandonRoom() in src/orchestrator.js.
+           It sits INSIDE this card, under the heading and above the first captain, because on the
+           card's white background it is legible; floated above the cards it sat on the blurred game
+           board and was, in Wyatt's words, "almost impossible to see". -->
+      <button class="backLink roomBack" type="button" id="btnRoomBack">← back</button>
+      <div id="seatList"></div>
+      <div id="waitMsg" class="muted" style="margin-top:10px"></div>
+      <button class="primary big" id="btnStart" style="display:none" type="button"><img class="narrIcon" src="../assets/icons/sailboat.png" alt=""> Start the voyage!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== HOW TO PLAY (modal) ===================== -->
+<div id="howToPlayModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:480px;text-align:left">
+    <div class="modalTitle" style="text-align:center">📖 How to play</div>
+    <div style="margin-top:14px;max-height:60vh;overflow-y:auto">
+      <h4>🎯 The goal</h4>
+      <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. First baker home wins!</p>
+      <h4>⚓ Setting sail</h4>
+      <p>Each captain gets a recipe map (5 ingredients), 3 gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — when they're gone, they're gone.</p>
+      <h4>Yer turn: sail → act</h4>
+      <p><b>🌬️ Wind.</b> Each round the wind picks a direction and holds it. It doesn't move ye — it sets yer sailing budget: cheap with the wind, dear against it, in between across it.</p>
+      <p><b>⛵ Sail.</b> Pay 1🌕 to move using a 9-point budget: 2 pts/square with the wind (up to 4 squares), 3 pts/square across it (up to 3), 4 pts/square against it (up to 2) — mix directions freely as long as ye can afford the total. An island upwind of ye cuts yer budget to 7. Sail past other ships, but don't end on one. No coins? Ye can't sail this turn — better go fishing!</p>
+      <p><b>⚓ Act</b> — choose one:</p>
+      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip: heads take a crate; tails take 3🌕 — or pay 3🌕 to buy the crate anyway. Stay as long as ye like and keep flipping. Ship's hold: ye may take crates that aren't on yer recipe — they make excellent trade bait...</p>
+      <p><b>Attack</b> — fight an adjacent ship! Pay 2🌕 powder, then flip head-to-head: heads beats tails (1 point). Both heads? The captain firing <b>downwind</b> lands the shot — that's the wind advantage; a crosswind clash cancels. On a double-miss (both tails) the defender may pay 1🌕 to flee to safety instead of fighting on. First to 2 points wins; loser hands over a crate (winner picks) or 5🌕 — loser's choice. Can't pay in full? Winner takes everything. Nobody changes squares — win or lose, every ship holds its position. Spectators can call the winner for a free dubloon at the Lookout's Call — or back their call with coin for double or nothing.</p>
+      <p><b>Trade</b> — hail any captain, anywhere, and make a deal: crates, coins, or both together. When a trade is struck, both captains collect +1🌕 from the bank.</p>
+      <p><b>Fish</b> — flip: heads nets 2🌕, tails... just a candycrab (1🌕).</p>
+      <p><b>Start yer bakery!</b> — at the Isle of Tortuga with yer whole recipe? Declare victory! <img class="narrIcon" src="../assets/icons/cupcake.png" alt=""></p>
+      <h4><img class="narrIcon" src="../assets/icons/current-swirl.png" alt=""> The trade winds</h4>
+      <p>The sea around the rim of the world flows in a mighty clockwise current, in arcs of varying length each game. Sail (or get blown) into it and yer instantly swept to the far corner of that stretch — a daring shortcut for captains in a hurry!</p>
+      <h4>⛈️ Storms</h4>
+      <p>Roughly 3 in 20 rounds brews a storm — the only time the wind moves ye without yer say-so: it forcibly pushes everyone 2 squares, then spins and pushes 2 more. Moored ships are safe — if ye docked last turn, sit at a berth, or are at the Isle of Tortuga, the storm can't push ye into land. Otherwise, blown at an island ye must pay 1🌕 to dodge or flip: heads drop anchor safely, tails run aground — lose half yer coins, or a crate if yer broke, or the whole turn to repairs if yer hold's empty too! The wind never blows ye onto a full dock.</p>
+      <h4>⏰ The shot clock</h4>
+      <p>Take too long on yer turn and ye'll lose a random ingredient from yer hold (or 5🌕 if yer out of ingredients) and miss the turn.</p>
+      <h4><img class="narrIcon" src="../assets/icons/crown.png" alt=""> Winning</h4>
+      <p>When the first baker docks home, everyone else gets one last turn. If more than one makes it: BAKEOFF! Flip head-to-head, first to 3 points takes the crown.</p>
+      <p><i>May yer flips be heads and yer rivals be broke.</i></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CREDITS (modal) ===================== -->
+<div id="creditsModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalTitle">🎗️ Credits</div>
+    <div class="modalByline" style="text-align:left">
+      <p>This game was made by <a href="http://wyattroy.com" target="_blank" rel="noopener">Wyatt Roy</a>, a designer and overly enthusiastic noodle. It was inspired by two highschoolers, Luca and Amelia, who were taught by <a href="https://www.leskodesignwork.com/" target="_blank" rel="noopener">Nick Lesko</a> how to design their own board game. When I came to class and saw theirs, an amazing bridge-building game called <i>Seafarers</i>, something in me clicked. Or broke. Or both. For the next 8 days straight (and counting) I did nothing except eat pastry, talk like a pirate, and build Pastry Pirates.<br><br>The game owes an immense amount to <a href="https://www.luiszanforlin.com/" target="_blank" rel="noopener">Luis Zanforlin</a>, who spent his entire last day in Boston imagining mechanics for it in his head, and who later wrote every sound effect you hear, my father Robin and mother Cathy, two of its first multiplayer testers, and <a href="https://xavaar.com/" target="_blank" rel="noopener">Xavaar</a>, who came up with the idea for how the wind should affect your movements based on real sailing — as well as ways to make battles genuinely strategic, and playtesting it with an obsession that mirrored my own. And lastly, to my sweet partner Juju, who has tolerated me turning every conversation towards Pastry Pirates with the acceptance of a Buddhist monk.</p>
+    </div>
+    <!-- KOFI-01: after the credits text, per the requirement. A button onto the SAME #kofiModal the
+         footer opens — one embedded panel, two doors — so neither route leaves the game. -->
+    <div style="text-align:center;margin-top:16px">
+      <button id="btnKofiCredits" class="footerBtn footerKofi" type="button">🍪 Buy me a cookie</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CAPTAIN'S LOG (modal) ===================== -->
+<div id="logModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:480px;text-align:left">
+    <div class="modalTitle" style="text-align:center">📜 Captain's log</div>
+    <div id="log" style="margin-top:14px;max-height:60vh"></div>
+  </div>
+</div>
+
+<!-- ===================== FEEDBACK (modal) ===================== -->
+<!-- ===================== KO-FI (modal) ===================== -->
+<!-- KOFI-01, revised 2026-07-31 (Wyatt): the button must open the Ko-Fi WIDGET, not navigate to
+     ko-fi.com. His floating-chat snippet could not be reused for that — it draws its own permanent
+     button inside a CROSS-ORIGIN iframe, so nothing on our page can trigger it. This embeds the same
+     Ko-Fi panel in one of the game's own modals instead, which keeps the player in the game and
+     keeps the footer button exactly where the requirement asks for it.
+     The iframe src is filled in by mountKofi() on first open, not here, so the page never contacts
+     ko-fi.com for a player who does not open it. -->
+<div id="kofiModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalTitle">🍪 Buy me a cookie</div>
+    <div id="kofiPanel" class="kofiPanel"></div>
+  </div>
+</div>
+
+<div id="feedbackModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalTitle">💬 Feedback</div>
+    <div class="modalByline">What's working, what's confusing, what broke — this goes straight to Wyatt, the pirate-slash-dev who built this. Want to give him a cookie?</div>
+    <textarea id="feedbackText" rows="5" maxlength="2000" placeholder="Type yer thoughts here..." style="width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;resize:vertical;margin-bottom:10px"></textarea>
+    <button class="primary big" id="btnSendFeedback" type="button">Send feedback</button>
+  </div>
+</div>
+
+<!-- ===================== RECIPE (modal) ===================== -->
+<div id="recipeModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:480px;text-align:left">
+    <div id="recipeModalBody"></div>
+    <div id="recipeModalBtns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="big recipeModalBtn" id="btnRecipePdf" type="button">🖨️ Download PDF</button>
+      <button class="big recipeModalBtn" id="btnRecipeEmail" type="button">✉️ Email to myself</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== START-VOYAGE CONFIRM (modal) ===================== -->
+<div id="startConfirmModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:380px">
+    <div class="modalTitle">⛵ Set sail?</div>
+    <div class="modalByline">Is everyone at the table? Once the voyage starts, no one else can join — empty seats sail with bots.</div>
+    <button class="primary big" id="btnConfirmStart" type="button">⛵ Everyone's aboard?</button>
+    <button class="big" id="btnCancelStart" type="button">Wait, not yet</button>
+  </div>
+</div>
+
+<!-- #8: confirm before abandoning ship, in every mode -->
+<div id="leaveConfirmModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:380px">
+    <div class="modalTitle">🚪 Abandon ship?</div>
+    <div class="modalByline">Are ye sure ye want to leave this game? Ye can't rejoin the same voyage once ye go.</div>
+    <!-- notes/edits UI-10(list #10): the safe choice reads first and quietly (faded blue), the
+         irreversible one sits below styled like the old "Stay aboard" primary so it's a deliberate tap. -->
+    <button class="big" id="btnCancelLeave" type="button" style="border-color:#8fb3d9;background:#eef4fb;color:#3f6690">Nope, stay aboard</button>
+    <!-- FIX-06: keeps its existing primary class (see the CSS rule above for why) and gains a
+         second class for the red destructive-action recipe, per the UI-10 comment above (styled
+         as the deliberate/weighty tap) — label unchanged. -->
+    <button class="primary big footerLeave" id="btnConfirmLeave" type="button">🚪 Aye, leave the game</button>
+  </div>
+</div>
+
+<!-- notes/edits BUG-03: host-refresh replay came up short. Never silently hand back a board that
+     has reset to turn 1 — say so and let the player choose. Mirrors #leaveConfirmModal's shape. -->
+<div id="restoreFailModal" class="modalOverlay" style="display:none">
+  <div class="modalCard" style="max-width:420px">
+    <div class="modalTitle">🧭 Couldn't fully restore this voyage</div>
+    <div class="modalByline" id="restoreFailWhy">Some of this game's history didn't make it back. Carrying on may put ye out of step with the rest of the crew.</div>
+    <button class="big" id="btnRestoreAnyway" type="button">⚓ Resume anyway</button>
+    <button class="primary big" id="btnRestoreRestart" type="button">🔄 Start a fresh voyage</button>
+  </div>
+</div>
+
+<!-- LOAD-03: the static blurred backdrop the welcome and lobby screens sit on, in place of a live
+     game rendered only to be hidden. Declared BEFORE #game and at z-index 0 so it sits behind
+     everything; the modals are z-index 1000+. See its CSS above for why a still is both cheaper and
+     more honest than the live board. -->
+<div id="welcomeBackdrop" aria-hidden="true"></div>
+
+<!-- ===================== GAME ===================== -->
+<div id="game" style="display:none">
+  <div id="syncnote" class="fbnote" style="display:none"><img class="narrIcon" src="../assets/icons/gear.png" alt=""> Trouble syncing with the crew — a move may not have gone through. Refresh to reconnect if this doesn't clear up on its own.</div>
+  <!-- notes/edits BUG-03/D-08: guests are render-only, so a host whose restore failed would just
+       leave them staring at a frozen board with no explanation. Same treatment as #syncnote. -->
+  <div id="recoverynote" class="fbnote" style="display:none"><img class="narrIcon" src="../assets/icons/gear.png" alt=""> Yer captain is repairing the voyage log — the board may be a few moves behind until they're done.</div>
+  <div id="layout">
+    <div id="left">
+      <div id="boardwrap">
+        <svg id="board" viewBox="0 0 640 640"></svg>
+        <!-- #1b: storm overlay — darkens the board + animated rain/wind, fades in/out via CSS -->
+        <div id="stormOverlay" aria-hidden="true"></div>
+        <!-- PERF-01 (2026-08-02): the active-turn sonar ripple, moved OUT of the board SVG.
+             Measured, GPU on, phone viewport: as three SVG <circle>s animating only transform and
+             opacity it forced ~62 layouts PER SECOND — 97% of all layout work while the game sat
+             idle, and just over half the main-thread cost during play. Chrome does not composite
+             SVG transform animations at all, and will-change cannot promote an SVG child to its own
+             layer; transform-box/transform-origin candidates all measured identical. As HTML it
+             costs ZERO layouts. Positions come in `cqw` against #boardwrap (container-type:
+             inline-size), so board user units still map 1:1 and every call site keeps its numbers. -->
+        <div id="rippleHost" aria-hidden="true"><div id="rippleRing"></div></div>
+        <!-- PERF-01 (2026-08-02): the boats, split out of #board into their own SVG so they paint
+             ABOVE the ripple rings. Moving the rings to HTML had put them over the boats, which
+             read wrong. Same viewBox as #board and the same box, so every ship coordinate means
+             exactly what it did before — drawBoard() simply appends the ship groups here instead.
+             Only the ships live here: sail highlights and emoji pops stay in #board, below the
+             boats, which is where Wyatt wants them. -->
+        <svg id="boardShips" viewBox="0 0 640 640" aria-hidden="true"></svg>
+        <!-- chat speech bubbles, one per seat, positioned over that seat's boat -->
+        <div id="chatBubbles"></div>
+      </div>
+    </div>
+    <div id="controlsRow">
+      <div id="flipPanel">
+        <div class="flipPlank"><div id="flipCoinWrap" class="coin wait">?</div></div>
+      </div>
+      <div id="shotClockPanel" class="idle">
+        <button id="scPause" type="button" style="display:none"><img id="scPauseImg" alt="pause/resume"></button>
+        <button id="scTimerToggle" type="button" title="Turn the timer off/on" style="display:none">⏱️</button>
+        <div id="scLabel">turn clock</div>
+        <div id="scRow"><span id="shotClockNum">–</span><span id="scUnit"></span></div>
+        <div id="shotClockSub">&nbsp;</div>
+      </div>
+      <!-- AUDIO-02/D-15 (phase 21): a #controlsRow sibling to the right of #shotClockPanel, NOT a
+           third corner icon on the clock face — #scPause/#scTimerToggle already occupy both
+           corners, and 21-03's D-20 change makes the timer toggle visible in solo for the first
+           time, so a third icon there would newly crowd a panel that already clamps to 70-118px.
+           Bare 🔊/🔇 emoji scaffold (D-14): the real speaker icon + blocked-slash overlay is
+           Wave 5's job and needs Wyatt's art pipeline; this ships behaviour complete now with no
+           broken image and no borrowed icon (horn.png already carries the 📯 meaning). Visible
+           content set every tick by setClockUI(); click bound once in wireLobby().
+           MUTE-01 (2026-08-02): the button itself lives in #muteSlot, a #layout grid child, so it can
+           sit under the captains box when the row is too narrow — see the #muteSlot rule. Its cqw
+           sizing still resolves against this row, because #muteSlot shares this row's box. -->
+      <button id="btnPlayAgain" type="button" style="display:none">🔁 Play again</button>
+    </div>
+    <div id="actionPanel" style="display:none"><div id="apGrid"><div id="apGridInner"></div></div></div>
+    <div class="panel" id="captainsPanel">
+      <h3>Captains</h3>
+      <div id="players"></div>
+    </div>
+    <!-- MUTE-01 (Wyatt, 2026-08-02): "when the screen size is too narrow to have the mute button
+         appear in line with the turn clock, move it underneath the captain's box, just above the
+         footer links." #muteSlot is the grid item that makes that possible while still letting the
+         button align with the clock row when there IS space — see its CSS for why the wrapper
+         exists. Placed here, after the captains box, so DOM order matches the narrow reading order. -->
+    <div id="muteSlot"><button id="btnMute" type="button" style="display:none">🔊</button></div>
+    <div class="panel" id="statsWrap" style="display:none">
+      <h3>End of voyage</h3>
+      <div id="statsPanel"></div>
+    </div>
+    <div class="panel" id="chatPanel" style="display:none">
+      <h3>Scuttlebutt</h3>
+      <div id="chatLog"></div>
+      <form id="chatForm">
+        <input id="chatInput" maxlength="140" placeholder="Say something…" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+  <div id="footerRow">
+    <button id="btnShowHow" class="footerBtn footerHow" type="button">📖 How to play</button>
+    <button id="btnShowCredits" class="footerBtn footerCredits" type="button">🎗️ Credits</button>
+    <button id="btnShowLog" class="footerBtn footerLog" type="button">📜 Captain's log</button>
+    <button id="btnShowFeedback" class="footerBtn footerFeedback" type="button">💬 Feedback</button>
+    <!-- KOFI-01: right of Feedback, per the requirement, and styled the same as its neighbours.
+         Opens #kofiModal rather than navigating — Wyatt, 2026-07-31: "i don't want this button to
+         open up the kofi website; ideally, i want it to open up the kofi widget." -->
+    <button id="btnKofi" class="footerBtn footerKofi" type="button">🍪 Buy me a cookie</button>
+    <a id="lnkAboutFooter" class="footerBtn footerAbout" href="../about.html">ℹ️ About</a>
+    <button id="btnLeave" class="footerBtn footerLeave" type="button">🚪 Leave game</button>
+  </div>
+  <!-- hidden helpers the renderer expects -->
+  <input type="range" id="speed" min="0.5" max="40" step="0.5" value="0.5" style="display:none">
+  <input type="range" id="scrub" min="0" max="0" value="0" style="display:none">
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

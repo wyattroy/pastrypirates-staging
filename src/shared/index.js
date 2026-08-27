@@ -17,8 +17,17 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a
 const ING_ALL=["wheat","dairy","sugar","eggs","cocoa","spice","vanilla"];
 const ING_EMOJI={wheat:"🌾",eggs:"🥚",sugar:"🍬",cocoa:"🍫",dairy:"🥛",vanilla:"🌼",spice:"🌶️"};
 // custom-art pipeline: drop matching files in assets/ and they render in place of the emoji/
-// vector fallback automatically (iconAt() below removes the <image> on load failure, leaving
-// the original emoji/shape visible) — nothing else in the code needs to change.
+// vector fallback automatically — nothing else in the code needs to change.
+//
+// THIS COMMENT USED TO CLAIM "iconAt() below removes the <image> on load failure, leaving the
+// original emoji/shape visible". IT DOES NOT, and never has: iconAt() (ui/board.js) has no error
+// handler, and neither does ingImg(). Only spawnPops() and the board backdrop have one. So a
+// failed ingredient image is left showing the browser's broken-image glyph — the blue "?" Wyatt
+// photographed on 2026-08-26. Corrected rather than deleted because the false version was
+// load-bearing: it is why nobody added the fallback it promised. (Rule 6: a comment is not a
+// measurement, and one making a runtime claim rots.)
+// v2 shares v1's art and sound rather than duplicating 19MB. NEVER copy CNAME/robots.txt/
+// sitemap.xml alongside them — those claim the live domain (see root CLAUDE.md).
 const ASSET_BASE="assets/";
 const ING_IMG={};ING_ALL.forEach(i=>ING_IMG[i]=`${ASSET_BASE}ingredients/${i}.png`);
 // blackened silhouette of each ingredient, same alpha shape as ING_IMG — rendered at 30%
@@ -103,14 +112,53 @@ const EMOJI_IMG={
 const EMOJIFY_RE=new RegExp(
   "(?:"+Object.keys(EMOJI_IMG).sort((a,b)=>b.length-a.length)
     .map(e=>e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")\\uFE0F?","gu");
+// The same alternation, capturing the emoji and any punctuation glued to its right, so emojify()
+// can keep the two on one line. Built from EMOJIFY_RE.source so the two can never drift apart.
+const EMOJIFY_PUNCT_RE=new RegExp("("+EMOJIFY_RE.source+")([.,;:!?\u2026]+)?","gu");
 // drop-in replacement for any narration/label/log HTML string: swaps every emoji that has custom
 // art for its <img>, leaving anything without dedicated art untouched. Safe to run more than once
 // on the same string (already-swapped text has no emoji left to match) — deliberately applied at
 // more than one chokepoint (describe(), panel()) rather than tracked precisely, since re-scanning
 // a short string is free and missing a spot silently isn't.
+//
+// SUBSTITUTION HAPPENS OUTSIDE TAGS ONLY, and that is load-bearing, not tidiness. panel()
+// (ui/panel.js:435) runs a WHOLE assembled button row through here — every attribute included —
+// and iconImg() returns `<img class="narrIcon" src="..." alt="">`, which carries three literal
+// double-quotes. Spliced into an already-correctly-escaped data-why="Ye can't afford the powder —
+// 5🌕 a broadside…", the first of those quotes CLOSES the attribute early and breaks the button's
+// own opening tag open; the leaked fragments then count toward the textContent that
+// menuButtons() (ui/stage.js:1029) measures against its 16-character cutoff, which disqualifies
+// the WHOLE prompt from the radial bloom and drops it to a flat card — on host and guest alike,
+// since panel() is the one sink both localAsk() and watchPrompt() render through. So walk the
+// string tag-by-tag and only ever replace inside the text spans between them. This protects every
+// current and future data-* attribute, not just data-why.
+//
+// KNOWN LIMITATION, named rather than hidden (RESEARCH 02.1 §7, threat T-02.1-04): a literal ">"
+// inside an attribute value would end a tag span early here and could still be walked into. No
+// string this codebase feeds through emojify() contains one — every why:/label is
+// developer-authored, never player-typed, and esc()/escW() already turn "<" into "&lt;" — and a
+// real HTML tokenizer is disproportionate to a zero-dependency, zero-build-step codebase.
 function emojify(html){
   if(!html)return html;
-  return html.replace(EMOJIFY_RE,m=>iconImg(EMOJI_IMG[m.replace(/️$/,"")]));
+  // split() with ONE capture group alternates text, tag, text, tag… so odd indices are always the
+  // captured tags. Index parity is used rather than a startsWith("<") test so that a stray, never
+  // -closed "<" in ordinary prose stays TEXT and still gets its emoji swapped.
+  return html.split(/(<[^>]*>)/).map((seg,i)=>
+    i%2?seg:seg.replace(EMOJIFY_PUNCT_RE,(m,emo,punct)=>{
+      const img=iconImg(EMOJI_IMG[emo.replace(/️$/,"")]);
+      /* PUNCTUATION STAYS WITH ITS ICON. An <img> is a replaced element, so the browser is allowed
+         to break the line straight after it — and it does. The sea trial's vision judge caught the
+         result twice, on two different legs: "…find ye one more crate… for 10 [coin]" with the FULL
+         STOP stranded alone on the next line, which it read as "a broken/truncated sentence
+         template". A player reads it the same way.
+         Fixed HERE rather than at the call sites because the sweep found five of them
+         (util.js x3, flow.js, panel.js) and any new line of copy would be a sixth. Adds a wrapper
+         but no TEXT, which matters: menuButtons() (ui/stage.js) measures textContent against a
+         16-character cutoff to decide the radial bloom, so a fix that added even one invisible
+         character could silently drop prompts to a flat card. */
+      return punct?`<span class="pp4Cling">${img}${punct}</span>`:img;
+    })
+  ).join("");
 }
 const BOAT_IMG=[1,2,3,4].map(i=>`${ASSET_BASE}boats/${i}.png`);
 // 7 base island footprints (see TET below); art is authored once per shape in its canonical
@@ -153,7 +201,7 @@ const dockPlace=x=>DOCK_PLACE[x]||"the island";
 // UNCHANGED in signature AND in value — all 7 joined strings stay byte-identical, because two things
 // depend on that: the seven `misc:dockFlavor:<ing>` audit cards render dockFlavor(ing) directly (so
 // Wyatt's seven reviewed rows read exactly as they did), and the neutral dock narration's own
-// wording is not what F5 changes. scripts/narration_test.js pins all 7 against hardcoded literals.
+// wording is not what F5 changes. scripts/narration_test.js pins all 7 against hardcoded literals.  [UNGATED-IN-4: narration_test.js reads the root tree, not this one]
 const dockFlavor=x=>{const f=DOCK_FLAVOR[x];return f?`${f.prefix} ${f.name}`:iname(x);};
 const iname=x=>ING_NAME[x]||x;
 const ilabel=x=>ING_EMOJI[x]+" "+iname(x);
@@ -167,7 +215,7 @@ const iconImg=src=>`<img class="narrIcon" src="${src}" alt="">`;
 // F5: dockFlavor() with the ingredient's icon inserted immediately before the NAME, per the declared
 // {prefix,name} split above. THE ONE PLACE that decides where a dock-flavour icon goes — every dock
 // string in src/ui/flow.js and src/ui/util.js routes through here, so the branches cannot drift apart
-// again. Differs from dockFlavor() by nothing but the inserted icon; narration_test.js proves that by
+// again. Differs from dockFlavor() by nothing but the inserted icon; narration_test.js proves that by  [UNGATED-IN-4: narration_test.js reads the root tree, not this one]
 // stripping the icon back out and comparing (D-16: an icon is never dropped, only moved).
 // The unknown-key fallback emits no icon rather than an `src="undefined"` img: for a key with no art
 // there is no icon to drop, so D-16 has nothing to protect here.
@@ -185,14 +233,254 @@ const PERP={N:["E","W"],S:["E","W"],E:["N","S"],W:["N","S"]};
 // the combined diagonal a storm actually carries you toward — used to aim the single wind needle
 // ORDER IS LOAD-BEARING — consumed only by the classic live turn loop alongside PERP, to aim the storm's combined wind-needle diagonal; the headless corpus cannot catch a reorder here.
 const STORM_DIAG={N:{E:45,W:315},S:{E:135,W:225},E:{N:45,S:135},W:{N:315,S:225}};
-// New wind mechanic (see notes/edits for pastry pirates.pdf #7): wind no longer force-moves
-// anyone each turn — it only prices voluntary movement. Sailing draws from a per-turn point
-// budget; moving with the wind is cheap, against it is expensive, crossing it is in between.
-// Storms are the only thing left that still shoves ships around (see Game.windPush/windLeg).
-// ORDER IS LOAD-BEARING — parallel table keyed to DIRS; must stay in lockstep with it (also consumed by windStepCost below).
+// v2 rule 1. Sailing is a plain DISTANCE, not a weighted point budget, and it is free (rule 2).
+// You move up to SAIL_RANGE squares in any mix of orthogonal directions — but the moment your
+// route includes even ONE upwind square (the direct opposite of the wind), the whole move is
+// capped at SAIL_RANGE_UPWIND. Crosswind is not upwind and never triggers the cap.
+//
+// The lee is gone: an island upwind of you does nothing at all now. v1's SAIL_BUDGET(_LEEWARD)
+// and windStepCost are deleted rather than left unused — a constant nothing reads is exactly the
+// dead code the house rules exist to prevent.
+// ORDER IS LOAD-BEARING — parallel table keyed to DIRS; must stay in lockstep with it.
 const OPPOSITE={N:"S",S:"N",E:"W",W:"E"};
-const SAIL_BUDGET=9,SAIL_BUDGET_LEEWARD=7;
-const windStepCost=(windDir,dirKey)=>dirKey===windDir?2:(dirKey===OPPOSITE[windDir]?4:3);
+// What a captain sees when they Pass — there's nothing else worth doing with the turn, so they
+// look into the ocean. All fifty sightings are Wyatt's, hand-written in full on 2026-08-06 and
+// corrected only for grammar and punctuation; copy here is his, mechanism is ours.
+//
+// EACH ENTRY CARRIES BOTH PERSONS, and that is the whole design. One sighting is narrated two ways
+// — "ye lean over the rail..." to the captain themselves, "Crustbeard leans over the rail..." to
+// everyone else — and `{}` in `t` is where the captain's name goes. It is NOT always first: Wyatt's
+// own "Off the bow, ye see..." becomes "Off the bow, Crustbeard sees...", which no name-prefix rule
+// could have produced.
+//
+// THE PREVIOUS SHAPE (a shared SEA_OPENERS table plus a per-creature subject and verb) IS GONE.
+// It existed to keep the two persons in lockstep from one source, but it only worked while every
+// line began with the same handful of clauses. Wyatt's rewrite fuses opener and sighting — "ye see
+// a baby candycrab scuttle off the deck", "By the bow, ye spy..." — so there is no shared opener
+// left to share. Both forms are now written out, which also means the second verb in a compound
+// sentence is conjugated correctly ("leans over the rail, and SPOTS six clownfish") — something no
+// leading-clause rule would have caught.
+//
+// Nothing is inferred at runtime. No article is guessed, no verb agreement is derived, no person is
+// conjugated: every string is read out exactly as written.
+//
+// ORDER IS LOAD-BEARING (Wyatt, 2026-08-06): "we want each animal to be followed by a substantially
+// different animal, in a different view/part of the oceanscape." No two neighbours share a creature
+// family or a zone of the sea — and because each captain starts at their own point and walks the
+// list as a RING, the 50→1 join is a real adjacency and satisfies the rule too. Adding or moving an
+// entry means re-checking both, not just the visible neighbours.
+const SEA_CREATURES=[
+  {y:"ye peep into the clear water and see a pokey pistachio pufferfish gettin' sassy.",
+   t:"{} peeps into the clear water and sees a pokey pistachio pufferfish gettin' sassy."},
+  {y:"ye lean on the railing as a honeycomb hermit crab skitters by.",
+   t:"{} leans on the railing as a honeycomb hermit crab skitters by."},
+  {y:"By the bow, ye spy a minty mahi mahi leap out of the emerald water.",
+   t:"By the bow, {} spies a minty mahi mahi leap out of the emerald water."},
+  {y:"ye peer down past the waterline at a school of glittering sugarfish.",
+   t:"{} peers down past the waterline at a school of glittering sugarfish."},
+  {y:"ye catch sight of the bottom, and a dozen donut shrimp bounce past.",
+   t:"{} catches sight of the bottom, and a dozen donut shrimp bounce past."},
+  {y:"ye spy a key lime lionfish fanning out its tangy fins.",
+   t:"{} spies a key lime lionfish fanning out its tangy fins."},
+  {y:"Off the bow, ye see a sprinkle shark leave a rainbow wake in the water.",
+   t:"Off the bow, {} sees a sprinkle shark leave a rainbow wake in the water."},
+  {y:"ye watch some sour sardines turn together in the turquoise water.",
+   t:"{} watches some sour sardines turn together in the turquoise water."},
+  {y:"ye lean over the rail, as shimmering cinnamon squid drift past.",
+   t:"{} leans over the rail, as shimmering cinnamon squid drift past."},
+  {y:"ye peer down past the waterline, and a banana bonito slips down the hull.",
+   t:"{} peers down past the waterline, and a banana bonito slips down the hull."},
+  {y:"ye catch sight of the bottom, where a lollipop lobster backs into a crack.",
+   t:"{} catches sight of the bottom, where a lollipop lobster backs into a crack."},
+  {y:"ye squint up and see an applesauce albatross soaring above.",
+   t:"{} squints up and sees an applesauce albatross soaring above."},
+  {y:"ye watch the sea open up as a butterwhale breaches and splashes down.",
+   t:"{} watches the sea open up as a butterwhale breaches and splashes down."},
+  {y:"ye lean over the rail and see a gingerbread hammerhead circling.",
+   t:"{} leans over the rail and sees a gingerbread hammerhead circling."},
+  {y:"ye peer starboard and see a marshmallow manatee floating in the swell.",
+   t:"{} peers starboard and sees a marshmallow manatee floating in the swell."},
+  {y:"ye look down through clear water at a nougat nudibranch sliding along.",
+   t:"{} looks down through clear water at a nougat nudibranch sliding along."},
+  {y:"ye look down at a reef to see a peppermint parrotfish crunching candy cane coral.",
+   t:"{} looks down at a reef to see a peppermint parrotfish crunching candy cane coral."},
+  {y:"ye lean over the rail, when a custard cuttlefish flashes gold and vanishes.",
+   t:"{} leans over the rail, when a custard cuttlefish flashes gold and vanishes."},
+  {y:"ye watch the water slide by, swirled by a school of tiramisu tuna.",
+   t:"{} watches the water slide by, swirled by a school of tiramisu tuna."},
+  {y:"ye catch sight of the bottom, and a tiny toasted coconut crab scuttles along.",
+   t:"{} catches sight of the bottom, and a tiny toasted coconut crab scuttles along."},
+  {y:"ye see a pavlova pelican dive in a white crash of meringue.",
+   t:"{} sees a pavlova pelican dive in a white crash of meringue."},
+  {y:"ye catch sight of a blueberry beluga spraying jam as it splashes down.",
+   t:"{} catches sight of a blueberry beluga spraying jam as it splashes down."},
+  {y:"ye look down through crystal clear water and spy a reef of golden funnelcake coral.",
+   t:"{} looks down through crystal clear water and spies a reef of golden funnelcake coral."},
+  {y:"ye keep an eye on the swell, and some maple syrup seals slick over each other.",
+   t:"{} keeps an eye on the swell, and some maple syrup seals slick over each other."},
+  {y:"ye peer down and spot a mocha manta ray gliding below.",
+   t:"{} peers down and spots a mocha manta ray gliding below."},
+  {y:"ye catch sight of the bottom, where a salted caramel starfish sticks to a rock.",
+   t:"{} catches sight of the bottom, where a salted caramel starfish sticks to a rock."},
+  {y:"ye lean over the rail, and spot six clementine clownfish squabbling.",
+   t:"{} leans over the rail, and spots six clementine clownfish squabbling."},
+  {y:"ye drift near a reef, and a giant snickerdoodle sea snail slides by.",
+   t:"{} drifts near a reef, and a giant snickerdoodle sea snail slides by."},
+  {y:"ye peer down deep, where a jello octopus wobbles.",
+   t:"{} peers down deep, where a jello octopus wobbles."},
+  {y:"ye catch sight of the bottom, where a fudgey flounder unburies itself.",
+   t:"{} catches sight of the bottom, where a fudgey flounder unburies itself."},
+  {y:"ye peer down past the waterline, and a cheesecake sea snake squiggles below.",
+   t:"{} peers down past the waterline, and a cheesecake sea snake squiggles below."},
+  {y:"ye lean over the rail, and a great white waffleshark passes below with maple syrup on its fin.",
+   t:"{} leans over the rail, and a great white waffleshark passes below with maple syrup on its fin."},
+  {y:"ye squint up at the sky, and see a cotton candy flamingo float over.",
+   t:"{} squints up at the sky, and sees a cotton candy flamingo float over."},
+  {y:"ye look into the water, and spy a cloud of pecan prawns roasting in the shimmering sun.",
+   t:"{} looks into the water, and spies a cloud of pecan prawns roasting in the shimmering sun."},
+  {y:"ye watch the turquoise water slide by, thick with peanut butter jellyfish.",
+   t:"{} watches the turquoise water slide by, thick with peanut butter jellyfish."},
+  {y:"ye float by a reef, where a lemony anemone wiggles its citrusy arms.",
+   t:"{} floats by a reef, where a lemony anemone wiggles its citrusy arms."},
+  {y:"ye watch the sea open up ahead, and a challah humpback blows a toasty plume.",
+   t:"{} watches the sea open up ahead, and a challah humpback blows a toasty plume."},
+  {y:"ye peer down deep and see a family of strawberry seahorses squoogling along.",
+   t:"{} peers down deep and sees a family of strawberry seahorses squoogling along."},
+  {y:"ye catch sight of the bottom, and a gummy eel stretches out of its hidey-hole.",
+   t:"{} catches sight of the bottom, and a gummy eel stretches out of its hidey-hole."},
+  {y:"ye lean over the rail, and some affogato angelfish swirl up like cream in coffee.",
+   t:"{} leans over the rail, and some affogato angelfish swirl up like cream in coffee."},
+  {y:"ye watch the water off the bow, and a pod of dark chocolate dolphins jump up.",
+   t:"{} watches the water off the bow, and a pod of dark chocolate dolphins jump up."},
+  {y:"ye drift near a reef, and a crème brûlée stingray lifts off, its back cracked and burnt gold.",
+   t:"{} drifts near a reef, and a crème brûlée stingray lifts off, its back cracked and burnt gold."},
+  {y:"ye see a baby candycrab scuttle off the deck, shell hard as torched sugar.",
+   t:"{} sees a baby candycrab scuttle off the deck, shell hard as torched sugar."},
+  {y:"ye look up at a shadow crossing the deck, and a sesame seagull makes off with a bun.",
+   t:"{} looks up at a shadow crossing the deck, and a sesame seagull makes off with a bun."},
+  {y:"ye spy an ice cream sea bream chilling in the hull's shadow, keepin' cool.",
+   t:"{} spies an ice cream sea bream chilling in the hull's shadow, keepin' cool."},
+  {y:"ye catch sight of the bottom, where a giant cappuccino clam shuts with a foamy thump.",
+   t:"{} catches sight of the bottom, where a giant cappuccino clam shuts with a foamy thump."},
+  {y:"ye peer at an eggnog nautilus spiraling to the surface in a creamy swirl.",
+   t:"{} peers at an eggnog nautilus spiraling to the surface in a creamy swirl."},
+  {y:"ye lean over the rail, and a babka bull shark comes in too close.",
+   t:"{} leans over the rail, and a babka bull shark comes in too close."},
+  {y:"ye keep an eye on the swell, and the amber shell of a toffee turtle surfaces.",
+   t:"{} keeps an eye on the swell, and the amber shell of a toffee turtle surfaces."},
+  {y:"ye drift near a reef, and a honey lavender sea cucumber lies there, doing nothing.",
+   t:"{} drifts near a reef, and a honey lavender sea cucumber lies there, doing nothing."},
+];
+const SAIL_RANGE=4,SAIL_RANGE_UPWIND=2;
+// v2 rule 7: a storm is one direction, this far, everyone at once, at the start of the round.
+const STORM_PUSH=3;
+
+/* ================= THE BAKE-OFF (v2.1, experimental) =================
+   The end-of-voyage minigame: five mixing bowls, shuffled, named back in the recipe's own order.
+   See v2bakeoff/src/engine/bakeoff.js for the pure core and RULES-V2.md for the ruleset.
+
+   BAKEOFF_ENABLED IS A ROLLBACK SWITCH, NOT A TUNING KNOB. False restores the pre-bake-off game
+   exactly — the instant finish and the one-lap final round — and scripts/bakeoff_baseline.js proves  [UNGATED-IN-4: bakeoff_baseline.js reads the root tree, not this one]
+   that mechanically against a fingerprint captured before the feature existed, rather than leaving
+   it as a claim nobody re-checks.
+
+   It is threaded onto `cfg` by roundCfg() rather than read directly at every call site, for two
+   reasons that both bite otherwise: a headless balance run needs to flip it PER GAME to compare the
+   two rulesets in one process, and a solo save must carry the value it was played under (cfg is
+   rebuilt from roundCfg() on resume, so a save made with it on and resumed with it off would replay
+   a decision log against a structurally different game).
+
+   BAKE_ATTENTION is the bot's per-crate memory. NOT a difficulty dial for the player: raising it
+   makes bots better, it does not make the puzzle harder.
+
+   RETUNED 0.28 -> 0.24 (Wyatt, 2026-08-08: "The bots should take 2-3 turns to finish the bakeoff,
+   getting 1-2 more ingredients right per attempt. Tune them so this is the case."). Measured over
+   60k bakes per candidate:
+
+     att    mean attempts   1st attempt   newly-correct per later attempt
+     0.20        2.94          2.00                 1.54
+     0.24        2.72          2.20                 1.63     <- both criteria inside their bands
+     0.28        2.51          2.41                 1.72     <- old; first attempt above "1-2"
+
+   THE TWO CRITERIA PULL AGAINST EACH OTHER, which is worth knowing before anyone "improves" this.
+   Five crates finished in two attempts REQUIRES 2.5 per attempt, which is outside "1-2" by
+   construction — so the gain criterion pushes the mean up and the turn criterion pushes it down.
+   0.24 is where both land inside their stated range at once.
+
+   Attention also cannot cut both tails: it only trades instant wins against long ones. At 0.24,
+   11.5% of bakes still finish first try and 21.3% run to four or more. The 2-3 band is essentially
+   flat at ~69% across the whole usable range, so there is no setting that concentrates it further —
+   that would need a different bot model, not a different number. */
+const BAKEOFF_ENABLED=true;
+const BAKE_SWAPS=3;
+const BAKE_ATTENTION=0.24;
+// What one more look at the shuffle costs (Wyatt, 2026-08-08: "You should be able to pay 1 coin to
+// rewatch the shuffle happen before making your guess — and repeat it as long as you have coins").
+// A coin, and no cap beyond your purse: the ceiling is affordability, which is a decision the player
+// already understands, rather than an arbitrary "3 rewatches max" nobody can reason about. It also
+// gives coins a use at the very end of a voyage, where they had none — every other way to spend
+// them is out at sea.
+const BAKE_REWATCH_COST=1;
+// bakeoffEnabled() — the live switch, same memoize-and-guard shape as windPrototypeEnabled():
+// `?bakeoff=0` / `?bakeoff=1` overrides the constant for one session so both rulesets can be
+// A/B'd on a phone without a redeploy. Guarded so a file:// page or a storage-blocked context
+// falls back to the constant instead of throwing.
+let bakeoffOn=null;
+function bakeoffEnabled(){
+  if(bakeoffOn!==null)return bakeoffOn;
+  let on=BAKEOFF_ENABLED;
+  try{
+    if(location.search.indexOf("bakeoff=1")!==-1)on=true;
+    else if(location.search.indexOf("bakeoff=0")!==-1)on=false;
+  }catch(err){}
+  bakeoffOn=on;
+  return bakeoffOn;
+}
+/* ================= ?ovens=1 — the bake-off playtest shortcut =================
+
+   A whole voyage to reach the ovens is 16-odd days, and the thing being tested at the end of it
+   takes ninety seconds. `?ovens=1` fills the HUMAN captains' holds with their own drafted recipe
+   the moment the draft closes. Everyone starts the game standing on Tortuga, so a full hold is the
+   only thing standing between the first turn and the ovens: pass on day one and they light.
+
+   BOTS ARE DELIBERATELY LEFT ALONE. Filling every hold would end the voyage on day one and test
+   nothing. Leaving them to sail normally is what makes this a real test of the thing actually in
+   question — whether the days a captain spends baking give the rest of the table a catch-up window
+   that feels earned.
+
+   IT DRAWS NO RANDOM NUMBERS, which is what makes it safe to bolt onto a seeded game: the same seed
+   still produces the same board, the same recipes and the same bot decisions. It only changes what
+   is in a hold. It rides in soloMeta for the same reason the bake-off flag does — a save made with
+   it on and resumed without it would replay its decision log against a different game. */
+/* IS THIS A DEVELOPER'S MACHINE? — the one gate every dev flag hangs off.
+   CUTOVER, 2026-08-26. While this game lived at /4 it was a dev preview and a URL that skipped the
+   voyage cost nothing. It is now the front door, and Phase 6's criterion 4 is explicit: "No URL a
+   player can type skips the voyage or opens a developer tuning panel." `?ovens=1` fills the human
+   holds — a player who typed it would skip the entire 16-day voyage and never know what they
+   missed; `?windhud=1` opens a tuning HUD.
+   NOT DELETED, because both are genuinely useful and deleting them would mean re-deriving them the
+   next time the bake-off needs testing. Gated instead: the flags keep working exactly as before on
+   localhost and from a file:// checkout, and do nothing at all on the live domain. ONE definition
+   rather than a copy at each flag (rule 23) — a second copy is a second thing to keep in step. */
+function devHost(){
+  try{
+    const h = location.hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0" || h === "" || h.endsWith(".local");
+  }catch(err){ return false; }
+}
+
+const OVENS_NOW=false;
+let ovensNowOn=null;
+function ovensNowEnabled(){
+  if(ovensNowOn!==null)return ovensNowOn;
+  let on=OVENS_NOW;
+  try{
+    if(devHost() && location.search.indexOf("ovens=1")!==-1)on=true;
+    else if(location.search.indexOf("ovens=0")!==-1)on=false;
+  }catch(err){}
+  ovensNowOn=on;
+  return ovensNowOn;
+}
 const NAMES=["Capt. Davy Scones","Capt. Crustbeard","Capt. Dough Hook","Capt. Flaky Jack"];
 // default captain names in seat order (no "Capt. " prefix) — the pool a player who leaves the
 // name box blank draws from, mirroring the defaults pname() shows for un-claimed seats.
@@ -201,18 +489,153 @@ const DEFAULT_NAMES=NAMES.map(n=>n.replace("Capt. ",""));
 // bot's or another captain's default — the "two Crustbeards" bug). Instead pick a name no seat
 // in `seats` is already using, preferring the one that belongs to `preferIdx`'s own seat so the
 // solo/host player at seat 0 reliably becomes "Davy Scones".
+// seatHeldName(seats,i) — THE ONE ANSWER to "what name is this seat holding right now?"
+//
+// Item 16 (D-19) needs to ask that question of every seat before it lets a joining captain keep the
+// name they typed, and unusedDefaultName() below was already asking its own version of it to build
+// the taken-set. Two askers means two answers that drift, so there is one function and both name it
+// (CLAUDE.md rule 23).
+//
+// AN UNNAMED SEAT STILL HOLDS A NAME, and that is the whole subtlety. A networked bot seat is written
+// as {name:"", id:"", bot:true} (createRoom), so nothing in the database says "Crustbeard" — yet
+// pname() draws the seat-indexed captain default for it, and that is the name a player SEES at the
+// table. A human typing it would sit opposite their own twin, which is playtest 19's "two Dough
+// Hooks" bug arriving by a different door.
+//
+// WHAT THIS CHANGES IN unusedDefaultName, stated exactly, because it is a shared quantity and
+// HARD-WON-LESSONS §0 is emphatic about listing what reads one before altering how it is produced.
+// The old expression was `s.id ? (s.name||"").trim() : DEFAULT_NAMES[+k]`. Against every input any
+// call site in this repo can actually produce, the two agree on all but one case:
+//   - claimed + named        -> the typed name.        SAME
+//   - unclaimed bot, blank   -> the seat's default.    SAME
+//   - unclaimed bot, NAMED   -> old: the seat's default (wrong, it ignores the written name)
+//                               new: the written name.  CHANGED, and this is the point — item 16
+//                               renames a bot to accommodate a human, so from now on a bot seat can
+//                               carry a name that is not its index's default.
+//   - claimed + BLANK        -> old: "" ; new: the default. UNREACHABLE: no write path in this
+//                               codebase ever puts a blank name on a claimed seat (createRoom seat 0
+//                               takes requireName(), and joinRoom/renameMySeat both write
+//                               `chosen||unusedDefaultName(...)`), and buildRoster resolves a blank
+//                               human name before recording it. Listed rather than left implicit,
+//                               so the next reader does not have to re-derive that it cannot happen.
+function seatHeldName(seats,i){
+  const s=(seats&&seats[i])||{};
+  return (s.name||"").trim()||DEFAULT_NAMES[+i]||"";
+}
+// Item 30 (playtest 2026-08-23c): two names that READ the same ARE the same. Wyatt joined as
+// "flaky jack" and Flaky Jack the bot stayed at the table — the collision checks compared exact
+// strings, so a case difference smuggled a twin in. Every name comparison in this file goes
+// through this one norm (rule 23: one rule, however many askers), so the claim check and the
+// default-name pool can never disagree about what counts as taken.
+const sameName=(a,b)=>String(a||"").trim().toLowerCase()===String(b||"").trim().toLowerCase();
 function unusedDefaultName(seats,preferIdx){
   const taken=new Set();
   Object.keys(seats||{}).forEach(k=>{
-    const s=seats[k]||{};
-    const nm=s.id?(s.name||"").trim():DEFAULT_NAMES[+k];
-    if(nm)taken.add(nm);
+    const nm=seatHeldName(seats,k);
+    if(nm)taken.add(nm.toLowerCase());   // item 30: the pool is capitalization-normed too
   });
-  if(preferIdx!=null&&!taken.has(DEFAULT_NAMES[preferIdx]))return DEFAULT_NAMES[preferIdx];
-  return DEFAULT_NAMES.find(nm=>!taken.has(nm))||DEFAULT_NAMES[preferIdx||0];
+  if(preferIdx!=null&&!taken.has(DEFAULT_NAMES[preferIdx].toLowerCase()))return DEFAULT_NAMES[preferIdx];
+  return DEFAULT_NAMES.find(nm=>!taken.has(nm.toLowerCase()))||DEFAULT_NAMES[preferIdx||0];
+}
+// unusedDefaultName() counts EVERY seat in the map as taking a name, including the one being
+// claimed — so a player re-resolving their own seat would see their own old name as taken and drift
+// to a different default each pass. Hiding the seat under claim from the tally makes `preferIdx`
+// reliably return that seat's own captain, which is both stable and collision-free. Shared by
+// applyNameClaim() below, which is the only caller left in the tree.
+const withoutSeat=(s,i)=>{const o={};Object.keys(s||{}).forEach(k=>{if(+k!==i)o[k]=s[k];});return o;};
+
+/* ================= ITEM 16 / D-19 — a captain keeps the name they typed ================= */
+
+/* applyNameClaim(s,seat,chosen,numSeats,myId,fresh) — THE ONE RULE for what happens when a captain puts
+   a name on a seat. Returns "ok" (and has mutated `s`) or "taken" (and has touched nothing).
+
+   WYATT'S RULING, two different answers depending on who holds the name:
+     - another HUMAN holds it -> REFUSE. Nothing is written; the caller says so under the box the
+       name was typed in.
+     - a BOT holds it -> GRANT IT ANYWAY, and the bot swaps to a name nobody is using.
+
+   THERE ARE THREE WRITE PATHS, NOT TWO, and that is why this is a function rather than an edit in
+   two places. joinRoom has a fresh-claim path AND a rejoin path (NAME-01/C, added so "back out and
+   come back with a different name" honours the new name), and renameMySeat is the third. Fix two and
+   the rule holds on joining and fails on renaming — or, worse, holds on both and fails only on the
+   rejoin, which is the rarest path to test and the easiest to forget. One rule, three callers
+   (CLAUDE.md rule 23). Before this, all three wrote `chosen` verbatim with no collision check at all;
+   only the blank-name fallback, unusedDefaultName(), ever checked anything.
+
+   IT RUNS INSIDE THE TRANSACTION, and that is the whole point of its shape. netClaimSeat is a real
+   Firebase transaction on rooms/<code>/seats (src/net/readers.js), so `s` is the live server value
+   and the check and the write are one atomic step. Checked BEFORE the transaction instead, two
+   captains typing the same name in the same instant both pass the check and the last write wins —
+   the bug wearing a fix's clothes (T-02.2-21: two captains under one name at one table is an
+   impersonation surface, not a cosmetic clash).
+
+   `fresh` PRESERVES EACH CALLER'S EXISTING WRITE SHAPE, deliberately. The fresh claim writes a bare
+   {name,id,bot} record; the rejoin and rename paths spread the existing record first. They are kept
+   distinct rather than unified because the live RTDB rule validates this node, and quietly adding a
+   field (a bot seat's leftover `strat`) to a human seat's record is exactly the kind of change that
+   fails server-side and locks people out of games rather than showing a cosmetic fault.
+
+   THE BOT IS RENAMED AFTER THE HUMAN'S SEAT IS WRITTEN, which is what makes it collision-free for
+   free: unusedDefaultName() then reads a map that already contains the human's new name, so it
+   cannot hand the same name straight back. Both writes land in the SAME transaction, so there is no
+   instant in which two seats share a name. */
+function applyNameClaim(s,seat,chosen,numSeats,myId,fresh){
+  let clash=null;
+  if(chosen){
+    for(let i=0;i<numSeats;i++){
+      if(i===seat)continue;
+      // seatHeldName, not s[i].name: a networked bot seat is stored with name:"" and DISPLAYS its
+      // seat-indexed captain default, so the name a player can see is not the one in the record.
+      // sameName, not ===: "flaky jack" and "Flaky Jack" are one name at the table (item 30).
+      if(sameName(seatHeldName(s,i),chosen)){clash=i;break;}
+    }
+  }
+  // A HUMAN holds it (the seat has an id). Refuse, and write nothing at all.
+  if(clash!=null&&(s[clash]||{}).id)return "taken";
+  const cur=s[seat]||{};
+  const resolved=chosen||unusedDefaultName(withoutSeat(s,seat),seat);
+  s[seat]=fresh?{name:resolved,id:myId,bot:false}
+               :{...cur,name:resolved,id:myId,bot:false};
+  // A BOT held it: it swaps to accommodate the human, in this same transaction.
+  if(clash!=null){
+    const bot=s[clash]||{};
+    s[clash]={...bot,name:unusedDefaultName(withoutSeat(s,clash),clash)};
+  }
+  return "ok";
+}
+
+// playtest 19: TWO CAPTAINS CALLED "DOUGH HOOK". A bot seat was built as {name:"", id:""}, so its
+// display name came from pname()'s SEAT-INDEXED fallback (NAMES[i]) — which means a human who
+// typed one of the four default names got a bot twin at the table. Seen live at a Pass & Play
+// table with a human "Dough Hook": seat 2's bot was "Dough Hook" too.
+//
+// unusedDefaultName() above was written for exactly this ("the two Crustbeards bug"), but nothing
+// ever ran it for BOT seats — only for humans who left the box blank. So every seat is named once,
+// here, and all three roster-build sites share it: solo, Pass & Play, and the solo RESUME. They
+// must share it — if resume named the crew by a different rule, a resumed voyage would rename the
+// bots mid-game. Deterministic (no RNG), so the dlog and replay are untouched.
+function buildRoster(humanNames,strategies){
+  const roster=[],seats={},humans=humanNames||[];
+  humans.forEach((nm,i)=>{
+    // A BLANK human name is resolved here too, not left empty for pname() to paper over with the
+    // seat default. Leaving it empty was a second, quieter version of the same collision: an empty
+    // name reserves nothing, so seat 0 would DISPLAY "Davy Scones" through the fallback while a bot
+    // was still free to be handed "Davy Scones" as its own. Naming it now makes it taken.
+    const clean=String(nm||"").trim()||unusedDefaultName(seats,i);
+    roster[i]={name:clean,id:"solo",bot:false};
+    seats[i]={id:"solo",name:clean};
+  });
+  for(let i=humans.length;i<strategies.length;i++){
+    const nm=unusedDefaultName(seats,i);
+    roster[i]={name:nm,id:"",bot:true,strat:strategies[i]};
+    // recorded WITH an id so the next bot counts this actual name as taken, rather than the
+    // default that belongs to this seat index (which is the name we may have just skipped)
+    seats[i]={id:"bot",name:nm};
+  }
+  return roster;
 }
 const COLORS=["var(--p0)","var(--p1)","var(--p2)","var(--p3)"];
 const HEXCOL=["#f2679e","#1d96a6","#27c78d","#f5a623"];
 const man=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
 
-export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_BUDGET, SAIL_BUDGET_LEEWARD, windStepCost, NAMES, DEFAULT_NAMES, unusedDefaultName, COLORS, HEXCOL, man };
+export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, devHost, BAKEOFF_ENABLED, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, bakeoffEnabled, OVENS_NOW, ovensNowEnabled, SEA_CREATURES, NAMES, DEFAULT_NAMES, unusedDefaultName, seatHeldName, withoutSeat, applyNameClaim, buildRoster, COLORS, HEXCOL, man };

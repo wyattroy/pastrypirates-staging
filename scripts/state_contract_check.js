@@ -52,15 +52,46 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { ROOT, INDEX_HTML, locateClassicScriptRegion, classify, maskNonCode } from "./lib/js_region_tokenizer.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { locateClassicScriptRegion, classify, maskNonCode } from "./lib/js_region_tokenizer.js";
 import { APP_STATE_NAMES, checkNameBareUsages, hasTopLevelDeclaration } from "./migrate_app_state.js";
-import { MODULE_OK_FLAG } from "../src/module-contract.js";
+import { pickTree, treeLine, REPO_ROOT } from "./lib/pick_tree.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const picked = pickTree(process.argv);
+const ROOT = picked.root;
+const INDEX_HTML = path.join(ROOT, "index.html");
 const SRC_DIR = path.join(ROOT, "src");
 const MAIN_JS = path.join(ROOT, "src", "main.js");
 const STATE_INDEX_JS = path.join(ROOT, "src", "state", "index.js");
+
+/* ============================================================================
+   WHICH IMPORTS FOLLOW THE TREE, AND WHICH MUST NOT — the distinction that decides
+   whether this gate measures 4/ with 4/'s constants or with the root's.
+   ============================================================================
+   FOLLOWS THE TREE (a TREE ARTIFACT — the scanned game's own code):
+     index.html, src/, src/main.js, src/state/index.js, and src/module-contract.js's
+     MODULE_OK_FLAG. `4/src/module-contract.js` EXISTS and is the one that matters when scanning
+     4/. The two copies happen to agree today ("__pp_module_ok", byte-identical files) — which is
+     exactly why getting this backwards would be invisible. A statically-imported `../src/
+     module-contract.js` would pin the ROOT's flag value forever, and the day 4/ changed its own,
+     this gate would check 4/'s main.js against the old game's constant and pass.
+
+   DOES NOT FOLLOW THE TREE (a TOOL — tree-agnostic vocabulary and classifiers):
+     ./migrate_app_state.js's APP_STATE_NAMES / checkNameBareUsages / hasTopLevelDeclaration, and
+     ./lib/js_region_tokenizer.js's classify / maskNonCode / locateClassicScriptRegion. These are
+     the migration's own definition of "what an app-state name is" and a character classifier;
+     neither describes a tree. There is deliberately no 4/scripts/migrate_app_state.js, and adding
+     one would fork the vocabulary. (The tokenizer's own exported ROOT/INDEX_HTML constants ARE
+     tree artifacts, so they are no longer imported here — this file computes both from the
+     selector instead. That import was the crash that made this gate un-runnable against 4/.)
+   ============================================================================ */
+const MODULE_CONTRACT_JS = path.join(ROOT, "src", "module-contract.js");
+let MODULE_OK_FLAG = null;
+if (fs.existsSync(MODULE_CONTRACT_JS)) {
+  ({ MODULE_OK_FLAG } = await import(pathToFileURL(MODULE_CONTRACT_JS).href));
+}
 
 const failures = [];
 
@@ -140,6 +171,11 @@ function checkDebugHookNames() {
     const varName = m2[1];
     let resolved = null;
     if (varName === "MODULE_OK_FLAG") resolved = MODULE_OK_FLAG;
+    if (varName === "MODULE_OK_FLAG" && MODULE_OK_FLAG == null) {
+      ok = false;
+      failures.push(`DEBUG-HOOK: src/main.js assigns window[MODULE_OK_FLAG], but ${path.relative(REPO_ROOT, MODULE_CONTRACT_JS)} does not exist in the scanned tree — this check cannot resolve the flag's VALUE and must not pass pretending it did.`);
+      continue;
+    }
     if (resolved === null) {
       ok = false;
       failures.push(`DEBUG-HOOK: src/main.js uses an indirect "window[${varName}] = ..." assignment this check doesn't know how to resolve — extend checkDebugHookNames()`);
@@ -239,7 +275,7 @@ function checkStateBindingNeverReassigned() {
 
   for (const file of jsFilesRecursive(SRC_DIR)) {
     if (path.resolve(file) === path.resolve(STATE_INDEX_JS)) continue;
-    const rel = path.relative(ROOT, file);
+    const rel = path.relative(REPO_ROOT, file);
     const content = fs.readFileSync(file, "utf8");
     const masked2 = maskNonCode(content, classify(content));
     scanMasked(rel, masked2, (idx) => content.slice(0, idx).split("\n").length);
@@ -250,6 +286,21 @@ function checkStateBindingNeverReassigned() {
 
 /* ================= Runner ================= */
 function main() {
+  // THE TREE, AND WHAT WAS ACTUALLY OPENED, BEFORE ANY VERDICT (HARD-WON-LESSONS §3).
+  const srcFiles = fs.existsSync(SRC_DIR) ? jsFilesRecursive(SRC_DIR) : [];
+  const regionChars = fs.existsSync(INDEX_HTML)
+    ? locateClassicScriptRegion(fs.readFileSync(INDEX_HTML, "utf8")).source.length
+    : -1;
+  console.log(treeLine(picked, `${srcFiles.length} .js file(s) under src/, ${APP_STATE_NAMES.length} app-state name(s), index.html classic-script region ${regionChars < 0 ? "MISSING" : regionChars + " chars"}`));
+  if (srcFiles.length === 0) {
+    console.error(`FAIL: no .js files found under ${SRC_DIR} — this gate scanned NOTHING.`);
+    process.exit(1);
+  }
+  if (!fs.existsSync(MAIN_JS) || !fs.existsSync(STATE_INDEX_JS)) {
+    console.error(`FAIL: ${path.relative(REPO_ROOT, MAIN_JS)} or ${path.relative(REPO_ROOT, STATE_INDEX_JS)} is missing — assertions 3 and 4 have no subject and must not pass over an absent one.`);
+    process.exit(1);
+  }
+
   const declOk = checkNoLeftoverDeclarations();
   console.log(`${declOk ? "PASS" : "FAIL"} no leftover top-level declaration — none of the 46 app-state names re-declared in index.html`);
 
@@ -266,7 +317,7 @@ function main() {
   console.log(`${reassignOk ? "PASS" : "FAIL"} appState binding never reassigned — only appState.NAME property writes occur outside src/state/index.js's own declaration`);
 
   if (failures.length) {
-    console.error("\nFAILURES:");
+    console.error(`\nFAILURES — tree: ${picked.label}`);
     for (const f of failures) console.error(`  - ${f}`);
     process.exit(1);
   }

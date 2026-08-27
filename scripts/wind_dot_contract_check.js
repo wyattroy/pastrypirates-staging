@@ -58,10 +58,16 @@
 // the exact banned words this guard is checking for (as this very header does, several times,
 // naming `mask`/`blur(`/`gradient` in prose) — an unstripped scan would flag the documentation
 // that exists to prevent the mistake, not the mistake itself. Stripping is therefore required
-// here for the guard to be usable at all. The stripper is mechanical (char-by-char, no string-
-// literal awareness) — a `//` or `/*` inside a JS string literal inside the region would also be
-// blanked. That is an accepted, narrow limitation of this file's scope (a small hand-written
-// decoration region), not of the technique in general.
+// here for the guard to be usable at all.
+//
+// THE "ACCEPTED, NARROW LIMITATION" THAT USED TO BE HERE IS GONE (03-01 Task 2). This file carried
+// its own char-by-char stripper with no string-literal awareness, so a `//` inside a JS string
+// inside the region would have been blanked too. That was honestly disclosed and is now simply
+// fixed: it uses the shared classify()-backed stripCommentSegments() from
+// lib/js_region_tokenizer.js, which knows the difference and preserves every byte's offset exactly
+// as the old one did. One definition of "a comment" across this gate, net_contract_check.js and
+// host_guest_parity_check.js (CLAUDE.md rule 23) — and it is the STRONGEST of the three, not the
+// weakest, which is the only acceptable direction for a convergence.
 //
 // Failures are always reported against a line number computed on the ORIGINAL file text, never
 // the stripped slice — the stripper preserves every character's absolute offset (comment bytes are
@@ -71,9 +77,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pickTree, treeLine, REPO_ROOT } from "./lib/pick_tree.js";
+import { stripCommentSegments } from "./lib/js_region_tokenizer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REAL_ROOT = path.join(__dirname, "..");
+
+// THE TREE THIS GATE SCANS (03-01 Task 2 / TEST-04). A bare run is unchanged and still scans the
+// root game; `--tree=4` scans the game under development. Shared selector, one spelling.
+// docs/HARD-WON-LESSONS.md §3 — a gate aimed at the wrong tree is not silent, it is reassuring.
+const picked = pickTree(process.argv);
+const REAL_ROOT = picked.root;
 
 const BOARD_REL = path.join("src", "ui", "board.js");
 
@@ -122,31 +135,10 @@ function lineAt(text, absOffset) {
   return line;
 }
 
-// Blanks `//` line comments and `/* */` block comments while preserving every OTHER character's
-// exact position (newlines kept as newlines, comment bytes replaced with spaces) — so an offset
-// found in the stripped output maps 1:1 onto the same offset in the original slice.
-function stripCommentsPreserveLayout(text) {
-  let out = "";
-  let i = 0;
-  const n = text.length;
-  while (i < n) {
-    if (text[i] === "/" && text[i + 1] === "*") {
-      const close = text.indexOf("*/", i + 2);
-      const end = close === -1 ? n : close + 2;
-      for (let k = i; k < end; k++) out += text[k] === "\n" ? "\n" : " ";
-      i = end;
-    } else if (text[i] === "/" && text[i + 1] === "/") {
-      const nl = text.indexOf("\n", i);
-      const end = nl === -1 ? n : nl;
-      for (let k = i; k < end; k++) out += " ";
-      i = end;
-    } else {
-      out += text[i];
-      i++;
-    }
-  }
-  return out;
-}
+// CONVERGED 03-01 Task 2 — this file used to define its own char-by-char stripper here. Same
+// guarantee (comment bytes become spaces, newlines stay newlines, every offset preserved, so an
+// offset in the stripped output maps 1:1 onto the original), now shared and string-literal aware.
+const stripCommentsPreserveLayout = stripCommentSegments;
 
 function deepEqual(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -270,9 +262,20 @@ function checkFileOwnership(root) {
   const failures = [];
   const srcDir = path.join(root, "src");
   for (const file of jsFilesRecursive(srcDir)) {
-    const rel = path.relative(root, file);
-    if (rel === BOARD_REL) continue; // the one file this workstream owns
-    const text = fs.readFileSync(file, "utf8");
+    const relToTree = path.relative(root, file);
+    const rel = path.relative(REPO_ROOT, file);
+    if (relToTree === BOARD_REL) continue; // the one file this workstream owns
+    /* STRIPS COMMENTS (03-01 Task 2), PER-ASSERTION, and here is the finding that earned it.
+       Against 4/ this reported 4/src/engine/bakeoff.js:13 — a sentence explaining WHY that file is
+       pure, which names windDotSpecs as a sibling example of the same pure/DOM split. It is not a
+       wind-dot symbol landing in the wrong file; it is the documentation of the very discipline
+       D-14 exists to protect, and flagging it makes writing that documentation an offence. The
+       identical thing happened to 4/scripts/seat_arg_check.js, whose first run failed on the
+       comment quoting the bug it catches (docs/HARD-WON-LESSONS.md §1b).
+       What D-14 reserves is where the CODE lives. Prose about wind dots is not an edit to the
+       wind-dot workstream. index.html below is deliberately NOT stripped — it is markup, not JS,
+       and a wind-dot token appearing there at all is the thing D-14 forbids. */
+    const text = stripCommentSegments(fs.readFileSync(file, "utf8"));
     if (!text.includes(TRIGGER)) continue;
     text.split("\n").forEach((line, i) => {
       if (line.includes(TRIGGER)) {
@@ -829,10 +832,17 @@ ${END_MARKER}
 if (process.argv.includes("--drill")) {
   drill();
 } else {
+  // THE TREE, AND WHAT WAS OPENED, BEFORE ANY VERDICT (HARD-WON-LESSONS §3).
+  const scanned = fs.existsSync(path.join(REAL_ROOT, "src")) ? jsFilesRecursive(path.join(REAL_ROOT, "src")).length : 0;
+  console.log(treeLine(picked, `${scanned} .js file(s) under src/, wind-dot region in ${BOARD_REL}`));
+  if (scanned === 0) {
+    console.error(`FAIL: no .js files found under ${path.join(REAL_ROOT, "src")} — this gate scanned NOTHING.`);
+    process.exit(1);
+  }
   const results = await runAll(REAL_ROOT);
   const failed = results.filter((r) => !r.ok);
   if (failed.length) {
-    console.error("\nFAILURES:");
+    console.error(`\nFAILURES — tree: ${picked.label}`);
     for (const r of failed) for (const f of r.failures) console.error(`  - ${f}`);
     process.exit(1);
   }

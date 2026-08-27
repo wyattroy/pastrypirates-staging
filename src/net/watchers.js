@@ -38,9 +38,17 @@ export function netWatchFlip(db, room, handler) {
 // from the caller's own connection-setup routine, independent of which
 // room (if any) is open. Must never be torn down by a room-scoped teardown
 // — see registry.js's detachRoom(), which only ever touches "room" entries.
-export function netWatchConnected(db, handler, onCancel) {
+// `label` names WHICH consumer this is, and it is the reason this parameter exists at all.
+// The registry's key is scope|ref|event|label and it refuses a duplicate on purpose (a repeated
+// key is nearly always a double-invoked entry point). But .info/connected has TWO legitimate,
+// independent consumers — presence marking, and the host-gone reconnect repair — and while both
+// passed the same hardcoded label, the one that attached second was refused and never ran at all.
+// docs/MODULES.md:155 states each wrapper "chooses a scope and a label"; letting the caller name
+// itself keeps the duplicate guard intact rather than weakening it. Covered by
+// 4/scripts/net_connected_twin_test.js, which also asserts the guard still fires on a true repeat.
+export function netWatchConnected(db, handler, onCancel, label = "connected") {
   const ref = db.ref(".info/connected");
-  return registry.attach({ scope: "session", ref, event: "value", callback: handler, cancelCallback: onCancel, label: "connected" });
+  return registry.attach({ scope: "session", ref, event: "value", callback: handler, cancelCallback: onCancel, label });
 }
 
 export function netWatchPresence(db, handler, onCancel) {

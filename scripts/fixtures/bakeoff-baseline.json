@@ -1,0 +1,1611 @@
+{
+ "games": 200,
+ "strategies": [
+  "pirate",
+  "trader",
+  "balanced",
+  "rusher"
+ ],
+ "rows": [
+  {
+   "seed": 1,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 3020,
+   "events": 172,
+   "hash": "bfbb62e5b5296b10"
+  },
+  {
+   "seed": 2,
+   "winner": 1,
+   "rounds": 19,
+   "randCalls": 2563,
+   "events": 276,
+   "hash": "9770739d3174fd6b"
+  },
+  {
+   "seed": 3,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3789,
+   "events": 193,
+   "hash": "011e3559dd74fe84"
+  },
+  {
+   "seed": 4,
+   "winner": 0,
+   "rounds": 19,
+   "randCalls": 4024,
+   "events": 286,
+   "hash": "cb7f6c1d7b2fb766"
+  },
+  {
+   "seed": 5,
+   "winner": 3,
+   "rounds": 14,
+   "randCalls": 3321,
+   "events": 198,
+   "hash": "9f085a29cb6d364a"
+  },
+  {
+   "seed": 6,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 4344,
+   "events": 174,
+   "hash": "597dbea88b992a8f"
+  },
+  {
+   "seed": 7,
+   "winner": 1,
+   "rounds": 13,
+   "randCalls": 4725,
+   "events": 175,
+   "hash": "abd4498e04655a13"
+  },
+  {
+   "seed": 8,
+   "winner": 0,
+   "rounds": 18,
+   "randCalls": 3157,
+   "events": 234,
+   "hash": "4d46001a18625a1b"
+  },
+  {
+   "seed": 9,
+   "winner": 2,
+   "rounds": 10,
+   "randCalls": 4644,
+   "events": 141,
+   "hash": "54edab88911b1c80"
+  },
+  {
+   "seed": 10,
+   "winner": 1,
+   "rounds": 15,
+   "randCalls": 2968,
+   "events": 219,
+   "hash": "b0844cf4534d1d8d"
+  },
+  {
+   "seed": 11,
+   "winner": 2,
+   "rounds": 27,
+   "randCalls": 3359,
+   "events": 400,
+   "hash": "8f5e3b4a4ebee8e8"
+  },
+  {
+   "seed": 12,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 3308,
+   "events": 290,
+   "hash": "15f689977a22680d"
+  },
+  {
+   "seed": 13,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 3812,
+   "events": 179,
+   "hash": "31eb88cce7197991"
+  },
+  {
+   "seed": 14,
+   "winner": 2,
+   "rounds": 26,
+   "randCalls": 3348,
+   "events": 341,
+   "hash": "f991a3defe47354a"
+  },
+  {
+   "seed": 15,
+   "winner": 3,
+   "rounds": 15,
+   "randCalls": 3568,
+   "events": 241,
+   "hash": "474585c9c07168e1"
+  },
+  {
+   "seed": 16,
+   "winner": 0,
+   "rounds": 24,
+   "randCalls": 3524,
+   "events": 333,
+   "hash": "a26361b050607ac8"
+  },
+  {
+   "seed": 17,
+   "winner": 0,
+   "rounds": 8,
+   "randCalls": 2614,
+   "events": 119,
+   "hash": "167e069e1252e52f"
+  },
+  {
+   "seed": 18,
+   "winner": 3,
+   "rounds": 15,
+   "randCalls": 3127,
+   "events": 211,
+   "hash": "d80100d729c76cc9"
+  },
+  {
+   "seed": 19,
+   "winner": 3,
+   "rounds": 15,
+   "randCalls": 3017,
+   "events": 205,
+   "hash": "1e77c429ca5abffd"
+  },
+  {
+   "seed": 20,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 2774,
+   "events": 195,
+   "hash": "99eb3bbcb1036752"
+  },
+  {
+   "seed": 21,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 3785,
+   "events": 173,
+   "hash": "07e42bc740ad266d"
+  },
+  {
+   "seed": 22,
+   "winner": 0,
+   "rounds": 19,
+   "randCalls": 3110,
+   "events": 267,
+   "hash": "d5504b40dd9d65c6"
+  },
+  {
+   "seed": 23,
+   "winner": 1,
+   "rounds": 17,
+   "randCalls": 3262,
+   "events": 250,
+   "hash": "c1f29d56dea25d71"
+  },
+  {
+   "seed": 24,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 4044,
+   "events": 241,
+   "hash": "ed1ccb0c83d8e629"
+  },
+  {
+   "seed": 25,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 3252,
+   "events": 253,
+   "hash": "6f481b227293e8df"
+  },
+  {
+   "seed": 26,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 3095,
+   "events": 181,
+   "hash": "229e67fc45723021"
+  },
+  {
+   "seed": 27,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 3697,
+   "events": 169,
+   "hash": "df51b7a6c8d3c83d"
+  },
+  {
+   "seed": 28,
+   "winner": 3,
+   "rounds": 18,
+   "randCalls": 3714,
+   "events": 260,
+   "hash": "00ccf60fce533970"
+  },
+  {
+   "seed": 29,
+   "winner": 0,
+   "rounds": 9,
+   "randCalls": 4343,
+   "events": 142,
+   "hash": "adb99a0de39ddfa5"
+  },
+  {
+   "seed": 30,
+   "winner": 3,
+   "rounds": 13,
+   "randCalls": 2292,
+   "events": 193,
+   "hash": "9e8f33238ed96fc9"
+  },
+  {
+   "seed": 31,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3893,
+   "events": 200,
+   "hash": "dcf204fce4a5a05e"
+  },
+  {
+   "seed": 32,
+   "winner": 1,
+   "rounds": 12,
+   "randCalls": 2080,
+   "events": 176,
+   "hash": "29390d2ba9286e5c"
+  },
+  {
+   "seed": 33,
+   "winner": 2,
+   "rounds": 29,
+   "randCalls": 3754,
+   "events": 386,
+   "hash": "4bac6862db1c1b24"
+  },
+  {
+   "seed": 34,
+   "winner": 0,
+   "rounds": 29,
+   "randCalls": 2535,
+   "events": 396,
+   "hash": "50ef60f311973a79"
+  },
+  {
+   "seed": 35,
+   "winner": 0,
+   "rounds": 15,
+   "randCalls": 3311,
+   "events": 223,
+   "hash": "d78e50233dcb6045"
+  },
+  {
+   "seed": 36,
+   "winner": 2,
+   "rounds": 18,
+   "randCalls": 3976,
+   "events": 229,
+   "hash": "5fdd54da0bfe43fd"
+  },
+  {
+   "seed": 37,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3949,
+   "events": 212,
+   "hash": "af1b54520beedd8a"
+  },
+  {
+   "seed": 38,
+   "winner": 0,
+   "rounds": 9,
+   "randCalls": 3775,
+   "events": 137,
+   "hash": "1a217a53b4fa5f0a"
+  },
+  {
+   "seed": 39,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3376,
+   "events": 208,
+   "hash": "5466d367e9c86e92"
+  },
+  {
+   "seed": 40,
+   "winner": 3,
+   "rounds": 17,
+   "randCalls": 3732,
+   "events": 231,
+   "hash": "b9fe3f19637cdafd"
+  },
+  {
+   "seed": 41,
+   "winner": 0,
+   "rounds": 63,
+   "randCalls": 3508,
+   "events": 722,
+   "hash": "43e8e13382ef237e"
+  },
+  {
+   "seed": 42,
+   "winner": 2,
+   "rounds": 25,
+   "randCalls": 3134,
+   "events": 349,
+   "hash": "b2d7f937452668db"
+  },
+  {
+   "seed": 43,
+   "winner": 0,
+   "rounds": 14,
+   "randCalls": 4638,
+   "events": 216,
+   "hash": "c8eb0bdc8ef7021b"
+  },
+  {
+   "seed": 44,
+   "winner": 3,
+   "rounds": 16,
+   "randCalls": 3470,
+   "events": 230,
+   "hash": "36a474d7bc9174e3"
+  },
+  {
+   "seed": 45,
+   "winner": 1,
+   "rounds": 23,
+   "randCalls": 4886,
+   "events": 339,
+   "hash": "7e929018fa0b9c67"
+  },
+  {
+   "seed": 46,
+   "winner": 3,
+   "rounds": 20,
+   "randCalls": 4112,
+   "events": 264,
+   "hash": "7e2291a379e4ff2b"
+  },
+  {
+   "seed": 47,
+   "winner": 3,
+   "rounds": 17,
+   "randCalls": 3476,
+   "events": 254,
+   "hash": "8b51ed71aa0f9ec6"
+  },
+  {
+   "seed": 48,
+   "winner": 0,
+   "rounds": 18,
+   "randCalls": 3888,
+   "events": 243,
+   "hash": "6e11e1859cded0dd"
+  },
+  {
+   "seed": 49,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3929,
+   "events": 165,
+   "hash": "d240851be7234e6b"
+  },
+  {
+   "seed": 50,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3049,
+   "events": 187,
+   "hash": "37f4b8fdd509f6df"
+  },
+  {
+   "seed": 51,
+   "winner": 1,
+   "rounds": 52,
+   "randCalls": 3614,
+   "events": 683,
+   "hash": "8102aa110dca21ee"
+  },
+  {
+   "seed": 52,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 3335,
+   "events": 228,
+   "hash": "a7042d84d7cdde10"
+  },
+  {
+   "seed": 53,
+   "winner": 2,
+   "rounds": 27,
+   "randCalls": 3147,
+   "events": 395,
+   "hash": "16a1dcef00f19ea3"
+  },
+  {
+   "seed": 54,
+   "winner": 3,
+   "rounds": 14,
+   "randCalls": 2289,
+   "events": 208,
+   "hash": "b5f2f5e45a86c384"
+  },
+  {
+   "seed": 55,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 4138,
+   "events": 172,
+   "hash": "06b6e732726eb2c8"
+  },
+  {
+   "seed": 56,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3676,
+   "events": 177,
+   "hash": "7bacfe3fecc7bf21"
+  },
+  {
+   "seed": 57,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 2964,
+   "events": 237,
+   "hash": "27688ea6b9f9c257"
+  },
+  {
+   "seed": 58,
+   "winner": 3,
+   "rounds": 21,
+   "randCalls": 3332,
+   "events": 290,
+   "hash": "2de29778d21e6605"
+  },
+  {
+   "seed": 59,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 2957,
+   "events": 203,
+   "hash": "00b563afd3007cd8"
+  },
+  {
+   "seed": 60,
+   "winner": 1,
+   "rounds": 15,
+   "randCalls": 2914,
+   "events": 221,
+   "hash": "1081627a32959467"
+  },
+  {
+   "seed": 61,
+   "winner": 2,
+   "rounds": 32,
+   "randCalls": 3823,
+   "events": 424,
+   "hash": "d2b38189fcf4b775"
+  },
+  {
+   "seed": 62,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 4267,
+   "events": 171,
+   "hash": "b2934bae92b6945b"
+  },
+  {
+   "seed": 63,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 3898,
+   "events": 181,
+   "hash": "1dffcd771c7527c1"
+  },
+  {
+   "seed": 64,
+   "winner": 3,
+   "rounds": 10,
+   "randCalls": 4812,
+   "events": 154,
+   "hash": "b1844cd32b90425a"
+  },
+  {
+   "seed": 65,
+   "winner": 3,
+   "rounds": 32,
+   "randCalls": 2862,
+   "events": 383,
+   "hash": "68f5242709af1e0a"
+  },
+  {
+   "seed": 66,
+   "winner": 1,
+   "rounds": 12,
+   "randCalls": 2861,
+   "events": 167,
+   "hash": "d238b943e17dfdbe"
+  },
+  {
+   "seed": 67,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3191,
+   "events": 198,
+   "hash": "311bf23f165568c5"
+  },
+  {
+   "seed": 68,
+   "winner": 1,
+   "rounds": 24,
+   "randCalls": 2173,
+   "events": 349,
+   "hash": "fd306c3e6bc4fddf"
+  },
+  {
+   "seed": 69,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 3992,
+   "events": 181,
+   "hash": "26da44558d23c124"
+  },
+  {
+   "seed": 70,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 3739,
+   "events": 210,
+   "hash": "ae43733792a55073"
+  },
+  {
+   "seed": 71,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 2872,
+   "events": 233,
+   "hash": "605393d253a184bf"
+  },
+  {
+   "seed": 72,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 2088,
+   "events": 253,
+   "hash": "cdccdbf77b7057a6"
+  },
+  {
+   "seed": 73,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 5095,
+   "events": 215,
+   "hash": "835abd53da1add2a"
+  },
+  {
+   "seed": 74,
+   "winner": 3,
+   "rounds": 14,
+   "randCalls": 3144,
+   "events": 190,
+   "hash": "a56167e471f174cf"
+  },
+  {
+   "seed": 75,
+   "winner": 0,
+   "rounds": 23,
+   "randCalls": 3703,
+   "events": 324,
+   "hash": "50754b6b082cf8a5"
+  },
+  {
+   "seed": 76,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 4254,
+   "events": 164,
+   "hash": "32e805c56c604d65"
+  },
+  {
+   "seed": 77,
+   "winner": 3,
+   "rounds": 17,
+   "randCalls": 3186,
+   "events": 241,
+   "hash": "3d77927a5e55a6b1"
+  },
+  {
+   "seed": 78,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 3987,
+   "events": 263,
+   "hash": "a272f2f67392816e"
+  },
+  {
+   "seed": 79,
+   "winner": 1,
+   "rounds": 11,
+   "randCalls": 4487,
+   "events": 167,
+   "hash": "c10d4d54188018b0"
+  },
+  {
+   "seed": 80,
+   "winner": 1,
+   "rounds": 12,
+   "randCalls": 2150,
+   "events": 171,
+   "hash": "5c3a9f97ded98c4c"
+  },
+  {
+   "seed": 81,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 3883,
+   "events": 197,
+   "hash": "3841ee74b27b59be"
+  },
+  {
+   "seed": 82,
+   "winner": 0,
+   "rounds": 15,
+   "randCalls": 3724,
+   "events": 215,
+   "hash": "39c1458d929bdd2f"
+  },
+  {
+   "seed": 83,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 4161,
+   "events": 199,
+   "hash": "9574be9d34fade74"
+  },
+  {
+   "seed": 84,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 4268,
+   "events": 163,
+   "hash": "68e0ceb6bf51b5ef"
+  },
+  {
+   "seed": 85,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 2896,
+   "events": 239,
+   "hash": "7597dba43d617510"
+  },
+  {
+   "seed": 86,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 3673,
+   "events": 174,
+   "hash": "fc3d732305f63345"
+  },
+  {
+   "seed": 87,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 2739,
+   "events": 237,
+   "hash": "f5fdb2d8f3f2b8ce"
+  },
+  {
+   "seed": 88,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3928,
+   "events": 213,
+   "hash": "7fce5adb376349d2"
+  },
+  {
+   "seed": 89,
+   "winner": 3,
+   "rounds": 20,
+   "randCalls": 3385,
+   "events": 267,
+   "hash": "5802facc51b6355e"
+  },
+  {
+   "seed": 90,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3270,
+   "events": 180,
+   "hash": "5e8705e0746d0b2f"
+  },
+  {
+   "seed": 91,
+   "winner": 3,
+   "rounds": 14,
+   "randCalls": 4654,
+   "events": 193,
+   "hash": "2cdbdd9b12f7734e"
+  },
+  {
+   "seed": 92,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 4123,
+   "events": 258,
+   "hash": "97cbfb968efa5a8f"
+  },
+  {
+   "seed": 93,
+   "winner": 2,
+   "rounds": 29,
+   "randCalls": 3409,
+   "events": 391,
+   "hash": "d422cead5f47ffc8"
+  },
+  {
+   "seed": 94,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3117,
+   "events": 176,
+   "hash": "b2f86c1a1a3463a0"
+  },
+  {
+   "seed": 95,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 3723,
+   "events": 234,
+   "hash": "3ecfae35679fbb34"
+  },
+  {
+   "seed": 96,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3153,
+   "events": 175,
+   "hash": "0830e3412a81732f"
+  },
+  {
+   "seed": 97,
+   "winner": 3,
+   "rounds": 15,
+   "randCalls": 3450,
+   "events": 221,
+   "hash": "9c67fd67cab7922b"
+  },
+  {
+   "seed": 98,
+   "winner": 2,
+   "rounds": 27,
+   "randCalls": 2306,
+   "events": 335,
+   "hash": "bf506cc475a85a14"
+  },
+  {
+   "seed": 99,
+   "winner": 3,
+   "rounds": 12,
+   "randCalls": 3137,
+   "events": 186,
+   "hash": "20d63234e7480749"
+  },
+  {
+   "seed": 100,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 4153,
+   "events": 212,
+   "hash": "d58fed769a3bce81"
+  },
+  {
+   "seed": 101,
+   "winner": 0,
+   "rounds": 19,
+   "randCalls": 3784,
+   "events": 275,
+   "hash": "c89ad33df7e1a540"
+  },
+  {
+   "seed": 102,
+   "winner": 1,
+   "rounds": 15,
+   "randCalls": 2059,
+   "events": 208,
+   "hash": "4f471706cf8a7c21"
+  },
+  {
+   "seed": 103,
+   "winner": 0,
+   "rounds": 23,
+   "randCalls": 3759,
+   "events": 323,
+   "hash": "6b20affd31e1c48b"
+  },
+  {
+   "seed": 104,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 3848,
+   "events": 153,
+   "hash": "10f74c5edf7d5a68"
+  },
+  {
+   "seed": 105,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 3763,
+   "events": 229,
+   "hash": "29514cf1845e7c19"
+  },
+  {
+   "seed": 106,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 4349,
+   "events": 165,
+   "hash": "e2cba2d6de0195b2"
+  },
+  {
+   "seed": 107,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 3982,
+   "events": 168,
+   "hash": "ae0174106480adfa"
+  },
+  {
+   "seed": 108,
+   "winner": 3,
+   "rounds": 17,
+   "randCalls": 2935,
+   "events": 251,
+   "hash": "42d951ca2af0a4b7"
+  },
+  {
+   "seed": 109,
+   "winner": 0,
+   "rounds": 18,
+   "randCalls": 3933,
+   "events": 248,
+   "hash": "6e737f17898c70d5"
+  },
+  {
+   "seed": 110,
+   "winner": 3,
+   "rounds": 12,
+   "randCalls": 2478,
+   "events": 173,
+   "hash": "12eabe9887abd4ea"
+  },
+  {
+   "seed": 111,
+   "winner": 0,
+   "rounds": 20,
+   "randCalls": 3234,
+   "events": 274,
+   "hash": "81474165203c7e2b"
+  },
+  {
+   "seed": 112,
+   "winner": 3,
+   "rounds": 18,
+   "randCalls": 3382,
+   "events": 252,
+   "hash": "d840d88d01ade5f1"
+  },
+  {
+   "seed": 113,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 3660,
+   "events": 183,
+   "hash": "57f6cc75dbf2df38"
+  },
+  {
+   "seed": 114,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3062,
+   "events": 202,
+   "hash": "74ffc311099bf8c2"
+  },
+  {
+   "seed": 115,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 3548,
+   "events": 233,
+   "hash": "3bb65f2c5c70ef39"
+  },
+  {
+   "seed": 116,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 2474,
+   "events": 207,
+   "hash": "eb8e01e86a23e76c"
+  },
+  {
+   "seed": 117,
+   "winner": 3,
+   "rounds": 12,
+   "randCalls": 3388,
+   "events": 177,
+   "hash": "2a096754b26827a6"
+  },
+  {
+   "seed": 118,
+   "winner": 2,
+   "rounds": 18,
+   "randCalls": 3829,
+   "events": 262,
+   "hash": "b27572b00048ba44"
+  },
+  {
+   "seed": 119,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 3124,
+   "events": 253,
+   "hash": "3e64a0278c201171"
+  },
+  {
+   "seed": 120,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 4230,
+   "events": 255,
+   "hash": "7d7809bb656949a9"
+  },
+  {
+   "seed": 121,
+   "winner": 1,
+   "rounds": 43,
+   "randCalls": 3814,
+   "events": 533,
+   "hash": "83042b296a09c2a1"
+  },
+  {
+   "seed": 122,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3879,
+   "events": 186,
+   "hash": "bd6b0e1b615c4fc3"
+  },
+  {
+   "seed": 123,
+   "winner": 2,
+   "rounds": 26,
+   "randCalls": 3985,
+   "events": 370,
+   "hash": "e20ad664c1559d2d"
+  },
+  {
+   "seed": 124,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 4350,
+   "events": 182,
+   "hash": "77d7fdac729183cb"
+  },
+  {
+   "seed": 125,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 4086,
+   "events": 241,
+   "hash": "d09844364c9ae2e0"
+  },
+  {
+   "seed": 126,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 4278,
+   "events": 188,
+   "hash": "0b7b2a8bada9cf55"
+  },
+  {
+   "seed": 127,
+   "winner": 0,
+   "rounds": 17,
+   "randCalls": 3721,
+   "events": 248,
+   "hash": "f909015fc64ae546"
+  },
+  {
+   "seed": 128,
+   "winner": 1,
+   "rounds": 14,
+   "randCalls": 3243,
+   "events": 189,
+   "hash": "51a10c0f5d5a55dc"
+  },
+  {
+   "seed": 129,
+   "winner": 0,
+   "rounds": 22,
+   "randCalls": 4109,
+   "events": 323,
+   "hash": "56b85b10bbe3a584"
+  },
+  {
+   "seed": 130,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 4112,
+   "events": 159,
+   "hash": "1734d9bc9fd18649"
+  },
+  {
+   "seed": 131,
+   "winner": 2,
+   "rounds": 18,
+   "randCalls": 3367,
+   "events": 254,
+   "hash": "4b0af2bec6f4afd7"
+  },
+  {
+   "seed": 132,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 3842,
+   "events": 230,
+   "hash": "99fe679ec71bd6dc"
+  },
+  {
+   "seed": 133,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 3687,
+   "events": 242,
+   "hash": "0926ca961dfd98bf"
+  },
+  {
+   "seed": 134,
+   "winner": 2,
+   "rounds": 19,
+   "randCalls": 4186,
+   "events": 267,
+   "hash": "7bdfffd761227049"
+  },
+  {
+   "seed": 135,
+   "winner": 2,
+   "rounds": 10,
+   "randCalls": 3778,
+   "events": 153,
+   "hash": "d0e6d9914044d8b1"
+  },
+  {
+   "seed": 136,
+   "winner": 1,
+   "rounds": 16,
+   "randCalls": 3419,
+   "events": 231,
+   "hash": "9215177cb99ffa11"
+  },
+  {
+   "seed": 137,
+   "winner": 3,
+   "rounds": 16,
+   "randCalls": 3061,
+   "events": 217,
+   "hash": "aa3a73fa728536eb"
+  },
+  {
+   "seed": 138,
+   "winner": 0,
+   "rounds": 18,
+   "randCalls": 3423,
+   "events": 247,
+   "hash": "c9976e00d33d8150"
+  },
+  {
+   "seed": 139,
+   "winner": 3,
+   "rounds": 20,
+   "randCalls": 3012,
+   "events": 266,
+   "hash": "7264b8bfa95b5e8d"
+  },
+  {
+   "seed": 140,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 3437,
+   "events": 219,
+   "hash": "fbb95197f70e1d8f"
+  },
+  {
+   "seed": 141,
+   "winner": 0,
+   "rounds": 21,
+   "randCalls": 4728,
+   "events": 278,
+   "hash": "cadf4393c517a905"
+  },
+  {
+   "seed": 142,
+   "winner": 0,
+   "rounds": 15,
+   "randCalls": 4099,
+   "events": 218,
+   "hash": "7ceb459967d5e075"
+  },
+  {
+   "seed": 143,
+   "winner": 3,
+   "rounds": 12,
+   "randCalls": 5045,
+   "events": 169,
+   "hash": "5f145b3bba02190e"
+  },
+  {
+   "seed": 144,
+   "winner": 1,
+   "rounds": 13,
+   "randCalls": 3062,
+   "events": 193,
+   "hash": "a9c6ef14d09831bc"
+  },
+  {
+   "seed": 145,
+   "winner": 2,
+   "rounds": 19,
+   "randCalls": 4041,
+   "events": 254,
+   "hash": "54dea7c0ef590aef"
+  },
+  {
+   "seed": 146,
+   "winner": 1,
+   "rounds": 98,
+   "randCalls": 4120,
+   "events": 1153,
+   "hash": "d818311f52f8a9ea"
+  },
+  {
+   "seed": 147,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 4258,
+   "events": 163,
+   "hash": "58c97e3dff3792d2"
+  },
+  {
+   "seed": 148,
+   "winner": 3,
+   "rounds": 18,
+   "randCalls": 2970,
+   "events": 257,
+   "hash": "7e7caf8ea8ed054a"
+  },
+  {
+   "seed": 149,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 3982,
+   "events": 250,
+   "hash": "f3f030564f417682"
+  },
+  {
+   "seed": 150,
+   "winner": 1,
+   "rounds": 12,
+   "randCalls": 3961,
+   "events": 166,
+   "hash": "e872c8cc3f4a2b50"
+  },
+  {
+   "seed": 151,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3617,
+   "events": 216,
+   "hash": "36d7472b707d77eb"
+  },
+  {
+   "seed": 152,
+   "winner": 2,
+   "rounds": 19,
+   "randCalls": 3827,
+   "events": 258,
+   "hash": "a11ca1cd1f2f6033"
+  },
+  {
+   "seed": 153,
+   "winner": 1,
+   "rounds": 22,
+   "randCalls": 3912,
+   "events": 278,
+   "hash": "c6621eca5b65f498"
+  },
+  {
+   "seed": 154,
+   "winner": 3,
+   "rounds": 18,
+   "randCalls": 4283,
+   "events": 243,
+   "hash": "2bb29c6e292c493d"
+  },
+  {
+   "seed": 155,
+   "winner": 2,
+   "rounds": 18,
+   "randCalls": 2894,
+   "events": 229,
+   "hash": "7f704091f5af03bd"
+  },
+  {
+   "seed": 156,
+   "winner": 0,
+   "rounds": 18,
+   "randCalls": 3233,
+   "events": 265,
+   "hash": "9024930044ed434d"
+  },
+  {
+   "seed": 157,
+   "winner": 2,
+   "rounds": 13,
+   "randCalls": 2585,
+   "events": 185,
+   "hash": "a261a883523f86ab"
+  },
+  {
+   "seed": 158,
+   "winner": 1,
+   "rounds": 14,
+   "randCalls": 3222,
+   "events": 213,
+   "hash": "a13b715b24272e99"
+  },
+  {
+   "seed": 159,
+   "winner": 2,
+   "rounds": 19,
+   "randCalls": 3140,
+   "events": 272,
+   "hash": "262684a02650c7cf"
+  },
+  {
+   "seed": 160,
+   "winner": 2,
+   "rounds": 7,
+   "randCalls": 3874,
+   "events": 112,
+   "hash": "4d8947f41efd3535"
+  },
+  {
+   "seed": 161,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 3576,
+   "events": 235,
+   "hash": "e068487eaae05f04"
+  },
+  {
+   "seed": 162,
+   "winner": 2,
+   "rounds": 16,
+   "randCalls": 2957,
+   "events": 236,
+   "hash": "b8d3241042d909a5"
+  },
+  {
+   "seed": 163,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 2029,
+   "events": 249,
+   "hash": "5b603a6ba82e6a92"
+  },
+  {
+   "seed": 164,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 2984,
+   "events": 172,
+   "hash": "8abc7b6842adb0e7"
+  },
+  {
+   "seed": 165,
+   "winner": 3,
+   "rounds": 21,
+   "randCalls": 4646,
+   "events": 303,
+   "hash": "581ccd591b6ed99b"
+  },
+  {
+   "seed": 166,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 2814,
+   "events": 147,
+   "hash": "82749c1da260c199"
+  },
+  {
+   "seed": 167,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 3821,
+   "events": 175,
+   "hash": "a8d167e9e55e2fbb"
+  },
+  {
+   "seed": 168,
+   "winner": 2,
+   "rounds": 14,
+   "randCalls": 4579,
+   "events": 204,
+   "hash": "f132118dc5c8bf29"
+  },
+  {
+   "seed": 169,
+   "winner": 0,
+   "rounds": 14,
+   "randCalls": 3436,
+   "events": 190,
+   "hash": "46ce243d56cdbca2"
+  },
+  {
+   "seed": 170,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 2933,
+   "events": 182,
+   "hash": "cbe250e0be439a7f"
+  },
+  {
+   "seed": 171,
+   "winner": 0,
+   "rounds": 17,
+   "randCalls": 3273,
+   "events": 223,
+   "hash": "6769bd9dde16f2de"
+  },
+  {
+   "seed": 172,
+   "winner": 0,
+   "rounds": 44,
+   "randCalls": 3786,
+   "events": 555,
+   "hash": "78bc9a1ceb4c18da"
+  },
+  {
+   "seed": 173,
+   "winner": 2,
+   "rounds": 12,
+   "randCalls": 3406,
+   "events": 177,
+   "hash": "007d6ec46b4d73a8"
+  },
+  {
+   "seed": 174,
+   "winner": 0,
+   "rounds": 12,
+   "randCalls": 3323,
+   "events": 181,
+   "hash": "08a7f256f7e95503"
+  },
+  {
+   "seed": 175,
+   "winner": 3,
+   "rounds": 14,
+   "randCalls": 2778,
+   "events": 209,
+   "hash": "8e141a9f642df36e"
+  },
+  {
+   "seed": 176,
+   "winner": 0,
+   "rounds": 17,
+   "randCalls": 3222,
+   "events": 244,
+   "hash": "6f381099e259afb2"
+  },
+  {
+   "seed": 177,
+   "winner": 0,
+   "rounds": 14,
+   "randCalls": 3186,
+   "events": 203,
+   "hash": "201fdd277e8b9ef4"
+  },
+  {
+   "seed": 178,
+   "winner": 3,
+   "rounds": 18,
+   "randCalls": 3269,
+   "events": 264,
+   "hash": "ad0a1b8eeb11eec8"
+  },
+  {
+   "seed": 179,
+   "winner": 1,
+   "rounds": 15,
+   "randCalls": 4501,
+   "events": 214,
+   "hash": "e00ebe3ba187a6df"
+  },
+  {
+   "seed": 180,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 3901,
+   "events": 226,
+   "hash": "7a9af08d7fa1d8ee"
+  },
+  {
+   "seed": 181,
+   "winner": 1,
+   "rounds": 17,
+   "randCalls": 3362,
+   "events": 222,
+   "hash": "2b0fcd2f025de6ee"
+  },
+  {
+   "seed": 182,
+   "winner": 2,
+   "rounds": 15,
+   "randCalls": 3434,
+   "events": 213,
+   "hash": "1f4c825bb4e5830d"
+  },
+  {
+   "seed": 183,
+   "winner": 2,
+   "rounds": 19,
+   "randCalls": 4311,
+   "events": 275,
+   "hash": "03bd6e96c7dc1fb2"
+  },
+  {
+   "seed": 184,
+   "winner": 0,
+   "rounds": 11,
+   "randCalls": 3774,
+   "events": 168,
+   "hash": "b8379442a2d8bebe"
+  },
+  {
+   "seed": 185,
+   "winner": 2,
+   "rounds": 11,
+   "randCalls": 3750,
+   "events": 171,
+   "hash": "007fa935c889d31e"
+  },
+  {
+   "seed": 186,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 2887,
+   "events": 187,
+   "hash": "953899364853387f"
+  },
+  {
+   "seed": 187,
+   "winner": 3,
+   "rounds": 16,
+   "randCalls": 4313,
+   "events": 225,
+   "hash": "8a66cd0fa7b67063"
+  },
+  {
+   "seed": 188,
+   "winner": 0,
+   "rounds": 17,
+   "randCalls": 3947,
+   "events": 246,
+   "hash": "9631f7d580def1df"
+  },
+  {
+   "seed": 189,
+   "winner": 1,
+   "rounds": 16,
+   "randCalls": 2995,
+   "events": 241,
+   "hash": "3358cc1fb758729d"
+  },
+  {
+   "seed": 190,
+   "winner": 0,
+   "rounds": 15,
+   "randCalls": 3947,
+   "events": 214,
+   "hash": "91ff17460865385a"
+  },
+  {
+   "seed": 191,
+   "winner": 3,
+   "rounds": 15,
+   "randCalls": 3757,
+   "events": 210,
+   "hash": "32f426eee0f3666d"
+  },
+  {
+   "seed": 192,
+   "winner": 0,
+   "rounds": 13,
+   "randCalls": 3938,
+   "events": 192,
+   "hash": "38203f7f3aed3aaf"
+  },
+  {
+   "seed": 193,
+   "winner": 1,
+   "rounds": 18,
+   "randCalls": 4732,
+   "events": 252,
+   "hash": "33e11276e01e6dd7"
+  },
+  {
+   "seed": 194,
+   "winner": 0,
+   "rounds": 17,
+   "randCalls": 2959,
+   "events": 263,
+   "hash": "ff85a048c09e04f4"
+  },
+  {
+   "seed": 195,
+   "winner": 0,
+   "rounds": 21,
+   "randCalls": 2009,
+   "events": 287,
+   "hash": "72545408a730425f"
+  },
+  {
+   "seed": 196,
+   "winner": 3,
+   "rounds": 12,
+   "randCalls": 3098,
+   "events": 173,
+   "hash": "be24f80ee90fa8f8"
+  },
+  {
+   "seed": 197,
+   "winner": 2,
+   "rounds": 21,
+   "randCalls": 2135,
+   "events": 304,
+   "hash": "17bf02676c8bb166"
+  },
+  {
+   "seed": 198,
+   "winner": 0,
+   "rounds": 16,
+   "randCalls": 3050,
+   "events": 238,
+   "hash": "c58e22fe84734bdc"
+  },
+  {
+   "seed": 199,
+   "winner": 2,
+   "rounds": 17,
+   "randCalls": 4700,
+   "events": 248,
+   "hash": "131ec6387aa5015e"
+  },
+  {
+   "seed": 200,
+   "winner": 2,
+   "rounds": 20,
+   "randCalls": 3078,
+   "events": 278,
+   "hash": "18ec750b71653580"
+  }
+ ]
+}

@@ -12,4 +12,11 @@ export * from "./board.js";
 export * from "./panel.js";
 export * from "./lobby.js";
 export * from "./handlers.js";
+// v2.1 bake-off: BEFORE flow.js, which now genuinely depends on it — flow.js's bakeoffPrompt (the
+// logged + clocked wrapper) drives playBakeoffLive. The dependency runs one way only: bakeoff.js
+// reaches no further than panel.js/util.js/recipe.js/state/shared, so there is no cycle. util.js was
+// added to that list on 2026-08-22 (item 6, D-16) for narrationHoldMs — the one reading-speed model
+// — and it widens the invariant by nothing in practice: panel.js, which bakeoff.js already imports,
+// imports util.js itself, and util.js imports neither panel.js nor bakeoff.js.
+export * from "./bakeoff.js";
 export * from "./flow.js";

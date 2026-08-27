@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// TREE: classic/ — this gate tests the v1 game, which moved to classic/ at the 2026-08-26
+// cutover. It imports exports the promoted game does not have, so it is v1-specific by
+// nature rather than by choice; pointing it here preserves EXACTLY the coverage that
+// existed the day before the cutover. Gates that DO pass against the promoted game were
+// deliberately left on the root, where they now guard the live game for the first time.
 // scripts/hail_ranking_test.js
 //
 // AI-01 (D-04/D-06/D-07): DOM-free unit coverage for rankHailTargets/priceHailOffer/hailWorthIt —
@@ -11,7 +16,7 @@
 // check(name, actual, expected) counter, plain console.log, process.exit(failures?1:0).
 
 import { loadEngine } from "./lib/load_engine.js";
-import { rankHailTargets, priceHailOffer, hailWorthIt } from "../src/ui/flow.js";
+import { rankHailTargets, priceHailOffer, hailWorthIt } from "../classic/src/ui/flow.js";
 
 const { Game, roundCfg } = await loadEngine();
 
