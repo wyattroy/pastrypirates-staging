@@ -5,7 +5,7 @@
 // Imports from `../shared/index.js`; must never be imported BY
 // `src/shared/` (shared is a leaf, engine depends on it, never the reverse).
 
-import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, man, ilabelImg } from "../shared/index.js";
+import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, bake2Enabled, endCardEnabled, man, ilabelImg } from "../shared/index.js";
 import { recipeSteps } from "../shared/recipe-steps.js";
 import { newBake, scrambleBench, shuffleSlots, scoreAttempt, applyResult, botGuess, unsolvedCount } from "./bakeoff.js";
 
@@ -3110,7 +3110,11 @@ function roundCfg(strategies){
     // A host who started a test room at ?ovens=1 and resumed at a bare URL would otherwise replay
     // the decision log against captains whose holds were never stocked — a structurally different
     // game. Falls back to the constant (false) headless, like bakeoffEnabled().
-    ovens:ovensNowEnabled()};
+    ovens:ovensNowEnabled(),
+    // W0-1's two endgame skips ride here for exactly the same three reasons, and are read through
+    // the one testFlagOn() chain in orchestrator.js rather than three copies of it.
+    bake2:bake2Enabled(),
+    endcard:endCardEnabled()};
 }
 
 export { rollStorm, PERSONALITY, PLAN, Game, roundCfg };

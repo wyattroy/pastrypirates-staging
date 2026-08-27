@@ -27,10 +27,19 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 // util.js), never window.innerWidth/innerHeight — Safari reports the pinch-zoomed *visual*
 // viewport in those, which is what shrank the recipe sheet to half width. The helpers live in
 // util.js because board.js's syncBoardSizing() needs the same rule; see the note there.
-// Bumped on every /4 deploy. Shown in the ☰ menu so a playtest screenshot proves which build it
-// came from — two stall reports have now turned out to be photos of code that was already fixed,
-// and Safari's module cache makes "refresh" an unreliable way to get the new build.
-const PP4_STAMP = "2026-08-26k-CUTOVER-STAGING/aug26-night-fixes@b8d61e42";
+// Bumped on every deploy. Shown in the ☰ menu so a playtest screenshot proves which build it came
+// from — two stall reports have now turned out to be photos of code that was already fixed, and
+// Safari's module cache makes "refresh" an unreliable way to get the new build.
+//
+// W0-3 (Wyatt, 2026-08-27): the old shape was `v4 · build 2026-08-26k-CUTOVER`, and both halves had
+// stopped earning their place. "v4" named the /4 preview directory, which the cutover deleted, so it
+// pointed at nothing; the letter suffix counted the day's builds in a code only its author could
+// read. HIS DECISION, recorded in .planning/BACKLOG.md: a date-based build number.
+//
+//   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
+//
+// Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
+const PP4_STAMP = "2026.08.27.3-staging@c9ce605e";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1995,7 +2004,7 @@ function buildStage(){
   if (foot){
     const stamp = document.createElement("div");
     stamp.id = "pp4Stamp";
-    stamp.textContent = "v4 · build " + PP4_STAMP;
+    stamp.textContent = "Build " + PP4_STAMP;
     stamp.style.cssText = "opacity:.55;font-size:11px;text-align:center;padding:6px 0 2px;letter-spacing:.04em";
     foot.appendChild(stamp);
   }

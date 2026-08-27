@@ -69,9 +69,10 @@
 import { appState } from "./state/index.js";
 import { pingVisit, pingStart, pingFin, usageGid } from "./ui/usage.js";
 import { Game, roundCfg, rollStorm } from "./engine/index.js";
+import { applyResult } from "./engine/bakeoff.js";
 import {
   PERP, DIRS, HEXCOL, CROWN_IMG, CLOSE_X_IMG, FLAME_IMG, unusedDefaultName, seatHeldName, applyNameClaim, iconImg, man,
-  ilabelImg, ovensNowEnabled,
+  ilabelImg, ovensNowEnabled, bake2Enabled, endCardEnabled,
 } from "./shared/index.js";
 import { initAudio, playForEvent, playWinScreen, playBattleEngage, isMuted, setMuted } from "./ui/audio.js";
 import {
@@ -1207,23 +1208,34 @@ async function benchReveal(p,res){
    and only the contents of a hold differ. It emits a real `hold` event so the move shows up in the
    captain's log rather than crates silently materialising, and says plainly on screen that this is
    a test game — a shortcut nobody can see is one somebody eventually mistakes for a real result. */
-async function stockHoldsForBakeTest(){
-  // THE SAVE OUTRANKS THE URL. On a resume the query string may be gone (a bookmark without it, a
-  // shared link, a cleared address bar) while the decision log being replayed was recorded in a
-  // stocked game — so what the voyage was PLAYED under wins, and the URL only decides for a game
-  // that does not exist yet. Old saves predate the field and fall back to the URL, which is what
-  // they behaved like anyway.
+/* testFlagOn(name,urlFn) — THE SAVE OUTRANKS THE URL, asked once instead of three times.
+   On a resume the query string may be gone (a bookmark without it, a shared link, a cleared
+   address bar) while the decision log being replayed was recorded in a stocked game — so what the
+   voyage was PLAYED under wins, and the URL only decides for a game that does not exist yet.
+
+   Precedence: the solo save, then the game's own cfg, then the URL. The cfg leg is the CREW game's
+   equivalent of the same rule — roundCfg() threads the flag onto cfg, startGame writes that cfg
+   into the room, and a host-reload replay rebuilds from it, so a test room stays a test room across
+   a resume even when the query string is gone. The bare URL fallback only decides for a game whose
+   cfg predates the field, which is what old saves behaved like anyway.
+
+   CONVERGED, NOT COPIED (rule 23). W0-1 added a second and third caller of this exact chain. Three
+   copies of a precedence rule are three things kept in step by discipline; the design-time question
+   is "what makes these agree?" and the only durable answer is that there is one of them. */
+function testFlagOn(name,urlFn){
   const meta=appState.soloMeta;
-  // Precedence: the solo save, then the game's own cfg, then the URL. The cfg leg is the CREW
-  // game's equivalent of "the save outranks the URL": roundCfg() threads ovensNowEnabled() onto
-  // cfg, startGame writes that cfg into the room, and a host-reload replay rebuilds from it — so
-  // a test room stays a test room across a resume even when the query string is gone. The bare
-  // URL fallback only decides for a game whose cfg predates the field.
   const cfg=appState.game&&appState.game.cfg;
-  const on=(meta&&meta.ovens!==undefined)?!!meta.ovens
-          :(cfg&&cfg.ovens!==undefined)?!!cfg.ovens
-          :ovensNowEnabled();
-  if(!on)return;
+  if(meta&&meta[name]!==undefined)return !!meta[name];
+  if(cfg&&cfg[name]!==undefined)return !!cfg[name];
+  return urlFn();
+}
+async function stockHoldsForBakeTest(){
+  // ?bake2=1 IMPLIES this shortcut — a second attempt needs a captain standing at a lit oven with
+  // a full hold, which is exactly what this does. One route to the ovens, two doors onto it.
+  // ?endcard=1 does NOT: it never bakes, so lighting an oven for it would pose a state the card it
+  // is trying to reach never comes from.
+  const bake2=testFlagOn("bake2",bake2Enabled);
+  if(!testFlagOn("ovens",ovensNowEnabled)&&!bake2)return;
   const g=appState.game;
   const humans=g.players.filter(p=>p.strategy==="human");
   if(!humans.length)return;
@@ -1235,12 +1247,65 @@ async function stockHoldsForBakeTest(){
     // this cannot conjure a bake out of an ineligible captain — it just satisfies the gate in the
     // one window where everyone provably still meets it.
     g.lightOvens(p);
+    /* ?bake2=1 — LAND ON THE SECOND ATTEMPT, NOT THE FIRST (W0-1).
+       The jitter Wyatt reported (W3-2) is an attempt-TWO fault, and `?ovens=1` lands on attempt
+       one, so the shortcut that existed could not reach the bug it was needed for. lightOvens has
+       just built a fresh bake; spend one attempt on it.
+
+       THROUGH THE ENGINE'S OWN applyResult, never by hand-setting attempts and locked. It is the
+       function a real attempt goes through, so this state is one a real voyage can actually
+       produce — including the forced-last-bowl rule, which hand-setting would miss. It draws no
+       random numbers, so the seeded stream is untouched.
+
+       HOW MANY STEPS THE PRETEND ATTEMPT GOT RIGHT IS DERIVED, NOT TYPED (rule 9): enough to leave
+       THREE bowls open. A recipe length is not a constant — leaving a fixed two locked would solve
+       a short recipe outright via the forced-last-bowl rule and hand him a bake with nothing left
+       to play. Three open is the smallest bench that still shuffles and still has to be read. */
+    if(bake2&&p.bake&&p.bake.order.length){
+      const n=p.bake.order.length;
+      const solved=Math.max(0,n-3);
+      applyResult(p.bake,{correct:p.bake.order.map((_,k)=>k<solved)});
+    }
   }
   liveRender();
   // @copy adhoc.test.ovensnow
   // "Stay put, then Pass" is MEASURED, not assumed: a turn is two prompts, the sail picker and then
   // the action menu, so "pass on day one" would have sent him looking for one button that does both.
-  await flash(`${iconImg(FLAME_IMG)} <b>TEST GAME</b> — holds stocked and the ovens are lit. The bake-off begins at the end of day one.`,3000);
+  await flash(bake2
+    ? `${iconImg(FLAME_IMG)} <b>TEST GAME</b> — holds stocked, ovens lit, and one attempt already spent. The bake-off resumes at attempt 2 at the end of day one.`
+    : `${iconImg(FLAME_IMG)} <b>TEST GAME</b> — holds stocked and the ovens are lit. The bake-off begins at the end of day one.`,3000);
+}
+/* ?endcard=1 — LAND ON THE END OF VOYAGE CARD (W0-1, 2026-08-27).
+
+   Four of Wyatt's 2026-08-27 PROBLEM marks are problems only because the card sits at the far end
+   of a sixteen-day voyage and he could not get to it on a phone. Two of them (W3-3, the drumroll
+   firing after the winner is named; W3-4, the card slamming down) are faults IN the ending itself,
+   so a shortcut that produces anything other than the real ending would be worse than useless.
+
+   SO IT DOES NOT DRAW A CARD. It poses the state the ending reads — every captain home with a full
+   recipe — and then lets the voyage end through liveResolveEndNet(), the same and only function
+   that ends every other voyage. ONE DISPLAY PATH (rule 23): the card he inspects is the card
+   players get, because nothing here draws one.
+
+   EVERY captain, not only the humans. With one finisher the ending takes its single-winner branch
+   and never emits `collab` — and the collaborative bakery, the ranked finishers and the drumroll
+   are exactly what W3-3 is about. The richer ending is the one worth reaching.
+
+   IT DRAWS NO RANDOM NUMBERS, like the ovens shortcut it sits beside, and it emits a real
+   `testhold` per captain so the crates do not silently materialise in the captain's log. */
+async function skipToEndCard(){
+  if(!testFlagOn("endcard",endCardEnabled))return false;
+  const g=appState.game;
+  for(const p of g.players){
+    if(!p.recipe||!p.recipe.length)continue;
+    p.ing=[...p.recipe];
+    g.ev({t:"testhold",p:p.idx});
+    p.done=true;p.baking=false;
+    if(g.finishOrder.indexOf(p.idx)<0)g.finishOrder.push(p.idx);
+  }
+  liveRender();
+  await flash(`${iconImg(FLAME_IMG)} <b>TEST GAME</b> — every captain is home with a full recipe. Skipping to the end of the voyage.`,2600);
+  return true;
 }
 export async function runLiveNet(){
   await showAhoyIntro();
@@ -1275,8 +1340,16 @@ export async function runLiveNet(){
   // the RNG stream, which is the one thing this swap must not do.
   await recipeDraftNet();
   await stockHoldsForBakeTest();
-  await showTurnOrderIntro(order);
-  let ended=false;
+  /* ?endcard=1 skips straight past the day loop into liveResolveEndNet() below — the one function
+     that ends every voyage. Nothing here draws the card; the real ending does.
+
+     BEFORE the turn-order intro, and that placement was MEASURED, not chosen (2026-08-27). Placed
+     after it, the shortcut sat behind netIntroBarrier's "🦜 Start" button waiting for a tap — so a
+     URL whose whole purpose is to remove taps between him and the card added one. The intro draws
+     lots for a sailing order that this voyage will never use. */
+  const toEnd=await skipToEndCard();
+  if(!toEnd)await showTurnOrderIntro(order);
+  let ended=toEnd;
   while(appState.game.round<150&&!ended){
     appState.game.round++;
     // v2 rule 6: the wind that blows this round was forecast on the compass LAST round, and rule

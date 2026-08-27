@@ -107,7 +107,19 @@ echo "==> staging deploy: $STAGING_REPO"
 
 git -C "$SRC" diff --quiet || echo "    note: working tree has uncommitted changes; deploying them as-is"
 
-gh repo clone "$STAGING_REPO" "$WORK/staging" -- -q
+# GET THE STAGING CHECKOUT. `gh` when it exists, plain git when it does not.
+# The CLOUD CONTAINER HAS NO `gh` (measured 2026-08-27) — so this line, which is the CTO's only
+# route to publishing anything, failed on the only platform the CTO runs on. Plain HTTPS git does
+# reach the repo there, through the session's authenticated proxy.
+# THIS IS NOT HAND-ROLLING THE SYNC, and the difference matters: only the way the CHECKOUT is
+# fetched changes. The rsync, the EXCLUDES, and every CNAME guard below are untouched — they are
+# the parts that stop a preview deploy taking the live game down, and nothing here goes near them.
+if command -v gh >/dev/null 2>&1; then
+  gh repo clone "$STAGING_REPO" "$WORK/staging" -- -q
+else
+  echo "    no gh — cloning over https"
+  git clone -q "https://github.com/$STAGING_REPO" "$WORK/staging"
+fi
 rsync -a --delete "${EXCLUDES[@]}" "$SRC/" "$WORK/staging/"
 
 # --- THE GUARD. Never remove; this is the whole reason the script exists. ---
@@ -156,6 +168,15 @@ echo "    guard passed: staging CNAME is '$GOT' (not the production host)"
 # production, which is worse than no stamp at all: the one tell Wyatt relies on to
 # know which build he is looking at was actively lying.
 # Stamped on the COPY, never the source, so the working tree stays clean.
+# IN-PLACE sed, ON BOTH PLATFORMS. The BSD/macOS form needs an empty backup suffix as a separate
+# argument; GNU sed (every Linux box, and every cloud container this project now runs in) reads
+# that empty string as the SCRIPT and the real script as a FILENAME, and dies. Found 2026-08-27
+# from a cloud session, where this script — the CTO's only sanctioned output channel — could not
+# have published anything at all.
+# Feature-detected, never guessed from `uname`: GNU sed answers --version, BSD sed does not.
+if sed --version >/dev/null 2>&1; then sed_i(){ sed -i "$@"; }
+else                                  sed_i(){ sed -i '' "$@"; }; fi
+
 STAMPFILE="$WORK/staging/src/ui/stage.js"
 if [ -f "$STAMPFILE" ]; then
   STAMP="$(grep -o 'PP4_STAMP = "[^"]*"' "$STAMPFILE" | head -1 | sed 's/.*= "//; s/"//')"
@@ -167,9 +188,15 @@ if [ -f "$STAMPFILE" ]; then
   # screenshot now names the exact build it came from.
   SHA="$(git -C "$SRC" rev-parse --short HEAD)"
   case "$STAMP" in
-    *-STAGING/*) echo "    stamp already marked: $STAMP" ;;
-    *) sed -i '' "s|const PP4_STAMP = \"$STAMP\";|const PP4_STAMP = \"$STAMP-STAGING/$BRANCH@$SHA\";|" "$STAMPFILE"
-       echo "    stamped: $STAMP-STAGING/$BRANCH@$SHA" ;;
+  # W0-3 (Wyatt, 2026-08-27): "staging appends -staging". The old suffix `-STAGING/<branch>@<sha>`
+  # made the very stamp he asked to SHORTEN the longest thing on the line. The short SHA STAYS —
+  # it was added this morning because staging once served different code under a stamp
+  # byte-identical to production's, and he would have played a stale build with no tell. The
+  # BRANCH name is what leaves the SCREEN; the deploy log below still prints it, so the log keeps
+  # the full identity while the ☰ menu keeps the short one.
+    *-staging@*) echo "    stamp already marked: $STAMP" ;;
+    *) sed_i "s|const PP4_STAMP = \"$STAMP\";|const PP4_STAMP = \"$STAMP-staging@$SHA\";|" "$STAMPFILE"
+       echo "    stamped: $STAMP-staging@$SHA   (from branch $BRANCH)" ;;
   esac
 else
   echo "FATAL: $STAMPFILE missing — refusing to publish an unstampable staging build." >&2
@@ -191,7 +218,7 @@ if [ -f "$INDEX" ]; then
   if grep -q "<title>\[STAGING\]" "$INDEX"; then
     echo "    title already marked"
   else
-    sed -i '' 's|<title>|<title>[STAGING] |' "$INDEX"
+    sed_i 's|<title>|<title>[STAGING] |' "$INDEX"
     echo "    tab title: $(grep -o '<title>[^<]*</title>' "$INDEX" | head -1)"
   fi
 fi

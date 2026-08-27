@@ -196,15 +196,18 @@ shipped.
 ```bash
 git checkout -b aug28-whatever            # 1. a dated branch (monthDD-topic)
 
-npm test                                  # 2. the gates — expect 19, exit 0
+npm test                                  # 2. the gates — expect 20, exit 0
 node scripts/qa/gear.mjs                  # 3. how deep must this change be tested?
 node scripts/sea_trial.mjs                # 4. sail it, at whatever gear step 3 named
 
 ./scripts/deploy-staging.sh "what changed"   # 5. -> staging.playpastrypirates.com
 ```
 
-**6. Wyatt plays staging.** The build stamp must read `<stamp>-STAGING/<branch>`. If it reads a
-bare stamp he is looking at production and the publish did not land.
+**6. Wyatt plays staging.** The build stamp must read `<stamp>-staging@<sha>` — e.g.
+`Build 2026.08.27.3-staging@a24c675`. If it reads a bare stamp he is looking at production and the
+publish did not land. *(The suffix was `-STAGING/<branch>` until W0-3, 2026-08-27: he asked for a
+shorter stamp, the sha stayed because it is what makes it a build identity, and the branch name
+moved to the deploy log.)*
 
 **7. On his approval — and only then:**
 
@@ -227,7 +230,7 @@ there is no build step. If he cannot see it, it is not on `main`.
 
 ### Why the stamp matters more than it looks
 
-`deploy-staging.sh` rewrites `PP4_STAMP` to `<stamp>-STAGING/<branch>` **on the published copy, not
+`deploy-staging.sh` rewrites `PP4_STAMP` to `<stamp>-staging@<sha>` **on the published copy, not
 the source**. On 2026-08-27 it did not, and staging served DIFFERENT CODE under a stamp IDENTICAL to
 production — worse than no stamp, because the one tell Wyatt uses to know which build he is looking
 at was actively lying. The script now refuses to publish at all if it cannot stamp the build.
@@ -365,6 +368,19 @@ PATH (`google-chrome`, `chromium`, `chromium-browser`), then the Mac bundle; on 
 `--no-sandbox --disable-dev-shm-usage` (a container running as root cannot use Chrome's SUID
 sandbox, and `/dev/shm` is tiny). The repo root is derived from the script's own location. Usage
 is unchanged: `node scripts/mouse_qa.mjs <outdir> <W> <H> <port> <dbgport>`.
+
+### WHAT A CLOUD CTO RUN FOUND, 2026-08-27 — five things that only fail in a container
+
+Run from `claude/cloud-handoff-planning-a9ay1u` while Wyatt was away. Every one of these was
+MEASURED here, and every one is invisible from a Mac. Two were blocking.
+
+| | what happens | status |
+|---|---|---|
+| **WebKit cannot be installed** | `npm i playwright` in `~/.pw` works (19 MB). `npx playwright install webkit` is refused by the egress proxy: **403, `no rule or allowlist entry allows host "cdn.playwright.dev"`**, and the same for `playwright.download.prss.microsoft.com`. No WebKit exists anywhere on the image. | **OPEN — needs those two hosts allowlisted.** Until then `solo-desktop-wk` and `solo-phone-wk` are permanently NOT RUN in the cloud, and no cloud report may ever imply Safari was covered. |
+| **`gh` is not installed** | `deploy-staging.sh` cloned the staging repo with `gh repo clone`, so the CTO's only publishing route died on its first command. Plain HTTPS `git` *does* reach `wyattroy/pastrypirates-staging` through the session proxy. | **FIXED** — the script feature-detects `gh` and falls back to `git clone`. Only the checkout changes; the rsync, the EXCLUDES and every CNAME guard are untouched. |
+| **`sed -i ''` is BSD-only** | Two sites in `deploy-staging.sh`. GNU sed reads the empty string as the SCRIPT and the real script as a FILENAME: `sed: can't read s\|hello\|bye\|`. It could not stamp a build. | **FIXED** — feature-detected (`sed --version` answers on GNU, not BSD). |
+| **The container's local `main` is stale** | A fresh container clone left local `main` 50 commits ahead / 70 behind `origin/main` on an old lineage. `cto_supervise.mjs` correctly reports **NEEDS ATTENTION — something committed to main locally**, which in a container is a **false alarm**. | Fix it, do not chase it: confirm the extra commits exist on some remote branch, then `git branch -f main origin/main`. The supervisor goes green. |
+| **`pkill -f chromium` kills your own shell, and the browsers are not called `chromium`** | Every Bash call runs under a wrapper that exports `CHROME_BIN=/usr/local/bin/chromium`, so `-f` matches the killing shell — the symptom is empty output and a strange exit code with the browsers still alive. And `/usr/local/bin/chromium` is a wrapper: the real processes are named **`chrome`**, so `pgrep -x chromium` reported **0 while ten live chrome processes were burning CPU**. | Match the process NAME and cover both: `pkill -9 -x chrome; pkill -9 -x chromium; pkill -9 -x headless_shell`. **A cleanup check that cannot see its subject reads exactly like a clean machine** — rule 17's whole point. |
 
 ### THE PROOF — RAN 2026-08-21, all four items passed.
 

@@ -2515,6 +2515,8 @@ export function resumeSoloGame(saved){
   // Same override for ?ovens=1: the save's value wins over whatever the current URL made roundCfg
   // say, so cfg never contradicts the soloMeta the stock check actually reads.
   if(saved.ovens!==undefined)cfg.ovens=!!saved.ovens;
+  if(saved.bake2!==undefined)cfg.bake2=!!saved.bake2;
+  if(saved.endcard!==undefined)cfg.endcard=!!saved.endcard;
   netHandlers().onBeginGame(cfg,saved.seed);
 }
 // notes/edits BUG-03/BUG-04: decide whether a host-refresh replay actually rebuilt the voyage.

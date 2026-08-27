@@ -63,3 +63,7 @@ chrome-probe*/
 # for a third incident to make the case.
 mouse-qa-shots/
 narration-timeline/
+
+# The CTO lock: written when a marathon worker starts, removed when it stops. Machine-local
+# state, never history — and .claude/hooks/cto-staging-only.cjs keys the main-branch block on it.
+.planning/.cto-lock
