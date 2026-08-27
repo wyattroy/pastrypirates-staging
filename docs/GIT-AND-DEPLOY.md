@@ -166,71 +166,101 @@ shipped.
 
 ---
 
-## 5. How the work reaches Wyatt's phone
+## 5. THE RELEASE PROCESS — how work reaches Wyatt, and then reaches players
 
-Wyatt, 2026-08-14: *"The design we have been using is that playpastrypirates.com continues serving
-its normal version; but playpastrypirates.com/4 is serving the version that we are working on."*
+**Two environments, one source tree. Promotion is a MERGE, never a copy.**
 
-He asked for this to be written down so he never has to explain it to a new session again.
-
-### The shape of it
-
-`playpastrypirates.com` is GitHub Pages serving **`main`, from the repo root, with no build step and
-no deploy workflow.** What is on `main` *is* what is live — there is nothing in between.
-
-| URL | Served from | What it is |
+| environment | address | what it is |
 |---|---|---|
-| `playpastrypirates.com` | repo root (`index.html`, `src/`) | **the game under development AND the game real players play — the same files** |
-| `playpastrypirates.com/classic` | `classic/` | v1, frozen |
+| **staging** | `staging.playpastrypirates.com` | where Wyatt plays work-in-progress. Published from ANY branch |
+| **production** | `playpastrypirates.com` | the game real players are in the middle of. It is `main`, served from the repo root, with no build step |
+| *(frozen)* | `playpastrypirates.com/classic` | v1, not developed |
 
-> ### ⚠ THE CUTOVER (2026-08-26) INVERTED WHAT THIS SECTION USED TO SAY
->
-> The old table had `/4` as a separate milestone tree, and the paragraph under it read: *"Merging
-> does not touch the root game, because the root game is different files. Do not treat a merge to
-> `main` as a scary outward-facing act requiring ceremony."*
->
-> **That reassurance was load-bearing on the two-tree layout, and the two-tree layout is gone.**
-> `4/` was promoted to the root; there is no separate development copy any more. Every push to
-> `main` is served to real players immediately, because there is no build step between `main` and
-> the domain.
->
-> This section carried its own instruction to be updated in the cutover commit. **It was not**, and
-> it sat wrong for the rest of the day — including telling sessions to bump `PP4_STAMP` in
-> `4/src/ui/stage.js`, which the cutover deleted. A doc that tells you to edit a file that does not
-> exist is the same failure as a gate pointed at the wrong tree: not silent, *reassuring*.
+### The four rules everything else follows from
 
-**Pushing to `main` is still the normal way the work reaches him**, and still his only route when he
-is away from the laptop — so this is not an argument for pushing less. **It is an argument for
-knowing what is in the diff, and for sailing the trial BEFORE the push rather than after.** The diff
-is still the thing to read; it is simply no longer the thing that makes the push safe.
+1. **ONE SOURCE TREE.** There is exactly one copy of the game in this repo: `index.html` + `src/`.
+   Never a second folder holding "the staging version" — that is two things kept in step by memory,
+   and it drifted within twelve hours the one day it existed (2026-08-27).
+2. **PROMOTE THE ARTIFACT, DO NOT REBUILD IT.** Production changes because the SAME COMMITS moved
+   onto `main`. Copying files at release time ships something nobody tested.
+3. **ENVIRONMENTS DIFFER BY CONFIGURATION, NOT CONTENT.** Staging is the same game at a different
+   address, with its own `CNAME` and a `robots.txt` that says `Disallow: /`.
+4. **A RELEASE IS REVERSIBLE.** Production moved by a merge, so a bad release is undone by
+   reverting that merge — not by hand-editing the live game.
 
-### The loop, every time
+> **Staging is a STAGE, not a copy.** It is not consumed by a release and no new one is created
+> afterwards. It is a permanent address whose contents are replaced each time you publish to it.
 
-1. Develop and commit on the session's designated branch.
-2. **Bump the build stamp** — `PP4_STAMP` in `src/ui/stage.js` (**not `4/src/…` — the cutover moved it**), shown in the hamburger menu as
-   `v4 · build 2026-08-13g`. It is how he tells at a glance whether he is looking at your work.
-3. **Prove the merge touches only the milestone.** Run this and read it — empty output is the
-   licence to push:
-   ```bash
-   git diff --name-only origin/main..HEAD -- ':(exclude)4/' ':(exclude)scripts/' ':(exclude)docs/' ':(exclude).claude/' ':(exclude).planning/'
-   ```
-   Anything printed there changes the live game real players are in the middle of. Stop and ask.
-   `CNAME`, `robots.txt` and `sitemap.xml` must never appear — see §1.
-4. Fast-forward, push, pull, and verify both directions are zero (§3).
-5. Go back to the working branch. Tell him the build stamp to look for, and that Pages takes a
-   minute or two.
+### The loop
 
-### The tell that a session skipped this
+```bash
+git checkout -b aug28-whatever            # 1. a dated branch (monthDD-topic)
 
-**He reports an old build stamp.** On 2026-08-14 he sent a screenshot of `build 2026-08-13a` and said
-he could not see `13g` even in an incognito window — and he was completely right. Fourteen commits of
-playtest fixes were sitting on a branch nobody had merged, so `/4` was still serving a build from
-before the session started. He had spent the morning testing work that was never deployed.
+npm test                                  # 2. the gates — expect 19, exit 0
+node scripts/qa/gear.mjs                  # 3. how deep must this change be tested?
+node scripts/sea_trial.mjs                # 4. sail it, at whatever gear step 3 named
 
-**It was not a cache. Nothing is ever a cache here, because there is no build step.** If he cannot
-see it, it is not on `main`.
+./scripts/deploy-staging.sh "what changed"   # 5. -> staging.playpastrypirates.com
+```
 
----
+**6. Wyatt plays staging.** The build stamp must read `<stamp>-STAGING/<branch>`. If it reads a
+bare stamp he is looking at production and the publish did not land.
+
+**7. On his approval — and only then:**
+
+```bash
+git checkout main && git merge aug28-whatever
+git push origin main && git pull origin main
+git rev-list --count origin/main..main    # 0
+git rev-list --count main..origin/main    # 0
+```
+
+**8. Verify production actually moved.** Never assume; Pages takes a minute or two:
+
+```bash
+curl -s https://playpastrypirates.com/src/ui/stage.js | grep -o 'PP4_STAMP = "[^"]*"'
+curl -s -o /dev/null -w "%{http_code}\n" https://playpastrypirates.com/classic/    # 200
+```
+
+**The tell that a session skipped this: he reports an old build stamp.** It is never a cache —
+there is no build step. If he cannot see it, it is not on `main`.
+
+### Why the stamp matters more than it looks
+
+`deploy-staging.sh` rewrites `PP4_STAMP` to `<stamp>-STAGING/<branch>` **on the published copy, not
+the source**. On 2026-08-27 it did not, and staging served DIFFERENT CODE under a stamp IDENTICAL to
+production — worse than no stamp, because the one tell Wyatt uses to know which build he is looking
+at was actively lying. The script now refuses to publish at all if it cannot stamp the build.
+
+### The checks that make this durable — and why each exists
+
+**One cutover broke SIX instruments and not one of them said so.** A path is a claim about the
+world, written once, that nothing re-checks. These re-check them, and every one is red-proofed:
+
+| gate | the claim it re-checks | what it would have caught |
+|---|---|---|
+| `scripts/tree_health_check.js` | every gate the chain names exists; every static import resolves; no path is built into a directory that is gone | `sea_trial.mjs` reading `4/src/ui/stage.js`; a moved script importing one level above the repo |
+| `scripts/game_url_check.js` | the browser fleet points at a page that actually contains the game | the whole fleet loading a **directory listing** at `/4/` — HTTP 200, no game |
+| `scripts/doc_command_check.js` | every `node …` command and every link in every doc exists | 35 lines of docs telling sessions to edit deleted files |
+| `scripts/gate_count_check.js` | the gates declared equal the gates run | a gate added or dropped without anyone noticing |
+| `scripts/qa/gear.mjs` + `.claude/hooks/qa-gear-first.cjs` | what counts as game code, by EXCLUSION so a new directory is strict by default | the picker reporting `GEAR: NONE` for every change to the live game |
+
+**The shared lesson, and it is the reusable one:** *a hand-kept list of what to guard rots exactly
+like the thing it guards.* Every one of these derives its answer — from `.gitignore`, from the
+directory listing, from `package.json`'s own chain — rather than from a list somebody typed.
+
+### Where staging lives, and the one thing only Wyatt can do
+
+Staging is a **separate repository**, `wyattroy/pastrypirates-staging`, because **GitHub Pages
+serves one branch per repo at one domain** — pointing this repo's Pages at a staging branch would
+take production down. It owns its own `CNAME` naming the SUBDOMAIN.
+
+**That is safe, and the reasoning is not optional:** rule 14 is about two repos claiming ONE
+hostname. `staging.playpastrypirates.com` and `playpastrypirates.com` are different hostnames.
+`deploy-staging.sh`'s guard enforces exactly that — staging's CNAME must name the staging host, must
+never name the production host, and must not be missing.
+
+DNS lives at **Squarespace**: `CNAME` · host `staging` · value `wyattroy.github.io`.
 
 ## 6. Absolute paths, always — the two-trees hazard
 
@@ -326,15 +356,15 @@ grep -rl "$PWD" .claude/commands .claude/agents .claude/gsd-core | xargs sed -i 
 ### Setup script
 
 Nothing beyond a clone — there is no build step and no `package-lock.json`, so no `npm ci`. The
-root `npm test` and every `4/scripts/*_check.js` gate run on bare Node.
+root `npm test` and every `scripts/*_check.js` gate run on bare Node.
 
 ### Browser QA in the cloud
 
-`4/scripts/mouse_qa.mjs` and `4/scripts/mp_rig.mjs` resolve Chrome from `$CHROME_BIN`, then the
+`scripts/mouse_qa.mjs` and `scripts/mp_rig.mjs` resolve Chrome from `$CHROME_BIN`, then the
 PATH (`google-chrome`, `chromium`, `chromium-browser`), then the Mac bundle; on Linux they add
 `--no-sandbox --disable-dev-shm-usage` (a container running as root cannot use Chrome's SUID
 sandbox, and `/dev/shm` is tiny). The repo root is derived from the script's own location. Usage
-is unchanged: `node 4/scripts/mouse_qa.mjs <outdir> <W> <H> <port> <dbgport>`.
+is unchanged: `node scripts/mouse_qa.mjs <outdir> <W> <H> <port> <dbgport>`.
 
 ### THE PROOF — RAN 2026-08-21, all four items passed.
 
@@ -343,14 +373,14 @@ after a two-part browser TLS fix — **now applied AUTOMATICALLY at session star
 `.claude/hooks/cloud-session-start.sh` (a SessionStart hook in `.claude/settings.json`, added
 2026-08-21 at Wyatt's ask: *"I want this to work, now and always"*). It no-ops on the laptop
 (`CLAUDE_CODE_REMOTE` guard), is idempotent, and installs the fixed browser as `chromium` on PATH
-so `4/scripts/lib/chrome.mjs` resolves it with no env var. The manual recipe stays below as the
+so `scripts/lib/chrome.mjs` resolves it with no env var. The manual recipe stays below as the
 fallback if the hook ever reports "skipped" — and as the record of what the fix IS.
 
 1. **Project-local GSD works.** `node .claude/gsd-core/bin/gsd-tools.cjs validate health` ran —
    known-noise W019s only. Also verified: `state get`, `progress` and the full command list all
    respond; **zero laptop-absolute paths** remain in `.claude/commands`, `.claude/agents`,
    `.claude/gsd-core`; GSD **1.8.0 project-local**.
-2. **Solo mouse-QA at 1400×900, past the bar.** `node 4/scripts/mouse_qa.mjs <out> 1400 900 8611
+2. **Solo mouse-QA at 1400×900, past the bar.** `node scripts/mouse_qa.mjs <out> 1400 900 8611
    9611` — the bar was Day 6; the run played a full voyage to the end-of-voyage card at **Day 14**:
    1158 ticks, 72 real-mouse actions, 115 screenshots, **0 findings, 0 console errors**. The
    screenshots were verified readable by eye (the Day-1 board and the end-of-voyage card).

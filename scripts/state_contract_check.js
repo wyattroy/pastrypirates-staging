@@ -72,7 +72,7 @@ const STATE_INDEX_JS = path.join(ROOT, "src", "state", "index.js");
    ============================================================================
    FOLLOWS THE TREE (a TREE ARTIFACT — the scanned game's own code):
      index.html, src/, src/main.js, src/state/index.js, and src/module-contract.js's
-     MODULE_OK_FLAG. `4/src/module-contract.js` EXISTS and is the one that matters when scanning
+     MODULE_OK_FLAG. `src/module-contract.js` EXISTS and is the one that matters when scanning
      4/. The two copies happen to agree today ("__pp_module_ok", byte-identical files) — which is
      exactly why getting this backwards would be invisible. A statically-imported `../src/
      module-contract.js` would pin the ROOT's flag value forever, and the day 4/ changed its own,
@@ -82,7 +82,7 @@ const STATE_INDEX_JS = path.join(ROOT, "src", "state", "index.js");
      ./migrate_app_state.js's APP_STATE_NAMES / checkNameBareUsages / hasTopLevelDeclaration, and
      ./lib/js_region_tokenizer.js's classify / maskNonCode / locateClassicScriptRegion. These are
      the migration's own definition of "what an app-state name is" and a character classifier;
-     neither describes a tree. There is deliberately no 4/scripts/migrate_app_state.js, and adding
+     neither describes a tree. There is deliberately no scripts/migrate_app_state.js, and adding
      one would fork the vocabulary. (The tokenizer's own exported ROOT/INDEX_HTML constants ARE
      tree artifacts, so they are no longer imported here — this file computes both from the
      selector instead. That import was the crash that made this gate un-runnable against 4/.)

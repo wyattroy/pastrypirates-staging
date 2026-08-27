@@ -19,12 +19,12 @@ every player", written now so that turning it on later is a decision rather than
 ## 1. THE STATE OF THE DOOR TODAY — a checkable fact, not a memory
 
 ```bash
-test -d 4/scripts/fixtures/determinism \
+test -d scripts/fixtures/determinism \
   && echo "CLOSED — a corpus exists; an engine emission change now costs a gated re-record" \
   || echo "OPEN — no corpus; an engine emission change costs nothing"
 ```
 
-**As of 2026-08-23 that prints OPEN.** `4/scripts/fixtures/` does not exist at all.
+**As of 2026-08-23 that prints OPEN.** `scripts/fixtures/` does not exist at all.
 
 **Run the command. Do not trust this paragraph.** It is written down precisely so the claim cannot
 rot silently, which is the failure mode every other sentence in this repo's docs is exposed to.
@@ -130,9 +130,9 @@ its D-51 paired-field invariant, `art-review/narration-table-baseline.json`'s th
 - it loads the engine through `./lib/load_engine.js`, which imports `../../src/engine/index.js`;
 - it writes to `path.join(__dirname, "fixtures", "determinism")`.
 
-**So a copy at `4/scripts/determinism_baseline.js` loads `4/`'s engine and writes
-`4/scripts/fixtures/determinism/` — with nothing configured and nothing to remember.** That is the
-same property `4/scripts/lib_twin_check.js`'s header explains and defends: the copy is not a
+**So a copy at `scripts/determinism_baseline.js` loads `4/`'s engine and writes
+`scripts/fixtures/determinism/` — with nothing configured and nothing to remember.** That is the
+same property `scripts/lib_twin_check.js`'s header explains and defends: the copy is not a
 duplicate of the code, it is what AIMS the code.
 
 **DO NOT "improve" this by having a `4/` copy import the root's `scripts/lib/load_engine.js`.** It
@@ -168,7 +168,7 @@ node scripts/determinism_baseline.js --verify
 ```
 
 **The "twin question" below is now moot too** — there is no second copy to keep in step, because
-there is no second tree. `4/scripts/lib_twin_check.js` has nothing to watch here.
+there is no second tree. `scripts/lib_twin_check.js` has nothing to watch here.
 
 **Three things 03-03 must decide when it does step 2, none of which is decided here:**
 
@@ -181,8 +181,8 @@ there is no second tree. `4/scripts/lib_twin_check.js` has nothing to watch here
 - **The ruleset.** `roundCfg()` returns `bakeoff: true` headless, so `play()` routes to
   `playBakeoff()`, not `playClassic()` (`HARD-WON-LESSONS.md` §3). That IS the right ruleset for
   `/4` — it is what ships — but the manifest must say which one it recorded.
-- **The twin question.** `4/scripts/determinism_baseline.js` would be a byte-identical copy of a
-  root file that is NOT under `scripts/lib/`, so `4/scripts/lib_twin_check.js` does not currently
+- **The twin question.** `scripts/determinism_baseline.js` would be a byte-identical copy of a
+  root file that is NOT under `scripts/lib/`, so `scripts/lib_twin_check.js` does not currently
   watch it. Either extend that gate's pair list (it already special-cases the `no_undef_check.js`
   pair one directory up, for exactly this reason) or the two will drift unnoticed.
 

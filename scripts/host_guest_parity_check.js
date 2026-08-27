@@ -122,7 +122,7 @@
 //   assertion 1 against 4/  — ALREADY GREEN (6 tokens each side). 02.1-03 unified the button
 //                             builder, so the markup vocabulary genuinely does match. THE RE-AIM
 //                             ALONE PROVES NOTHING; assertion 6 is what was red.
-//   assertion 2 against 4/  — FAIL. `class:"sailCell"` is not built in 4/src/ui/flow.js at all;
+//   assertion 2 against 4/  — FAIL. `class:"sailCell"` is not built in src/ui/flow.js at all;
 //                             the subject moved or was renamed. NOT a Group A regression.
 //   assertion 3 against 4/  — PASS.
 //   assertion 4 against 4/  — FAIL. animateRimSweepIfAny no longer builds a rimSweepCurve in 4/.
@@ -176,7 +176,7 @@ const read = (root, rel) => {
 // "what is a comment" is three chances to disagree, so there is now ONE, in the shared tokenizer,
 // and it is STRONGER than what it replaced: classify()-backed, so it blanks the interior of a
 // `/* ... */` block (which a line filter cannot see — that miss is what left two false NO-APP-STATE
-// findings standing in 4/src/net/writers.js) and it preserves every byte, so offsets, brace
+// findings standing in src/net/writers.js) and it preserves every byte, so offsets, brace
 // matching and line numbers are all unchanged. The full --drill suite passes unchanged.
 const stripComments = stripCommentSegments;
 
@@ -233,7 +233,7 @@ export function checkOneSailHighlightBuilder(root) {
      key handed to el("rect",{...}). `4/` builds the square as an HTML div instead — playtest 20,
      because UI-06's bounce animates transform:scale and on an SVG element that forces a full layout
      every frame (measured: 60.1 layouts/sec from the transform alone, zero from the opacity) — so
-     4/src/ui/flow.js:513 sets the class as a DOM PROPERTY, `d.className="sailCell"`.
+     src/ui/flow.js:513 sets the class as a DOM PROPERTY, `d.className="sailCell"`.
 
      The gate therefore found ZERO builders in the game we actually ship and reported "expected 1"
      — a false alarm about the most load-bearing rule it guards, and the kind that gets a gate

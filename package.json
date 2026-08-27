@@ -3,18 +3,17 @@
   "private": true,
   "_gates_comment": "NOT documentation. scripts/gate_count_check.js parses scripts.test below, counts the node invocations and the subset that reads 4/, and FAILS THE BUILD if either number here disagrees. Update these in the same edit that adds or removes a gate.",
   "gates": {
-    "total": 19,
-    "readingFour": 6
+    "total": 19
   },
   "type": "module",
   "scripts": {
     "start": "python3 -m http.server 8000",
-    "test": "node scripts/gate_count_check.js && node scripts/engine_contract_check.js && node scripts/dlog_replay_test.js && node scripts/net_registry_test.js && node 4/scripts/net_connected_twin_test.js && node scripts/net_contract_check.js && node scripts/state_contract_check.js && node scripts/module_graph_check.js && node scripts/ui_contract_check.js --tree=classic && node scripts/wind_dot_contract_check.js && node scripts/no_undef_check.js && node scripts/host_guest_parity_check.js && node scripts/hail_ranking_test.js && node scripts/rim_sweep_trace_test.js && node 4/scripts/mode_fork_check.js && node 4/scripts/game_url_check.js && node 4/scripts/flip_consistency_check.js && node 4/scripts/doc_command_check.js && node 4/scripts/lib_twin_check.js",
+    "test": "node scripts/gate_count_check.js && node scripts/tree_health_check.js && node scripts/engine_contract_check.js && node scripts/dlog_replay_test.js && node scripts/net_registry_test.js && node scripts/net_connected_twin_test.js && node scripts/net_contract_check.js && node scripts/state_contract_check.js && node scripts/module_graph_check.js && node scripts/ui_contract_check.js --tree=classic && node scripts/wind_dot_contract_check.js && node scripts/no_undef_check.js && node scripts/host_guest_parity_check.js && node scripts/hail_ranking_test.js && node scripts/rim_sweep_trace_test.js && node scripts/mode_fork_check.js && node scripts/game_url_check.js && node scripts/flip_consistency_check.js && node scripts/doc_command_check.js",
     "test:determinism": "node scripts/determinism_baseline.js --verify   # BROKEN BY THE CUTOVER \u2014 see .planning/BACKLOG.md",
     "test:determinism-diff": "node scripts/determinism_diff.js",
     "audit:extract": "node scripts/extract_narration_lines.js",
     "audit:check": "node scripts/narration_audit_check.js",
     "test:v1": "# PARKED BY THE CUTOVER \u2014 see .planning/BACKLOG.md: node scripts/storm_moored_reason_test.js && node scripts/bot_storm_narration_test.js && node scripts/narration_test.js && node scripts/narration_flow_test.js && node scripts/extract_narration_lines.js && node scripts/economy_guard_test.js && node scripts/narration_audit_check.js && node scripts/audio_mapping_test.js",
-    "test:parked-citation": "node 4/scripts/gate_citation_check.js   # PREMISE RETIRED BY THE CUTOVER \u2014 see BACKLOG"
+    "test:parked-citation": "node scripts/gate_citation_check.js   # PREMISE RETIRED BY THE CUTOVER \u2014 see BACKLOG"
   }
 }

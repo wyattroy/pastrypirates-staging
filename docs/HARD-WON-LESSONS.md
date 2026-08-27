@@ -274,7 +274,7 @@ the decision log. All of that is downstream of a prompt **that never rendered**.
 reported *at a tap*, the first thing to prove is that the next prompt appears at all. Everything
 about what it decides is unreachable until that is true.
 
-`4/scripts/seat_arg_check.js` is the gate: the four name renderers (`pn`/`poss`/`pname`/`rawName`)
+`scripts/seat_arg_check.js` is the gate: the four name renderers (`pn`/`poss`/`pname`/`rawName`)
 take a seat index, and it rejects any call site handed a rendered name or a string literal.
 `no_undef_check.js` cannot see this class at all — `poss` is defined and imported, and it is the
 ARGUMENT that is wrong.
@@ -721,7 +721,7 @@ Immune to params, bodies, template literals and nesting alike.
 Wyatt's 7am solo playtest found the radial fan, the ask pill, the apSub tooltip and every narration
 bubble+pointer pushed off toward a corner on desktop, with Dock/Trade/Attack stacked invisibly
 under Pass — game-stopping, could not dock. The build that shipped it had passed every existing
-`4/scripts/*_check.js` gate and the overnight QA that preceded it, because **every one of those
+`scripts/*_check.js` gate and the overnight QA that preceded it, because **every one of those
 checks asks whether a renderer FUNCTION ran, never where on screen the thing it drew actually
 landed.** A driven-game QA pass would have missed it too, for a related but distinct reason:
 
@@ -775,7 +775,7 @@ where the answer is written down before you ask how it looks.
 
 Three things this cost that are worth copying:
 
-- **The gate counts, it does not pattern-match.** `4/scripts/dlog_quantity_check.js`'s first version
+- **The gate counts, it does not pattern-match.** `scripts/dlog_quantity_check.js`'s first version
   looked for `=== "ok") return <expr>;` and read the expression — then I reformatted that branch into
   a block and the gate went green while silently covering half of what it claimed. Counting confirm
   branches against `logQuantity()` calls is immune to how the branch is written.
@@ -985,7 +985,7 @@ the note's name in brackets. CLAUDE.md already carries the big ones (ask with th
   other agent's probe on the machine. `pkill -f "remote-debugging-port=${DBG}"`, `"http.server
   ${PORT}"`. *(same)*
 - **Real-mouse QA is the instrument he trusts, and a DOM clicker is not** — he asked for it by name
-  after an off-screen Dock button sailed through headless QA. `4/scripts/mouse_qa.mjs`: trusted
+  after an off-screen Dock button sailed through headless QA. `scripts/mouse_qa.mjs`: trusted
   `Input.dispatchMouseEvent` at screen coordinates, gated on inside-viewport + inside-the-column +
   `elementFromPoint` hits it, a screenshot per action that you then READ. **And KEEP the
   screenshots** — the build-u desktop pass was declared clean with none kept, and the layout was
@@ -1017,7 +1017,7 @@ the note's name in brackets. CLAUDE.md already carries the big ones (ask with th
 - **On the laptop only: `find` is `bfs`**, which rejects relative `-newermt` timestamps; with
   `2>/dev/null` the error looks like "found nothing". The cloud image has GNU find. Either way,
   never `2>/dev/null` an exploratory `find`. *(project_find_is_bfs)*
-- **`4/scripts/mp_rig.mjs` is the two-window crew rig**, with three corrections baked in that each
+- **`scripts/mp_rig.mjs` is the two-window crew rig**, with three corrections baked in that each
   cost real time: visibility is the painted rectangle, never `offsetParent` (always null for
   `position:fixed`); the driver carries the liveness filter / prefer-the-committing-circle / rotate-
   after-5-failures fixes; a remote seat gets `coinStepper()`'s ± fallback, not the slider, so a
@@ -1266,7 +1266,7 @@ so no word ever hops a line mid-reveal. It also means:
 
 Only the **painted** pixels differ. A first fix using `textContent` did nothing, and a 40-sample
 trace is what caught it. **If you need to know whether text has finished arriving, walk the nodes
-and skip anything under `visibility:hidden`** — see `SETTLE_PROBE` in `4/scripts/lib/checks.mjs`.
+and skip anything under `visibility:hidden`** — see `SETTLE_PROBE` in `scripts/lib/checks.mjs`.
 
 ### 10e. The vision judge has TWO named biases — calibrate before acting
 
@@ -1306,7 +1306,7 @@ that caught it was writing the plan down before executing it. See
 
 ### 10h. Following the mandated workflow disarmed the gate that enforces it
 
-`4/scripts/qa/gear.mjs` compares against `origin/main`. **Rule 24 requires you to commit AND push so
+`scripts/qa/gear.mjs` compares against `origin/main`. **Rule 24 requires you to commit AND push so
 Wyatt can play it — and pushing empties that diff, so the picker then reports `GEAR: NONE`.** Doing
 exactly what the rules say produces "nothing to prove". Use `--since=HEAD~N` after a push, and treat
 a `NONE` verdict on a day you changed game code as the tell.

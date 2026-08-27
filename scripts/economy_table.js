@@ -15,7 +15,7 @@
 // THE LEVERS, AS OVERRIDES, NEVER AS EDITS.
 // `--crateBase`, `--powder`, `--dockTails`, `--dockHeads`, `--startCoins` and `--blackMarket` are
 // spread over `roundCfg()`'s return value AT CONSTRUCTION, inside THIS file. `roundCfg()` itself is
-// never touched, so the shipping config (4/src/engine/index.js:3049 dockHeads/dockTails/crateBase,
+// never touched, so the shipping config (src/engine/index.js:3049 dockHeads/dockTails/crateBase,
 // :3035 startCoins, :3037 powder, :3063 blackMarket) never moves. D-17: "Change no number until he
 // picks." This script is how the numbers get read without that ever being at risk.
 //
@@ -29,17 +29,17 @@
 // already tracked, read a different way — same pattern bot_ladder4.js's header describes for turns
 // and passes:
 //   - Every event the engine ever emits already carries a full per-seat snapshot, attached by
-//     `ev()` itself (4/src/engine/index.js:316-322): `o.state` (pos, coins, ing, done, baking for
+//     `ev()` itself (src/engine/index.js:316-322): `o.state` (pos, coins, ing, done, baking for
 //     EVERY seat, not just the actor) and `o.tokens` (every island's remaining stock), both stamped
 //     with `o.round`. Purses over time and island stock over time cost nothing to read — they were
 //     already being written into `g.events` for a reason that has nothing to do with this script.
 //   - Battle counts are `g.battles` / `g.attWins`, plain instance fields the engine already
-//     increments (4/src/engine/index.js:299 init, :1709/:1768 increment). Read off the finished
+//     increments (src/engine/index.js:299 init, :1709/:1768 increment). Read off the finished
 //     game object.
 //   - The "could a captain do what they wanted" proxy calls the engine's OWN public methods
 //     (`adjPort`, `needs`) on reconstructed `{pos}` objects built from the recorded snapshots, and
 //     reuses the SAME pricing formula `cratePrice()` already documents in prose
-//     (4/src/engine/index.js:801-813) — applied to the snapshot's `tokens` at that round rather
+//     (src/engine/index.js:801-813) — applied to the snapshot's `tokens` at that round rather
 //     than the game's final tokens, because "did this captain get priced out AT THE TIME" is what
 //     the question actually asks. This is a read, not a rebuild: nothing here is a second,
 //     independent implementation of a rule the engine already has — it is the same rule, called or
@@ -110,8 +110,8 @@
 // metric's N-distribution buckets sum back to the player-game count, and its three-way split
 // (in-band / N=0 / N>=4) partitions every player-game exactly once.
 
-import { Game, roundCfg } from "../4/src/engine/index.js";
-import { man } from "../4/src/shared/index.js";
+import { Game, roundCfg } from "../src/engine/index.js";
+import { man } from "../src/shared/index.js";
 
 const ARGV = process.argv.slice(2);
 const FLAGS = ARGV.filter((a) => a.startsWith("--"));
@@ -146,7 +146,7 @@ function buildCfg() {
   return cfg;
 }
 
-// The exact formula 4/src/engine/index.js's cratePrice() documents in prose, applied to the
+// The exact formula src/engine/index.js's cratePrice() documents in prose, applied to the
 // snapshot's tokens AT THAT ROUND (o.tokens, already recorded by ev()) rather than the game's
 // final tokens, because "priced out at the time" is the question, not "priced out at the end."
 function priceAt(cfg, left) {

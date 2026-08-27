@@ -56,7 +56,7 @@
 // scripts/bot_ladder3.js targets `3/` and is a different tree's instrument. It is deliberately left
 // alone by this rewrite; Phase 6 deletes `3/`.
 
-import { Game, roundCfg } from "../4/src/engine/index.js";
+import { Game, roundCfg } from "../src/engine/index.js";
 
 const ARGV = process.argv.slice(2);
 const FLAGS = ARGV.filter((a) => a.startsWith("--"));

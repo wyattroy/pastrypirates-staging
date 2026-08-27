@@ -35,7 +35,7 @@
 // What counts as "reads 4/"
 // ============================================================================
 // A chain entry reads `4/` if EITHER:
-//   - the script it runs lives under `4/scripts/` (a 4/-side gate, 4/-only by construction), OR
+//   - the script it runs lives under `scripts/` (a 4/-side gate, 4/-only by construction), OR
 //   - the invocation carries the tree flag `--tree=4` (a root-side gate re-aimed by the shared
 //     selector, scripts/lib/pick_tree.js).
 // `--tree=root` explicitly does NOT count, and neither does a bare run. That is the point: the
@@ -80,38 +80,41 @@ for (const entry of entries) {
   const m = entry.match(NODE_INVOCATION);
   if (!m) { nonNode.push(entry); continue; }
   const script = m[1];
-  const readsFour = script.startsWith("4/scripts/") || /--tree=4(\s|$)/.test(entry);
-  gates.push({ entry, script, readsFour });
+  /* THE "DOES IT READ 4/" HALF IS RETIRED (2026-08-27), and it is retired rather than repaired.
+     It existed to answer a real question while the repo held TWO games: "how many of these gates
+     actually read the tree we are developing?" The v2.0 cutover promoted 4/ to the root, and today
+     the script tree moved out of 4/ as well — so there is one game and one script tree, and every
+     gate reads the game by construction. The question has no answer to give.
+     It also could not survive the move: the test was `script.startsWith("4/scripts/")`, and a
+     path-rewrite turned it into `startsWith("scripts/")`, which matches EVERY gate. It then
+     reported "18 of 18 read 4/", which is not a fact about anything.
+     The TOTAL count stays — that one still catches a gate added without declaring it. */
+  gates.push({ entry, script });
 }
 
 const countedTotal = gates.length;
-const countedFour = gates.filter((g) => g.readsFour).length;
 
 /* ================= The declared numbers ================= */
 const declared = pkg.gates;
 if (!declared || typeof declared !== "object") {
-  failures.push(`GATE-COUNT: package.json has no top-level "gates" object. Counted ${countedTotal} gate(s) in the test chain, ${countedFour} of which read 4/. Declare them: "gates": { "total": ${countedTotal}, "readingFour": ${countedFour} }`);
+  failures.push(`GATE-COUNT: package.json has no top-level "gates" object. Counted ${countedTotal} gate(s) in the test chain. Declare it: "gates": { "total": ${countedTotal} }`);
 } else {
   if (declared.total !== countedTotal) {
     failures.push(`GATE-COUNT-TOTAL: package.json declares "gates.total": ${JSON.stringify(declared.total)}, but the scripts.test chain actually contains ${countedTotal} node invocation(s). Declared ${JSON.stringify(declared.total)}, counted ${countedTotal}. Fix whichever is wrong — if you just added or removed a gate, update the declaration in the SAME edit.`);
   }
-  if (declared.readingFour !== countedFour) {
-    failures.push(`GATE-COUNT-4: package.json declares "gates.readingFour": ${JSON.stringify(declared.readingFour)}, but ${countedFour} chain entr(y/ies) actually read 4/ (either under 4/scripts/ or carrying --tree=4). Declared ${JSON.stringify(declared.readingFour)}, counted ${countedFour}.`);
-  }
 }
 
 /* ================= THE ANTI-VACUITY FLOOR ================= */
-// The whole point of Phase 3. If the chain ever goes back to reading only the old game, this gate
-// says so out loud instead of counting zero and agreeing with a declaration of zero.
-if (countedFour === 0) {
-  failures.push(`GATE-COUNT-4-ZERO: NOT ONE gate in the test chain reads 4/. That is the state this gate was written to make impossible to ship quietly (docs/HARD-WON-LESSONS.md §3) — a fully green suite about a game nobody is developing.`);
+/* Its ORIGINAL form asked "does even one gate read 4/?", to make it impossible to ship a fully
+   green suite about a game nobody was developing (HARD-WON-LESSONS §3). With one game and one
+   script tree that question cannot be asked any more — but the FEAR behind it is permanent, so the
+   floor survives in the only form still meaningful: a chain with no gates in it is not a pass. */
+if (countedTotal === 0) {
+  failures.push(`GATE-COUNT-ZERO: the test chain contains NO gates at all. A suite that checks nothing is not a green suite (docs/HARD-WON-LESSONS.md §3).`);
 }
 
 /* ================= Output ================= */
-console.log(`gates in \`npm test\`: ${countedTotal} — ${countedFour} of them read 4/ (the game under development), ${countedTotal - countedFour} read the root tree.`);
-for (const g of gates.filter((x) => x.readsFour)) {
-  console.log(`  reads 4/: ${g.entry}`);
-}
+console.log(`gates in \`npm test\`: ${countedTotal} — one game, one script tree, every gate reads it.`);
 if (nonNode.length) {
   console.log(`  (${nonNode.length} non-node chain entr(y/ies) not counted as gates: ${nonNode.join(" | ")})`);
 }
@@ -122,5 +125,5 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`PASS gate count matches the chain (declared total ${countedTotal}, reading 4/ ${countedFour})`);
+console.log(`PASS gate count matches the chain (declared total ${countedTotal})`);
 process.exit(0);

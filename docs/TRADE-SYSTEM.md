@@ -266,7 +266,7 @@ along invisibly from an offer that was just rejected.
   Measured before the fix: a captain dragged the slider to 6 and the log gained exactly `[0]`, so a
   refresh replayed the trade at 1 coin and every decision after it landed on the wrong prompt. Wyatt
   saw *"the game was simply reset and stalled and the captains log was empty."* Gated by
-  `4/scripts/dlog_quantity_check.js`; the failure and its lessons are in `HARD-WON-LESSONS.md` §5.
+  `scripts/dlog_quantity_check.js`; the failure and its lessons are in `HARD-WON-LESSONS.md` §5.
 
 **That exception is CLOSED (05-01 Task 3, MP-08, D-55).** This paragraph used to record a named
 hole: the slider reached the local prompt path only, a genuinely remote seat fell back to a ± coin
@@ -323,7 +323,7 @@ because the deal stopped being worth it — not because a counter told it to shu
 
 ## 6. MEASURED BEHAVIOUR
 
-**Recompute rather than trust these** — `node 4/scripts/trade_offer_measure.js 150`. Figures below
+**Recompute rather than trust these** — `node scripts/trade_offer_measure.js 150`. Figures below
 are 2026-08-14, 150 seeded voyages, seats `pirate/trader/balanced/rusher` (the archetypes are *not*
 equally strong, so two runs are only comparable at identical seating).
 
@@ -407,11 +407,11 @@ Units: `coinTurns` · `acquireTurns` · `PLAN.coinsPerDockTurn` · `PLAN.leverag
 UI — `src/ui/flow.js`: `humanTrade` · `counterOffer` · `coinSlider` · `crateOpt` · `logQuantity`
 UI, shared by both tiers — `src/ui/util.js`: `ask` · `optionButtonsHTML` · `sliderWrapHTML` ·
 `sliderText` · `wireSlider` · `sliderWirePayload`
-Harnesses — `4/scripts/trade_offer_measure.js` (the guarded number) ·
-`4/scripts/dlog_quantity_check.js` (reads flow.js **and** util.js since 05-01) ·
-`4/scripts/crew_trade_probe.mjs` (a real crew trade: pacing, prompt round trips, the longest
+Harnesses — `scripts/trade_offer_measure.js` (the guarded number) ·
+`scripts/dlog_quantity_check.js` (reads flow.js **and** util.js since 05-01) ·
+`scripts/crew_trade_probe.mjs` (a real crew trade: pacing, prompt round trips, the longest
 unbroken *"is deciding"* span, the settlement ledger) ·
-`4/scripts/local_trade_probe.mjs` (the same trade in solo and pass-and-play, the two modes a
+`scripts/local_trade_probe.mjs` (the same trade in solo and pass-and-play, the two modes a
 two-tab test cannot see)
 
 ### A deal is settled in THREE places, and they must agree
@@ -442,7 +442,7 @@ defect; until they are one, change all three or none.**
 
 1. **Read this file and `git log --grep=trade -i`.** The design lives here; the graveyard and the
    guarded numbers live in commit messages.
-2. **Baseline first.** `node 4/scripts/trade_offer_measure.js 150`, saved, before a line changes.
+2. **Baseline first.** `node scripts/trade_offer_measure.js 150`, saved, before a line changes.
 3. **Ask which invariant your change touches.** Most trade changes touch at least one.
 4. **List what reads any quantity you are about to change — gates and tests included.**
 5. **Re-measure, and put hails per game in the summary, first, in its own row.** A number nobody is

@@ -63,7 +63,7 @@ function escapeRegExp(s) {
 //
 // CONVERGED 03-01 Task 2. This was a private trailing-`//`-to-end-of-line strip, whose header
 // carried two caveats that are both now retired rather than re-checked: it assumed no multi-line
-// `/* ... */` blocks in the moved region (4/src/engine/index.js has several), and it asked that
+// `/* ... */` blocks in the moved region (src/engine/index.js has several), and it asked that
 // the "no `://` inside a string literal here" assumption be reconfirmed whenever a URL-bearing
 // string appeared. Reconfirmed 2026-08-23 — still zero `://` in either tree's shared/engine — and
 // then made moot: the shared stripCommentSegments() is classify()-backed, so a `//` inside a
@@ -74,7 +74,7 @@ function escapeRegExp(s) {
 // was worth doing rather than cosmetic. A per-line strip cannot know a line is the CONTINUATION of
 // a `/* ... */` block: such a line begins with ordinary prose and matches no comment pattern at
 // all. That is exactly the miss that left two false NO-APP-STATE findings standing against
-// 4/src/net/writers.js. Whole-file, offsets preserved, so line numbers below stay exact.
+// src/net/writers.js. Whole-file, offsets preserved, so line numbers below stay exact.
 
 /* ============================= Assertion 1: purity (ENGINE-01, D-08) ============================= */
 const PURITY_PATTERNS = [
@@ -199,7 +199,7 @@ function checkAnnotations() {
      2026-08-23 (03-01 Task 2). If that had been applied GLOBALLY here, this count would read ZERO,
      compare zero against a pinned zero once somebody "fixed" the pin, and pass forever — a check
      that cannot fail while still reading as protection (docs/HARD-WON-LESSONS.md §2 and §3, and
-     the same disease as 4/scripts/seat_arg_check.js's comment stripper blanking what it inspects).
+     the same disease as scripts/seat_arg_check.js's comment stripper blanking what it inspects).
      STRIP PER-ASSERTION, NEVER GLOBALLY. If you are adding stripping to this file, this function
      is the one that must not get it.
      ========================================================================================== */

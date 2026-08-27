@@ -30,7 +30,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 // Bumped on every /4 deploy. Shown in the ☰ menu so a playtest screenshot proves which build it
 // came from — two stall reports have now turned out to be photos of code that was already fixed,
 // and Safari's module cache makes "refresh" an unreliable way to get the new build.
-const PP4_STAMP = "2026-08-26k-CUTOVER-STAGING/aug26-night-fixes";
+const PP4_STAMP = "2026-08-26k-CUTOVER-STAGING/aug26-night-fixes@abcce16d";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -953,6 +953,16 @@ function eovParkGeometry(wrap){
   return { dY, T0, VB };
 }
 let eovDrag = null;
+/* WHERE THE SCROLL LIVES — ONE ANSWER, READ IN BOTH PLACES THAT NEED IT.
+   Until 2026-08-27 #statsWrap was itself the scroller, and this gesture read `wrap.scrollTop`
+   directly in two spots: the pointerdown arm and the wheel handler. Moving the scroll into
+   #statsScroll (so Play again could be a footer instead of a sticky button riding over the award
+   cards) would have left both reads looking at an element whose scrollTop is now ALWAYS 0 —
+   arming the park drag on every touch and killing ordinary scrolling outright. That is the cost
+   BACKLOG.md predicted when it said "the gesture needs hand-verification".
+   Two reads kept in step by hand is the rule-23 fault; there is one of them, and it falls back to
+   the wrap so nothing breaks if the inner element is ever absent. */
+const eovScroller = wrap => wrap.querySelector("#statsScroll") || wrap;
 function wireEovDrag(){
   const wrap = $("statsWrap"); if (!wrap || wrap._pp4DragWired) return;
   wrap._pp4DragWired = true;
@@ -966,7 +976,7 @@ function wireEovDrag(){
     // only capture the pull when there is nowhere further to scroll — the top of the content (a
     // normal scroll down to see below the fold stays a normal scroll) — or the card is already
     // parked, so pulling up from the strip can restore it from anywhere on the strip
-    if (!wrap.classList.contains("pp4EovParked") && wrap.scrollTop > 0) return;
+    if (!wrap.classList.contains("pp4EovParked") && eovScroller(wrap).scrollTop > 0) return;
     eovDrag = { id: e.pointerId, startY: e.clientY, base: eovTranslateY(wrap), moved: 0 };
     wrap.setPointerCapture(e.pointerId);
   });
@@ -1004,7 +1014,7 @@ function wireEovDrag(){
   // pointer position, because a trackpad/mouse wheel never fires a pointer drag at all
   wrap.addEventListener("wheel", e => {
     const parked = wrap.classList.contains("pp4EovParked");
-    if (!parked && wrap.scrollTop <= 0 && e.deltaY > 0){
+    if (!parked && eovScroller(wrap).scrollTop <= 0 && e.deltaY > 0){
       const g = eovParkGeometry(wrap);
       if (g.dY > 0){ settle(g.dY, true); e.preventDefault(); }
     } else if (parked && e.deltaY < 0){
@@ -1136,21 +1146,17 @@ function ribbonTick(){
     const again = document.createElement("button");
     again.className = "pp4Again"; again.type = "button"; again.textContent = "🔁 Play again!";
     again.onclick = () => { const orig = $("btnPlayAgain"); if (orig && orig.onclick) orig.onclick(); };
-    ($("statsPanel") || sw).appendChild(again);
-    /* THE AIR UNDER THE STICKY BUTTON MUST BELONG TO THE ELEMENT THAT ACTUALLY SCROLLS — and until
-       2026-08-26 it was reserved on one that does not. index.html carried
-       `body.pp4Stage #statsPanel { padding-bottom:10px }` with a comment stating the rule correctly;
-       #statsPanel does not scroll. #statsWrap is the scroller (overflow-y:auto), and it reserved its
-       own unrelated 14px against a 66px button.
-       MEASURED at 390x844: content 855 in a 786 box, button 66 tall, 14 reserved — so ~52px of the
-       stats list sat permanently behind the button and could not be scrolled clear. The sea trial's
-       vision judge caught it twice on the END OF VOYAGE screen, which is the last thing a player
-       sees in every game.
-       DERIVED, NOT TYPED (rule 9): the button's height is its font size plus its padding plus its
-       border, and all three move — 66 would be wrong the first time any of them changed. Read the
-       rendered box and reserve exactly that. */
-    const reserve = again.offsetHeight;
-    if (reserve > 0) sw.style.paddingBottom = reserve + "px";
+    /* APPENDED TO THE WRAP, NOT THE PANEL — it is a FOOTER now, a flex sibling of #statsScroll
+       rather than the last child of the scrolling content. That is the whole fix for the button
+       riding over the award cards. */
+    sw.appendChild(again);
+    /* NO PADDING RESERVATION ANY MORE, and deleting it is part of the fix rather than tidy-up.
+       It existed solely because a STICKY button floated over the scrolling content: the reserve
+       bought back the last rows that would otherwise sit permanently underneath it. The button is
+       a footer outside the scroller now, so nothing is ever behind it and there is nothing to
+       reserve. Leaving the padding would open a dead strip at the foot of the list.
+       (The bug it fixed is still worth knowing: ~52px of the stats list was unreachable at
+       390x844 because the reserve was made on #statsPanel, which does not scroll.) */
   }
 }
 

@@ -38,7 +38,7 @@ export const INDEX_HTML = path.join(ROOT, "index.html");
  *
  * WHY IT IS NOT A "DROP WHOLE-LINE COMMENTS" FILTER EITHER, which was this function's first
  * implementation and was replaced the same night. Against 4/ the two NO-APP-STATE hits were
- * 4/src/net/writers.js:174 and :193 — CONTINUATION lines inside a long `/* ... *\/` block, which
+ * src/net/writers.js:174 and :193 — CONTINUATION lines inside a long `/* ... *\/` block, which
  * begin with ordinary prose and match no comment-opening pattern at all. A regex that cannot
  * track block-comment state cannot see them, and a gate that only half-strips is worse than one
  * that does not strip, because its remaining false positives look like real findings.

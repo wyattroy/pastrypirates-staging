@@ -2298,8 +2298,11 @@
   /* playtest 11/13: End of Voyage sits ABOVE the captains box and the prompts (it was z19,
      under pp4Cap's 22 — the captains box ate its bottom half and the scroll never reached the
      end). The ribbon rides above it so the ☰ stays reachable. */
+  /* NOT THE SCROLLER ANY MORE (2026-08-27). It is a flex column: heading, the scrolling region,
+     then the Play again footer. #statsScroll below is what actually scrolls. */
   body.pp4Stage #statsWrap { position:fixed; left:0; right:0; bottom:0;
-    top:calc(44px + env(safe-area-inset-top)); z-index:32; overflow:auto;
+    top:calc(44px + env(safe-area-inset-top)); z-index:32;
+    display:flex; flex-direction:column; overflow:hidden;
     background:rgba(232,244,238,.98); padding:14px;
     /* item 8 (D-14): the A+C park gesture, wired in stage.js's wireEovDrag(). touch-action:pan-y
        keeps the browser's own vertical-scroll recognition (so scrolling down to the below-the-fold
@@ -2311,7 +2314,12 @@
   body.pp4Stage #statsWrap.pp4EovDrag { transition:none; }
   /* parked: freeze the internal scroll so the strip's own content can't drift under it while it
      sits over #pp4Cap's old spot — only the translateY set by wireEovDrag ever moves it now */
+  /* min-height:0 is load-bearing: without it a flex child refuses to shrink below its content and
+     the footer gets pushed off the bottom of the screen — the exact fault this change exists to end. */
+  body.pp4Stage #statsScroll { flex:1 1 auto; overflow-y:auto; min-height:0; }
   body.pp4Stage #statsWrap.pp4EovParked { overflow:hidden; cursor:pointer; }
+  /* parked freezes the INNER scroll now, since that is the thing that scrolls */
+  body.pp4Stage #statsWrap.pp4EovParked #statsScroll { overflow:hidden; }
   body.pp4Stage #pp4Ribbon { z-index:40; }
   /* playtest 13: the big way out at the bottom of End of Voyage.
      D-46 fault 2 — AND IT MUST NEVER BE THE THING THE SCREEN EDGE CUTS IN HALF. On the honest
@@ -2323,10 +2331,19 @@
      Sticky inside #statsWrap, which is already the scroll container, so the way out is on screen
      from the first frame at any window height and the awards still scroll freely behind it. The
      backdrop is the card's own background colour, so nothing reads through it as it passes under. */
-  #statsPanel .pp4Again { display:block; width:100%; margin:18px 0 0; padding:16px;
+  /* A FOOTER OUTSIDE THE SCROLLER, NOT A STICKY BUTTON INSIDE IT (Wyatt, 2026-08-27).
+     Sticky kept it on screen but it necessarily rode OVER the award cards as they scrolled past —
+     the vision judge caught it cutting off "Struck more deals than a..." and "For the sal..." on
+     solo-phone-022 and solo-phone-eov, and across three trials that was its EIGHTH flag.
+     Reserving padding underneath (the previous fix) only guarantees the LAST row can be scrolled
+     clear; mid-scroll it still covers whatever is behind it. Overlap is inherent to the button
+     living inside the scrolling box, so it does not any more: #statsScroll takes the space that is
+     left, and this takes its own. Always visible AND never covering, which is what D-38 (a control
+     you cannot hit) and D-43 (a card may be cut) were pulling against. */
+  #statsWrap .pp4Again { display:block; width:100%; margin:12px 0 0; padding:16px;
     font-size:18px; font-weight:800; border-radius:14px; border:3px solid #0e5c5c;
     background:#177; color:#fffdf2; box-shadow:0 8px 24px rgba(0,0,0,.25);
-    position:sticky; bottom:0; z-index:1; }
+    flex:0 0 auto; }
   /* the air under a sticky button has to belong to the SCROLLER, not to the button, or the button
      lifts off the card's bottom edge by its own margin and floats.
      THE RULE ABOVE IS RIGHT AND THIS SELECTOR WAS WRONG: #statsPanel does not scroll. #statsWrap
@@ -2895,7 +2912,10 @@
     <div id="muteSlot"><button id="btnMute" type="button" style="display:none">🔊</button></div>
     <div class="panel" id="statsWrap" style="display:none">
       <h3>End of voyage</h3>
-      <div id="statsPanel"></div>
+      <!-- #statsScroll is the SCROLLER; #statsWrap is not. That split is what lets "Play again!"
+           be a footer OUTSIDE the scrolling region instead of a sticky button riding over the
+           award cards. See the .pp4Again rule and wireEovDrag()'s eovScroller(). -->
+      <div id="statsScroll"><div id="statsPanel"></div></div>
     </div>
     <div class="panel" id="chatPanel" style="display:none">
       <h3>Scuttlebutt</h3>

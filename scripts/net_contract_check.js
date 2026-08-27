@@ -57,7 +57,7 @@
 // comment" — but that cost is now "rewrite the paragraph explaining WHY the
 // host-gone path works", i.e. the gate makes writing the explanation an
 // offence. HARD-WON-LESSONS §1b records the same thing happening to
-// 4/scripts/seat_arg_check.js, whose first run failed on the comment
+// scripts/seat_arg_check.js, whose first run failed on the comment
 // documenting the bug it exists to catch.
 //
 // So assertions 2 and 3 now match against source with COMMENT CHARACTERS
@@ -248,7 +248,7 @@ function checkNoAppStateDependency() {
   for (const file of netJsFiles) {
     const rel = path.relative(REPO_ROOT, file);
     // STRIPS COMMENTS (03-01 Task 2). This is the assertion that reported
-    // 4/src/net/writers.js:174 and :193 — both prose inside the host-gone comment block.
+    // src/net/writers.js:174 and :193 — both prose inside the host-gone comment block.
     const lines = stripCommentSegments(fs.readFileSync(file, "utf8")).split("\n");
     lines.forEach((line, i) => {
       for (const { name, re } of APP_STATE_PATTERNS) {

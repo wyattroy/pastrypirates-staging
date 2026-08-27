@@ -34,13 +34,13 @@
 // close, and the cheapest possible protection against it is one line of output. `treeLine()`
 // below is that line; do not hand-format it at each call site.
 //
-// ROOT-ONLY BY DESIGN — no `4/scripts/lib/` twin, and there must never be one.
+// ROOT-ONLY BY DESIGN — no `scripts/lib/` twin, and there must never be one.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// Marker token above is read by 4/scripts/lib_twin_check.js. Its sibling tools in this directory
+// Marker token above is read by scripts/lib_twin_check.js. Its sibling tools in this directory
 // (load_engine.js, tiny_dom.mjs, js_region_tokenizer.js, audit_page_headless.mjs) are byte-
-// identical to their 4/scripts/lib/ copies BECAUSE they resolve everything tree-relatively — the
+// identical to their scripts/lib/ copies BECAUSE they resolve everything tree-relatively — the
 // 4/ copy of load_engine.js loads the 4/ engine for exactly that reason. This file is the
-// opposite: it computes the repo root from its OWN location, so a copy sitting in 4/scripts/lib/
+// opposite: it computes the repo root from its OWN location, so a copy sitting in scripts/lib/
 // would resolve `--tree=4` to `4/4/` and scan nothing at all — silently, and green.
 
 import path from "node:path";

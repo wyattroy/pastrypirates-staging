@@ -678,6 +678,34 @@ returns success but does not move `window.innerWidth` when `outerWidth` is 0, so
 tab. That work needs a real visible window — or Wyatt's own browser. Say so rather than reporting a
 width-dependent check as passed.
 
+## 8c. SAFARI/WEBKIT — it finds Playwright on its own now
+
+**Do not put it in `/tmp`.** `/tmp` is cleared on reboot, and that is exactly what silently
+disabled every Safari leg: on 2026-08-27 a full sea trial reported **2 legs NOT RUN** with
+*"playwright not found"*, while the WebKit **browsers** sat perfectly intact in
+`~/Library/Caches/ms-playwright/`. Only the little npm package directory had evaporated, and
+nothing said so until a trial refused to sail.
+
+`scripts/lib/wk.mjs` now searches, in order:
+
+1. **`$PW_DIR`** — an explicit override still wins, for a one-off or a CI image
+2. **`~/.pw`** — the durable home. 18 MB, survives reboots, created 2026-08-27
+3. **bare `playwright`** — a global or workspace install, if one exists
+
+So the normal case needs no environment variable at all. If it is ever missing again:
+
+```bash
+mkdir -p ~/.pw && cd ~/.pw && npm i playwright && npx playwright install webkit
+```
+
+*(`npm init -y` fails in `~/.pw` — npm rejects a package name beginning with a dot. It is not
+needed; `npm i` works regardless, and a hand-written `package.json` is already there.)*
+
+**Verified 2026-08-27 with `PW_DIR` explicitly unset:** `solo-phone-wk` launched and played to
+DAY 2 with no environment variable in sight.
+
+---
+
 ## 9. Never verify against production
 
 `playpastrypirates.com` serves whatever last merged to `main`. It can never prove anything about

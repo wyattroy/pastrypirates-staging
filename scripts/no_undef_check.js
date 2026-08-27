@@ -397,7 +397,7 @@ function findLine(text, offset) {
 
 /* Accessor exclusion. An object-literal accessor pair — `get subject(){…}`, `set subject(v){…}` —
    puts its property name in call position as far as CALL_RE is concerned, because the regex has no
-   concept of accessor syntax. `4/src/ui/stage.js:1483` carries both on one line and was therefore
+   concept of accessor syntax. `src/ui/stage.js:1483` carries both on one line and was therefore
    reported TWICE, as an undeclared call to a name that is not a call at all.
    Built from the same backward-walk technique the property-call exclusion above already uses: skip
    whitespace, then take the maximal run of identifier characters, and skip the match only when that
