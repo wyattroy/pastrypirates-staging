@@ -3066,8 +3066,22 @@ function roundCfg(strategies){
     // rule 9c: powder still 2 up front. rule 9b: another 2 buys a fresh broadside, repeatable.
     powder:2,refire:2,callBounty:2,
     // rule 10: heads finds treasure, tails is a turn of dock work. rule 11: price = 6 − crates left.
-    // TREASURE PAYS 5, NOT 6 (Wyatt, 2026-08-08: "Can we lower treasure to 5?"). Measured over 600
-    // normal-length voyages, this is what the number moves:
+    // WHAT THE DOCK PAYS IS THE `dockHeads`/`dockTails` FIELDS BELOW, NOT THIS PROSE. Derive every
+    // displayed amount from cfg (checked 2026-08-27: `ui/flow.js` and `ui/util.js` both do; the
+    // how-to-play modal still hardcodes its numbers — that is a filed todo, not this line's job).
+    // This block is the GRAVEYARD for that pair: it has moved twice, each time on Wyatt's ask and
+    // each time against a measured table, so any amount spelled out in a sentence here is dated
+    // evidence and not a standing fact.
+    //
+    // CORRECTED 2026-08-27 (W2-10). This comment opened "TREASURE PAYS 5, NOT 6" from 2026-08-08
+    // until today. It was TRUE when written — 49443202 introduced the sentence and `dockHeads:5`
+    // in the same commit — and it rotted thirteen days later when D-30 moved the number and left
+    // the prose alone. Wyatt saw 3 at a dock and was right; a session read this line and nearly
+    // told him he was wrong. That is why the reasons below are dated, and why the amount itself
+    // is not restated in prose anywhere in this block.
+    //
+    // ── 2026-08-08 · 6 → 5 (Wyatt: "Can we lower treasure to 5?"; commit 49443202) ──
+    // Measured over 600 normal-length voyages, this is what the number moved:
     //   pays  ends with (median)  mean  ends broke  HOLDS AT THE OVENS
     //     6           4            5.2      21%            6
     //     5           3            3.5      29%            3
@@ -3076,6 +3090,20 @@ function roundCfg(strategies){
     // income. What mattered is the last column: a captain reaching the ovens with 6 coins can buy
     // six looks at the same three swaps, which stops being a memory test. 5 halves that to three
     // looks while leaving the midgame able to fund itself. The peek price is deliberately untouched.
+    //
+    // ── 2026-08-21 · 5/2 → 3/1, the values shipping below (D-30, stamp 2026-08-20t; commit 059bbe5,
+    // which lives in the pre-cutover history and does not resolve in this repo) ──
+    // A different question from the one above — not how fat the purse is at the end, but how often
+    // a captain is priced out of a crate they are standing next to. 300 games, seed x7919
+    // (`node scripts/economy_table.js 300 7919 --json`; full write-up in
+    // `.planning/phases/02.2-a-captain-who-cannot-take-their-turn/02.2-ECONOMY-TABLE.md`):
+    //   tails/heads   in the healthy 1–3-miss band   priced out 4+ times in a voyage
+    //     2 / 5 (was)            24.6%                          0.2%
+    //     1 / 4                  31.4%                          4.4%
+    //     1 / 3 (his pick)       41.1%                          7.2%
+    // A leaner dock is what makes money bite at all: it nearly halves the captains money never
+    // troubles, and buys that with a small tail it now stifles. He was shown that trade and took
+    // it. 1/4 remains the measured half-step if the stifled tail ever proves too much.
     dockHeads:3,dockTails:1,crateBase:6,
     // RULE-01: what a pass pays. A FIELD rather than a number written into the method, for the
     // reason every other amount on this object is one — nothing here is a constant, the game shifts
@@ -3086,9 +3114,13 @@ function roundCfg(strategies){
     // derives from here.
     passCoin:1,
     // THE BLACK MARKET (Wyatt, 2026-08-12): a sold-out island always has ONE more crate — for a
-    // flat 10🌕, forever. Two treasure finds' worth (treasure pays 5), double the worst shelf
-    // price, so it is a last resort and not a shop — but it means no recipe is ever mathematically
-    // dead, and the map stays honest: the crate is still AT its island, ye still sail there.
+    // flat 10🌕, forever — twice the dearest a shelf crate can ever get (rule 11 prices a crate at
+    // `crateBase` − crates left, so the last one on an island is 5), which is what makes it a last
+    // resort and not a shop. (It read "two treasure finds' worth (treasure pays 5)" until
+    // 2026-08-27; that was the same rotted number as the block above — the black market is priced
+    // off the SHELF, not off the dock, and pinning it to the dock payout was never the argument.)
+    // But it means no recipe is ever mathematically dead, and the map stays honest: the crate is
+    // still AT its island, ye still sail there.
     // He killed the harbormaster 2-for-1 for this exact reason — it deleted geography; this keeps it.
     blackMarket:10,
     dockBuy:true,merchant:true,parley:true,

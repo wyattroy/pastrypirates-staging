@@ -369,16 +369,34 @@ PATH (`google-chrome`, `chromium`, `chromium-browser`), then the Mac bundle; on 
 sandbox, and `/dev/shm` is tiny). The repo root is derived from the script's own location. Usage
 is unchanged: `node scripts/mouse_qa.mjs <outdir> <W> <H> <port> <dbgport>`.
 
-### WHAT A CLOUD CTO RUN FOUND, 2026-08-27 — five things that only fail in a container
+### WHAT A CLOUD CTO RUN FOUND, 2026-08-27 — seven things that only fail in a container
+
+> **THE THREE HOSTS TO ADD TO THE ENVIRONMENT'S ALLOWLIST**, if cloud QA is ever to be complete:
+>
+> ```
+> cdn.playwright.dev
+> playwright.download.prss.microsoft.com
+> staging.playpastrypirates.com
+> ```
+>
+> The first two make the Safari-family sea-trial legs installable; the third lets a cloud session
+> verify its own staging publish instead of taking it on trust. Set at
+> **claude.ai/code → environment selector → settings icon → Network access → Custom → Allowed
+> domains**, and **tick "Also include default list of common package managers"** — Custom REPLACES
+> the Trusted list otherwise, which would cut off npm and the package registries.
 
 Run from `claude/cloud-handoff-planning-a9ay1u` while Wyatt was away. Every one of these was
-MEASURED here, and every one is invisible from a Mac. Two were blocking.
+MEASURED here, and every one is invisible from a Mac. **THREE of them were in the same command** —
+`deploy-staging.sh`, the CTO's only way to hand him anything — and it published successfully only
+after all three were fixed.
 
 | | what happens | status |
 |---|---|---|
-| **WebKit cannot be installed** | `npm i playwright` in `~/.pw` works (19 MB). `npx playwright install webkit` is refused by the egress proxy: **403, `no rule or allowlist entry allows host "cdn.playwright.dev"`**, and the same for `playwright.download.prss.microsoft.com`. No WebKit exists anywhere on the image. | **OPEN — needs those two hosts allowlisted.** Until then `solo-desktop-wk` and `solo-phone-wk` are permanently NOT RUN in the cloud, and no cloud report may ever imply Safari was covered. |
-| **`gh` is not installed** | `deploy-staging.sh` cloned the staging repo with `gh repo clone`, so the CTO's only publishing route died on its first command. Plain HTTPS `git` *does* reach `wyattroy/pastrypirates-staging` through the session proxy. | **FIXED** — the script feature-detects `gh` and falls back to `git clone`. Only the checkout changes; the rsync, the EXCLUDES and every CNAME guard are untouched. |
+| ~~**WebKit cannot be installed**~~ **RESOLVED 2026-08-27 by Wyatt allowlisting the two hosts.** WebKit 26.5 downloads (102 MB), `npx playwright install-deps webkit` pulls the Linux libraries, and it **LAUNCHES — verified, not assumed**. Both `-wk` legs are runnable in a container for the first time. | Two gotchas for the next session: the browser lands in **`$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`)**, set by this repo's own session hook — NOT in `~/.cache/ms-playwright`, so "it isn't there" is usually a wrong place to look. And the install fails at `validateDependenciesLinux` until `install-deps` has run; that failure comes AFTER a successful 102 MB download, so read past the stack trace before concluding the download was blocked. | **STILL NOT SAFARI.** Playwright WebKit is the same engine family, a different build. Wyatt's own phone remains the only real Safari this project has, and no report may say "Safari passed". |
+| **`gh` is not installed IN THE CONTAINER** — it IS on Wyatt's Mac, which is why this never showed up before | `deploy-staging.sh` cloned the staging repo with `gh repo clone`, so the CTO's only publishing route died on its first command. Measured in the container: `command -v gh` is empty and `/usr/bin/gh`, `/usr/local/bin/gh` and `/opt/gh` do not exist. Plain HTTPS `git` *does* reach `wyattroy/pastrypirates-staging` through the session proxy. | **FIXED** — the script feature-detects `gh` and falls back to `git clone`. Only the checkout changes; the rsync, the EXCLUDES and every CNAME guard are untouched. |
+| **`rsync` is not installed** | `deploy-staging.sh` syncs the tree with rsync. Third blocker in the same command, after `gh` and `sed`. | **FIXED by installing the real tool** — `apt-get install -y rsync` works in the container. **DO NOT substitute `cp -r` or a hand-rolled copy.** rsync's `--exclude` list is what keeps `CNAME`, `robots.txt` and `sitemap.xml` out of the staging repo, and hand-rolling that sync is the exact move that twice came within one command of taking the live game down. |
 | **`sed -i ''` is BSD-only** | Two sites in `deploy-staging.sh`. GNU sed reads the empty string as the SCRIPT and the real script as a FILENAME: `sed: can't read s\|hello\|bye\|`. It could not stamp a build. | **FIXED** — feature-detected (`sed --version` answers on GNU, not BSD). |
+| ~~**A cloud CTO can publish but cannot check its own publish**~~ **RESOLVED 2026-08-27.** GitHub had never issued the certificate for the subdomain — the repo was built the night before in a commit whose own title says *"subdomain built and blocked on DNS"*, and it stayed blocked. Wyatt cleared the Custom domain in **`wyattroy/pastrypirates-staging`** → Settings → Pages, re-entered it, and the certificate issued; **Enforce HTTPS** is now on. VERIFIED from a container: `https://staging.playpastrypirates.com/` → **200**, serving `2026.08.27.3-staging@c9ce605e` under the `[STAGING]` title, with production still on `2026-08-26k-CUTOVER`. | **THE DIAGNOSIS IS THE REUSABLE PART, because it looked like a network fault for two days.** `http://` is refused by the egress proxy no matter what is allowlisted; `https://` was ALLOWED all along (`200 Connection Established`) and then died after the tunnel with no HTTP status. **The proxy re-terminates TLS, so the certificate `curl` validates is the PROXY's** — a clean handshake says nothing about the origin, and "tunnel opens, then silence" is what a certificate-less origin looks like from behind one. DNS was never at fault. **⚠️ AND THE NEAR-MISS WORTH MORE THAN THE FIX:** the instruction "go to the staging repo's Settings → Pages" was followed on **`wyattroy/pastrypirates`** — production — where the same **Remove** button would have unset the live domain and **taken the game down for real players**. He asked before clicking. **Name the full URL, never "the staging repo".** |
 | **The container's local `main` is stale** | A fresh container clone left local `main` 50 commits ahead / 70 behind `origin/main` on an old lineage. `cto_supervise.mjs` correctly reports **NEEDS ATTENTION — something committed to main locally**, which in a container is a **false alarm**. | Fix it, do not chase it: confirm the extra commits exist on some remote branch, then `git branch -f main origin/main`. The supervisor goes green. |
 | **`pkill -f chromium` kills your own shell, and the browsers are not called `chromium`** | Every Bash call runs under a wrapper that exports `CHROME_BIN=/usr/local/bin/chromium`, so `-f` matches the killing shell — the symptom is empty output and a strange exit code with the browsers still alive. And `/usr/local/bin/chromium` is a wrapper: the real processes are named **`chrome`**, so `pgrep -x chromium` reported **0 while ten live chrome processes were burning CPU**. | Match the process NAME and cover both: `pkill -9 -x chrome; pkill -9 -x chromium; pkill -9 -x headless_shell`. **A cleanup check that cannot see its subject reads exactly like a clean machine** — rule 17's whole point. |
 

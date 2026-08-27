@@ -185,7 +185,7 @@ ever shows everyone parking against land, the lever is storm distance or frequen
 ## 10. Docking
 
 - Flip: **heads = 3🌕** treasure found; **tails = 1🌕** working as a dockhand. (D-30, 2026-08-21:
-  was 5/2, then 6/2 before that — see `4/src/engine/index.js` `dockHeads`/`dockTails` for the
+  was 5/2, then 6/2 before that — see `src/engine/index.js` `dockHeads`/`dockTails` for the
   shipping numbers; this doc is descriptive, not authoritative — the cfg field is.)
 - **No free crate on heads.** Crates come only from buying, battle, or trade.
 - After **either** outcome you may buy a crate, **on the same turn**, with the coins just earned.

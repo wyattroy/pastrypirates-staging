@@ -1267,7 +1267,9 @@ export async function narrateLastEvent(){
   await flash(L.txt,undefined,undefined,variants);
   // THE BLACK MARKET'S ONE LESSON (Wyatt, 2026-08-12, "ceremony + marker"): the first time any
   // shelf on the board empties, a once-per-voyage centre-stage beat teaches that sold-out islands
-  // now sell at 10🌕 — after this it is only the 🏴 marker and the dock's own whisper. Keyed on
+  // still sell, at cfg.blackMarket's flat price — after this it is only the 🏴 marker and the
+  // dock's own whisper. (The price is NOT repeated here on purpose: it moved once already and a
+  // number typed into a comment cannot move with it.) Keyed on
   // the event's firstDry stamp (engine sets it exactly once), so a replayed voyage re-derives the
   // same single showing. Hand-built stage barrier, same pattern as the bake-off intro card —
   // panel.js may not import flow.js's localAsk (layering), and needs none of it.
@@ -1288,11 +1290,22 @@ export function dryCeremony(){
     const ap=$("actionPanel");
     ap.dataset.pp4Stage="1";
     if(window.__pp4&&window.__pp4.stageCenterNow)window.__pp4.stageCenterNow();
-    // @copy prompt.blackmarket.ceremony — APPROVED as written, Wyatt 2026-08-14
+    // @copy prompt.blackmarket.ceremony — APPROVED as written, Wyatt 2026-08-27. He wrote this
+    // sentence HIMSELF, taking none of the three drafts he was offered, and two of its words are
+    // his deliberate picks rather than slips: "ingredient" (not "crate") and "black market flag"
+    // (not "black flag"). Do not "correct" either. He also cut "after dark" and "the Sugar Seas"
+    // on purpose — the latter agrees with W2-6. The paragraph it replaces was three lines long.
+    //
+    // THE PRICE IS READ, NEVER TYPED (rule 9). cfg.blackMarket is the one place the flat sold-out
+    // price lives; cratePrice() hands it back for an empty shelf, and the board's 🏴 marker reads
+    // the same field the same way (board.js, the flag build). So the card, the flag and the till
+    // cannot quote three different numbers — and when the price moves, this sentence moves with
+    // it instead of quietly lying to a captain about what the crate costs. Reached unguarded for
+    // the same reason board.js reaches it unguarded: no client ever draws without appState.game.
+    const bmPrice=appState.game.cfg.blackMarket;
     panel(`<div class="apMsg">🏴 <b>The shelves be bare…</b><br><br>
-      Word travels the Sugar Seas: when an island sells its last crate, the <b>black market</b>
-      opens after dark. Any sold-out island — marked with the black flag — will find ye one more
-      crate… for <b>10🌕.</b></div>
+      Sold-out islands fly the black market flag. They'll find ye one more
+      ingredient — for <b>${bmPrice}🌕.</b></div>
       <div class="apBtns"><button class="apBtn" id="bmCerGo" type="button">Arrgh!</button></div>
       `,true);   /* the "Steep, aye…" helper line is gone — his call, 2026-08-25 */
     const go=$("bmCerGo");

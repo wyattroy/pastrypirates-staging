@@ -49,7 +49,7 @@ import {
   // F5 (2026-07-29): dockFlavor -> dockFlavorIcon. The tails buy prompt (:below) was this file's
   // only dockFlavor consumer, and it now needs the icon placed by the declared {prefix,name} split
   // rather than interpolated in front of the whole flavour phrase.
-  DIRS, DIRNAME, STORM_PUSH, SAIL_RANGE, SAIL_RANGE_UPWIND, OPPOSITE, man, HEXCOL, iname, ilabelImg, iconImg, NAMES, dockPlace, dockFlavorIcon, ING_IMG,
+  DIRS, DIRNAME, STORM_PUSH, WAVE_IMG, SAIL_RANGE, SAIL_RANGE_UPWIND, OPPOSITE, man, HEXCOL, iname, ilabelImg, iconImg, NAMES, dockPlace, dockFlavorIcon, ING_IMG,
   CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled, BAKE_REWATCH_COST,
   buildRoster, emojify,
 } from "../shared/index.js";
@@ -388,9 +388,44 @@ export function sailSelfCheck(p,cells){
   console.error("[sail self-check]",{wind,dialWind,pos:p.pos,bad,cells});
   return `⚠️ SAIL BUG — screenshot this: wind ${wind} at ${p.pos.join(",")} · ${problems.join(" · ")}`;
 }
-export function sailPickMsg(seat){
+/* W2-8 (Wyatt, 2026-08-27): "'Tap to sail' -> 'Tap square again to sail trade winds'". A blue
+   square is the ONE square in the set that does not commit on the first tap — sweepGuard()
+   (src/ui/stage.js) swallows that tap to draw the ride preview, and only a second tap sails. That
+   is a deliberate exception to the one-tap gesture and his own pick (2026-08-13), but nothing on
+   screen said so, so the confirming tap had to be found by accident.
+
+   WHY THE CLAUSE IS CONDITIONAL rather than replacing the line outright. `cells` is a whole SET and
+   it is usually mixed: an amber square commits at once, a blue one does not. A line that told every
+   prompt to "tap the square again" would be false for every amber square in it — worse than saying
+   nothing. So the clause is added only where a blue square is actually on offer, which is only
+   within reach of the rim rather than every turn.
+
+   THE GRAVEYARD, because this is the SECOND sentence written on this card (rule 10). The first —
+   sailGuideLine()'s "Blue squares are the trade winds — land there and the current carries ye on" —
+   was deleted at playtest 22 item 2: "Remove it entirely — it's too long, it blocks the board, and
+   it appears every time." All three objections are answered on purpose: this clause is short, it
+   rides the existing line instead of adding a second one, and it appears only beside a blue square.
+   It also carries only the fact the BOARD CANNOT TEACH — the channel is tinted and the arrows flow
+   along it, so what blue MEANS is already shown; that it takes two taps is not.
+
+   ONE PREDICATE, NOT TWO. `g.onRim` is the same call sailHighlightRect() makes to decide whether to
+   paint the square blue at all, asked of the same `cells`, so the sentence and the colour cannot
+   disagree — there is nothing left to keep in step. And the line is built ONCE, here, on the
+   deciding device and shipped in spec.msg, so host and guest read the identical words.
+
+   `cells` is optional: renderPickPrompt's version-skew fallback calls this with a seat alone (see
+   its comment below), and that path degrades to the plain line rather than guessing.
+
+   STILL "tap", NOT "click", and that is a KNOWN GAP rather than a choice: D-40's verb helper
+   (holdVerb(), src/ui/stage.js:445) is private to that module, so there is no shared way to say
+   tap-or-click from here. Re-testing `matchMedia("(pointer: coarse)")` in this file would be a
+   second copy of the same rule to keep in step. Export holdVerb() and both lines can read it. */
+export function sailPickMsg(seat,cells){
   // v2 rule 2: sailing is FREE, so the (−1🌕) parenthetical is gone.
-  return `${pn(seat)}: tap to sail`;   // /4 playtest 6: one line — the card must stay small
+  const g=appState.game;
+  const swept=!!(g&&g.onRim&&(cells||[]).some(c=>c&&g.onRim(c)));
+  // /4 playtest 6: one line — the card must stay small
+  return `${pn(seat)}: tap to sail${swept?" — blue squares take two taps":""}`;
 }
 /* THE SAIL CARD, BUILT ONCE. 02.15-01, the narrow half — see renderPickPrompt (02.15-02 Task 3,
    THE TRACER) for the wide one, which converged the ORCHESTRATION around this same builder.
@@ -649,7 +684,9 @@ export function pickCell(p,cells){
   // (orchestrator.js), never added here. `pos` (item 21) is the captain's own square, carried so
   // the renderer can draw the stay square on BOTH tiers from the same authoritative value — a
   // guest's game.players[].pos is a stale render shell and must never be read for this.
-  const spec={kind:"pick",cells,msg:sailPickMsg(p.idx),hint:bug||null,pos:[p.pos[0],p.pos[1]]};
+  // `cells` is handed to sailPickMsg for W2-8: the line says a blue square takes two taps only
+  // when one of THESE squares is a blue one. Same list the renderer is about to colour.
+  const spec={kind:"pick",cells,msg:sailPickMsg(p.idx,cells),hint:bug||null,pos:[p.pos[0],p.pos[1]]};
   const base=decisionIsLocal(p.idx)?localPickCell(p,spec)
     :netHandlers().onRemotePrompt(p.idx,spec);
   const cellP=withShotClock(p.idx,base,null);
@@ -1391,7 +1428,7 @@ export async function humanDock(p,port){
   // already puts explanatory text (and, per the standing top-to-bottom rule, is revealed last).
   // @copy misc.paramprompt.dockflip
   const h=await humanFlip(p,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
-    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn's work on the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy a crate.`);
+    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy a crate.`);
   if(h==="back")return "back";
   p.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
   let got=h?"treasure":"dockhand";
@@ -1455,7 +1492,27 @@ export async function humanDock(p,port){
          a second copy of a sentence the button says while pointing at itself. The price and the
          barter alternative are both on the two buttons' own labels. */
       const sub=null;
-      const v=await ask(`${h?"⚪️ TREASURE!":"⚫️ TAILS — a turn on the docks."} Buy ${dockFlavorIcon(ing)}?`,opts,null,sub);
+      /* W2-4 (Wyatt, 2026-08-27): "Money must be explicit wherever it changes hands."
+         This prompt is the ONE place in the dock flow that had gone quiet about it. The line
+         BEFORE the flip already names both payouts (:1394) and the recap AFTER it already names
+         what landed (util.js:769-773) — so the amount was stated on the way in and on the way out,
+         and vanished at the exact moment the coin landed and the captain was asked to spend.
+
+         DERIVED FROM cfg, NEVER TYPED (rule 9). dockHeads/dockTails are cfg FIELDS precisely so
+         they can move — a "+3" written into this sentence is a price list standing in for a
+         quantity that shifts, and it would go silently wrong the day the payout is retuned. That
+         is not hypothetical here: the comment above those very fields claimed 5 while the code
+         paid 3, and it took a playtest to catch it (W2-10).
+
+         AND THE SAME EDIT SWEEPS TWO CONSISTENCY FAULTS (rule 8), both surfaced by the W2-3 audit:
+         the tails outcome is ONE action and was named three ways — "haulin' crates" (util.js, now
+         "workin' the docks"), "a turn's work on the docks" (:1394) and "a turn on the docks" here.
+         A player read a different name for the thing they had just done every time they did it.
+         And this was the ONLY dock line in the tree spelling the coins with the variation selector
+         (U+FE0F) — every other flip, here and in util.js, uses the bare ⚪/⚫. Same family as the
+         minus sign that must be U+2212: a character nobody can see is still a difference the font
+         renders. */
+      const v=await ask(`${h?`⚪ TREASURE <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span>!`:`⚫ TAILS <span class="nobrk">(+${g.cfg.dockTails}🌕)</span> — a turn workin' the docks.`} Buy ${dockFlavorIcon(ing)}?`,opts,null,sub);
       if(appState.turnExpired)break;
       // D-40 safety net: buyCrate re-reads the purse itself — `canBuy` was computed BEFORE the
       // await, and the shot clock's penalty can take a coin while this prompt sits open. One
@@ -1770,8 +1827,13 @@ export async function humanTrade(p){
          top?'"  His sentence, verbatim. The line now asks the question the control answers; the
          running amount is not lost, because the slider draws its own value beside the handle.
          The deal itself is still on screen — this prompt sits under the offer being built. */
+      /* W2-9 (Wyatt, 2026-08-27): "context-blind. If coin is the ONLY thing being offered it makes
+         no sense — should read 'How many coins?'" Right: "on top" of nothing is not a question.
+         THE SIGNAL ALREADY EXISTED, one line up. `st.baseIng` is null exactly when the captain
+         picked "— coins only —" (:1806), and `minC` at :1812 was already branching on it to raise
+         the floor to 1. The control knew; only the sentence did not. Nothing new is computed here. */
       const n=await coinSlider(p.idx,
-        k=>`Would ye offer any coin on top?`,
+        k=>st.baseIng?`Would ye offer any coin on top?`:`How many coins?`,
         minC,minC,maxC,"Offer it!");
       if(n==null)return false;
       if(n==="__back__"){step=1;continue;}
@@ -2101,7 +2163,30 @@ export async function humanAct(p,sailCtx){
   // the flat label agree with the fan rather than inventing a style.
   // NOT changed: the parentheticals in NARRATION (e.g. the sailing-order line, :2260) — item 1 says
   // action prompt BUTTONS, and narration is prose where a bracket reads normally.
-  if(!canOvens)opts.push({label:`🌊 Pass${appState.game.cfg.passCoin?` <span class="nobrk">+${appState.game.cfg.passCoin}🌕</span>`:""}`,value:"pass"});
+  /* MUSE, not Pass (Wyatt, 2026-08-27). "Pass" named the absence of a move; "Muse" names what the
+     captain is actually doing — watching the water and thinking about a recipe — so the quietest
+     turn in the game stops reading as a forfeit.
+
+     GRAVEYARD, so nobody re-runs this argument by accident (rule 10): this label was briefly
+     "Look into the ocean" on 2026-08-05 and was changed BACK to "Pass". "Muse" is a different word
+     and a later ruling of his, not a repeat of that one.
+
+     NO TOOLTIP, and that is his call too, made the same day: "don't build the tooltip, ignore this
+     and let the idea go." The backlog had asked for hover text explaining the button; the game has
+     no mechanism for one on an ENABLED button (data-why is disabled-buttons-only, util.js), and he
+     chose not to build one rather than have half the item ship quietly.
+
+     THREE STACKED LINES — "a wave image above 'Muse' and a +1🌕 below it", his words. The <br>
+     idiom is the house form for exactly this and is already what crateOpt() uses for the radial
+     fan ("icon above, words below"); `short` and `label` carry the same shape so the circle and
+     the list button read identically rather than being two spellings kept in step (rule 8).
+     A real WAVE_IMG, not the 🌊 emoji, because he asked for an image and the asset already exists.
+     The coin still comes off cfg.passCoin — a payout is not a constant (rule 9). */
+  if(!canOvens){
+    const museCoin=appState.game.cfg.passCoin?`<br><span class="nobrk">+${appState.game.cfg.passCoin}🌕</span>`:"";
+    const museFace=`${iconImg(WAVE_IMG)}<br>Muse${museCoin}`;
+    opts.push({label:museFace,short:museFace,value:"pass"});
+  }
   // #5c/D-41: helper text under the buttons explains why a greyed button is greyed — Attack's own
   // powder gate, and now Trade's cargo gate, follow the same pattern.
   //

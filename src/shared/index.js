@@ -225,8 +225,17 @@ const dockFlavorIcon=x=>{
 };
 // ORDER IS LOAD-BEARING — its Object.values iteration order builds the candidate dock-cell array that the constructor then indexes with an this.r()-derived index; a reorder changes every dock position for an identical RNG draw, and also flips seat-spawn assignment and Dijkstra tie-breaks.
 const DIRS={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]};
+/* CAPS, by Wyatt's ruling of 2026-08-27: "write directions in all caps, eg, SOUTH for all storm
+   and wind." CHANGED IN THE TABLE RATHER THAN AT EACH CALL SITE, which is rule 23's question —
+   what makes these agree? There are exactly four consumers and every one of them is player-facing
+   wind or storm prose (the day-start line and its forecast, the storm summary, and the turn
+   banner), so a fifth surface added later inherits the ruling instead of re-deciding it.
+
+   ONLY THE VALUES CHANGED. THE KEY ORDER IS UNTOUCHED, and the line below says why that matters —
+   it was momentarily deleted by this very edit and `engine_contract_check.js` (ENGINE-04) caught
+   it, which is the whole reason that gate pins nine of these annotations by name. */
 // ORDER IS LOAD-BEARING — parallel table keyed to DIRS; must stay in lockstep with it.
-const DIRNAME={N:"north",S:"south",E:"east",W:"west"};
+const DIRNAME={N:"NORTH",S:"SOUTH",E:"EAST",W:"WEST"};
 // a storm's 2nd gust always veers 90° off the 1st (never the same direction, never reversing)
 // ORDER IS LOAD-BEARING — consumed only by the classic live turn loop, where PERP[windNow][Math.floor(game.r()*2)] indexes directly by RNG draw. The headless corpus cannot catch a reorder here.
 const PERP={N:["E","W"],S:["E","W"],E:["N","S"],W:["N","S"]};

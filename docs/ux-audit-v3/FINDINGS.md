@@ -132,3 +132,7 @@ code measurements from `3/index.html` + `3/src/ui/*`, plus the planning-record d
 - ≤480 media block: #scPause/#scTimerToggle 24×24px; flip coin clamp(54px,19.5cqw,96px).
 - apMsg 15px; apSub 12.5px italic; player-row 13.5px; prowRecipe 11px; chat bubble 12px.
 - Engine dockHeads:5 vs how-to-play copy "6"; RULES-V2.md also stale (6/2).
+  *(Dated 2026-08-27: the ENGINE has moved again since this was written — D-30 took the pair to
+  `dockHeads:3, dockTails:1` on 2026-08-21. The finding still stands and is now WORSE, because the
+  how-to-play copy is two changes behind rather than one. Tracked as Q-7: that modal is static HTML
+  with no access to `cfg`, so making it derive needs a mechanism, not a copy edit.)*

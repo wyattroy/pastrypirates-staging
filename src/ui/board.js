@@ -312,9 +312,15 @@ export function drawBoard(){
         g.id=`crate_${ing}_${idx}`;
       });
       // 🏴 THE BLACK MARKET FLAG (draft art — emoji until Wyatt commissions a proper flag): flies
-      // over the dock when the shelf is empty, the standing "still sells after dark, 10🌕" marker
-      // the ceremony teaches. Built hidden; render() toggles it from the same event snapshot that
-      // greys the crates, so the two tells can never disagree.
+      // over the dock when the shelf is empty — the same promise the ceremony card makes, that a
+      // sold-out island will still find ye one more ingredient for a price.
+      // THE PRICE IS NOT REPEATED HERE ON PURPOSE (corrected 2026-08-27). This comment used to
+      // quote "10🌕", which is a number that lives in cfg.blackMarket precisely so it can move —
+      // a comment restating it is a second copy that rots silently. "after dark" went with it:
+      // Wyatt cut that phrase from the ceremony on 2026-08-27, so repeating it here would have
+      // preserved retired wording in the one place nobody thinks to re-read.
+      // Built hidden; render() toggles it from the same event snapshot that greys the crates, so
+      // the two tells can never disagree.
       if(appState.game.cfg.blackMarket&&appState.game.dockOf&&appState.game.dockOf[ing]){
         const fd=appState.game.dockOf[ing];
         const f=el("text",{x:(fd[0]+.5)*cell,y:(fd[1]+.42)*cell,"text-anchor":"middle",

@@ -763,9 +763,9 @@ async function asyncBattleRun(att,def){
       if(downwind==="a"){a++;winner=att;}else{d++;winner=def;}
       const dwName=downwind==="a"?nm(att.idx):nm(def.idx);
       // @copy misc.battleline.bothheadsdownwind
-      rmsg=`<span class="score">Both fire ⚪️ HEADS — but ${dwName}'s firing downwind and the shot hits!</span>`;
+      rmsg=`<span class="score">Both fire ⚪ HEADS — but ${dwName}'s firing downwind and the shot hits!</span>`;
     // @copy misc.battleline.bothheadscrosswind
-    }else rmsg=`<span class="cancel">Both fire ⚪️ HEADS — but in the crosswind, the cannonballs collide.</span>`;
+    }else rmsg=`<span class="cancel">Both fire ⚪ HEADS — but in the crosswind, the cannonballs collide.</span>`;
   }else if(ah||dh){
     scorer=ah?"a":"d";
     if(ah){a++;winner=att;}else{d++;winner=def;}
@@ -774,7 +774,7 @@ async function asyncBattleRun(att,def){
     rmsg=`<span class="score">${hitName} lands a hit!</span>`;
   }
   // @copy misc.battleline.bothmiss
-  else rmsg=`<span class="cancel">Both miss — ⚫️ TAILS all round.</span>`;
+  else rmsg=`<span class="cancel">Both miss — ⚫ TAILS all round.</span>`;
   rounds.push([ah?1:0,dh?1:0,0,scorer]);
   renderBattle(base({atState:ah?"H":"T",dfState:dh?"H":"T",live:null,winCoin:scorer,result:rmsg}));
   await sleep(hold);

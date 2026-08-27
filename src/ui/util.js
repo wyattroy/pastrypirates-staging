@@ -409,334 +409,41 @@ const EVENT_NARRATION={
   // distinction only matters once the storm has itself repeated a round (streak>=2, below) —
   // and a storm that's both repeated AND has the wind holding renders one line regardless of
   // whether that hold is merely gusting or has gone past 3 rounds ("won't quit").
+  /* THE DAY-START WEATHER LINE — Wyatt's shape, 2026-08-27.
+       Day 6: Wind SOUTH. Tomorrow: NORTH.
+       Day 6: Storm blowin' SOUTH. Tomorrow: NORTH.
+
+     TWO RULINGS OF HIS, and between them they took the calm line from 57 characters to 35 and the
+     held-storm line from 138 to 42:
+       1. directions in CAPS — applied in DIRNAME itself, so every wind surface agrees;
+       2. Option B "but remove '3 squares'; reasoning: the game already teaches you this
+          automatically." He is right: a storm moves every ship and the player watches it happen,
+          so the sentence was explaining something the board had already demonstrated.
+
+     WHAT WENT, SO THE NEXT READER DOES NOT RESTORE IT THINKING IT WAS LOST BY ACCIDENT. All of it
+     was his own approved copy (11cbf345, the 209 reviewed dispositions; re-approved at D-49), and
+     all of it was cut by him, on purpose, on 2026-08-27:
+       · "It'll blow every ship 3 squares west"        — ruling 2 above
+       · "Batten down the hatches, ye scurvy lot!" / "Fie, Poseidon!"  — the storm theatre
+       · "this westerly is gusting" / "won't quit"     — the wind-streak flavour, which is why
+         windHoldPhrase() below now has no callers
+     v2.1's rule SURVIVES and is the one thing here that is not merely shorter: a FORECAST storm
+     still names no direction (`e.next` is null on exactly those rounds), so the tail reads
+     "Tomorrow: a storm." and never guesses a heading.
+
+     NOTHING ABOUT THE WEATHER IS TYPED (rule 9) — the day, both directions and whether tomorrow
+     storms all come off the event. The old line hardcoded the 3 that STORM_PUSH already held.
+
+     THE NOBRK SPAN IS GONE WITH THE LENGTH, and that is deliberate rather than an oversight. It
+     existed because the old storm line put 502px of unbreakable text into a 276px box and was cut
+     off at every width tested, 430px included. At 35-46 characters there is no atomic unit left to
+     protect, and a span that cannot wrap is a liability the moment a line grows again. */
   newround:e=>{
-    const D=DIRNAME[e.dir];
-    const held=(e.windStreak||1)>=2,wontQuit=(e.windStreak||1)>=3;
-    // v2 rule 7: a storm is ONE direction now, not a gust and then a perpendicular second gust —
-    // so every line that named a second direction loses it. v2 rule 6: the round header also
-    // carries next round's committed forecast, which is what makes planning ahead possible.
-    // v2.1: a forecast storm no longer names its direction — `e.next` is null on exactly those
-    // rounds (Game.forecastWind), so the storm arm reads off `e.nextStorm` alone and the two arms
-    // are no longer both keyed to `e.next`.
-    // NOBRK COVERS THE ATOMIC UNIT ONLY, NEVER THE WHOLE SENTENCE. `.nobrk` is white-space:nowrap,
-    // so anything inside it CANNOT wrap and will happily run off the side of the narration box. The
-    // calm line is short enough (185px) that wrapping it whole was harmless; this storm line is not,
-    // and shipping it in the same span put 502px of unbreakable text into a 276px box on a 360px
-    // phone — cut off at every width tested, 430px included.
-    // Same lesson as P7 (see the turn-order line in flow.js): the span's job is to keep ONE readable
-    // unit together, not to keep a sentence on one line. Here that unit is the warning itself —
-    // compass, cloud and claim — and the tail is free to wrap under it.
-    const fc=e.nextStorm
-      ? ` <span class="nobrk">🧭 Next day: ⛈️ a storm's comin'</span> — no tellin' which way she'll blow.`
-      : (e.next?` <span class="nobrk">🧭 Next day: wind ${DIRNAME[e.next]}.</span>`:"");
-    if(e.storm){
-      if(e.streak>=2)return {cls:"roundhdr",
-        txt:(held
-          ?`— Day ${e.round}: ⛈️ The storm's baked in and won't cool down! It's still aiming ${D}. Fie, Poseidon! —`
-          :`— Day ${e.round}: ⛈️ The storm's baked in and won't cool down! It's aiming ${D}. Batten down the hatches, ye scurvy lot! —`)+fc};
-      return {cls:"roundhdr",txt:`Day ${e.round}: A ⛈️ storm be ragin'! It'll blow every ship 3 squares ${D}.`+fc};
-    }
-    if(held)return {cls:"roundhdr",txt:(wontQuit
-      ?`— Day ${e.round}: wind still to the ${D}, ${windHoldPhrase(e.dir,e.windStreak)} —`
-      :`— Day ${e.round}: wind still blows ${D}, ${windHoldPhrase(e.dir,e.windStreak)} —`)+fc};
-    return {cls:"roundhdr",txt:`— Day ${e.round}: wind is blowin' ${D} —`+fc};
-  },
-  /* v2.1 (Wyatt, 2026-08-05): `aground`, `stormlost`, `berthHold` and `blownDock` are DELETED
-     along with the rule that produced them. A storm can no longer cost a turn, so nothing runs
-     aground, no mooring has to hold, and being blown into a berth is not a rescue worth naming —
-     it is just where the push happened to stop. The whole storm is now `storm` plus the ordinary
-     movement lines. Four narration entries, one engine outcome and two turn-path branches went
-     with it; that deletion IS the feature. */
-  /* THE ANCHOR LINE, kept at Wyatt's request: *"I want the narration lines about 'dropped anchor
-     to avoid running aground' to remain."* It survives the v2.1 simplification because the moment
-     it describes still exists — the storm drives ye at the rocks and the ship fetches up short of
-     them. What changed is that there is no longer a penalty being dodged, so the line reports
-     seamanship rather than a bullet missed. It also fills a real silence: until now, a storm that
-     stopped a ship against land said nothing at all. */
-  /* playtest 21 item 3 (Wyatt: "reading the same message 4 times about different players is
-     tedious"). The TEXT is gone; the event is not. It still carries this ship's anchor pop on the
-     board, its captain-panel note, and its audio cue — all of which are per-ship by nature and
-     none of which was the tedious part. The whole storm now reads as one sentence, built by
-     `stormSummary` below from the outcome the engine recorded for every captain. */
-  anchorHold:(e,at,cellPx,viewerSeat)=>({
-    caps:[[e.p,"⚓ anchors clear of the rocks"]],pops:[[at(e.p),"⚓"]]}),
-  /* ONE LINE FOR THE WHOLE STORM. Wyatt's own example is the shape it follows:
-       "(The storm moved X,Y, and Z but A had land at their back and dropped anchor)"
-     — everyone who was pushed named together, then the exceptions. Grouped by OUTCOME rather than
-     by captain, which is what makes it one sentence instead of four.
-
-     @copy adhoc.storm.summary — APPROVED as written, Wyatt 2026-08-14 ("storm summary is good").
-
-     Viewer-aware like every other line: whichever group the reader is in addresses them as "ye"
-     and drops their own name out of the list, so a captain reads their own fate rather than
-     finding themselves in a roll-call. `NEUTRAL_VIEWER` and the headless default both fall
-     through to the third-person form, which is what keeps bot_storm_narration_test green. */
-  stormSummary:(e,at,cellPx,viewerSeat)=>{
-    const D=DIRNAME[e.dir]||"";
-    // every clause below begins with a literal lowercase word ("the storm…", "a gale…"), never
-    // with markup, so capitalising position 0 is safe here and would not be in general
-    const cap=s=>s?s[0].toUpperCase()+s.slice(1):s;
-    // a group as it reads to THIS viewer: their own seat becomes "ye", the rest are named
-    const say=seats=>{
-      const mine=seats.filter(s=>isLocalTo(s,viewerSeat));
-      const them=seats.filter(s=>!isLocalTo(s,viewerSeat)).map(s=>pn(s));
-      const list=[];
-      if(mine.length)list.push("ye");
-      list.push(...them);
-      if(!list.length)return {txt:"",you:false};
-      const joined=list.length===1?list[0]
-        :list.slice(0,-1).join(", ")+" and "+list[list.length-1];
-      return {txt:joined,you:!!mine.length,n:list.length};
-    };
-    const mv=say(e.moved||[]),hd=say(e.held||[]),bl=say(e.blown||[]);
-    // ITEM 8: swept-into-the-trade-winds joins the one summary line instead of narrating mid-storm.
-    // Clause starts with a literal lowercase word ("the"), keeping cap()'s position-0 rule safe.
-    const sw=say(e.swept||[]);
-    // HIS ITEM 3, the half nobody had noticed. A captain whose storm push was stopped by another
-    // SHIP used to narrate a line of their own outside this summary — and, if they never moved a
-    // square before being stopped, was left out of the summary entirely (noteStormOutcome's
-    // `if(!moved)return;`). Both an extra line AND a missing one, from the same omission. They now
-    // arrive here, in their own group, because the existing `held` clause says "land at their
-    // back" and for these captains that would simply be untrue: it was a hull, not a headland.
-    const sh=say(e.shipHeld||[]);
-    const parts=[];
-    if(mv.txt)parts.push(`the storm drives ${mv.txt} ${D}`);
-    if(bl.txt)parts.push(`a gale tears ${bl.txt} off the dock`);
-    if(sw.txt)parts.push(`the trade winds sweep ${sw.txt} along the rim`);
-    const lead=parts.join(" and ");
-    // the possessive follows the READER, not the group: "ye and Crustbeard have land at YER
-    // backs", never "at their backs" with the reader standing inside the group
-    const heldClause=!hd.txt?"":(hd.n===1
-      ?`${hd.txt} ${hd.you?"have":"has"} land at ${hd.you?"yer":"their"} back and ${hd.you?"drop":"drops"} anchor`
-      :`${hd.txt} have land at ${hd.you?"yer":"their"} backs and drop anchor`);
-    const shipClause=!sh.txt?"":(sh.n===1
-      ?`${sh.txt} ${sh.you?"have":"has"} a hull dead ahead and ${sh.you?"strike":"strikes"} sail`
-      :`${sh.txt} have hulls dead ahead and strike sail`);
-    const stopped=[heldClause,shipClause].filter(Boolean).join(", and ");
-    let txt="";
-    if(lead&&stopped){
-      txt=`🌬️ ${cap(lead)} — but ${stopped}.`;
-    }else if(lead){
-      txt=`🌬️ ${cap(lead)}.`;
-    }else if(hd.txt&&!sh.txt){
-      txt=hd.n===1
-        ?`⚓ The storm hurls itself at ${hd.txt}, but ${hd.you?"ye've":"they've"} land at ${hd.you?"yer":"their"} back and the anchor bites.`
-        :`⚓ The storm hurls itself at the fleet, but ${hd.txt} have land at ${hd.you?"yer":"their"} backs and every anchor bites.`;
-    }else if(stopped){
-      // nobody was driven anywhere — the whole table simply held. One sentence still, never one
-      // per captain, which is the entire point of this event (rule 7: a storm is ONE event).
-      txt=`⚓ The storm hurls itself at the fleet, but ${stopped}.`;
-    }
-    return {txt};
-  },
-  // v2 rule 7: the storm hits the whole table at once, before anybody acts.
-  // SILENT (Wyatt, 2026-08-06): "it is a recording of the dialogue that comes before it". The round
-  // header has already said it one beat earlier — "Round 9: A ⛈️ storm be ragin'! It'll blow every
-  // ship 3 squares north." — and this line said the same thing again in different words, so the
-  // player read the storm twice before a single ship moved.
-  //
-  // The EVENT still fires; only its narration goes. runStormLive emits it, renders, and awaits
-  // narrateLastEvent() as before — that await now resolves immediately, which costs nothing,
-  // because the pacing beat was never here: the header runs through flash(...,900) in the
-  // orchestrator and holds on its own before the first ship is pushed.
-  storm:()=>null,
-  // v2 rule 8a: run aground and ye simply lose the turn. No dodging, no anchoring, no repairs —
-  // the compass warned ye a full round ago.
-  /* Fires at the top of the grounded captain's own turn. It used to be SILENT, on the reasoning
-     that `aground` had already announced it during the storm. That was wrong in practice: the
-     storm line promised a loss in the FUTURE tense ("they'll lose their turn"), and then the turn
-     simply never arrived — the game skipped it with nothing said at all. Wyatt, 2026-08-05: *"the
-     narration was unclear about me losing my turn."*
-     So `aground` now reports only what just happened, and THIS line reports the consequence at the
-     moment it lands. Present tense, addressed, and explicit that both halves of the turn are gone. */
-  // Silent by design: it exists only so the Captains panel's snapshot catches up with a purse that
-  // changed mid-turn (see humanDock). It is not an event in the fiction and must never narrate.
-  purse:()=>null,
-  // v2: a bot with nothing worth doing simply ends the turn. Deliberately silent in the
-  // narration box — it is not an event, it is the absence of one.
-  idle:()=>null,
-  // Pass, given something to look at. Every captain who takes the turn off sees a different beast
-  // go by; see Game.nextSeaCreature. The BUTTON reads "🌊 Pass" with the payout stated after it
-  // (Wyatt, 2026-08-05 — it briefly read "Look into the ocean"; the label went back to Pass, the
-  // narration stayed; the amount joined it under RULE-01, built like Attack's cost).
-  //
-  // RULE-01/D-06: passing pays a dubloon (Game.doPass), and the line says so. Wyatt's wording, his
-  // pick over two longer drafts of his own — the idea is that the sea creatures are where the recipe
-  // inspiration comes from, and the constraint he named was "short and easy to read".
-  //
-  // IT IS A SUBJECTLESS FRAGMENT AND THAT IS THE WHOLE POINT. About twenty of the fifty sightings
-  // end on the CREATURE as the nearest grammatical subject ("...and a dozen donut shrimp bounce
-  // past."), so any appended clause carrying a verb hands the pen to the shrimp. No subject, no
-  // verb, no agreement to derive: it reads identically after all fifty sentences in both persons,
-  // which is what lets it be appended HERE, once, with all 100 hand-written strings untouched — the
-  // seaLine contract above, which the deleted seaSighting() broke in all three ways at once.
-  //
-  // The coin is a RAW character, resolved to the coin image by emojify() at panel()'s single
-  // chokepoint (D-50), like every other coin-amount line in this table. Hand-rolling the markup here
-  // would duplicate the chokepoint. Wrapped WHOLE rather than just the parenthetical — a unit and
-  // its amount are one readable thing (the sailing-order precedent, G27/P7).
-  //
-  // THE AMOUNT IS READ OFF THE LIVE GAME'S ROUND CONFIG, not written out here — the same unguarded
-  // read the dock: builder below already does for its two flip payouts, from inside this same
-  // table. It is the same field the engine pays from and the same field the Pass button states, so
-  // a line that tells a captain what they were paid cannot drift from what they were actually
-  // paid. The wording is Wyatt's and is fixed; only the number derives.
-  pass:(e,at,cellPx,viewerSeat)=>({
-    txt:`🌊 ${seaLine(e.sea,isLocalTo(e.p,viewerSeat),pn(e.p))} <span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>`,
-    // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
-    // no separately-stored subject to lift out of it, and inventing one by parsing the prose is
-    // exactly the kind of guessing this rewrite removed. (Nothing renders caps in v2 regardless.)
-    caps:[[e.p,"🌊 looks into the ocean"]],pops:[[at(e.p),"🌊",false,WAVE_IMG]]}),
-  // v2.1: the ovens go cold. A captain who reached Tortuga with a full recipe has just been raided
-  // (rule 13c) and stripped of a crate they needed, so the bake is off and they are back in the
-  // rotation. This is the loudest consequence in the game — the one moment a finished voyage comes
-  // undone — so it gets its own line rather than being folded into the battle's spoil clause.
-  unfinish:(e,at,cellPx,viewerSeat)=>({cls:"battle",
-    txt:isLocalTo(e.p,viewerSeat)
-      ?`${iconImg(FLAME_IMG)} ${pn(e.p)} — yer ovens go cold! That crate was part of yer recipe, and without it there's no bakin' to be done. Back to sea with ye.`
-      :`${iconImg(FLAME_IMG)} ${pn(e.p)}'s ovens go cold — the stolen crate was part of the recipe, and the bake is off. Back to sea.`,
-    caps:[[e.p,`${iconImg(FLAME_IMG)} ovens cold`]],pops:[[at(e.p),"🔥",true,FLAME_IMG]]}),
-  /* THE BAKE-OFF (v2.1). Two beats, and they are deliberately different in weight.
-
-     `ovens` is the arrival — loud, once, the moment the race changes shape. It does NOT replace the
-     existing `finish` line ("returns to the Isle of Tortuga with a full recipe!"), which now fires
-     on a successful BAKE instead; the two read as a pair, opening and closing the kitchen.
-
-     `bake` is the verdict on one attempt, and it has to work for a bot as well as for you, because
-     a rival quietly getting four of five is the most important thing on screen at that moment. It
-     leads with the count so the number is the first thing read, not the last. */
-  // ?ovens=1 only (see stockHoldsForBakeTest, src/orchestrator.js). It exists so the shortcut is
-  // ON THE RECORD: a test game that looked identical to a real one is a test game whose result
-  // eventually gets quoted as a real one. Deliberately NOT in the pirate register — this is the
-  // tooling talking, not the game world, the same boundary the credits sit on the far side of.
-  testhold:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",
-    txt:`${iconImg(FLAME_IMG)} TEST GAME — ${pn(e.p)}'s hold was stocked with a full recipe to reach the bake-off early.`}),
-  // Buying another look at the shuffle. Worth a line rather than a silent coin drop: it is the only
-  // spend in the bake-off, and a rival watching should see that a captain paid for their certainty.
-  rewatch:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",
-    txt:isLocalTo(e.p,viewerSeat)
-      ?`${iconImg(EYES_IMG)} ${pn(e.p)} — ye slip the kitchen hand ${e.paid}${iconImg(COIN_IMG)} for another look at the crates.`
-      :`${iconImg(EYES_IMG)} ${pn(e.p)} pays ${e.paid}${iconImg(COIN_IMG)} for another look at the crates.`,
-    caps:[[e.p,`${iconImg(EYES_IMG)} another look`]]}),
-  ovens:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",
-    txt:isLocalTo(e.p,viewerSeat)
-      ?`${iconImg(CUPCAKE_IMG)} ${pn(e.p)} — ye reach Tortuga with a full recipe and fire up the ovens! Now bake it right.`
-      :`${iconImg(CUPCAKE_IMG)} ${pn(e.p)} reaches Tortuga with a full recipe and fires up the ovens!`,
-    caps:[[e.p,`${iconImg(CUPCAKE_IMG)} at the ovens`]],pops:[[at(e.p),"🧁",true,CUPCAKE_IMG]]}),
-  bake:(e,at,cellPx,viewerSeat)=>{
-    const mine=isLocalTo(e.p,viewerSeat);
-    if(e.solved)return {cls:"roundhdr",
-      txt:mine?`${iconImg(FLAME_IMG)} ${pn(e.p)} — every crate in its place. Ye baked it!`
-              :`${iconImg(FLAME_IMG)} ${pn(e.p)} opens the crates — every one in its place!`,
-      caps:[[e.p,`${iconImg(FLAME_IMG)} baked!`]]};
-    // "n of five in place" reads as progress; "you got n wrong" reads as a scolding. Same number.
-    const n=e.correct,left=e.left;
-    return {cls:"battle",
-      txt:mine?`${iconImg(CUPCAKE_IMG)} ${pn(e.p)} — ye open the crates: ${n} of 5 in place. ${left} to go, and they'll be shuffled again.`
-              :`${iconImg(CUPCAKE_IMG)} ${pn(e.p)} opens the crates — ${n} of 5 in place, ${left} still to find.`,
-      caps:[[e.p,`${iconImg(CUPCAKE_IMG)} ${n}/5`]]};
-  },
-  // v2 rule 9: the crosswind stand-off nobody paid to break.
-  battlenull:(e,at,cellPx,viewerSeat)=>({cls:"battle",
-    txt:`💥 ${pn(e.a)} and ${pn(e.d)} break off — the smoke clears and neither has a thing to show for it.`,
-    caps:[[e.a,"💥 no hit"],[e.d,"💥 no hit"]]}),
-  refire:(e,at,cellPx,viewerSeat)=>({txt:isLocalTo(e.a,viewerSeat)
-    ?`🔥 ${pn(e.a)} — ye load another broadside <span class="nobrk">(−${e.cost}🌕)</span>`
-    :`🔥 ${pn(e.a)} loads another broadside <span class="nobrk">(−${e.cost}🌕)</span>`,
-    caps:[[e.a,`🔥 fires again −${e.cost}🌕`]]}),
-  // v2 rule 4: an offer goes to the WHOLE table, not to one captain.
-  openoffer:(e,at,cellPx,viewerSeat)=>({cls:"trade",txt:isLocalTo(e.p,viewerSeat)
-    ?`📣 ${pn(e.p)} — ye hail the table: "Who'll give me ${ilabelImg(e.want)} for ${fmtItem(e.offer)}?"`
-    :`📣 ${pn(e.p)} hails the table: "Who'll give me ${ilabelImg(e.want)} for ${fmtItem(e.offer)}?"`,
-    caps:[[e.p,`📣 wants ${ING_EMOJI[e.want]}`]],pops:[[at(e.p),"📣",false,HORN_IMG]]}),
-  // v2 rule 12: no bakeoff — the finishers bake together and the title goes to whoever brought most.
-  collab:(e,at,cellPx,viewerSeat)=>{
-    const names=e.finishers.map(i=>pn(i)).join(" and ");
-    return {cls:"roundhdr",
-      txt:`${iconImg(CUPCAKE_IMG)} ${names} fire up the ovens together — and ${pn(e.winner)} brought the most to the bench!`,
-      caps:[[e.winner,`${iconImg(CUPCAKE_IMG)} Best Baker!`]],pops:[[at(e.winner),"🧁",true,CUPCAKE_IMG]]};
-  },
-  // D-25/D-37 (Wyatt-approved 2026-07-29): wind always BLOWS a player — never carries/sweeps/moves.
-  // FIX-04 (Wyatt, 2026-07-31): the narration line itself is gone — both viewer variants together,
-  // per D-07/NARR-05. The Captains-box capsule stays; it's the only remaining marker of the drift.
-  windmove:(e,at,cellPx,viewerSeat)=>({caps:[[e.p,"🌬️ drifts"]]}),
-  // playtest 21 item 3: folded into `stormSummary`'s "a gale tears X off the dock" clause. The
-  // event stays for its audio cue (ship-move) and for the captain panel; only the bubble is gone.
-  blownOut:(e,at,cellPx,viewerSeat)=>({caps:[[e.p,"⛵ blown off the dock"]]}),
-  // v2 rule 2: sailing is free — no coin named, because none changes hands.
-  sail:(e,at,cellPx,viewerSeat)=>({txt:isLocalTo(e.p,viewerSeat)?`${pn(e.p)} — ye set sail`:`${pn(e.p)} sets sail`,caps:[[e.p,"⛵ sails"]]}),
-  // D-07/NARR-05/D-10 (Wyatt-approved 2026-07-29): the tracer line for viewer-aware narration. The
-  // addressed reader keeps the name prefix, then switches to second person; every other viewer
-  // (including NEUTRAL_VIEWER, and describe()'s own default when appState.mySeat is unset) sees the
-  // third-person line — see isLocalTo()'s own header comment for why.
-  // v2.1: a storm stops short of land or of another ship, and that is the whole of it.
-  //
-  // HIS ITEM 3 (Wyatt, build t): "before this work, the storm moved everyone simultaneously and
-  // reported just one narration summary at the end. How did this behavior get lost?" — then,
-  // crucially: "strangely, the storm narration summary DID happen once, later on in the game."
-  // Not lost. CONDITIONAL. This entry is the condition.
-  //
-  // b8e9eea (2026-08-14) collapsed the storm's per-ship chatter into one summary and its own
-  // header comment lists which outcomes it silenced: windmove, blownOut, anchorHold. It never
-  // mentions the FOURTH — a push stopped by another SHIP — because that one fires from a
-  // structurally separate call site (runStormLive's per-square loop, src/ui/flow.js) rather than
-  // from noteStormOutcome, and the commit only ever looked at the latter. Measured headless over
-  // 300 seeded games with the storm rate raised for signal: 14.5% of storms carry at least one of
-  // these, 16.8% in rounds 1-3 (every captain starts one square from the others at Tortuga)
-  // falling to 10.2% by round 16. That decline is exactly his account — one-by-one early, one
-  // clean summary later, but not a hard rule.
-  //
-  // So the text goes, the way its three siblings' text already went, and everything else stays:
-  // the ⚓ board pop, and now a captains-box capsule it never had (windmove/blownOut/anchorHold
-  // each kept theirs; this one had none, so a silenced blocked ship would otherwise vanish from
-  // the panel as well as the bubble). The captain is named instead inside the ONE summary line —
-  // see stormSummaryEvent's `shipHeld` group in src/engine/index.js.
-  blocked:(e,at,cellPx,viewerSeat)=>({caps:[[e.p,"⚓ holds fast"]],pops:[[at(e.p),"⚓"]]}),
-  /* TWO WAYS INTO THE CHANNEL, AND ONLY ONE OF THEM IS SOMETHING DONE TO YE.
-     playtest 22 item 3 (Wyatt): the line should say "sails the trade winds!" on every turn where the
-     captain steered in on purpose, and "is blown into the trade winds" ONLY when a storm put him
-     there. One line for both read as though the sea had grabbed a captain who had just made a
-     clever move — it took the credit for his own plan away from him.
-     `e.blown` is set by the engine at the moment of entry (Game.tradewind), never inferred here.
-
-     BOTH LINES STOP AT THE TRADE WINDS — playtest 23 item 4 (Wyatt): "the narration dialogue for
-     sailing the tradewinds uses the pronoun her. Remove the second half of the sentence and just
-     keep the part about sailing the tradewinds." The pronoun was the tell — a captain the game has
-     never gendered was being called "her" — but the trailing clause was the thing to cut, because
-     the board is already showing the current carrying the ship as the words are read. His call,
-     same day, was to trim the storm sibling to match rather than leave one long line and one
-     short: same event, same box, same length.
-     @copy adhoc.narr.tradewind — APPROVED as written, Wyatt 2026-08-15 */
-  tradewind:(e,at,cellPx,viewerSeat)=>({txt:e.blown
-      ?(isLocalTo(e.p,viewerSeat)?`🌀 ${pn(e.p)} — yer blown into the trade winds!`
-                                 :`🌀 ${pn(e.p)} is blown into the trade winds!`)
-      :(isLocalTo(e.p,viewerSeat)?`🌀 ${pn(e.p)} — ye sail the trade winds!`
-                                 :`🌀 ${pn(e.p)} sails the trade winds!`),
-    pops:[[at(e.p),"🌀",true,TRADE_SWIRL_IMG]]}),
-  // D-19 SIMPLIFIED (Wyatt-approved 2026-07-29): `parley` now fires ONLY on a refusal — an accepted
-  // hail emits a `trade` event instead (src/ui/flow.js's bot-hail path), so the old `e.ok===true`
-  // "deal struck!" branch here is unreachable and has been removed rather than left as dead copy a
-  // future rewrite could land on. `table:parley`/`table:parley~refused` collapse to this one
-  // refusal-only builder (D-25/D-26: no notes given for either row, so wording is unchanged from
-  // before — only the unreachable branch is gone).
-  parley:(e,at,cellPx,viewerSeat)=>{
-    // v2 rule 4: an offer goes to the WHOLE TABLE, so a refused one has no single captain to name
-    // — `e.b` is null, and pn(null) throws. That null is the NORMAL v2 shape (it stalled the first
-    // full playthrough), and this branch is what it is for. The named form below is kept because
-    // an engine-side bot trade still records the partner it actually dealt with.
-    let txt;
-    if(e.b==null){
-      txt=isLocalTo(e.a,viewerSeat)
-        ?`🙅 ${pn(e.a)} — ye offered ${fmtItem(e.offer)} for ${fmtItem(e.want)}, and not a captain would take it.`
-        :`🙅 ${pn(e.a)} offered ${fmtItem(e.offer)} for ${fmtItem(e.want)} — not a captain would take it.`;
-      return {cls:"trade",txt,pops:[[at(e.a),"🙅"]]};
-    }
-    // D-08: each named captain reads the offer addressed to themselves — the offerer's own view,
-    // and the target's own view; a third-party viewer reads today's exact text.
-    if(isLocalTo(e.a,viewerSeat))txt=`🤝 ${pn(e.a)} — ye offered ${fmtItem(e.offer)} for ${pn(e.b)}'s ${fmtItem(e.want)} — they refused.`;
-    else if(isLocalTo(e.b,viewerSeat))txt=`🤝 ${pn(e.a)} offered ${fmtItem(e.offer)} for yer ${fmtItem(e.want)} — ye refused.`;
-    else txt=`🤝 ${pn(e.a)} offered ${fmtItem(e.offer)} for ${pn(e.b)}'s ${fmtItem(e.want)} — they refused.`;
-    return {cls:"trade",txt,pops:[[at(e.a),"🙅"]]};
+    const tail=e.nextStorm?" Tomorrow: a storm.":(e.next?` Tomorrow: ${DIRNAME[e.next]}.`:"");
+    const head=e.storm
+      ? `Day ${e.round}: Storm ${e.streak>=2?"still":"blowin\u2019"} ${DIRNAME[e.dir]}.`
+      : `Day ${e.round}: Wind ${DIRNAME[e.dir]}.`;
+    return {cls:"roundhdr",txt:head+tail};
   },
   dock:(e,at,cellPx,viewerSeat)=>{
     const place=dockPlace(e.ing),goods=dockFlavorIcon(e.ing);
@@ -754,23 +461,34 @@ const EVENT_NARRATION={
     const gave=barter
       ?(e.paidIng[0]===e.paidIng[1]?`two ${fmtItem(e.paidIng[0])}`:e.paidIng.map(fmtItem).join(" an' "))
       :``;
+    /* W2-5 — ONE FORMAT FOR COIN IN THIS SENTENCE, NOT TWO. The dig above already names the gain
+       as a signed parenthetical, `(+3🌕)`; the purchase in the SAME breath read "for 12🌕". Money
+       arriving and money leaving were dressed differently a dozen words apart.
+       THE MINUS IS U+2212 "−", NEVER ASCII "-" — the same character the broadside line and the
+       captain's-log capsule below already use; a hyphen here is the drift this whole clause exists
+       to stop. `.nobrk` because the coin is an <img>, and a replaced element hands the browser a
+       break opportunity immediately after it — the reason a full stop turned up alone on its own
+       line twice. Built ONCE and spent by both the third-person and the addressed form, so the two
+       can never say the amount differently. The barter clause takes no `spent`: it pays in crates,
+       and inventing a coin figure where no coin moved would be a lie the whole table can read. */
+    const spent=`<span class="nobrk">(−${paid}🌕)</span>`;
     const buyTail=bought
       ?(barter?` — then trades ${gave} to the black market for ${goods}, under cover o' dark.`
-        :e.black?` — then pays the black market ${paid}🌕 for ${goods} under cover o' dark.`
-        :` — then buys ${goods} for ${paid}🌕.`+(e.wentDry?` That were the last crate — the shelves be bare!`:``))
+        :e.black?` — then pays the black market for ${goods} ${spent}, under cover o' dark.`
+        :` — then buys ${goods} ${spent}.`+(e.wentDry?` That were the last crate — the shelves be bare!`:``))
       :``;
     const buyTailYou=bought
       ?(barter?` — then ye trade ${gave} to the black market for ${goods}, under cover o' dark.`
-        :e.black?` — then ye pay the black market ${paid}🌕 for ${goods} under cover o' dark.`
-        :` — then ye buy ${goods} for ${paid}🌕.`+(e.wentDry?` Ye took the last crate — the shelves be bare!`:``))
+        :e.black?` — then ye pay the black market for ${goods} ${spent}, under cover o' dark.`
+        :` — then ye buy ${goods} ${spent}.`+(e.wentDry?` Ye took the last crate — the shelves be bare!`:``))
       :``;
     const txt=isLocalTo(e.p,viewerSeat)
       ?(e.heads
         ?`⚪ HEADS! Ye dig deep at ${place} and strike buried treasure <span class="nobrk">(+${heads}🌕)</span>${buyTailYou}`
-        :`⚫ TAILS — ye spend the turn haulin' crates at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTailYou}`)
+        :`⚫ TAILS — ye spend the turn workin' the docks at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTailYou}`)
       :(e.heads
         ?`⚪ HEADS! ${pn(e.p)} digs deep at ${place} and strikes buried treasure <span class="nobrk">(+${heads}🌕)</span>${buyTail}`
-        :`⚫ TAILS — ${pn(e.p)} spends the turn haulin' crates at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTail}`);
+        :`⚫ TAILS — ${pn(e.p)} spends the turn workin' the docks at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTail}`);
     const cap=(e.heads?`⚪H 💰+${heads}🌕`:`⚫T +${tails}🌕`)+
       (bought?(barter?` · ${e.paidIng.map(x=>ING_EMOJI[x]||"📦").join("")} → ${ING_EMOJI[e.ing]}`:` · buys ${ING_EMOJI[e.ing]} −${paid}🌕`):``);
     return {txt,caps:[[e.p,cap]],

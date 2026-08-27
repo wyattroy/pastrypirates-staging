@@ -233,4 +233,47 @@ git status --short | sed 's/^/    /'
 git commit -q -m "$MSG"
 git push -q origin HEAD:main
 echo "==> pushed. https://$STAGING_HOST/"
-echo "    (GitHub Pages takes a minute or two to rebuild.)"
+
+# ============================================================================
+#  PROVE IT LANDED. The push is not the deploy.
+# ============================================================================
+# This script had NO post-publish check at all, and that is how staging served
+# DIFFERENT CODE under a stamp identical to production's for a day without one
+# thing in the loop noticing. "We deployed it" is a claim; the stamp on the wire
+# is the evidence. Never fails the deploy — Pages genuinely takes minutes — but
+# it always says which of the three things happened, in words.
+STAMP_NOW="$(grep -o 'PP4_STAMP = "[^"]*"' "$STAMPFILE" | head -1 | sed 's/.*= "//; s/"//')"
+echo "    waiting for Pages to serve $STAMP_NOW ..."
+LANDED=no
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 12
+  GOT="$(curl -s --max-time 20 "https://$STAGING_HOST/src/ui/stage.js" 2>/dev/null \
+         | grep -o 'PP4_STAMP = "[^"]*"' | head -1 | sed 's/.*= "//; s/"//')"
+  if [ "$GOT" = "$STAMP_NOW" ]; then LANDED=yes; break; fi
+  [ -n "$GOT" ] && echo "    still serving: $GOT"
+done
+
+if [ "$LANDED" = yes ]; then
+  echo "    ✅ LIVE — https://$STAGING_HOST/  serving $STAMP_NOW"
+else
+  # THE TWO FAILURES LOOK IDENTICAL FROM A SCRIPT AND ARE NOT THE SAME PROBLEM,
+  # so name both rather than printing one guess. Measured from a cloud container
+  # 2026-08-27: the egress proxy permits HTTPS CONNECT to this host but refuses
+  # plain http:// outright, and https:// then dies AFTER the tunnel opens with no
+  # HTTP status — which is what an origin with no certificate looks like from
+  # behind a re-terminating proxy.
+  echo "    ⚠️  COULD NOT CONFIRM. The push succeeded; the SERVE is unverified."
+  echo "        Do not report this as deployed. Two things it can be:"
+  echo "        1. Pages is still rebuilding — re-run the curl above in a few minutes."
+  echo "        2. GitHub has issued NO CERTIFICATE for $STAGING_HOST, so https fails."
+  echo "           DNS is not the problem if 'getent hosts $STAGING_HOST' names"
+  echo "           wyattroy.github.io. The fix is in the staging repo's"
+  echo "           Settings -> Pages: clear the Custom domain, save, re-enter it,"
+  echo "           save. That re-runs the check and re-requests the certificate."
+  echo "           Then tick Enforce HTTPS. A CAA record on the apex that omits"
+  echo "           letsencrypt.org blocks this permanently — check that first if"
+  echo "           re-adding the domain never issues a cert."
+  echo "        Meanwhile the push IS verifiable from git:"
+  echo "           git clone --depth 1 https://github.com/$STAGING_REPO /tmp/stgchk"
+  echo "           grep -o 'PP4_STAMP = \"[^\"]*\"' /tmp/stgchk/src/ui/stage.js"
+fi
