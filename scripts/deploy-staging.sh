@@ -77,10 +77,20 @@ trap 'rm -rf "$WORK"' EXIT
 # purpose (they identify the live site), and .planning/, .claude/ and
 # art-review/ are tracked on purpose too. Deriving these away would be the
 # outage this script exists to prevent.
+#
+# physical-board/ joined this list 2026-08-28, the hard way: it is kept out of the main
+# checkout's tree only via .git/info/exclude — a LOCAL, untracked file this script never reads,
+# because the derived half above only walks the shared .gitignore. rsync copies the working tree,
+# not what git ignores, so a deploy run from a checkout that has the folder on disk (any session
+# that ever worked the physical-board branch in-place) pushed it straight onto the PUBLIC
+# staging.playpastrypirates.com. It is the CNAME hazard's own shape — a hand-kept ignore list two
+# directories away from the one this script actually consults — for a folder that is meant to
+# live ONLY on the physical-board branch, never on main, never public.
 EXCLUDES=(
   --exclude=CNAME          # ← THE ONE THAT MATTERS. See the header.
   --exclude=robots.txt     # preview must stay Disallow:/ — do not publish the live Allow:/
   --exclude=sitemap.xml    # lists playpastrypirates.com URLs; meaningless on the preview
+  --exclude=physical-board/  # never public — see the note above
   --exclude=.git/
   --exclude=.planning/
   --exclude=.claude/
