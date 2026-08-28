@@ -63,11 +63,19 @@ const CASES = [
   ["BLOCK", "git switch main",                                     "the same move, newer verb"],
   ["BLOCK", "git merge aug26-night-fixes",                         "promotion is Wyatt's call"],
   ["BLOCK", HEREDOC_HIDING,                                        "a real push AFTER a heredoc terminator is not hidden by it"],
+  // THE TWO A CEO FOUND, 2026-08-28, by trying spellings this file's author had not thought of.
+  // Both got through the hook AND through the pre-relaxation hook at 7393ace1 — an old hole, not a
+  // new one. They are pinned here so the next person to touch the matcher cannot reopen them.
+  ["BLOCK", 'bash -c "git push origin main"',                       "a shell wrapper is not a different intention"],
+  ["BLOCK", "sh -lc 'git push origin main'",                        "nor is a different shell"],
+  ["BLOCK", "git push origin $(echo main)",                         "nor is a substitution that spells main"],
+  ["BLOCK", "xargs git push origin main",                           "nor is git arriving via another program"],
 
   ["ALLOW", "git push -u origin claude/cloud-handoff-planning-a9ay1u", "the CTO's own branch"],
   ["ALLOW", 'git commit -m "docs: every push to main is served to real players immediately"', "a MESSAGE about main is prose"],
   ["ALLOW", 'git commit -m "fix: do not merge this into main by hand"', "so is one about merging"],
   ["ALLOW", HEREDOC,                                               "and so is a heredoc body"],
+  ["ALLOW", 'git commit -m "docs: bash -c git push origin main is now blocked"', "a message DESCRIBING the hole is still a message"],
   ["ALLOW", "git merge-base --is-ancestor abc def",                "asks a question, changes nothing"],
   ["ALLOW", "git status",                                          "reads"],
   ["ALLOW", "git checkout -b aug28-topic",                         "a NEW branch is not main"],

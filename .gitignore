@@ -67,3 +67,7 @@ narration-timeline/
 # The CTO lock: written when a marathon worker starts, removed when it stops. Machine-local
 # state, never history — and .claude/hooks/cto-staging-only.cjs keys the main-branch block on it.
 .planning/.cto-lock
+
+# ANY *-shots/ directory is transient probe output — the list above was hand-kept and rotted
+# (w1-smoke-shots/ appeared 2026-08-28 and was not on it). The glob is the derived answer.
+*-shots/

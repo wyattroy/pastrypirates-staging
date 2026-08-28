@@ -290,7 +290,7 @@ snap.state.map(s => s.pos.join(','));                  // the positions actually
 |---|---|---|
 | `turnOrder` | both sides | must be identical on both clients |
 | `game.events.length` | both sides | the broadcast frontier — should track the host's |
-| `timerOff` / `shotClockPaused` | both sides | the host's clock changes must propagate to the guest |
+| `shotClockPaused` | both sides | a pause toggled anywhere must propagate to every client *(`timerOff` left with the shot clock, 2026-08-28)* |
 | `turnExpired` | both sides | must NOT be stuck true after a pause/resume cycle (that was BUG-02) |
 | `events[last].state[].pos` | both sides | the rendered board — **use this, not `game.players`** |
 | `game.players[].pos` / `.ing` / `round` | **HOST ONLY** | stale on a guest; never compare these across clients |

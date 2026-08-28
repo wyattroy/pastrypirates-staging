@@ -177,8 +177,7 @@ const TABLE_GROUPS = {
   battleflee: "Battle",
   fish: "Fishing",
   finish: "End of Voyage",
-  shotclock: "Shot Clock",
-  shotclockskip: "Shot Clock",
+  // shotclock/shotclockskip ("Shot Clock" category) left with the shot clock, 2026-08-28
   bakeoff: "End of Voyage",
   end: "End of Voyage",
   turn: "Sailing & Movement",
@@ -1018,9 +1017,9 @@ const draftWait = DRAFT_WAIT_SITES.map((site) => {
   return { file: site.file, line: lineNo, fn: enclosingFunction(marks, lineNo), anchor: site.anchor };
 }).filter(Boolean);
 
-/* ---- timer: the shot-clock timer-off/on toggle's own tooltip (a two-branch ternary). ---- */
-const timerSites = findAssignmentByLHS(src.panel, FILE_PATHS.panel, "toggleEl\\.title");
-if (timerSites.length !== 1) fail(`timer: expected exactly 1 "toggleEl.title=" assignment in ${FILE_PATHS.panel}, found ${timerSites.length}`);
+/* ---- timer: the ⏱ toggle's tooltip left with the shot clock (2026-08-28); its extraction row
+   and count went with it. ---- */
+const timerSites = [];
 
 /* ---- lobby: the pass-and-play hand-off screen (message + button) and the online lobby's own
  * "waiting for the crew" seat-list caption. ---- */
@@ -1317,7 +1316,7 @@ console.log(`D-43 roundCfg:  ${Object.keys(roundCfgFlags).length} hardcoded bool
 
 // the corrected pre-change surface count from 15-RESEARCH.md — plans 15-03/15-04 can only raise
 // this (new brokeSailLine/brokeAnchorLine/stormIntroClause call sites), never lower it
-if (total < 49) fail(`total ${total} is below the corrected pre-change floor of 49`);
+if (total < 47) fail(`total ${total} is below the corrected pre-change floor of 47`);   // 49 -> 47 with the shot clock, 2026-08-28 — MEASURED delta (41 -> 39 on this tree), not the assumed 3. NOTE: this script has been red since the cutover (70 failures on the pre-removal tree, measured 2026-08-28) — re-pointing it is its own piece of work, parked in test:v1.
 
 if (failures) {
   console.error(`\n${failures} check(s) FAILED — art-review/narration-inventory.json NOT written.`);

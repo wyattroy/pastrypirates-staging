@@ -39,7 +39,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.08.27.3-staging@427ff9d5";
+const PP4_STAMP = "2026.08.28.1-staging@9179ff66";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1068,7 +1068,7 @@ function pillTick(){
      the ribbon (D-18/D-31, the phone stays as it is). */
   const rib = $("pp4Ribbon");
   const wantRibbon = !!rib && pillRidesRibbon();
-  if (wantRibbon && p.parentNode !== rib) rib.insertBefore(p, $("pp4Clock") || rib.lastElementChild);
+  if (wantRibbon && p.parentNode !== rib) rib.insertBefore(p, $("pp4FF") || rib.lastElementChild);
   else if (!wantRibbon && p.parentNode !== document.body) document.body.appendChild(p);
   const h = pillHTML();
   if (h !== S.lastPill){ p.innerHTML = h; S.lastPill = h; }
@@ -1100,20 +1100,8 @@ function ribbonTick(){
     const want = (ord && ord.length) ? String(ord.indexOf(i) < 0 ? i : ord.indexOf(i)) : "";
     if (b.style.order !== want) b.style.order = want;
   });
-  // playtest 11/12: the turn clock lives HERE, right of the boats. Counts down while armed,
-  // flashes red for the LAST 10 SECONDS, and shows a dim "⏱ off" you can tap to re-enable.
-  const ck = $("pp4Clock");
-  if (ck){
-    const off = !!appState.timerOff;
-    const armed = !off && appState.shotClockSeat != null && !appState.shotClockPaused;
-    const left = armed ? Math.max(0, Math.ceil((appState.shotClockDeadline - Date.now()) / 1000)) : 0;
-    ck.classList.toggle("on", armed || off);
-    ck.classList.toggle("off", off);
-    ck.classList.toggle("urgent", armed && left <= 10);
-    const t = off ? "⏱ off" : (armed ? "⏱ " + left : "");
-    if (!off && !armed) ck.classList.remove("on");
-    if (ck.textContent !== t) ck.textContent = t;
-  }
+  // (The ribbon turn-clock chip #pp4Clock stood here — playtest 11/12. Left with the shot clock
+  // 2026-08-28; its span and toggle wiring went in the same commit.)
   // the ⏩ chip shows only while a BOT holds the wheel and the voyage is live — on the player's
   // own turn there is nothing to skip; while a skip runs it stays lit so a tap can't double-arm
   const ff = $("pp4FF");
@@ -1874,7 +1862,6 @@ function buildStage(){
   const order = [0, 1, 2, 3];
   rib.innerHTML = `<span id="pp4Round">DAY 1</span>
     <span class="pp4Boats">${order.map(i => `<img class="pp4Boat" src="assets/boats/${i + 1}.png">`).join("")}</span>
-    <span id="pp4Clock"></span>
     <button id="pp4FF" type="button" title="Skip to yer next turn">⏩</button>
     <button id="pp4Chat" type="button" title="Scuttlebutt">💬<span id="pp4ChatDot"></span></button>
     <button id="pp4Menu" type="button">☰</button>`;
@@ -1966,17 +1953,8 @@ function buildStage(){
     const msg = prompt.querySelector(".apMsg:not(.fadeOut)");
     if (msg && typeof msg._revealNow === "function") msg._revealNow();
   }, { capture: true });
-  /* D-51 — THE TURN-CLOCK ROW HAS LEFT THE MENU. Wyatt, 2026-08-21: "remove the 'Turn clock: OFF
-     – no rush' button in the menu, it's already visible always in the header row." Two controls
-     for one state is exactly the consistency fault rule 8 exists to catch, and the ribbon chip is
-     the one that is always on screen. The TOGGLE itself is untouched — the chip has always called
-     this same function — so what goes is a duplicate control, never the ability to stop the clock.
-     Nothing else read #pp4ClockRow: its CSS rule is deleted in the same commit (index.html), and
-     the label writer went with the row it wrote to. */
-  const clockToggle = () => { const t = $("scTimerToggle"); if (t) t.click();
-    else { appState.timerOff = !appState.timerOff; try{ localStorage.setItem("pp4_timerOff", appState.timerOff ? "1" : "0"); }catch(e){} } };
-  // playtest 12: tapping the ribbon clock toggles it, and the chip shows its OFF state
-  const rc = $("pp4Clock"); if (rc) rc.onclick = clockToggle;
+  /* The ribbon clock chip's toggle wiring stood here (D-51 kept it the ONE control after the menu
+     row left, Wyatt 2026-08-21). Removed 2026-08-28 with the shot clock. */
   const foot = $("footerRow");
   /* ONE LIST, and this class is what says so (D-50, rule 23). The card look, the full-width rows
      and the sound row all hang off it in index.html, so they follow the list into whichever mount
@@ -3341,7 +3319,8 @@ export function initStage(){
   // D-03: the OFF default is DELIBERATE and is not what FIX-01 changes — only the key changed.
   // Wyatt, 2026-08-18: "multiplayer is played between friends, who can communicate through the
   // chat." The shot clock is not this game's dropped-player mechanism. REQUIREMENTS.md:169.
-  try { if (localStorage.getItem("pp4_timerOff") == null) { appState.timerOff = true; localStorage.setItem("pp4_timerOff", "1"); } } catch (e) {}
+  // (The D-03 off-by-default timer seed stood here. The shot clock left 2026-08-28; players'
+  // pp4_timerOff preference stays on their devices untouched, to be honoured on its return.)
   // bridge for the classic modules (no import cycles): panel/flow/board call these if present
   window.__pp4 = {
     flash: stageFlash,

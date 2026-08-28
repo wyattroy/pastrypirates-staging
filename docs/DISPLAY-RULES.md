@@ -108,16 +108,16 @@ was NOT shared until this task was who calls them and when. `renderPickPrompt` o
 teardown; it knows nothing about Firebase, promises or seats, and imports nothing from `src/net/`.
 
 **How long it stays:** until the captain taps a square or "Stay put" (`answer` fires immediately
-after teardown), or the shot clock forces it via `appState.activePickCleanup` — the LOCAL caller's
-teardown, registered only by `localPickCell` (a deliberate asymmetry, not an oversight: registering
-it on the guest tier too would be a behaviour change on a path only the host's own shot clock reads,
-which tonight's pure-plumbing constraint forbids).
+after teardown). *(While the shot clock lived — it left 2026-08-28, temporarily, at Wyatt's word —
+its expiry could also force the teardown via `appState.activePickCleanup`, a LOCAL-caller concern
+registered only by `localPickCell`. The registration left with the clock; the renderer still
+returns its teardown for the clock's return.)*
 
 **Where the promise is created, resolved, rejected:** created in `localPickCell` (local) or by
-`remotePrompt` (remote, `src/orchestrator.js`); resolved on a square click, on `#apStay`, or from
-`appState.shotClockForce` at 30s. **No reject path** — a dropped prompt does not throw, it simply
-never settles, exactly as before this task. `renderPickPrompt` does not add a second way to reach
-that state.
+`remotePrompt` (remote, `src/orchestrator.js`); resolved on a square click or on `#apStay` (and,
+while the clock lived, from its 30s force-resolver). **No reject path** — a dropped prompt does not
+throw, it simply never settles, exactly as before this task. `renderPickPrompt` does not add a
+second way to reach that state.
 
 **The wire is unchanged** — exactly `kind`, `cells`, `msg`, `hint`; `id` and `seat` are still stamped
 by `remotePrompt`, never added to the literal built in `pickCell()`.
@@ -240,7 +240,8 @@ different control again.
 `choice` on the wire unchanged, so an object needs no channel change (04-01 established this for the
 bake's `{g:[…],w:n}`). `ask()` unpacks it **before `resolveOpt`** and writes `n` into the host's own
 `ref`, so `coinSlider`'s single `logQuantity()` call records a remote drag identically to a local
-one. **A bare number must still work** and does: `withShotClock` force-resolves with a plain `0`.
+one. **A bare number must still work** and does: while the clock lived its force-resolver answered
+a plain `0`, and any future forced answer will again.
 
 **How long it stays:** it is part of the prompt and leaves with it. **It is `display:none` for
 roughly the first 750ms** of that prompt's life while the layer reveals — measured 3 of 32 samples
@@ -261,7 +262,7 @@ orchestration parity (see §4 below for the distinction that matters for the pro
 
 ---
 
-## 3. THE THREE STANDING RULES — any new drawn thing must obey all three
+## 3. THE STANDING RULES — two live today; the third returns with the shot clock
 
 ### Rule A — MIRROR WHEN REMOTE. The host's own screen never round-trips through Firebase.
 
@@ -316,24 +317,18 @@ this rule — `recipeDraftNet` and `netIntroBarrier` fork on `seatLocal`, and it
 reached.** See §4 — do not extend a converged dispatch to those two without disarming that landmine
 first.
 
-### Rule C — `withShotClock()` needs a plain Promise, nothing else.
+### Rule C — RETIRED WITH THE SHOT CLOCK, 2026-08-28. It returns when the clock does.
 
-```js
-export function withShotClock(seat,base,defaultVal){
-  if(!appState.isHost||seat!==appState.shotClockSeat)return base;
-  return new Promise(res=>{
-    let done=false;
-    appState.shotClockForce=()=>{if(!done){done=true;res(defaultVal);}};
-    base.then(v=>{ /* ... */ });
-  });
-}
-```
-
-It races `base` against `appState.shotClockForce` only because it can call `.then()` on `base` — it
-cares that `base` is *a* Promise, nothing about who resolves it or how. Anything a captain can be
-asked must resolve a plain Promise from wherever it comes. Resolve through anything else — an
-emitter, a callback registry — and the visible clock keeps counting down while nothing
-force-resolves at zero: the 30-second auto-skip every player relies on stops firing, silently.
+Rule C was *"`withShotClock()` needs a plain Promise, nothing else"* — every askable decision had
+to resolve a plain Promise so the 30s force-resolver could race it. **It was the single reason four
+prompt forks stayed open across three phases**: a prompt cannot loop back like an event when
+something is racing it. Wyatt removed the obstacle instead of building around it (2026-08-28: *"i'd
+prefer to do it even if it breaks shot clock, and to temporarily remove the shot clock from the
+game"*). The full rule text and `withShotClock`'s body live in this file's git history and in
+`src/ui/util.js`'s history — **when the clock returns it races the CONVERGED dispatch's one
+resolver, which is the easier problem this removal was chosen to create.** The plain-Promise
+discipline is still the house style for every decision; nothing new should resolve through an
+emitter or callback registry.
 
 ---
 

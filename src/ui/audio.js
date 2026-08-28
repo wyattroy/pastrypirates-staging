@@ -71,12 +71,8 @@ const STORM_VOLUME = 0.35;
 // `newround`/`end`). Opening value, same tuning-point discipline as STORM_VOLUME.
 const STORM_FADE_SEC = 1.2;
 
-// D-22 EXPLICIT PLACEHOLDER — not a final choice. Running out of time must make a noise so you
-// notice even if you looked away (Wyatt's call), but none of Luis's six is an alarm. This is a
-// stand-in: short, percussive, unambiguously adverse. On the shopping list for Luis: a
-// purpose-made time-out alert. `EVENT_SOUND.shotclock`/`.shotclockskip` reference this constant
-// rather than repeating the stem string, so a later edit cannot quietly de-flag it by inlining it.
-const SHOTCLOCK_SOUND_PLACEHOLDER = "battle-swords";
+/* SHOTCLOCK_SOUND_PLACEHOLDER stood here (D-22, battle-swords standing in for a purpose-made
+   time-out alert). Left with the shot clock 2026-08-28 — restore the shopping-list note with it. */
 
 // D-05 EXPLICIT PLACEHOLDER — not a final choice. The win screen gets a sound rather than
 // silence; nothing in the six actually sounds like victory, so Claude selected the short, bright
@@ -84,8 +80,8 @@ const SHOTCLOCK_SOUND_PLACEHOLDER = "battle-swords";
 // purpose-made victory sound. Swapping it is a one-constant change.
 const WIN_SOUND_PLACEHOLDER = "store-ingredient";
 
-// 260801-7f4 — a REAL choice, not a placeholder like the two above. Unlike WIN_SOUND_PLACEHOLDER
-// and SHOTCLOCK_SOUND_PLACEHOLDER, this stem literally is a sword clash; it is not on any shopping
+// 260801-7f4 — a REAL choice, not a placeholder like WIN_SOUND_PLACEHOLDER above (or the
+// departed SHOTCLOCK one); this stem literally is a sword clash; it is not on any shopping
 // list for Luis. Named as a constant (not inlined) so the DOM-free harness can assert it by name.
 // This is the moment cue for a battle being JOINED — see playBattleEngage() below — fired from the
 // orchestrator's own battle-opening seams, never from the `battle` event, because that event does
@@ -110,8 +106,6 @@ const EVENT_SOUND = {
   // D-04: running aground / shipwrecked both borrow storm
   // v2.1: nothing runs aground any more — the storm keeps its own cue via `newround`
   shipwrecked: "storm",
-  // D-22 — see SHOTCLOCK_SOUND_PLACEHOLDER above. Referenced by constant, never repeated inline.
-  shotclock: SHOTCLOCK_SOUND_PLACEHOLDER, shotclockskip: SHOTCLOCK_SOUND_PLACEHOLDER,
   // D-06 — explicit silence, not merely absent from the table
   blocked: null, moored: null, turn: null, newround: null, tradewind: null, bakeoff: null,
   // playtest 21 item 3: the storm's one summary line. Deliberately SILENT — every ship in it has
@@ -373,6 +367,6 @@ function playBattleEngage() {
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
-  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND_PLACEHOLDER, SHOTCLOCK_SOUND_PLACEHOLDER,
+  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND_PLACEHOLDER,
   BATTLE_ENGAGE_SOUND, playBattleEngage,
 };

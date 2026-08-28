@@ -18,14 +18,14 @@
 import { detach, detachRoom, detachAll, size, list } from "./registry.js";
 import {
   netWatchFlip, netWatchConnected, netWatchPresence,
-  netWatchTimerOff, netWatchClock, netWatchChat, netWatchBattle,
+  netWatchChat, netWatchBattle,
   netWatchRecovery, netWatchDraftPrompt, netWatchEvents, netWatchPrompt,
   netWatchNarr,
   netWatchSeats, netWatchStatus, netWatchTurnOrder, netWatchRecipes,
   netWatchResponse, netWatchDraftResponse, netWatchPaused,
 } from "./watchers.js";
 import {
-  netSetFlip, netSetClock, netSetTimerOff,
+  netSetFlip,
   netSetPrompt, netRemovePrompt, netSetResponse,
   netSetNarr, netPushChat,
   netSetBattle, netRemoveBattle,
@@ -44,14 +44,14 @@ import {
 
 export {
   netWatchFlip, netWatchConnected, netWatchPresence,
-  netWatchTimerOff, netWatchClock, netWatchChat, netWatchBattle,
+  netWatchChat, netWatchBattle,
   netWatchRecovery, netWatchDraftPrompt, netWatchEvents, netWatchPrompt,
   netWatchNarr,
   netWatchSeats, netWatchStatus, netWatchTurnOrder, netWatchRecipes,
   netWatchResponse, netWatchDraftResponse, netWatchPaused,
 };
 export {
-  netSetFlip, netSetClock, netSetTimerOff,
+  netSetFlip,
   netSetPrompt, netRemovePrompt, netSetResponse,
   netSetNarr, netPushChat,
   netSetBattle, netRemoveBattle,

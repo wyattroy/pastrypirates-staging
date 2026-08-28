@@ -742,13 +742,7 @@
     border-color: #f5a623; background: rgba(245,166,35,.35); }
   @media (prefers-reduced-motion: reduce) {
     #scPause.scPulse { animation: none; box-shadow: 0 0 8px 3px rgba(245,166,35,.5); } }
-  #scTimerToggle img { width: 60%; height: 60%; object-fit: contain; vertical-align: middle; }
-  /* #7: timer off/on toggle — sits in the bottom-right corner, clear of the "turn clock" label
-     text in the top-left (which it used to overlap) and of #scPause in the top-right */
-  #scTimerToggle { position: absolute; bottom: 3px; right: 4px; width: 16px; height: 16px; padding: 0;
-    line-height: 13px; font-size: 9px; border: 1px solid #d9a84e; border-radius: 50%;
-    background: rgba(0,0,0,.25); color: #ffe9b8; cursor: pointer; }
-  #scTimerToggle:hover { background: rgba(0,0,0,.4); }
+  /* (#scTimerToggle's rule stood here — the ⏱ toggle left with the shot clock, 2026-08-28.) */
   #shotClockPanel.urgent { background: linear-gradient(160deg, rgba(90,95,102,.72), rgba(37,40,44,.72)), var(--clock-img) center/100% 100% no-repeat;
     border-color: #e2564c;
     animation: clockurgent 0.9s ease-in-out infinite; }
@@ -1290,7 +1284,6 @@
       padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px);
       min-width: clamp(105px,39cqw,177px); }
     #scPause { width: 24px; height: 24px; }
-    #scTimerToggle { width: 24px; height: 24px; line-height: 20px; font-size: 13.5px; }
     /* AUDIO-02 (phase 21): #btnMute joins the same narrow-viewport bump — 21-03 made the timer
        toggle visible in solo for the first time, so this row now carries one more control than
        it ever has at this width. */
@@ -2384,20 +2377,16 @@
      behaviour). An explicit line-height is what makes it hold — without it the ⏩'s larger
      font-size silently makes its box taller than the clock's again, which is the same
      two-hand-synced-numbers trap this project keeps paying for. */
-  #pp4Clock, #pp4FF, #pp4Chat { box-sizing:border-box; align-items:center; justify-content:center;
+  /* (#pp4Clock shared this box rule until the shot clock left, 2026-08-28 — its chip rules and
+     the pp4ClockFlash keyframes went with it.) */
+  #pp4FF, #pp4Chat { box-sizing:border-box; align-items:center; justify-content:center;
     min-width:34px; padding:3px 8px; line-height:18px; border:none; border-radius:8px;
     background:rgba(255,255,255,.16); color:#fff; font-family:inherit; text-align:center; }
-  #pp4Clock { display:none; font-size:13px; font-weight:800; letter-spacing:.5px;
-    font-variant-numeric:tabular-nums; cursor:pointer; }
-  #pp4Clock.on { display:inline-flex; }
-  #pp4Clock.off { opacity:.45; }               /* playtest 12: tapped off — dim, tap to re-arm */
-  #pp4Clock.urgent { color:#ffd0c4; animation:pp4ClockFlash .5s steps(2,jump-none) infinite; }
-  @keyframes pp4ClockFlash { 0% { background:rgba(214,69,42,.85); } 100% { background:rgba(255,255,255,.16); } }
   /* ⏩ fast-forward: appears in the ribbon only while a bot holds the wheel (stage.js ribbonTick);
      lights orange while a one-shot skip runs so a second tap can't double-arm */
   #pp4FF { display:none; font-size:15px; cursor:pointer; }
   #pp4FF.on { background:rgba(245,166,35,.85); }
-  /* D-06: the 💬 chip shares #pp4Clock/#pp4FF's ONE box rule above (playtest 21 item 8's own
+  /* D-06: the 💬 chip shares #pp4FF's ONE box rule above (playtest 21 item 8's own
      ruling against a third hand-written box) and adds only what genuinely differs from #pp4FF —
      nothing, in fact, but position:relative to anchor the unread dot to its own corner. Visibility
      (crew games only) is written inline in ribbonTick, same explicit-value pattern as #pp4FF. */
@@ -2887,13 +2876,11 @@
       </div>
       <div id="shotClockPanel" class="idle">
         <button id="scPause" type="button" style="display:none"><img id="scPauseImg" alt="pause/resume"></button>
-        <button id="scTimerToggle" type="button" title="Turn the timer off/on" style="display:none">⏱️</button>
         <div id="scLabel">turn clock</div>
         <div id="scRow"><span id="shotClockNum">–</span><span id="scUnit"></span></div>
         <div id="shotClockSub">&nbsp;</div>
       </div>
       <!-- AUDIO-02/D-15 (phase 21): a #controlsRow sibling to the right of #shotClockPanel, NOT a
-           third corner icon on the clock face — #scPause/#scTimerToggle already occupy both
            corners, and 21-03's D-20 change makes the timer toggle visible in solo for the first
            time, so a third icon there would newly crowd a panel that already clamps to 70-118px.
            Bare 🔊/🔇 emoji scaffold (D-14): the real speaker icon + blocked-slash overlay is

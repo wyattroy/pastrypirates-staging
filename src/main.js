@@ -89,12 +89,11 @@ if (typeof window !== "undefined") {
     onLogDecision: orchestrator.logDecision,
     onBeginGame: orchestrator.beginGame,
     onBroadcastFlip: orchestrator.broadcastFlip,
-    onBroadcastClock: orchestrator.broadcastClock,
-    onExpireShotClock: orchestrator.expireShotClock,
     onTogglePause: orchestrator.togglePause,
     onCreateRoom: orchestrator.createRoom, // UI-05: "Host a Crew" creates the room directly
     onNetBroadcast: orchestrator.netBroadcast,
     onRenderBattle: orchestrator.renderBattle,
+    onConsumeEvent: orchestrator.consumeEvent,   // W1: the ONE event consumer — liveRender's drain reaches it through this seam
     onBattleAsk: orchestrator.battleAsk,
     onAsyncBattle: orchestrator.asyncBattle,
     // Wyatt's problem 5 (2026-08-23): endReplay tells the orchestrator the resumed host is live

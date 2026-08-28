@@ -593,8 +593,9 @@ export function checkRingMovesWithShip(root) {
 // a gate that is green against a declaration anyone can read the holes in — a reviewable statement,
 // not an accident. Widening the declaration to cover a renderer that is still host-only turns this
 // back into the reassuring kind of gate; do not do it.
+// watchClock left with the shot clock (2026-08-28) — eight listeners now.
 const LISTENERS = ["watchEvents","watchPrompt","watchNarr","watchFlip","watchBattle",
-                   "watchDraftPrompt","watchClock","watchTurnOrder","watchRecoveryState"];
+                   "watchDraftPrompt","watchTurnOrder","watchRecoveryState"];
 
 // Renderers this gate tracks. `shared:true` means a listener must be able to reach it;
 // `shared:false` is a DECLARED GAP — still host-loop-only, with the stage that closes it named.
@@ -613,7 +614,15 @@ const ORCHESTRATION_DECL = [
      dropped requirement. */
   { fn: "applyActiveSeat(", shared: true, why: "shared — PROMOTED BY 02.15-01 STAGE 2, in the same commit that made it true. The one function that sets curSeat AND S.activeSeat, called by humanTurn/botTurn and by watchEvents." },
   { fn: "setActor(",      superseded: "applyActiveSeat(", why: "not a renderer — a one-line assignment to appState.curSeat, now reached by both tiers THROUGH applyActiveSeat. Reported, not asserted." },
-  { fn: "localAsk(",      shared: false, why: "the host draws its own prompt from the game loop. Closes at Stage 4, which is abandonable under D-04." },
+  /* W1 (2026-08-28) CLOSED THIS ROW — the last declared gap of the six forks. renderAskPrompt is
+     the ONE ask-class renderer, named directly by localAsk (now the LOCAL RESPONSE MECHANISM,
+     exactly localPickCell's shape) and by watchPrompt's ask branch. Same superseded precedent as
+     setActor→applyActiveSeat and localPickCell→renderPickPrompt: measured and printed, asserts
+     nothing, so the swap is auditable rather than asserted. The row was added BEFORE the
+     convergence and watched RED (PARITY-ORCH-ABSENT — renderAskPrompt did not exist), per this
+     gate's own rule that a row added after the fact proves nothing. */
+  { fn: "localAsk(",      superseded: "renderAskPrompt(", why: "not a renderer any more — the LOCAL RESPONSE MECHANISM, reached THROUGH renderAskPrompt on both tiers. W1, 2026-08-28." },
+  { fn: "renderAskPrompt(", shared: true, why: "shared — PROMOTED BY W1 (2026-08-28), in the same commit that made it true. The ONE ask-class renderer: buttons, slider, back, flip arming and the ceremony's words, named directly by localAsk and by watchPrompt's ask branch." },
   /* 02.15-02 Task 3 (THE TRACER) CLOSED THIS ROW. localPickCell was the DECLARED GAP watched RED
      by Task 1 — the host drew its own sail window from the game loop; a guest's was drawn by a
      separate wrapper, remotePickHighlights, called from watchPrompt. Task 3 converged both into
@@ -658,7 +667,9 @@ const ORCHESTRATION_DECL = [
 // Slice a function body by BRACE MATCHING from its `export function NAME(` header. Located by
 // content, never by line number, for the same reason sliceFn is — a line shift must go loud.
 function fnBody(src, name) {
-  const i = src.indexOf("export function " + name + "(");
+  // async exports too — consumeEvent (W1) is `export async function`
+  let i = src.indexOf("export function " + name + "(");
+  if (i < 0) i = src.indexOf("export async function " + name + "(");
   if (i < 0) return null;
   const st = src.indexOf("{", i);
   if (st < 0) return null;
@@ -689,7 +700,24 @@ export function checkOrchestrationParity(root, { strict = false } = {}) {
   const found = [], missing = [];
   for (const w of LISTENERS) { const b = fnBody(orch, w); if (b) found.push([w, b]); else missing.push(w); }
   if (missing.length) fail(res, `PARITY-ORCH-VACUITY: ${missing.length} of ${LISTENERS.length} listener bodies not found in ${ORCH_REL} (${missing.join(", ")}) — this assertion cannot measure a tree it cannot parse, and must not pass one`);
-  const listenerSrc = found.map(([, b]) => b).join("\n");
+  /* W1 (2026-08-28): THE LISTENER PATH INCLUDES THE ONE CONSUMER. watchEvents no longer draws
+     inline — it delegates every drawing step to consumeEvent (the one-activity-engine seam), so a
+     textual scan of listener BODIES alone reads `applyActiveSeat: listeners=0` about a call that
+     every listener-delivered event makes. consumeEvent's body IS what the listener executes; it
+     joins the scanned path, with its own anti-vacuity: if it exists it must be non-trivial. This
+     was caught RED before it was fixed — the applyActiveSeat row failed PARITY-ORCH the moment
+     the consumer landed, on a convergence that was real. */
+  const consumer = fnBody(orch, "consumeEvent");
+  if (consumer && consumer.length < 200) fail(res, `PARITY-ORCH-VACUITY: consumeEvent exists but is ${consumer.length} chars — too small to be the real consumer`);
+  // …and the ONE ask renderer (fork 2, same day): watchPrompt names renderAskPrompt and the
+  // slider builders live inside it, so the scan must read through that delegation too. Guarded
+  // the same way: it only extends the path if watchPrompt actually reaches it — a renderer no
+  // listener calls must NOT smuggle its callees into the listener path.
+  const askRenderer = fnBody(flow, "renderAskPrompt");
+  const wpBody = fnBody(orch, "watchPrompt") || "";
+  const askReached = askRenderer && /renderAskPrompt\(/.test(wpBody) ? askRenderer : "";
+  if (askRenderer && askRenderer.length < 200) fail(res, `PARITY-ORCH-VACUITY: renderAskPrompt exists but is ${askRenderer.length} chars — too small to be the real renderer`);
+  const listenerSrc = found.map(([, b]) => b).join("\n") + (consumer ? "\n" + consumer : "") + (askReached ? "\n" + askReached : "");
   if (listenerSrc.length < 500) { fail(res, `PARITY-ORCH-VACUITY: the listener path is ${listenerSrc.length} chars — too small to be the real one. Refusing to report parity against an empty listener set`); return res; }
 
   const driven = orch + "\n" + flow;   // where the host's loop reaches its renderers
@@ -1113,7 +1141,7 @@ function drill() {
      names, because the assertion's own anti-vacuity guard refuses to report against a tree it
      cannot parse — which is the property drill 6c exists to prove. */
   const NINE = ["watchEvents","watchPrompt","watchNarr","watchFlip","watchBattle",
-                "watchDraftPrompt","watchClock","watchTurnOrder","watchRecoveryState"];
+                "watchDraftPrompt","watchTurnOrder","watchRecoveryState"];   // eight since the clock left; name kept so the fixtures read
   // pad each body so the whole listener set clears the 500-char floor without any real call in it
   const orchFixture = (bodies) => NINE.map((w) =>
     `export function ${w}(){\n  const pad="${"x".repeat(70)}";\n  ${bodies[w] || ""}\n}\n`).join("\n");

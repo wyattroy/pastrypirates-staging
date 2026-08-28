@@ -38,8 +38,20 @@ function extractJSON(text) {
 export function judgeScreen(imgPath, context = "", { model = "claude-sonnet-5", timeoutMs = 120000 } = {}) {
   const prompt = `${RUBRIC}\n\nContext (informational only, does not change the rules): ${context}\nRead the image file at ${imgPath} and judge it.`;
   return new Promise((resolve) => {
+    /* THE JUDGE MUST TRUST THE PROXY'S CA, OR IT CANNOT SEE ANYTHING.
+       Measured 2026-08-27: in a cloud container every judge call died with
+         "API Error: Unable to connect to API: Self-signed certificate detected."
+       and the trial fell back to its queue — **30 screens went unjudged in one run**, reported as
+       DEFERRED rather than passed, which is the honest behaviour and still means the eyes never
+       opened. Cloud sessions route HTTPS through a policy proxy that re-terminates TLS, so the
+       child process has to be told where the bundle is; the parent's own trust does not inherit.
+       FEATURE-DETECTED, never assumed: the file exists in a container and not on Wyatt's Mac, so
+       this is a no-op on the laptop rather than a second thing to keep in step. */
+    const CA = "/root/.ccr/ca-bundle.crt";
+    const env = { ...process.env };
+    if (!env.NODE_EXTRA_CA_CERTS && fs.existsSync(CA)) env.NODE_EXTRA_CA_CERTS = CA;
     const child = execFile("claude", ["-p", prompt, "--model", model, "--output-format", "json"],
-      { maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      { maxBuffer: 8 * 1024 * 1024, env }, (err, stdout) => {
         if (err && !stdout) return resolve({ verdict: "ERROR", issues: ["vision call failed: " + String(err.message || err).slice(0, 120)], confidence: 0 });
         let text = stdout;
         let outer = null;
@@ -78,6 +90,20 @@ export async function judgeAll(items, { concurrency = 3, model = "claude-sonnet-
       if (fatal) return;
       const i = next++;
       results[i] = await judgeScreen(items[i].path, items[i].context || "", { model });
+      /* A TRANSIENT TLS FAILURE IS NOT AN EXPIRED LOGIN. Measured on the 2026-08-28 trial: the
+         SAME run judged dozens of screens and then hit "Self-signed certificate detected" three
+         separate times — with NODE_EXTRA_CA_CERTS correctly inherited (verified in the parent
+         env), so the proxy's TLS interception simply hiccuped. Treating one hiccup as FATAL
+         deferred 45 judged-able screens to the queue. So a cert-flavoured FATAL gets exactly TWO
+         bounded retries with a short breath between; a FATAL that repeats or is not cert-flavoured
+         (expired OAuth, missing CLI) still stops the whole pass, because there every further call
+         genuinely fails the same way. */
+      if (results[i] && results[i].verdict === "FATAL" && /certificate|SSL|TLS/i.test(String(results[i].issues && results[i].issues[0] || ""))) {
+        for (let r = 0; r < 2 && results[i].verdict === "FATAL"; r++) {
+          await new Promise(w => setTimeout(w, 3000 * (r + 1)));
+          results[i] = await judgeScreen(items[i].path, items[i].context || "", { model });
+        }
+      }
       if (results[i] && results[i].verdict === "FATAL" && !fatal) fatal = results[i];
       if (onEach) onEach(items[i], results[i], i);
     }

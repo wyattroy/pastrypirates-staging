@@ -236,6 +236,12 @@ export function makePlayer(c, { log = () => {}, isGuest = false } = {}) {
   // screenshot every DISTINCT screen once. Returns the shot path when this sig is new.
   async function captureIfNew(shotDir, prefix, n) {
     const s = await sig();
+    /* THE WEBKIT MOUNT RETURNS {__err} WHERE THE CDP MOUNT THROWS — and this line used to call
+       .replace on that object, so both -wk legs of the 2026-08-28 trial died mid-voyage with
+       "s.replace is not a function" while the REAL failure (whatever made page.evaluate throw)
+       was never seen by anyone. An instrument that crashes on its own error report is worse than
+       one that crashes honestly: surface the underlying message instead. */
+    if (typeof s !== "string") throw new Error("sig() could not read the page: " + ((s && s.__err) || JSON.stringify(s).slice(0, 160)));
     const key = s.replace(/~ [^~]*$/, "");     // ignore the free-text tail for dedupe
     if (seenSig.has(key)) return null;
     seenSig.add(key);

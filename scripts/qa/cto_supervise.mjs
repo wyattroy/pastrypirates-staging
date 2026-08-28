@@ -105,7 +105,7 @@ if (newest) {
 /* ─────────────────────────────────────────────────────────────────────────────────────────────
    2. IS IT MAKING PROGRESS, OR STUCK ON ONE THING?
    ───────────────────────────────────────────────────────────────────────────────────────────── */
-const CLOSERS = new Set(["DONE", "BLOCKED", "PARKED", "ABANDONED", "REVERTED"]);
+const CLOSERS = new Set(["DONE", "BLOCKED", "PARKED", "ABANDONED", "REVERTED", "DONE-PENDING-CEO"]);
 const latestByItem = new Map();
 for (const e of entries) {
   if (e.id === "BOOTSTRAP" || e.state === "HEARTBEAT") continue;
@@ -113,6 +113,10 @@ for (const e of entries) {
   if (!prev || e.at >= prev.at) latestByItem.set(e.id, e);
 }
 const open = [...latestByItem.values()].filter(e => !CLOSERS.has(e.state));
+/* DONE-PENDING-CEO CLOSES AN ITEM BUT DOES NOT CLAIM A VERDICT. Added 2026-08-28: the ledger was
+   already using this state nine times and this file had never heard of it, so a finished item
+   counted as nothing and the supervisor reported "2 of 32 closed" against a real twelve. A reader
+   that silently drops a state it does not know is worse than one that errors. */
 const done = [...latestByItem.values()].filter(e => e.state === "DONE");
 
 if (open.length > 1)

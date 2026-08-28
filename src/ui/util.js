@@ -20,7 +20,8 @@
 // move here too. Fix: `islandArtPlacement`, `shipXY`, `islandXY`, `spawnPops` gained an explicit
 // `cellPx` parameter (default-free — every call site is still-classic and has `cell` in scope, so
 // each is updated in index.html to pass it explicitly) and `boatXY` gained a `shipEls` parameter
-// the same way. The EVENT_NARRATION `battle`/`aground`/`shotclockskip` entries gained an optional
+// the same way. The EVENT_NARRATION `battle`/`aground` entries (and, before the shot clock's
+// 2026-08-28 removal, `shotclockskip`) gained an optional
 // `cellPx=0` third parameter for the same reason; describe()/captions() (which only ever read
 // `.txt`/`.cls`/`.caps`, never `.pops`) call with the 2-arg form and let the harmless default
 // apply, while spawnPops() (the only real consumer of `.pops`) passes its own `cellPx` through.
@@ -57,7 +58,7 @@ import { escHtml } from "./recipe.js";
 // 11-07 (bridge deletion fix): util.js is a common dependency of src/ui/board.js, panel.js,
 // lobby.js, and flow.js — it can never import any of THEM back without closing an import cycle
 // module_graph_check.js's "no import cycle" assertion forbids. A handful of functions here
-// (ask/botBeat/narrateCurrent/applyShotClockPenalty/toggleShotClockPause/shotClockTick/
+// (ask/botBeat/narrateCurrent/toggleShotClockPause/
 // spawnPops/updateRecipeBanner/resumeSoloGame) genuinely need to CALL a rendering function that
 // lives in one of those sibling modules (liveRender/flash/setClockUI/narrateLastEvent from
 // panel.js; popEmoji/render from board.js), or a net-adjacent orchestration function that lives
@@ -711,22 +712,9 @@ const EVENT_NARRATION={
   // NARR-01/D-25/D-38 (Wyatt-approved 2026-07-29): signed catch amounts.
   finish:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",txt:isLocalTo(e.p,viewerSeat)?`🏁 ${pn(e.p)} — ye return to the Isle of Tortuga with a full recipe!`:`🏁 ${pn(e.p)} returns to the Isle of Tortuga with a full recipe!`,
     caps:[[e.p,"🏁 recipe done!"]],pops:[[at(e.p),"🏁",true]]}),
-  shotclock:(e,at,cellPx,viewerSeat)=>({cls:"trade",txt:isLocalTo(e.p,viewerSeat)?`⏱ ${pn(e.p)} — ye were too slow and lose 1🌕; everyone else gets +1🌕`:`⏱ ${pn(e.p)} was too slow — loses 1🌕, everyone else +1🌕`}),
-  // NARR-01/D-25 (Wyatt-approved 2026-07-29): "loses the turn" → "loses their/yer turn" for
-  // parallelism with the addressed form.
-  //
-  // WYATT, 2026-07-30 — HIS WORDING, chosen from three drafts: "Dozed at the helm!". The old
-  // headline was "Snoozing pirates lose their treasure!", which became untrue the moment the two
-  // 30-second resource penalties were removed (see expireShotClock in src/orchestrator.js). The
-  // event no longer carries `ing` or `coins` AT ALL, so there is one line per viewer instead of a
-  // four-way branch, and no `pops` — nothing goes overboard any more, so nothing splashes.
-  //
-  // If a resource penalty is ever reinstated, this line must change WITH it. That coupling is the
-  // whole reason the old wording survived being false: the text described a mechanic the code had
-  // moved on from. (15-LEARNINGS #6 — a constant, or a string, that does not mean what it says.)
-  shotclockskip:(e,at,cellPx=0,viewerSeat)=>({cls:"roundhdr",txt:isLocalTo(e.p,viewerSeat)
-      ?`⏰ Dozed at the helm! ${pn(e.p)} — ye lose yer turn.`
-      :`⏰ Dozed at the helm! ${pn(e.p)} loses their turn.`}),
+  /* The `shotclock` (20s coin penalty) and `shotclockskip` (30s turn skip, Wyatt's "Dozed at the
+     helm!" wording) rows stood here — removed 2026-08-28 with the shot clock itself (see ask()).
+     Nothing emits either event any more; the wordings and their approval history live in git. */
   // D-08/D-25: both finalists read the result addressed to themselves — the winner's own "ye take
   // it!", the loser's own commiseration; a third-party viewer (and NEUTRAL_VIEWER) reads today's
   // exact third-person text.
@@ -888,7 +876,7 @@ export function computeAwards(){
   const n=appState.game.players.length;
   const mk=()=>Array(n).fill(0);
   const battlesWon=mk(),battlesLost=mk(),timesAttacked=mk(),cratesBought=mk(),dist=mk(),
-    trades=mk(),shotClockCount=mk(),longestBattle=mk(),hottestStreak=mk(),streak=mk();
+    trades=mk(),longestBattle=mk(),hottestStreak=mk(),streak=mk();
   const bump=(i,heads)=>{
     if(i==null)return;
     if(heads){streak[i]++;if(streak[i]>hottestStreak[i])hottestStreak[i]=streak[i];}
@@ -923,13 +911,12 @@ export function computeAwards(){
     // v2: `aground` is no longer a coin flip — a storm asks nothing (rule 8), so it contributes
     // nothing to the heads-luck tally. `anchor` no longer exists at all.
     if(e.t==="trade"){trades[e.a]++;trades[e.b]++;}
-    if(e.t==="shotclock"||e.t==="shotclockskip")shotClockCount[e.p]++;
     if(e.state)e.state.forEach((s,i)=>{
       if(prevPos[i])dist[i]+=Math.abs(s.pos[0]-prevPos[i][0])+Math.abs(s.pos[1]-prevPos[i][1]);
       prevPos[i]=s.pos;
     });
   }
-  return {battlesWon,battlesLost,timesAttacked,cratesBought,dist,trades,shotClockCount,longestBattle,hottestStreak};
+  return {battlesWon,battlesLost,timesAttacked,cratesBought,dist,trades,longestBattle,hottestStreak};
 }
 // notes/edits EOV-04: the end-of-voyage honours. The full pool of ~10 keepsakes, each with a
 // pirate-y name, a byline, its 1:1 emblem art (assets/badges/*.png — placeholders Wyatt will
@@ -949,7 +936,9 @@ const BADGE_POOL=[
   {key:"trades",       img:"ledger",   name:"The Silver-Tongued Ledger",         byline:"Struck more deals than a Tortuga fishmonger on market day.",       stat:"Most trades struck", unit:"",         scale:3},
   {key:"timesAttacked",img:"target",   name:"The Painted Target",                byline:"Somehow every cannon in the Caribbean swung their way.",           stat:"Most set upon",      unit:"",         scale:3},
   {key:"battlesLost",  img:"timbers",  name:"The Splintered Timbers",            byline:"Took a right drubbing and lived to grumble about it.",             stat:"Most battles lost",  unit:"",         scale:3},
-  {key:"shotClockCount",img:"barnacle",name:"The Barnacle Brain",                byline:"Pondered each move till the barnacles grew — no rush in these waters.", stat:"Slowest to decide", unit:"",      scale:3},
+  /* "The Barnacle Brain" (slowest to decide) left with the shot clock, 2026-08-28 — its tally
+     counted shotclock/shotclockskip events nothing emits now; kept, every seat would score 0 and
+     the award would be handed out by tie-break, a visibly wrong End of Voyage screen. */
 ];
 // Guaranteed fallback for a captain who earned no standout stat (rare — everyone at least sails, so
 // "Farthest traveled" is nearly always claimable — but this ensures EVERY captain gets one award).
@@ -1554,31 +1543,16 @@ export function ask(msg,opts,colors,sub,extra){
     netHandlers().onEndReplay();
   }
   const seat=appState.curSeat;
-  // D-02 (18-05): the shot clock used to arm HERE, before the prompt's own buttons were even in
-  // the DOM — a player on a long prompt lost up to ~2.8s of their 30s window to the typewriter
-  // reveal before they could act at all (D-01 now holds the buttons hidden until it resolves).
-  // Publish a one-shot continuation instead: whichever panel() render actually gates the button
-  // row (18-01's pendingReveal seam) claims it and fires it once the buttons are truly clickable.
-  // Deliberately does NOT itself call the arming function defined below — this file's only mention
-  // of that identifier is its own declaration line (a hard gate on this task's own diff); panel.js
-  // is the sole caller, since it already imports it and is where every claim of this continuation
-  // actually happens (both the deferred-reveal path and the remote estimate path). The closure
-  // below just marks the arm claimed and hands the real seat back to whoever calls it, since
-  // panel()'s own currentTurnSeat() derivation is a display-only approximation (it can drift from
-  // the actual asked seat during a nested battle sub-decision) and must never be the value that
-  // actually gets armed.
-  //
-  // Published BEFORE onBroadcast() below, not just before onLocalAsk/onRemotePrompt — netNarrate
-  // (onBroadcast's target) calls showNarration() synchronously on THIS (host) browser before it
-  // ever reaches Firebase, so it is the FIRST panel() render this call produces on either branch:
-  // the actor's own line for a local seat, or the neutral spectator line for a remote one — and
-  // for a remote seat that spectator render is the ONLY panel() call this browser ever makes for
-  // this decision (the real button row renders on the deciding guest's own browser instead).
-  let resolveArmed;
-  const armed=new Promise(res=>{resolveArmed=res;});
-  appState.clockPendingLocal=decisionIsLocal(seat);
-  appState.clockPendingText=msg;
-  appState.clockPendingArm=()=>{resolveArmed();return seat;};
+  /* THE SHOT CLOCK IS TEMPORARILY OUT OF THE GAME — Wyatt, 2026-08-28, choosing removal over
+     engineering the one-activity-engine convergence around it: "i'd prefer to do it even if it
+     breaks shot clock, and to temporarily remove the shot clock from the game." What stood here
+     was the D-02/18-05 arming machinery: an `armed` promise resolved by a one-shot continuation
+     (appState.clockPendingArm) that panel()'s reveal seam claimed once the buttons were truly
+     clickable, so a captain never lost reveal-time from their 30s window. It comes BACK against
+     the converged dispatch — racing ONE resolver is an easier problem than racing two, which is
+     the whole reason removal won. The reveal-gating half of that seam (buttons hidden until the
+     typewriter finishes and the board settles) is a separate feature and still lives in panel().
+     Removal gate: scripts/qa/shotclock_removed_check.mjs. */
   // D-10 DELIVERY (F7, found in the 2026-07-29 two-tab playtest): ONE broadcast reaches EVERY
   // client, so content that branches on the local viewer can never be right. This line used to read
   // `seat===appState.mySeat?msg:spectatorLine` — but ask() runs on the HOST, so `mySeat` is the
@@ -1640,22 +1614,10 @@ export function ask(msg,opts,colors,sub,extra){
           of prompts that are just buttons. */
        slider:sliderWirePayload(extra&&extra.slider),
        flipIdx:opts.findIndex(o=>o.flip),back:opts.findIndex(o=>o.back)});
-  // No-panel belt: nothing claimed the arm during the synchronous render above — a pure flip
-  // prompt (opts.length===1 with a `flip`) never calls panel() at all (see localAsk()), so there
-  // is no reveal to defer onto. Arm right now so this decision is never left unclocked; identical
-  // to today's timing for exactly this case (T-18-13). Inlines the same two-line body the arming
-  // function below performs (host guard, then start the clock for this seat) rather than naming
-  // it a second time in this file, for the same reason the closure above doesn't.
-  if(appState.clockPendingArm){
-    appState.clockPendingArm=null;appState.clockPendingLocal=false;appState.clockPendingText="";
-    resolveArmed();
-    if(appState.isHost){const p=appState.game.players[seat];if(p)startShotClock(p);}
-  }
-  // Hard constraint 1: withShotClock() bails out and returns `base` unwrapped unless
-  // seat===appState.shotClockSeat — chaining it onto `armed` guarantees the seat has already been
-  // armed (shotClockSeat is already set) before withShotClock ever inspects it, so the 30s
-  // auto-skip resolver is installed for every clocked decision, never skipped (T-18-12).
-  const idxP=armed.then(()=>withShotClock(seat,base,0));
+  // With the clock out there is nothing to arm and nothing to race: the answer is the answer.
+  // (The no-panel belt and the armed→withShotClock chain that stood here are part of the same
+  // atomic removal as the machinery above — inventory D1: removing HALF of it hangs every prompt.)
+  const idxP=base;
   return idxP.then(v=>{
     /* A QUANTITY PROMPT COMES BACK AS {i,n} — the button and the number the captain dragged to.
        Unpacked HERE, before resolveOpt, for two reasons. First, resolveOpt has always taken an
@@ -1663,8 +1625,8 @@ export function ask(msg,opts,colors,sub,extra){
        Second, `n` has to be in `ref` before the caller's own confirm branch reads it, and that
        branch is what calls logQuantity() — so the number reaches the decision log through the ONE
        call a local drag already uses, for a remote drag too.
-       A BARE NUMBER MUST STILL WORK: withShotClock(seat,base,0) force-resolves with a plain 0 at
-       30s, and a forced answer is an index, not a pair. */
+       A BARE NUMBER MUST STILL WORK: while the shot clock lived, its 30s force-resolve answered
+       with a plain 0 — an index, not a pair — and any future forced answer will again. */
     let i=v;
     if(v&&typeof v==="object"&&v.i!=null){
       i=v.i;
@@ -1672,14 +1634,6 @@ export function ask(msg,opts,colors,sub,extra){
     }
     const r=resolveOpt(opts,i,0);netHandlers().onLogDecision(r.i);return r.opt.value;});
 }
-// re-arms the shot clock with a fresh 30s window right before a new decision is shown to
-// whichever seat is being asked — every ask()/pickCell()/non-flip battleAsk() call in the
-// game goes through this, so every decision anyone makes is timed the same way.
-export function armClock(seat){
-  if(!appState.isHost)return;
-  const p=appState.game.players[seat];if(p)startShotClock(p);
-}
-
 /* ---------- pause / pacing ---------- */
 // solo pause (see toggleShotClockPause) freezes the whole game by making every await-ed
 // sleep() stall first — bots pace their turns entirely through sleep(), so this alone halts
@@ -1891,97 +1845,28 @@ export function isLocalTo(seat,viewerSeat){
 // remotePrompt/remoteDraftPrompt (which would throw anyway, since db/room are null here).
 export function decisionIsLocal(s){return (appState.passAndPlay&&appState.game.players[s].strategy==="human")||seatLocal(s);}
 
-/* ---------- shot clock ---------- */
-export function startShotClock(p){
-  if(!appState.isHost||appState.timerOff)return;   // #7: timer switched off — decisions wait, never time out
-  appState.shotClockSeat=p.idx;
-  appState.shotClockDeadline=Date.now()+30000;
-  appState.shotClockFired={};
-  appState.turnExpired=false;
-  appState.shotClockPaused=false;
-  netHandlers().onBroadcastClock();
-  if(appState.shotClockTimer)clearInterval(appState.shotClockTimer);
-  appState.shotClockTimer=setInterval(shotClockTick,500);
-}
-export function stopShotClock(){
-  if(!appState.isHost)return;
-  // BUG-02: stash the in-flight decision's force-resolver before dropping the live reference, so
-  // rearmShotClock() can hand it back. Keyed by seat — restoring a resolver that belongs to an
-  // older decision would force-resolve the wrong promise, which is worse than having no auto-skip.
-  if(appState.shotClockForce&&appState.shotClockSeat!=null)appState.shotClockStash={seat:appState.shotClockSeat,force:appState.shotClockForce};
-  appState.shotClockSeat=null;appState.shotClockForce=null;appState.shotClockPaused=false;
-  if(appState.shotClockTimer){clearInterval(appState.shotClockTimer);appState.shotClockTimer=null;}
-  netHandlers().onBroadcastClock();
-}
-// notes/edits BUG-02: re-arm the CURRENT turn's clock after the timer is switched back on. This is
-// deliberately not startShotClock(): that clears shotClockFired, which would let the same turn be
-// charged the 20s penalty twice. D-06 says an already-fired penalty is neither refunded nor
-// replayed — switching the timer off only prevents FUTURE penalties. Also restores the stashed
-// force-resolver so the 30s auto-skip survives the toggle (see stopShotClock).
-// Not a pause button: D-04 keeps multiplayer on the ⏱ toggle only, and this adds no new UI.
-export function rearmShotClock(p){
-  if(!appState.isHost||appState.timerOff)return;
-  appState.shotClockSeat=p.idx;
-  appState.shotClockDeadline=Date.now()+30000;   // D-05: a full fresh 30s, not the remainder
-  appState.shotClockPaused=false;
-  // shotClockFired is deliberately NOT reset here (D-06) — see above.
-  // turnExpired is deliberately NOT cleared: if the turn already expired, the flow is unwinding
-  // and watchTimer's guard below refuses to re-arm it at all.
-  if(appState.shotClockStash&&appState.shotClockStash.seat===p.idx){appState.shotClockForce=appState.shotClockStash.force;appState.shotClockStash=null;}
-  netHandlers().onBroadcastClock();
-  if(appState.shotClockTimer)clearInterval(appState.shotClockTimer);
-  appState.shotClockTimer=setInterval(shotClockTick,500);
-}
+/* ---------- pause (the shot clock's former neighbour; the clock itself is temporarily out) ----------
+   THE SHOT-CLOCK BLOCK STOOD HERE — startShotClock/stopShotClock/rearmShotClock/shotClockTick/
+   applyShotClockPenalty/applyTimerOff/withShotClock, the 30s window, the 20s coin penalty and the
+   ⏱ toggle. Removed 2026-08-28 at Wyatt's word (see ask() above) so the one-activity-engine
+   convergence races nothing. The 30/20s design decisions those functions carried (D-05/D-06/D-07:
+   a fresh 30s on re-arm, a fired penalty never refunded, resume from the remainder) are recorded
+   in git history at this file — read the log before re-deriving them when the clock returns.
+   PAUSE STAYS. It shared the clock's state field and panel, but it is a separate feature: it backs
+   the phone app-switch auto-pause (src/main.js) that exists because a hidden tab used to hang a
+   turn forever. shotClockPaused keeps its name until the clock's return settles what it becomes. */
 // solo/bots-only games only — pausing wouldn't make sense with other humans waiting on you
 export function soloBotGame(){return appState.game&&appState.game.players&&appState.game.players.filter(p=>p.strategy==="human").length<=1;}
 // CLOCK-02: the pause/resume state-mutation body, extracted out of toggleShotClockPause below
 // so src/orchestrator.js's watchPause() can call it directly on the host branch of a networked
-// pause toggle — the SAME shotClockDeadline/shotClockPauseElapsed math as before (D-07: resume
-// continues from the remaining time, not a fresh 30s), just relocated, not rewritten. No
-// isHost/soloBotGame gate lives in here on purpose (D-05/D-06): the caller decides who may call
-// this — solo's toggleShotClockPause() below (host-only), or the host branch of watchPause()
-// (never the guest branch, which only mirrors the boolean for rendering).
+// pause toggle. No isHost/soloBotGame gate lives in here on purpose (D-05/D-06): the caller
+// decides who may call this — solo's toggleShotClockPause() below (host-only), or the host
+// branch of watchPause() (never the guest branch, which only mirrors the boolean for rendering).
 export function applyPauseState(nowPaused){
-  if(nowPaused){
-    appState.shotClockPaused=true;
-    if(appState.shotClockSeat!=null){
-      appState.shotClockPauseElapsed=Date.now()-(appState.shotClockDeadline-30000);
-      if(appState.shotClockTimer){clearInterval(appState.shotClockTimer);appState.shotClockTimer=null;}
-    }
-  }else{
-    appState.shotClockPaused=false;
-    if(appState.shotClockSeat!=null){
-      appState.shotClockDeadline=Date.now()+30000-appState.shotClockPauseElapsed;
-      appState.shotClockTimer=setInterval(shotClockTick,500);
-    }
-  }
-}
-// notes/edits BUG-02 / D-18 (phase 21): the timer-off state-mutation body, extracted VERBATIM out
-// of src/orchestrator.js's watchTimer() Firebase-listener callback so BOTH the networked path
-// (watchTimer(), unchanged below other than calling this) and the new local path (toggleTimer()'s
-// solo/pass-and-play branch) share this ONE body — the whole point being that the re-arm fix below
-// (BUG-02: switching the timer off then back on mid-turn must re-arm the clock for the player
-// whose turn is in progress, or the game freezes) cannot drift between the networked and local code
-// paths. Mirrors applyPauseState()'s own no-gate discipline immediately above: every appState.isHost
-// gate already lived INSIDE this body before the move and stays exactly where it was — the caller
-// decides who may call this, not this function.
-export function applyTimerOff(off){
-  const was=appState.timerOff;
-  appState.timerOff=off;
-  if(appState.isHost&&appState.timerOff)stopShotClock();
-  else if(appState.isHost&&was&&!appState.timerOff&&appState.shotClockSeat==null&&!appState.turnExpired){
-    // shotClockSeat==null is what prevents double-arming: this fires on EVERY client for every
-    // write (networked path) or the one local browser (solo/pass-and-play), so the host also runs
-    // it for a write a guest originated.
-    const seat=currentTurnSeat();
-    const p=seat!=null?appState.game.players[seat]:null;
-    if(p&&!p.done)rearmShotClock(p);
-  }
-  // src/ui/util.js is imported by src/ui/panel.js (setClockUI() lives there) — calling setClockUI()
-  // directly here would close an import cycle scripts/module_graph_check.js forbids outright, so
-  // this reaches it through the same netHandlers() render seam toggleShotClockPause() uses one
-  // function below.
-  netHandlers().onSetClockUI();
+  // With the clock out this is the whole body: the flag every sleep() and bot beat stalls on.
+  // The countdown-freeze/deadline-restore math that lived here (D-07: resume from the remainder)
+  // left with the clock and comes back with it.
+  appState.shotClockPaused=nowPaused;
 }
 // works any time in solo play, not just on your own turn — shotClockPaused doubles as the
 // whole game's pause flag (see waitWhilePaused/sleep above), so pausing between turns
@@ -1995,29 +1880,9 @@ export function toggleShotClockPause(){
   applyPauseState(!appState.shotClockPaused);
   netHandlers().onSetClockUI();
 }
-export function shotClockTick(){
-  if(appState.shotClockSeat==null)return;
-  const elapsed=Date.now()-(appState.shotClockDeadline-30000);
-  // /4 playtest 12 (Wyatt): the coin penalty lands WITH the skip at 30s — not as a separate
-  // 20-second surcharge while the player is still deciding
-  if(elapsed>=30000){
-    if(!appState.shotClockFired.t30){appState.shotClockFired.t30=true;applyShotClockPenalty();}
-    netHandlers().onExpireShotClock();return;
-  }
-  netHandlers().onSetClockUI();
-}
-export function applyShotClockPenalty(){
-  const p=appState.game.players[appState.shotClockSeat];if(!p)return;
-  const others=appState.game.players.filter(q=>q!==p&&!q.done);
-  const take=Math.min(1,p.coins);
-  p.coins-=take;others.forEach(q=>q.coins++);
-  appState.game.ev({t:"shotclock",p:p.idx,others:others.map(q=>q.idx)});
-  netHandlers().onNarrateLastEvent();
-  netHandlers().onLiveRender();
-}
 // mirrors render()'s "whose turn is it" derivation — used by setClockUI() to tell a genuinely
-// idle moment apart from a bot quietly taking its turn, since startShotClock() is only ever
-// armed for a human decision (ask()), never for a bot's turn.
+// idle moment apart from a bot quietly taking its turn (the panel says "waiting" rather than
+// sitting on an idle label while a bot plays).
 export function currentTurnSeat(){
   if(!appState.game||!appState.game.events)return null;
   for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
@@ -2027,31 +1892,6 @@ export function currentTurnSeat(){
   }
   return null;
 }
-// If `seat` is the one currently on the shot clock, wrap its decision so expireShotClock() can
-// force a default answer once 30s run out, instead of the answer waiting forever. A no-op for
-// every other decision in the game (recipe drafts, battle/trade sub-flows, etc).
-// Critically: once the wrapped decision is answered for real (not forced), the clock stops
-// immediately rather than continuing to tick toward that seat — otherwise a spectator who
-// answers a side-bet prompt right away keeps getting timed against for the rest of the battle,
-// long after they have nothing left to decide.
-export function withShotClock(seat,base,defaultVal){
-  if(!appState.isHost||seat!==appState.shotClockSeat)return base;
-  return new Promise(res=>{
-    let done=false;
-    appState.shotClockForce=()=>{if(!done){done=true;res(defaultVal);}};
-    base.then(v=>{
-      if(!done){
-        done=true;appState.shotClockForce=null;
-        // BUG-02: the decision resolved for real, so any resolver stashed for THIS seat across a
-        // timer-off is dead — drop it so a later re-arm can't force-resolve a settled promise.
-        if(appState.shotClockStash&&appState.shotClockStash.seat===seat)appState.shotClockStash=null;
-        if(appState.shotClockSeat===seat)stopShotClock();
-        res(v);
-      }
-    });
-  });
-}
-
 /* ---------- board pops (event -> emoji animation) ---------- */
 export function spawnPops(e,cellPx){
   if(!e)return;

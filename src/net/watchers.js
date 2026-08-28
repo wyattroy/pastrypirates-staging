@@ -56,33 +56,13 @@ export function netWatchPresence(db, handler, onCancel) {
   return registry.attach({ scope: "session", ref, event: "value", callback: handler, cancelCallback: onCancel, label: "presence" });
 }
 
-// ---------------------------------------------------------------------
-// Phase 9 Plan 2 (SPLIT-04/NET-01, D-05/D-06). Thirteen further room-scoped
-// wrappers, same shape as the three above: build the Reference, preserve
-// the caller's own guard (some call sites carry one, some do not — that
-// split is preserved exactly rather than normalised in either direction),
-// and hand the caller's own handler straight to the registry's attach
-// entry point as the callback itself.
-// ---------------------------------------------------------------------
 
-export function netWatchTimerOff(db, room, handler) {
-  if (!db || !room) return null;
-  const ref = db.ref("rooms/" + room + "/timerOff");
-  return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "timerOff" });
-}
-
-// CLOCK-02: mirrors netWatchTimerOff exactly — a room-scoped value watcher on the shared
-// whole-table pause flag, attached by every client (host and guest alike).
+// CLOCK-02: a room-scoped value watcher on the shared whole-table pause flag, attached by
+// every client (host and guest alike).
 export function netWatchPaused(db, room, handler) {
   if (!db || !room) return null;
   const ref = db.ref("rooms/" + room + "/paused");
   return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "paused" });
-}
-
-export function netWatchClock(db, room, handler) {
-  if (!db || !room) return null;
-  const ref = db.ref("rooms/" + room + "/clock");
-  return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "clock" });
 }
 
 export function netWatchChat(db, room, handler) {

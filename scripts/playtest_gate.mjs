@@ -29,13 +29,14 @@ import { openChrome, sleep } from "./lib/cdp.mjs";
    makePlayer() and every check below run against it unchanged (ONE DRIVER, TWO MOUNTS, rule 23).
    The pulse bug lived only in his phone's WebKit and cost eight days; three Chromium engines
    cleared it honestly. That is the whole argument for this import. */
-import { openWebKit } from "./lib/wk.mjs";
+import { playwrightDir, openWebKit } from "./lib/wk.mjs";
 import { MEASURE, structuralChecks, waitSettled } from "./lib/checks.mjs";
 import { judgeAll, writeJudgeQueue } from "./lib/vision.mjs";
 import { makePlayer, sideQuests, GATE_SRC } from "./lib/player.mjs";
 /* DO THE TWO CAPTAINS SEE THE SAME GAME? This leg already played both seats and threw the
    comparison away — each was judged against the universal rules ALONE, which cannot see "both
    screens are individually fine and they disagree". That is seven of Wyatt's 35 findings. */
+import { legVerdictLine } from "./lib/leg_verdict.mjs";
 import { compareWhenSettled } from "./lib/seat_parity.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -355,18 +356,18 @@ async function openEngine(def, opts) {
    A MISSING ENGINE IS "NOT RUN", NEVER A PASS. That distinction is the entire reason this function
    exists: a leg that silently skipped would make the report say Safari was covered when it was not,
    which is the exact lie this whole process was built to stop. */
-function webkitAvailable() {
-  const dir = process.env.PW_DIR || "/tmp/pw";
-  try {
-    fs.accessSync(path.join(dir, "node_modules", "playwright"));
-    return { ok: true, dir };
-  } catch {
-    return { ok: false, dir, how:
-      `WebKit is not installed, so the Safari legs did NOT run.\n` +
-      `      mkdir -p ${dir} && cd ${dir} && npm init -y && npm i playwright && npx playwright install webkit\n` +
-      `      then re-run with PW_DIR=${dir}` };
-  }
+async function webkitAvailable() {
+  // ASKS scripts/lib/wk.mjs, never its own copy. See playwrightDir()'s note there for the day this
+  // function's private /tmp/pw guess reported "not installed" about a working WebKit.
+  const dir = await playwrightDir();
+  if (dir) return { ok: true, dir };
+  return { ok: false, dir: null, how:
+    `WebKit is not installed, so the Safari legs did NOT run.\n` +
+    `      mkdir -p ~/.pw && cd ~/.pw && npm i playwright && npx playwright install webkit\n` +
+    `      (NOT /tmp — it is cleared on reboot. scripts/lib/wk.mjs finds ~/.pw on its own;\n` +
+    `       PW_DIR only overrides it.)` };
 }
+
 
 async function runLeg(name, idx) {
   const def = legDefs[name]; if (!def) { log(`unknown leg ${name}`); return { name, verdict: ["unknown leg"] }; }
@@ -375,7 +376,7 @@ async function runLeg(name, idx) {
   ownPorts.dbg.add(dbg); ownPorts.dbg.add(dbg + 1);
   let host = null, guest = null;
   if (def.engine === "webkit") {
-    const wk = webkitAvailable();
+    const wk = await webkitAvailable();
     if (!wk.ok) { log(`[${name}] NOT RUN — ${wk.how}`); return { name, notRun: wk.how, verdict: [] }; }
   }
   try {
@@ -481,7 +482,7 @@ let anyFail = false;
 for (const r of results) {
   const ok = r.verdict.length === 0;
   if (!ok) anyFail = true;
-  log(`\n== ${r.name}: ${ok ? "PASS" : "FAIL"}${r.finished ? "" : " (voyage incomplete)"}`);
+  log(legVerdictLine(r));
   for (const v of r.verdict) log(`   ✗ ${v}`);
   const P = (r.seats && r.seats[0] && r.seats[0].player) ? r.seats[0].player : null;
   if (P) log(`   coverage: ${[...P.coverage.entries()].map(([k, c]) => `${k}:${c.clicked}/${c.seen}`).join("  ")}`);

@@ -143,32 +143,16 @@ checkTrue(`D-01 the one legacy key literal sits INSIDE ${CLEANUP_FN}`,
 
 // The five renamed sites. grep-style line counts, matching the plan's acceptance criteria.
 const countLines = (src, needle) => src.split("\n").filter(l => l.includes(needle)).length;
-checkTrue(`D-01 the per-game key appears on >=2 lines of src/ui/stage.js (got ${countLines(stageSrc, GAME_KEY)})`,
-  countLines(stageSrc, GAME_KEY) >= 2);
-checkTrue(`D-01 the per-game key appears on >=3 lines of src/orchestrator.js (got ${countLines(orchSrc, GAME_KEY)})`,
-  countLines(orchSrc, GAME_KEY) >= 3);
 checkTrue("D-02 the one-time marker key literal is present in src/ui/stage.js",
   stageSrc.includes(MARKER_KEY));
 checkTrue(`D-02 ${CLEANUP_FN} is exported from src/ui/stage.js`,
   stageSrc.includes(`export function ${CLEANUP_FN}`));
 checkTrue(`D-02 initStage() calls ${CLEANUP_FN}`, stageSrc.includes(`${CLEANUP_FN}(localStorage)`));
 
-/* D-03 — the off-by-default seed is intact. Asserted against the seed LINE rather than by
- * brace-matching initStage's very large body: the line must sit after the initStage declaration,
- * must still assign true to appState.timerOff, and must still write the per-game key. FIX-01
- * changed the key and nothing else. */
-const initAt = stageSrc.indexOf("export function initStage");
-const seedLines = stageSrc.split("\n");
-let seedIdx = -1, offset = 0;
-for (let i = 0; i < seedLines.length; i++) {
-  const l = seedLines[i];
-  if (offset > initAt && initAt >= 0 && l.includes("appState.timerOff = true") && l.includes(GAME_KEY)) { seedIdx = i + 1; break; }
-  offset += l.length + 1;
-}
-checkTrue(`D-03 the off-by-default seed still assigns true inside initStage() and writes the per-game key (line ${seedIdx})`,
-  seedIdx > 0);
-checkTrue("D-03 the seed still writes the string one (the default is OFF, unchanged by FIX-01)",
-  seedIdx > 0 && seedLines[seedIdx - 1].includes(`${GAME_KEY}, "1"`));
+/* D-03's seed assertion (off-by-default, written inside initStage) left with the shot clock,
+ * 2026-08-28 — there is no live seed to assert. The per-game KEY is deliberately left on players'
+ * devices so their preference is honoured when the clock returns; the D-02 legacy-key cleanup
+ * checks above still stand, because that hygiene is about the classic game's namespace. */
 
 /* D-04 — the three shared identity keys are still present, un-prefixed, somewhere under src/.
  * Asserted as PRESENCE, never as absence-of-a-prefixed-variant: an absence assertion is satisfied

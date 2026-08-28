@@ -33,19 +33,19 @@
 
 import { appState } from "../state/index.js";
 import {
-  PLAY_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, BLOCKED_SLASH_IMG, STOPWATCH_IMG, SOUND_ON_IMG, SOUND_OFF_IMG, COIN_IMG, HEXCOL, iconImg, emojify,
+  PLAY_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, SOUND_ON_IMG, SOUND_OFF_IMG, COIN_IMG, HEXCOL, iconImg, emojify,
 } from "../shared/index.js";
 import {
-  render, boardCell, boardShipEls, chatBubbles, positionChatBubble, removeChatBubble,
+  boardShipEls, chatBubbles, positionChatBubble, removeChatBubble,
 } from "./board.js";
 import {
-  soloBotGame, currentTurnSeat, syncLogLines, spawnPops, pn, boatXY, narrationHoldMs, chatBubbleHoldMs,
-  waitWhilePaused, sleepMs, describeFor, narrationVariants, NEUTRAL_VIEWER, armClock,
-  pickNarrVariant, eventCeremony,
+  soloBotGame, currentTurnSeat, pn, boatXY, narrationHoldMs, chatBubbleHoldMs,
+  waitWhilePaused, sleepMs, describeFor, narrationVariants, NEUTRAL_VIEWER,
+  pickNarrVariant, eventCeremony, voyageAground,
 } from "./util.js";
 import { escHtml } from "./recipe.js";
 import { netHandlers } from "./handlers.js";
-import { playForEvent, isMuted } from "./audio.js";
+import { isMuted } from "./audio.js";
 
 const $=id=>document.getElementById(id);
 // sleepMs, not a bare setTimeout: a dropped beat must cost a late line, never the voyage (util.js)
@@ -132,15 +132,11 @@ export function setClockUI(){
   }
   wrap.style.display="";
   $("btnPlayAgain").style.display="none";
-  const state=appState.isHost?(appState.shotClockSeat==null?null:{seat:appState.shotClockSeat,deadline:appState.shotClockDeadline,paused:appState.shotClockPaused,pauseElapsed:appState.shotClockPauseElapsed}):appState.clockState;
-  // CLOCK-02 FIX (mp-pause-clock-desync): on a GUEST the frozen<->running decision AND the frozen
-  // remaining it renders must both flip from the SAME authoritative clock broadcast. Driving the
-  // paused branch off appState.shotClockPaused alone (set by watchPause on the /paused flag) let
-  // the flag land a network round-trip BEFORE the fresh deadline (watchClock) and flash a stale
-  // countdown — the "guest races to 0 on resume". Prefer the broadcast's own paused bit; fall back
-  // to the mirrored flag only until the first clock write arrives. The host owns the clock, so its
-  // inline state.paused IS its live flag — no behavior change for host or solo.
-  const paused=(state&&typeof state.paused==="boolean")?state.paused:appState.shotClockPaused;
+  // With the shot clock out (2026-08-28, see src/ui/util.js's ask()) the panel has exactly two
+  // subjects left: PAUSE, and "is a bot playing". The clock-state derivation, the CLOCK-02
+  // guest-desync fallback and the countdown branches that stood here are all in git history and
+  // ride back in with the clock.
+  const paused=appState.shotClockPaused;
   const labelEl=$("scLabel"),numEl=$("shotClockNum"),unitEl=$("scUnit"),subEl=$("shotClockSub"),pauseEl=$("scPause");
   // CLOCK-03: defensive reset, once per tick, BEFORE any branch below. setClockUI() re-runs on
   // the 500ms interval, so a click-to-resume handler set in a prior PAUSED tick must never
@@ -161,36 +157,10 @@ export function setClockUI(){
   const pauseLabel=paused?"The game is paused — tap to resume":"Pause the game";
   setIf(pauseEl,"title",pauseLabel);
   setAttrIf(pauseEl,"aria-label",pauseLabel);
-  // #7 / D-20 (phase 21): the timer off/on toggle is offered to EVERY player in EVERY mode —
-  // the soloBotGame() gate that used to hide it in solo/pass-and-play is gone. It used to be a
-  // dead control there (toggleTimer() early-returned with no Firebase connection); Task 2 gave
-  // every mode a working code path behind it, so there is no longer a reason to hide it anywhere
-  // but end of voyage. Its icon reflects the current state.
-  const toggleEl=$("scTimerToggle");
-  if(toggleEl){
-    toggleEl.style.display=appState.liveDone?"none":"";
-    setIf(toggleEl,"innerHTML",appState.timerOff?iconImg(BLOCKED_SLASH_IMG):iconImg(STOPWATCH_IMG));
-    // @copy misc.timer.toggletooltip
-    toggleEl.title=appState.timerOff?"Turn the timer back on":"Turn the timer off";
-  }
-  // PAUSED OUTRANKS TIMER-OFF (Wyatt, 2026-08-06: "players don't know why the game has stopped if
-  // they go away from the tab; we must make it clear that the game is paused").
-  //
-  // MEASURED, not guessed. The four combinations rendered like this before:
-  //   timer ON,  running -> "turn clock / – "
-  //   timer ON,  paused  -> "paused / ⏸ / tap ▶ to resume"     correct
-  //   timer OFF, running -> "timer off / ∞ / no rush — tap ⏱"
-  //   timer OFF, PAUSED  -> "timer off / ∞ / no rush — tap ⏱"  <-- the game is stopped and the
-  //                                                                panel says "no rush"
-  // The timer-off branch returned EARLY, before either paused branch could run, so with the timer
-  // off the pause state was invisible: the only tell was a 20px button icon flipping to ▶. That is
-  // exactly the reported bug, and it is a rendering-precedence bug, not a missing feature —
-  // "paused" and the ⏸ symbol were already written, they were simply unreachable.
-  //
-  // These are two INDEPENDENT states (D-05: the ⏱ toggle and the ▶/⏸ pause coexist), and paused is
-  // the one that stops play, so paused is the one the panel must report. Turning the timer off does
-  // not stop the game; pausing does.
-  if(paused&&(appState.timerOff||!state)){
+  // PAUSED IS THE ONE STATE THE PANEL MUST REPORT (Wyatt, 2026-08-06: "players don't know why
+  // the game has stopped if they go away from the tab") — with the countdown gone it is also the
+  // only state with anything to say.
+  if(paused){
     wrap.classList.remove("idle","urgent");wrap.classList.add("paused");
     labelEl.textContent="paused";numEl.innerHTML=iconImg(PAUSE_SYMBOL_IMG);unitEl.textContent="";
     subEl.innerHTML=`tap ${iconImg(PLAY_IMG)} to resume`;
@@ -200,117 +170,34 @@ export function setClockUI(){
     numEl.style.cursor="pointer";numEl.onclick=()=>netHandlers().onTogglePause();
     return;
   }
-  if(appState.timerOff){
-    // synced to all clients — everyone sees the clock is disabled
-    wrap.classList.add("idle");wrap.classList.remove("urgent","paused");
-    labelEl.textContent="timer off";numEl.textContent="∞";unitEl.textContent="";
-    subEl.innerHTML=`no rush — tap ${iconImg(STOPWATCH_IMG)}`;
-    return;
-  }
-  if(!state){
-    // the `!state && paused` case is handled by the precedence branch above, which now covers both
-    // timer-off and no-clock-yet — there is deliberately nothing left to do here.
-    // D-02 (18-05) UI obligation: a decision's own reveal is gating the button row right now
-    // (clockPendingSeat, set by panel() the instant it gates a real button row — see the D-02
-    // comment there), so there is genuinely no live clock state yet — the arm itself is what's
-    // deferred. Show a frozen full-window value instead of falling through to the idle "–" below,
-    // so a player never sees a blank or ticking clock during the 0-2.8s reveal. Derived from the
-    // SAME elapsed=0 expression the active/waiting branch further down uses, rather than a literal
-    // duplicate, so a future change to the 20/30 split can't desync the two.
-    if(appState.clockPendingSeat!=null){
-      const elapsed=0,urgent=elapsed>=20;
-      const num=urgent?30-elapsed:20-elapsed;
-      const activeViewer=appState.clockPendingSeat===appState.mySeat;
-      wrap.classList.remove("urgent","paused");
-      wrap.classList.toggle("idle",!activeViewer);
-      labelEl.textContent=activeViewer?"play in":"waiting";
-      numEl.textContent=num;
-      unitEl.textContent="seconds";
-      subEl.innerHTML=activeViewer?`or pay 1${iconImg(COIN_IMG)}`:`or gain 1${iconImg(COIN_IMG)}`;
-      return;
-    }
-    // notes/edits #5a: a bot's turn in solo mode never arms the shot clock, so `state` stays
-    // null the whole time it's playing — that used to fall through to the idle "turn clock"
-    // label even while a bot is actively moving. Show the same "waiting" copy multiplayer
-    // spectators see for a non-active seat instead, so it reads as "something's happening", not idle.
-    const activeSeat=currentTurnSeat();
-    const botPlaying=activeSeat!=null&&activeSeat!==appState.mySeat&&!(appState.game.players[activeSeat]&&appState.game.players[activeSeat].done);
-    wrap.classList.add("idle");wrap.classList.remove("urgent","paused");
-    labelEl.textContent=botPlaying?"waiting":"turn clock";numEl.textContent="–";unitEl.textContent="";subEl.innerHTML="&nbsp;";
-    return;
-  }
-  wrap.classList.remove("idle");
-  if(paused){
-    // CLOCK-02 FIX (mp-pause-clock-desync): the frozen remaining comes from the host's
-    // pauseElapsed carried in the clock broadcast (state.pauseElapsed) so host and guest show the
-    // IDENTICAL number — a guest never owns appState.shotClockPauseElapsed (it stays 0), which is
-    // why it used to freeze at 20s while the host showed 13s. Fall back to the live deadline only
-    // for the brief pre-broadcast window on a guest (self-corrects on the next clock write).
-    const peMs=(state.pauseElapsed!=null)?state.pauseElapsed:Math.max(0,30000-(state.deadline-Date.now()));
-    const elapsed=peMs/1000;
-    const urgent=elapsed>=20;
-    wrap.classList.remove("urgent");wrap.classList.add("paused");
-    labelEl.textContent="paused";
-    numEl.textContent=Math.ceil(urgent?30-elapsed:20-elapsed);
-    unitEl.textContent="seconds";
-    subEl.innerHTML=`tap ${iconImg(PLAY_IMG)} to resume`;
-    // CLOCK-03: same togglePause resume seam as the other paused branch above. UX (this phase):
-    // the frozen NUMBER didn't read as clickable (unlike the ⏸-symbol branch), so .tappable adds
-    // a dotted underline + hover lift making it obviously tap-to-resume on your own turn.
-    numEl.style.cursor="pointer";numEl.onclick=()=>netHandlers().onTogglePause();numEl.classList.add("tappable");
-    return;
-  }
-  const remain=Math.max(0,Math.ceil((state.deadline-Date.now())/1000));
-  const elapsed=30-remain;
-  const urgent=elapsed>=20;
-  // whose turn is being timed vs. who's looking: the active player sees a live "play in / or pay"
-  // countdown; everyone else sees a greyed "WAITING" clock with spectator-appropriate copy — a
-  // slow player hands the rest of the crew a coin, then (final 10s) forfeits their turn entirely.
-  const active=(state.seat===appState.mySeat);
-  wrap.classList.remove("paused");
-  // notes/edits UI-02: the clock's outer edge warms up as the 20s window burns down — 0 at a full
-  // 20s left, 1 at zero. The CSS reads --heat to size an orange glow (see #shotClockPanel.warming).
-  const heat=Math.max(0,Math.min(1,elapsed/20));
-  if(active){
-    wrap.classList.remove("idle");
-    wrap.classList.toggle("urgent",urgent);
-    wrap.classList.toggle("warming",!urgent&&heat>0);
-    wrap.style.setProperty("--heat",heat.toFixed(3));
-    labelEl.textContent="play in";
-    numEl.textContent=urgent?30-elapsed:20-elapsed;
-    unitEl.textContent="seconds";
-    // D-29 RESOLVED (Wyatt-approved 2026-07-29): every player-facing string in this file speaks the
-    // pirate register — the 2nd-person pronouns become ye/yer/yers/yerself. Applied as a one-time source
-    // transformation using art-review/narration-core.js's own PIRATE_RE/PIRATE_MAP as the spec — the one
-    // declaration site in the repo, imported by the audit page, the health gate and ui_contract_check.js  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
-    // alike (the
-    // page ran it LIVE at render, so a card tagged `keep` displayed the converted text — under D-25 that
-    // converted text is what he approved). No runtime helper is shipped for it: a pirateVoice() nothing
-    // calls would be dead code, which D-33/D-34/D-40 exist to prevent. Comments and identifiers are out
-    // of scope. scripts/ui_contract_check.js now gates this permanently.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
-    subEl.innerHTML=urgent?"or lose yer turn":`or pay 1${iconImg(COIN_IMG)}`;
-  }else{
-    wrap.classList.remove("urgent");
-    wrap.classList.add("idle");
-    labelEl.textContent="waiting";
-    numEl.textContent=urgent?30-elapsed:20-elapsed;
-    unitEl.textContent="seconds";
-    subEl.innerHTML=urgent?"or their turn is skipped":`or gain 1${iconImg(COIN_IMG)}`;
-  }
+  // notes/edits #5a: while a bot plays, say so — an idle label under a moving board reads as a
+  // stall. (This branch survived the clock: it never read the countdown.)
+  const activeSeat=currentTurnSeat();
+  const botPlaying=activeSeat!=null&&activeSeat!==appState.mySeat&&!(appState.game.players[activeSeat]&&appState.game.players[activeSeat].done);
+  wrap.classList.add("idle");wrap.classList.remove("urgent","paused");
+  // "waiting" is the pre-existing spectator copy; the truly-idle label is left BLANK on purpose
+  // rather than the old "turn clock" (a feature that is not there) or invented new copy — what
+  // this panel says while the clock is away is Wyatt's call, flagged on the staging checklist.
+  labelEl.textContent=botPlaying?"waiting":"";numEl.textContent="–";unitEl.textContent="";subEl.innerHTML="&nbsp;";
 }
 
 export function liveRender(){
   if(appState.replaying)return;          // during reload-replay we rebuild state silently, no render/broadcast
   appState.evIdx=Math.max(0,appState.game.events.length-1);
   if(!appState.game.events.length)return;
-  syncLogLines();
-  $("scrub").max=Math.max(0,appState.game.events.length-1);
-  render();
   const e=appState.game.events[appState.evIdx];
-  spawnPops(e,boardCell()); // notes/edits 11-03: cell now lives in src/ui/board.js
-  playForEvent(e); // AUDIO-01/D-07: the host's per-event sound moment — fires once per game.ev() call, whole table audible, no isLocalTo gate
+  const _nh=netHandlers();
+  /* W1 (2026-08-28): THE HOST'S INLINE DRAWING IS GONE. The render/pops/sound lines that stood
+     here were the second orchestration CLAUDE.md rule 23 names — the host drew from this loop
+     while a guest drew from watchEvents, and every divergence of three phases lived in that gap.
+     This is now the local DRAIN feeding the ONE consumer (consumeEvent, src/orchestrator.js,
+     via the handler seam — panel.js is ui-tier and may never import the orchestrator). Rule A:
+     the host consumes locally, never reading its own write back off Firebase.
+     Fire-and-forget WITH the aground catch: liveRender stays synchronous for its 57 call sites,
+     and a throw inside the consumer must still surface the wreck screen rather than vanish as
+     an unhandled rejection (the runLiveNet catch cannot see a detached promise). */
+  if(_nh.onConsumeEvent)_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent"));
   if(appState.isHost){
-    const _nh=netHandlers();
     // seam (D-07/criterion 1, RESEARCH Q1b edge 2): was a direct pushEvents() call — pushEvents
     // is itself still a classic-script global this wave, wired in through the still-present PP
     // bridge by src/main.js's setNetHandlers() call, formalized to a real src/net/ import in 11-06.
@@ -337,6 +224,7 @@ export function liveRender(){
 // cost, stated plainly so nobody has to rediscover it: 180ms of added latency per REPLACED line,
 // paid deliberately, his call. The rejection paragraph below is kept as history, not deleted.
 //
+
 // THE MECHANISM, which is the whole of the change. panel() stays fully SYNCHRONOUS — that is
 // REQUIRED, not a preference: flash() reads `.apMsg._revealDone` the instant panel() returns, so a
 // deferred swap would hand it the wrong element or none at all. So the DOM is still replaced
@@ -394,24 +282,10 @@ export const GHOST_FADE_MS=800;
 let panelSeq=0;
 // Resolver for the CURRENT message's reveal — runHeightSequence waits on it before SETTLED.
 let panelRevealSettle=null;
-// D-02 (18-05): sizes a REMOTE decision's host-side arm-defer window from the ACTOR's own prompt
-// text (never this browser's own shorter spectator line — see panel()'s clock-defer block below).
-// Derived from REVEAL_MS_PER_CHAR and GHOST_FADE_MS rather than a literal duplicate of either, so
-// a future change to the reveal pacing can't silently desync this estimate from the reveal it is
-// approximating — see CR-01's comment on GHOST_FADE_MS above for what a hardcoded companion
-// constant cost last time. Strips tags and counts CODE POINTS, not `.length` — narration text is
-// full of emoji/surrogate pairs `.length` would double-count. GHOST_FADE_MS is added
-// UNCONDITIONALLY (even though a real reveal only pays it when replacing a prior line): this
-// estimate can only ever grant the acting player MORE of their window, never less (hard
-// constraint 8) — erring long here is deliberate, not an oversight.
-function estimateRevealMs(html){
-  const codePoints=[...String(html||"").replace(/<[^>]*>/g,"")];
-  // + RESIZE_MS (2026-08-01): the swap sequence now waits for the height animation as well as the
-  // fade before the first character lands, so an estimate that stopped at GHOST_FADE_MS would run
-  // 180ms SHORT — and running short is the one thing hard constraint 8 forbids, because it would
-  // arm the acting player's clock before their prompt is readable. Erring long stays deliberate.
-  return codePoints.length*REVEAL_MS_PER_CHAR+GHOST_FADE_MS+RESIZE_MS;
-}
+/* estimateRevealMs() stood here — the deliberately-long reveal estimate the host used to defer
+   a remote seat's clock arm by (hard constraint 8: err long, never short). Left with the clock,
+   2026-08-28. RESIZE_MS and GHOST_FADE_MS above are NOT clock residue — they are the swap
+   sequence's own two clocks and stay. */
 // A CLEAR IS DEFERRED, and this is the single most important thing in this file.
 //
 // The harness caught it: almost every swap in a real game is `panel("")` immediately followed by
@@ -650,22 +524,10 @@ export function panel(html,needsAction=false){
       if(gateEl.dataset.revealSeq!==String(seq))return;
       gateEl.classList.remove("pendingStage");
     });
-    // D-02 (18-05): THIS is the button row becoming clickable — the seam armClock defers onto.
-    // clockPendingSeat drives setClockUI()'s frozen pending display on whichever browser renders
-    // it: the host's own screen for a local decision, or the deciding guest's own screen for a
-    // remote one (the ONLY place a remote seat's own button row ever renders — see the host-side
-    // spectator-narration branch below for how the host defers without ever seeing hasButtons here).
-    appState.clockPendingSeat=currentTurnSeat();
-    // Ownership of clockPendingArm is taken SYNCHRONOUSLY here (read-and-null), not inside the
-    // .then() below — this is what lets ask()'s no-panel belt (checked synchronously right after
-    // onLocalAsk/onRemotePrompt returns) tell "a button row WILL arm, just not yet" apart from
-    // "nothing will ever arm this decision" (a pure flip prompt, which never reaches panel() at
-    // all). clockPendingLocal gates it to LOCAL decisions only — a guest rendering its own remote
-    // decision always finds clockPendingArm null here (ask() only ever runs host-side), a correct
-    // no-op: arming is the host's job, and the guest's own clock mirrors clockState once the
-    // host's deferred arm (below) broadcasts it.
-    const armFn=(appState.clockPendingLocal&&appState.clockPendingArm)?appState.clockPendingArm:null;
-    if(armFn){appState.clockPendingArm=null;appState.clockPendingLocal=false;appState.clockPendingText="";}
+    // D-02 (18-05): THIS is the button row becoming clickable.
+    // (The shot clock's arm claim stood here — the one-shot clockPendingArm continuation that
+    // deferred the 30s window past this reveal. Removed 2026-08-28 with the clock; the reveal
+    // gating below is the feature that STAYS — D-01: buttons hidden until the player can act.)
     /* playtest 21 item 2: the buttons also wait for the BOAT TO ARRIVE. Extended here rather than
        given its own mechanism, because pendingReveal already exists to answer exactly this
        question — "may the player act yet?" — and a second gate would be a second thing able to
@@ -676,28 +538,13 @@ export function panel(html,needsAction=false){
        own right, and it falls out of putting the wait in the existing seam instead of beside it. */
     Promise.all([revealDone,settledP]).then(()=>{
       // T-18-15: reuse the SAME seq stamp the unhide above is gated by — a late-resolving EARLIER
-      // reveal must never clear a NEWER prompt's clockPendingSeat or arm a stale seat's clock.
+      // reveal must never unhide a newer prompt's row early.
       if(gateEl.dataset.revealSeq!==String(seq))return;
       gateEl.classList.remove("pendingReveal","pendingStage");
-      appState.clockPendingSeat=null;
-      // armFn() marks the continuation claimed (unblocking ask()'s withShotClock chain) and hands
-      // back the REAL asked seat — armClock(seat) is what actually starts the 30s window.
-      if(armFn)armClock(armFn());
     });
   }
-  // D-02 (18-05): a REMOTE decision's own button row never renders on the HOST's screen — the
-  // deciding seat is a different browser. This panel() call is the host's spectator "<seat> is
-  // deciding…" narration instead (hasButtons is false here, so the block above never runs on this
-  // browser for this decision). Claim the arm right here — a hasButtons render that would
-  // otherwise claim it is never coming on the host's own screen for a remote seat — and defer the
-  // actual arm by the ACTOR's own estimated reveal length (from their real prompt text via
-  // estimateRevealMs, not this shorter spectator line's own reveal): erring long by construction,
-  // never short (hard constraint 8, T-18-14).
-  if(!appState.clockPendingLocal&&appState.clockPendingArm){
-    const fn=appState.clockPendingArm,text=appState.clockPendingText;
-    appState.clockPendingArm=null;appState.clockPendingText="";
-    setTimeout(()=>armClock(fn()),estimateRevealMs(text));
-  }
+  // (The remote-decision arm claim stood here — the host deferring the clock by the actor's own
+  // estimated reveal length, T-18-14. Removed 2026-08-28 with the shot clock.)
   // playtest 19: LAY THE NEW PROMPT OUT IN THE FRAME IT WAS BUILT. The /4 stage styles and places
   // every prompt from its own tick loop, which drops to an 8Hz heartbeat when nothing is moving —
   // so a freshly built prompt could sit up to ~125ms in its unstyled default before the stage

@@ -27,6 +27,21 @@ import os from "node:os";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* playwrightDir() — THE ONE ANSWER TO "WHERE IS PLAYWRIGHT?", exported so nobody keeps a second.
+   playtest_gate.mjs had its own copy, looking only in $PW_DIR or /tmp/pw. THIS file was taught
+   ~/.pw on 2026-08-27; that copy was not — and within a day the trial reported "WebKit is not
+   installed" while WebKit was installed and launching, then printed install advice pointing at
+   /tmp, which §8c of docs/DRIVING-THE-GAME.md warns against because /tmp is cleared on reboot and
+   that is exactly how the Safari legs died the time before. Same search order, one definition. */
+export async function playwrightDir() {
+  const os = await import("node:os"), path = await import("node:path");
+  for (const d of [process.env.PW_DIR, path.join(os.homedir(), ".pw")].filter(Boolean)) {
+    try { await import(path.join(d, "node_modules/playwright/index.mjs")); return d; } catch {}
+  }
+  try { await import("playwright"); return "playwright (global)"; } catch {}
+  return null;
+}
+
 export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile = false, dsf = 1 }) {
   /* FINDING PLAYWRIGHT IS THE CODE'S JOB, NOT THE OPERATOR'S — and it used to be neither.
      This looked only at $PW_DIR, and the documented home for it was /tmp/pw. /tmp is cleared on

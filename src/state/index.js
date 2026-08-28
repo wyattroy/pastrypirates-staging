@@ -84,11 +84,9 @@ export const appState = {
   curSeat: 0,
   inBattlePrompt: false,
   spectatingBattle: false,
-  shotClockSeat: null,
-  shotClockDeadline: 0,
-  shotClockTimer: null,
-  shotClockForce: null,
-  shotClockStash: null,
+  // shotClockPaused OUTLIVED the shot clock (removed 2026-08-28 — see src/ui/util.js's ask()):
+  // it is the whole game's pause flag, read by waitWhilePaused/sleep and the app-switch
+  // auto-pause. The clock's own six fields (seat/deadline/timer/force/stash/fired) left with it.
   shotClockPaused: false,
   // /4: true only while the CURRENT pause was created by the hide-tab auto-pause (src/main.js) —
   // the visibility handler auto-resumes exactly that pause on return and never a player's own ⏸
@@ -99,28 +97,14 @@ export const appState = {
   // the engine never reads either field.
   ff: false,
   ffFromEv: null,
-  shotClockPauseElapsed: 0,
-  timerOff: false,
-  shotClockFired: {},
+  // turnExpired is KEEP-BUT-NEUTER (2026-08-28): the clock's expiry was its only true-writer,
+  // so it is now permanently false — its ~20 abort-guard readers across humanTurn/humanAct/
+  // humanTrade/humanDock are provably dead but stay for a separate sweep, because ripping out
+  // twenty `if`s across the turn flow is a far larger and riskier diff than one dormant field.
   turnExpired: false,
-  clockState: null,
-  // 18-05 (D-02): a one-shot continuation ask() (src/ui/util.js) publishes so the reveal-
-  // completion gate (panel(), src/ui/panel.js) can defer starting the shot clock until the
-  // button row is actually clickable, instead of at prompt-render — follows the
-  // activePickCleanup precedent below (a function stored on appState, read-and-nulled by
-  // whichever call takes ownership of it). In declaration order: the seat whose button row is
-  // currently gated (drives the frozen pending display on host AND guest alike, cleared once
-  // that reveal resolves); the continuation itself (the arming function plus the resolver that
-  // unblocks ask()'s force-resolver wrap, read-and-nulled at most once per decision); whether
-  // this seat's decision renders on the host's own browser directly (tells the reveal gate
-  // whether to defer onto its own reveal, or — for a seat rendering elsewhere — to schedule an
-  // estimate instead); and the deciding actor's own prompt HTML (never this browser's shorter
-  // spectator line), read to size that estimate.
-  clockPendingSeat: null,
-  clockPendingArm: null,
-  clockPendingLocal: false,
-  clockPendingText: "",
-  activePickCleanup: null,
+  // The clock's other bookkeeping (timerOff, clockState, shotClockFired/PauseElapsed, the
+  // clockPending* arm continuation, activePickCleanup) left with it — activePickCleanup's only
+  // reader was the clock's expiry (inventory D4).
   // 02.15-02 Task 3: the "one current prompt" of Wyatt's shape for this whole plan — the spec
   // renderPickPrompt() is CURRENTLY drawing. Set inside the renderer, cleared inside its teardown,
   // on every tier alike. null while a captain is visibly being asked is the signature of an
