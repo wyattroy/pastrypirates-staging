@@ -87,5 +87,24 @@ function fnBody(src, name) {
   else fail("cannot find the guest-only watchEvents attach — if the host now listens to its own event feed, that is the Rule A round-trip");
 }
 
+/* 5. A STATE CHANGE IS NOT AN EVENT — the drain cannot redraw one (found by the 2026-08-28 sea
+      trial, both solo legs). liveRender() consumes each event exactly ONCE (A-13); calling it
+      after a bare appState change draws NOTHING once the frontier is consumed. endVoyage set
+      liveDone=true and called liveRender() — every event was already consumed, render() never
+      ran with liveDone set, and the End of Voyage screen never appeared IN ANY MODE. The engine
+      finished; the screen sat silent. So: every site that sets liveDone=true must call render()
+      itself, the way applyEndMeta (the guest twin) always has. Run RED against the drain-only
+      endVoyage. */
+{
+  const clean = strip(orch);
+  const sites = [...clean.matchAll(/appState\.liveDone\s*=\s*true/g)];
+  if (!sites.length) fail("no liveDone=true site found in orchestrator — re-anchor this assertion, do not delete it");
+  for (const m of sites) {
+    const after = clean.slice(m.index, m.index + 400);
+    if (/(?<![a-zA-Z])render\(\)/.test(after)) pass("a liveDone=true site calls render() itself — the End of Voyage screen cannot depend on an unconsumed event existing");
+    else fail(`liveDone=true at orchestrator offset ${m.index} is not followed by a render() call — the drain has nothing left to consume there, so the End of Voyage screen never appears`);
+  }
+}
+
 console.log(fails ? `\nFAILED — ${fails} assertion(s)` : "\nPASSED — one event consumer, three producers");
 process.exit(fails ? 1 : 0);

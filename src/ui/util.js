@@ -45,7 +45,7 @@ import { roundCfg } from "../engine/index.js";
 import {
   // F5 (2026-07-29): dockFlavor -> dockFlavorIcon. EVENT_NARRATION.dock was this file's only
   // dockFlavor consumer; all four branches now take the icon-placed form from the declared split.
-  NAMES, HEXCOL, DIRNAME, ING_EMOJI, iname, ilabelImg, dockPlace, dockFlavorIcon, iconImg, ING_IMG,
+  NAMES, HEXCOL, DIRNAME, STORM_PUSH, ING_EMOJI, iname, ilabelImg, dockPlace, dockFlavorIcon, iconImg, ING_IMG,
   CUPCAKE_IMG, FLAME_IMG, CROWN_IMG, HORN_IMG, WAVE_IMG, TRADE_SWIRL_IMG, CRATE_OVERBOARD_IMG, TET, ISLAND_SHAPE_IMG, emojify,
   ASSET_BASE, BOARD_IMG, DOCK_IMG, WIND_ARROW_IMG, BOAT_IMG, ING_ALL, COIN_IMG, EYES_IMG,
   // the flip's own five, for preloadAssets — see its note on why a timed ceremony cannot wait
@@ -58,7 +58,7 @@ import { escHtml } from "./recipe.js";
 // 11-07 (bridge deletion fix): util.js is a common dependency of src/ui/board.js, panel.js,
 // lobby.js, and flow.js — it can never import any of THEM back without closing an import cycle
 // module_graph_check.js's "no import cycle" assertion forbids. A handful of functions here
-// (ask/botBeat/narrateCurrent/toggleShotClockPause/
+// (ask/botBeat/narrateCurrent/
 // spawnPops/updateRecipeBanner/resumeSoloGame) genuinely need to CALL a rendering function that
 // lives in one of those sibling modules (liveRender/flash/setClockUI/narrateLastEvent from
 // panel.js; popEmoji/render from board.js), or a net-adjacent orchestration function that lives
@@ -441,8 +441,15 @@ const EVENT_NARRATION={
      protect, and a span that cannot wrap is a liability the moment a line grows again. */
   newround:e=>{
     const tail=e.nextStorm?" Tomorrow: a storm.":(e.next?` Tomorrow: ${DIRNAME[e.next]}.`:"");
+    /* A-9 (Wyatt, 2026-08-28): option (b) — calm days stay short, a STORM day keeps a sentence of
+       its own carrying the rule, because this is the ONLY place a player is ever told how far a
+       storm moves them. His example verbatim: "It'll blow every ship 3 squares WEST." Distance
+       and direction both DERIVED (rule 9): STORM_PUSH is the same constant the engine pushes
+       with, DIRNAME is the one CAPS spelling every wind surface shares. This reverses the
+       2026-08-27 "minus 3 squares" cut on his own later word — the graveyard note below stands
+       as the history of that day, not the ruling in force. */
     const head=e.storm
-      ? `Day ${e.round}: Storm ${e.streak>=2?"still":"blowin\u2019"} ${DIRNAME[e.dir]}.`
+      ? `Day ${e.round}: Storm ${e.streak>=2?"still":"blowin\u2019"} ${DIRNAME[e.dir]}. It\u2019ll blow every ship ${STORM_PUSH} squares ${DIRNAME[e.dir]}.`
       : `Day ${e.round}: Wind ${DIRNAME[e.dir]}.`;
     return {cls:"roundhdr",txt:head+tail};
   },
@@ -474,13 +481,13 @@ const EVENT_NARRATION={
        and inventing a coin figure where no coin moved would be a lie the whole table can read. */
     const spent=`<span class="nobrk">(−${paid}🌕)</span>`;
     const buyTail=bought
-      ?(barter?` — then trades ${gave} to the black market for ${goods}, under cover o' dark.`
-        :e.black?` — then pays the black market for ${goods} ${spent}, under cover o' dark.`
+      ?(barter?` — then trades ${gave} to the black market for ${goods}.`
+        :e.black?` — then pays the black market for ${goods} ${spent}.`
         :` — then buys ${goods} ${spent}.`+(e.wentDry?` That were the last crate — the shelves be bare!`:``))
       :``;
     const buyTailYou=bought
-      ?(barter?` — then ye trade ${gave} to the black market for ${goods}, under cover o' dark.`
-        :e.black?` — then ye pay the black market for ${goods} ${spent}, under cover o' dark.`
+      ?(barter?` — then ye trade ${gave} to the black market for ${goods}.`
+        :e.black?` — then ye pay the black market for ${goods} ${spent}.`
         :` — then ye buy ${goods} ${spent}.`+(e.wentDry?` Ye took the last crate — the shelves be bare!`:``))
       :``;
     const txt=isLocalTo(e.p,viewerSeat)
@@ -1634,10 +1641,8 @@ export function ask(msg,opts,colors,sub,extra){
     }
     const r=resolveOpt(opts,i,0);netHandlers().onLogDecision(r.i);return r.opt.value;});
 }
-/* ---------- pause / pacing ---------- */
-// solo pause (see toggleShotClockPause) freezes the whole game by making every await-ed
-// sleep() stall first — bots pace their turns entirely through sleep(), so this alone halts
-// bot play without threading a paused-check through every call site.
+/* ---------- pacing ---------- */
+// (The solo-pause gate that used to precede these beats left with play/pause — A-10.)
 /* EVERY BEAT IN THE GAME IS AWAITED, SO NO BEAT MAY BE LOST — playtest 22, the stall report
    (Wyatt: "the game just completely stalled, and when i refreshed the browser, the game RESTARTED").
 
@@ -1672,11 +1677,6 @@ export function sleepMs(ms){
     pendingSleeps.add(rec);
     setTimeout(()=>rec.fire(),wait);
   });
-}
-export function waitWhilePaused(){
-  return appState.shotClockPaused?new Promise(res=>{
-    const iv=setInterval(()=>{if(!appState.shotClockPaused){clearInterval(iv);res();}},150);
-  }):Promise.resolve();
 }
 /* ---------- the voyage ran aground ---------- */
 /* A THROW IN THE TURN CHAIN USED TO BE A SILENT DEATH. Wyatt's call, 2026-08-14, after the counter
@@ -1845,44 +1845,19 @@ export function isLocalTo(seat,viewerSeat){
 // remotePrompt/remoteDraftPrompt (which would throw anyway, since db/room are null here).
 export function decisionIsLocal(s){return (appState.passAndPlay&&appState.game.players[s].strategy==="human")||seatLocal(s);}
 
-/* ---------- pause (the shot clock's former neighbour; the clock itself is temporarily out) ----------
-   THE SHOT-CLOCK BLOCK STOOD HERE — startShotClock/stopShotClock/rearmShotClock/shotClockTick/
-   applyShotClockPenalty/applyTimerOff/withShotClock, the 30s window, the 20s coin penalty and the
-   ⏱ toggle. Removed 2026-08-28 at Wyatt's word (see ask() above) so the one-activity-engine
-   convergence races nothing. The 30/20s design decisions those functions carried (D-05/D-06/D-07:
-   a fresh 30s on re-arm, a fired penalty never refunded, resume from the remainder) are recorded
-   in git history at this file — read the log before re-deriving them when the clock returns.
-   PAUSE STAYS. It shared the clock's state field and panel, but it is a separate feature: it backs
-   the phone app-switch auto-pause (src/main.js) that exists because a hidden tab used to hang a
-   turn forever. shotClockPaused keeps its name until the clock's return settles what it becomes. */
-// solo/bots-only games only — pausing wouldn't make sense with other humans waiting on you
-export function soloBotGame(){return appState.game&&appState.game.players&&appState.game.players.filter(p=>p.strategy==="human").length<=1;}
-// CLOCK-02: the pause/resume state-mutation body, extracted out of toggleShotClockPause below
-// so src/orchestrator.js's watchPause() can call it directly on the host branch of a networked
-// pause toggle. No isHost/soloBotGame gate lives in here on purpose (D-05/D-06): the caller
-// decides who may call this — solo's toggleShotClockPause() below (host-only), or the host
-// branch of watchPause() (never the guest branch, which only mirrors the boolean for rendering).
-export function applyPauseState(nowPaused){
-  // With the clock out this is the whole body: the flag every sleep() and bot beat stalls on.
-  // The countdown-freeze/deadline-restore math that lived here (D-07: resume from the remainder)
-  // left with the clock and comes back with it.
-  appState.shotClockPaused=nowPaused;
-}
-// works any time in solo play, not just on your own turn — shotClockPaused doubles as the
-// whole game's pause flag (see waitWhilePaused/sleep above), so pausing between turns
-// actually freezes the bots instead of just a countdown that isn't running yet.
-// CLOCK-02/D-05/D-06: the soloBotGame() half of the old gate is REMOVED here — multiplayer now
-// reaches pause too, via src/orchestrator.js's togglePause()/watchPause(), which call
-// applyPauseState() directly instead of this wrapper. This wrapper stays host-gated and is now
-// only the solo/pass-and-play path (togglePause()'s local fallback when there is no db/room).
-export function toggleShotClockPause(){
-  if(!appState.isHost)return;
-  applyPauseState(!appState.shotClockPaused);
-  netHandlers().onSetClockUI();
-}
-// mirrors render()'s "whose turn is it" derivation — used by setClockUI() to tell a genuinely
-// idle moment apart from a bot quietly taking its turn (the panel says "waiting" rather than
-// sitting on an idle label while a bot plays).
+/* ---------- the clock and pause both stood here ----------
+   Removed in two rulings, 2026-08-28: the shot clock ("temporarily remove the shot clock", see
+   ask() above), then play/pause itself (A-10: "you can simply remove play/pause from this latest
+   work — if we need to put it in again later, we'll re-engineer it"). What lived here across the
+   two removals: startShotClock/stopShotClock/rearmShotClock/shotClockTick/applyShotClockPenalty/
+   applyTimerOff/withShotClock, then soloBotGame/applyPauseState/toggleShotClockPause. The design
+   decisions they carried (D-05/06/07; CLOCK-02's networked pause; the app-switch auto-pause's
+   hidden-tab history) are in git history at this file — read the log before re-deriving any of
+   it. sleepMs's sweeper belt above is NOT pause residue: it is the measured defence against a
+   browser dropping setTimeout callbacks, and it must stay. */
+// mirrors render()'s "whose turn is it" derivation. CURRENTLY UNCALLED (its last consumer, the
+// pause panel's "waiting" label, left with play/pause at A-10) — kept because the clock's return
+// needs exactly this derivation, and it is pure over the event stream.
 export function currentTurnSeat(){
   if(!appState.game||!appState.game.events)return null;
   for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
@@ -1965,7 +1940,7 @@ export const SESSION_SCHEMA_V=1;
 // trade, so replaying it would run every decision after the first such trade against the wrong
 // prompt — the exact failure the new entry exists to stop. The stamp is what makes an old blob
 // "no resume" instead of a mis-aligned one.
-export const SOLO_SCHEMA_V=2;
+export const SOLO_SCHEMA_V=3;   // 2->3 at A-1: the bake-day reorder changes replay — a v2 save must be refused, never desynced
 export function getMyId(){
   let id=null;try{id=localStorage.getItem("pp_id");}catch(e){}
   if(!id){id="u"+Math.random().toString(36).slice(2,10);try{localStorage.setItem("pp_id",id);}catch(e){}}

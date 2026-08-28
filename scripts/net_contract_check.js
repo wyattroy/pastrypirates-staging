@@ -304,13 +304,13 @@ function checkDirectionalImports() {
 // against it, and the check would still pass. This is what makes D-01's
 // corrected count of eighteen (the roadmap's original figure was stale by
 // four) permanent.
-// netWatchTimerOff and netWatchClock left with the shot clock (2026-08-28) — seventeen now.
+// netWatchTimerOff/netWatchClock left with the clock; netWatchPaused with play/pause (A-10) — sixteen now.
 const WATCHER_INVENTORY = [
   "netWatchFlip", "netWatchConnected", "netWatchPresence",
   "netWatchChat", "netWatchBattle", "netWatchRecovery",
   "netWatchDraftPrompt", "netWatchEvents", "netWatchPrompt", "netWatchNarr",
   "netWatchSeats", "netWatchStatus", "netWatchTurnOrder", "netWatchRecipes",
-  "netWatchResponse", "netWatchDraftResponse", "netWatchPaused",
+  "netWatchResponse", "netWatchDraftResponse",
 ];
 const WATCHERS_FILE = path.join(NET_DIR, "watchers.js");
 
@@ -334,9 +334,9 @@ async function checkWatcherInventory() {
 
   const content = fs.readFileSync(WATCHERS_FILE, "utf8");
   const attachCount = (content.match(/registry\.attach\(/g) || []).length;
-  if (attachCount !== 17) {
+  if (attachCount !== 16) {
     ok = false;
-    failures.push(`INVENTORY: expected exactly 17 registry.attach() calls in src/net/watchers.js, found ${attachCount}`);
+    failures.push(`INVENTORY: expected exactly 16 registry.attach() calls in src/net/watchers.js, found ${attachCount}`);
   }
 
   return ok;
@@ -367,7 +367,7 @@ async function main() {
 
   const inventoryOk = await checkWatcherInventory();
   console.log(
-    `${inventoryOk ? "PASS" : "FAIL"} watcher inventory completeness (NET-01, D-01) — all seventeen watchers exported, exactly seventeen registry.attach() calls`
+    `${inventoryOk ? "PASS" : "FAIL"} watcher inventory completeness (NET-01, D-01) — all sixteen watchers exported, exactly sixteen registry.attach() calls`
   );
 
   if (failures.length) {

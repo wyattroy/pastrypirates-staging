@@ -52,6 +52,30 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 // and the two crates arc over/under each other while crossing (see runSwaps).
 const PREVIEW_MS=2500, COVER_MS=280, SWAP_MS=1000, SETTLE_MS=700, REVEAL_MS=520, VERDICT_MS=1300;
 
+/* A-2 (Wyatt, 2026-08-28: "Yes. Build it. Bakeoff IS the game coming to life.") — a BOT's bake now
+   plays on every screen through the same watcher choreography a human's bake feeds. The publisher
+   (orchestrator's botBakePerform) has to know how long THIS file will spend animating before it may
+   send the next moment, and the only way those two can never disagree is for this file to answer
+   from the same constants the animation runs on (rule 23: what makes these two agree? — one source).
+     benchChoreoMs(spec)  the cover sweep plus every swap-and-settle for the bench this spec
+                          describes, plus the ghost allowance playBakeoffLive itself waits out
+     BENCH_STUDY_MS       the bot's study window. PREVIEW_MS is not a new number: it is the study
+                          window the game itself used before the Ready button existed (rule 9 —
+                          derived from what the game already computed, not invented)
+     BENCH_BEAT_MS        one beat between published picks. SETTLE_MS is the number this file
+                          already defends as what decides whether the bench is trackable or a blur;
+                          a pick landing faster than a swap settles would be unreadable by the same
+                          argument */
+export const BENCH_STUDY_MS=PREVIEW_MS;
+export const BENCH_BEAT_MS=SETTLE_MS;
+export function benchChoreoMs(spec){
+  const locked=spec.locked||[];
+  const bowls=(spec.before||[]).length;
+  const uncovered=bowls-locked.filter(Boolean).length;   // locked crates take no cover beat
+  const swaps=(spec.swaps||[]).length;
+  return GHOST_FADE_MS+80+uncovered*COVER_MS+swaps*(SWAP_MS+SETTLE_MS);
+}
+
 // Reduced motion is read in JS, not CSS, for the same reason panel() does it: a media query cannot
 // reach a setTimeout. It does NOT collapse to zero — the swaps have to stay countable or the game
 // becomes unplayable, so they become instant repositions with a visible flash instead.

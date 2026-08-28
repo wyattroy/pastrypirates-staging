@@ -71,3 +71,5 @@ narration-timeline/
 # ANY *-shots/ directory is transient probe output — the list above was hand-kept and rotted
 # (w1-smoke-shots/ appeared 2026-08-28 and was not on it). The glob is the derived answer.
 *-shots/
+w1-crewphone-recheck/
+# ^ named outside the -shots convention and paid for it immediately: name probe output dirs *-shots so the glob above covers them without this file growing a list again.

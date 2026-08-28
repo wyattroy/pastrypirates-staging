@@ -258,6 +258,64 @@ said *"voyages that did NOT run: none"* while both Safari legs had died instantl
 `NOT RUN —` and the gate had printed `ERROR:`. It now decides from `report.json`: **a leg that
 captured no screens did not sail.**
 
+## 5b. RUNNING THE TRIAL — cloud container vs Wyatt's Mac, written down so it stops being re-derived
+
+*(Wyatt, 2026-08-28: "Add to Sea Trial's process document the steps to run it from a cloud
+container and the steps to run it from local, because it seems like those are different and you
+re-derive them each time at great time and cost." Every line below was paid for at least once.)*
+
+**The command is the same everywhere.** What differs is the environment around it, and every
+difference is listed here — if you are about to fight one that is not, add it to this section in
+the same session.
+
+### From a Claude Code cloud container
+
+```bash
+nohup node scripts/sea_trial.mjs > "$SCRATCH/trial.log" 2>&1 &   # DETACHED — see below
+```
+
+- **Launch it detached (`nohup … &`) and watch the log.** The Bash tool's hard ceiling is 10
+  minutes and a FULL trial runs longer — a foreground or background-tool run is killed mid-sail
+  and reports nothing. Watch the log with a monitor/until-loop; a foreground `sleep` is blocked
+  by the harness.
+- **Chrome is pre-wired**: `$CHROME_BIN` → `/usr/local/bin/chromium` (a wrapper over the
+  Playwright chromium in `/opt/pw-browsers`). Never run `playwright install` — the image sets
+  `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` and re-fetching is both slow and unnecessary.
+- **WebKit legs work**: browsers live durably in `$PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`;
+  the package resolves via `playwrightDir()` (`$PW_DIR` → `~/.pw` → global).
+- **The vision judge needs the proxy's CA.** Outbound HTTPS goes through the agent proxy;
+  `scripts/lib/vision.mjs` sets `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` itself when unset,
+  but exporting it on the trial command is harmless belt. Never disable TLS verification.
+- **Never `pkill -f chromium`** — the container's own shell wrapper matches and you kill your own
+  session. The browsers are processes named `chrome`; kill by debug port (mp_rig's `killAll()`
+  does this correctly, scoped to its own ports).
+- **`/tmp` does not survive a container recycle.** A trial whose evidence directory vanished may
+  be a reboot, not a failure — check mtimes before reporting NOT RUN (§10's "what happened just
+  before"). Keep evidence under `.planning/` or the session scratchpad.
+- **Firebase is reachable**, so the crew legs sail real rooms. Wyatt cannot see this machine's
+  browser — the report, the screenshots, and the build stamp are the only evidence that leaves it.
+
+### From Wyatt's Mac (local)
+
+```bash
+cd /Users/wyattroy/Documents/Projects/pastrypirates    # the ONLY checkout — worktrees are retired
+node scripts/sea_trial.mjs
+```
+
+- Chrome resolves from the PATH; WebKit's durable home is `~/.pw` (package) +
+  `~/Library/Caches/ms-playwright` (browsers) — both survive reboots; never install to `/tmp/pw`.
+- No CA override needed; the judge reaches the API directly.
+- **Rule 17 is live here in a way it is not in the cloud**: this is the laptop he is sitting at.
+  `--mute-audio` always (his speakers are in the room), and every headless Chrome and
+  `http.server` dies before you reply — the trial's own cleanup plus §8's pkill.
+- Foreground is fine; there is no 10-minute tool ceiling.
+
+**Which to prefer:** the cloud, whenever the session is already there — it costs his laptop
+nothing. Fall back to local when the cloud run is STALLED (measured: the log stops growing for
+minutes while legs sit unfinished — an environmental stall, seen 2026-08-28, cleared by re-running
+the leg) — and per his standing order, **tell him within 10 minutes of launching if the trial is
+stalled and whether it needs to run locally**, rather than silently retrying past the window.
+
 ## 6. READ THE JUDGE AS A WITNESS, NOT A VERDICT
 
 Roughly half its findings survive contact with the source. **Open the screenshot. Then check the

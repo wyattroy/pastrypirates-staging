@@ -39,7 +39,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.08.28.1-staging@9179ff66";
+const PP4_STAMP = "2026.08.28.4-staging@5f4fc83b";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1982,8 +1982,18 @@ function buildStage(){
   if (foot){
     const stamp = document.createElement("div");
     stamp.id = "pp4Stamp";
-    stamp.textContent = "Build " + PP4_STAMP;
-    stamp.style.cssText = "opacity:.55;font-size:11px;text-align:center;padding:6px 0 2px;letter-spacing:.04em";
+    /* A-4 (Wyatt, 2026-08-28): the commit code goes ON ITS OWN LINE. The deploy script appends
+       -staging@<sha> to the stamp; splitting at the @ keeps the human-readable build number on
+       one line and the exact-commit identity on the next, instead of one long string. A build
+       with no @ (local, production) renders a single line, unchanged. textContent per line —
+       never innerHTML — so the stamp can never carry markup. */
+    const at = PP4_STAMP.indexOf("@");
+    if (at >= 0) {
+      stamp.append("Build " + PP4_STAMP.slice(0, at), document.createElement("br"), "@" + PP4_STAMP.slice(at + 1));
+    } else {
+      stamp.textContent = "Build " + PP4_STAMP;
+    }
+    stamp.style.cssText = "opacity:.55;font-size:11px;text-align:center;padding:6px 0 2px;letter-spacing:.04em;line-height:1.5";
     foot.appendChild(stamp);
   }
   $("pp4Menu").onclick = () => { document.body.classList.toggle("pp4Foot"); };

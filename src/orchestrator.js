@@ -73,11 +73,12 @@ import { applyResult } from "./engine/bakeoff.js";
 import {
   PERP, DIRS, HEXCOL, CROWN_IMG, CLOSE_X_IMG, FLAME_IMG, unusedDefaultName, seatHeldName, applyNameClaim, iconImg, man,
   ilabelImg, ovensNowEnabled, bake2Enabled, endCardEnabled,
+  rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
 } from "./shared/index.js";
 import { initAudio, playForEvent, playWinScreen, playBattleEngage, isMuted, setMuted } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
-  netSetPaused, netWatchPaused, netDeleteRoom,
+  netDeleteRoom,
   netSetNarr, netPushChat, netWatchChat,
   netSetBattle, netWatchBattle, netRemoveBattle,
   netWatchConnected, netWatchPresence, netMarkPresence, netInit,
@@ -98,6 +99,7 @@ import {
 import {
   showNarration, panel, setNeedsAction, flash, fadeOutPanel, narrateLastEvent, liveRender, setClockUI,
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
+  benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
   setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
@@ -119,9 +121,9 @@ import {
   encodeDec, decodeDec, saveSoloState, clearSoloState, fixEv, syncLogLines, spawnPops, apBtnStyle,
   optionButtonsHTML, backButtonHTML, // 02.1-03: the ONE button-row builder, shared with localAsk
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
-  rawName, pn, pname, updateRecipeBanner, toggleShotClockPause, applyPauseState, describe, seatLocal,
+  rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, setActor, applyActiveSeat, stepDelay, ask, pickNarrVariant,
-  waitWhilePaused, sleepMs, BOARD_LAST_LOOK_MS,
+  sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
   isDisabledBtn, showWhy, // playtest 21 item 5: a greyed circle is tappable and says why
@@ -136,7 +138,7 @@ const $=id=>document.getElementById(id);
 // ⏩ fast-forward: same collapse as flow.js's sleep — beats that reach here without a player
 // prompt (storm holds, bot-only pacing) race by; anything that asks ends the skip first.
 // sleepMs, not a bare setTimeout: a dropped beat must cost a late line, never the voyage (util.js)
-const sleep=ms=>appState.replaying?Promise.resolve():waitWhilePaused().then(()=>sleepMs(appState.ff?Math.min(ms||0,40):ms));
+const sleep=ms=>appState.replaying?Promise.resolve():sleepMs(appState.ff?Math.min(ms||0,40):ms);   // the waitWhilePaused gate left with play/pause (A-10)
 
 const MAX_CHAT_LEN=140;
 // Firebase Spark's free tier caps at 100 simultaneous connections (see ONLINE_SETUP.md) — once
@@ -161,42 +163,12 @@ export function watchFlip(){
   netWatchFlip(appState.db,appState.room,s=>{const v=s.val();if(v)setFlipCoin(v.state);});
 }
 
-/* broadcastClock() stood here — the host-authoritative clock write (deadline + pause payload).
-   Removed 2026-08-28 with the shot clock (see src/ui/util.js's ask()). Pause now syncs solely
-   over its own /paused flag via togglePause()/watchPause() below. */
+/* broadcastClock() stood here (the clock write), then togglePause()/watchPause() (the whole-table
+   pause) — the clock left with the shot-clock removal, pause with Wyatt's A-10, both 2026-08-28. */
 /* toggleTimer() stood here — the ⏱ off/on toggle, every mode. Left with the clock 2026-08-28. */
-// CLOCK-02: any player (host or guest) may trigger a true play/pause of the WHOLE game —
-// bot captains and every awaited beat — via the ▶/⏸ button (D-05 once paired it with the ⏱
-// toggle; the toggle left with the clock). Multiplayer: write the flag; every client's
-// watchPause() mirrors it. Solo/pass-and-play (no db/room): the local toggleShotClockPause().
-export function togglePause(){
-  if(appState.db&&appState.room){
-    netSetPaused(appState.db,appState.room,!appState.shotClockPaused,netFail("pause"));
-  }else{
-    toggleShotClockPause();
-  }
-}
-// AUDIO-02 (phase 21): the mute button beside the clock. Pure client-side state — isMuted()/
-// setMuted() (src/ui/audio.js) are the whole store, backed by their own localStorage key; no
-// Firebase write, no net* writer, no appState field, so muting never reaches another player's
-// browser (D-13, T-21-12). setClockUI() is called directly (main tier may call it, unlike ui-tier
-// code) so the icon/tooltip refresh immediately rather than waiting for the next 500ms tick.
 export function toggleMute(){
   setMuted(!isMuted());
   setClockUI();
-}
-// Every client (host and guest) attaches this so the shared paused flag is tracked table-wide.
-// Only the host branch runs applyPauseState — a guest just mirrors the boolean for rendering (D-06).
-export function watchPause(){
-  netWatchPaused(appState.db,appState.room,s=>{
-    const v=!!s.val();
-    if(appState.isHost){
-      applyPauseState(v);
-      // (The CLOCK-02 re-broadcast that stood here synced the frozen countdown to guests. With
-      // the clock out the /paused flag itself is the whole shared state — nothing else to send.)
-    }else appState.shotClockPaused=v;
-    setClockUI();
-  });
 }
 /* expireShotClock() and watchClock() stood here — the 30s auto-skip (turnExpired, the forced
    default answer, the activePickCleanup teardown, the `shotclockskip` event and its narration)
@@ -347,8 +319,15 @@ let _bench=null;
 /* Publish one moment of a bench. `spec` is the SAME object the choreography is running from, so a
    watcher cannot be handed a bench that disagrees with the one being played. */
 export function benchPublish(spec,seat,patch){
+  /* `baker` rides the snapshot (A-2 sweep, closing a T-25 gap): the spec has carried the baker's
+     name since T-25 ("one field, built once, read by baker and watcher alike"), but this assign
+     dropped it — so every WATCHER titled the bench with bakeTitle's generic fallback while the
+     baker's own screen said whose bake it was. Forwarding it is what makes a watched bench read
+     "Crustbeard's Bake-Off". */
   const snap=Object.assign({seat,order:spec.order,before:spec.before,swaps:spec.swaps||[],
-    locked:spec.locked||[],attempts:spec.attempts||0,epoch:0},patch||{});
+    locked:spec.locked||[],attempts:spec.attempts||0,baker:spec.baker||null,epoch:0},patch||{});
+  // `||null`, not bare: RTDB rejects a set() carrying `undefined`, and a spec without a baker
+  // (an older client's) must degrade to bakeTitle's fallback, not kill the whole publish.
   applyBenchSnap(snap);                                   // LOCAL RENDER ALWAYS
   if(appState.db&&appState.room&&!appState.replaying)
     netSetBattle(appState.db,appState.room,{title:BENCH_TITLE,bake:snap},netFail("bake bench"));
@@ -382,7 +361,7 @@ function benchWatch(snap){
     setPicks:(p)=>{picks=p||[];if(pickCb)pickCb(picks);}};
   _bench=sess;
   playBakeoffLive({order:snap.order,before:snap.before,swaps:snap.swaps||[],
-                   locked:snap.locked||[],attempts:snap.attempts||0},{watch:ctl})
+                   locked:snap.locked||[],attempts:snap.attempts||0,baker:snap.baker},{watch:ctl})
     .catch(e=>{console.error("bench watch",e);})
     .then(()=>{if(_bench===sess)_bench=null;});
   // A watcher that arrives after the shuffle has begun does not sit on a Ready that will never be
@@ -980,18 +959,18 @@ async function runLiveDayBakeoff(order){
   const g=appState.game;
   for(const i of order){
     const p=g.players[i];
-    if(p.done||p.baking)continue;
+    if(p.done)continue;
+    /* A-1: one phase — the attempt rides the captain's own turn slot, byte-for-byte the same
+       order as the engine's playBakeoff (live and headless must consume identical randomness).
+       endBakeDay still closes the day at the end, so same-day arrivals keep their fair race. */
+    if(p.baking){await bakeTurnLive(p);continue;}
     await (p.strategy==="human"?humanTurn(p):botTurn(p));
-    if(g.lightOvens(p)){liveRender();await narrateLastEvent();}
-  }
-  for(const i of g.bakersToday(order)){
-    await bakeTurnLive(g.players[i]);
+    if(g.lightOvens(p)){liveRender();await narrateLastEvent();await bakeTurnLive(p);}
   }
   liveRender();
   return g.endBakeDay();
 }
-/* One captain's attempt. The UI half lands in a later step; for now every seat plays with the
-   engine's own botGuess, which is exactly what a forfeited human turn will use too. */
+/* One captain's attempt. */
 async function bakeTurnLive(p){
   const g=appState.game;
   /* SETUP FIRST, ALWAYS. The engine shuffles and computes the bot's guess in one call, in that
@@ -999,10 +978,20 @@ async function bakeTurnLive(p){
      then does the human path get to look at the bench. */
   const {setup,fallback}=g.bakeSetup(p);
   const human=p.strategy==="human";
-  // bakeoffPrompt owns replay, the decision log and the shot clock (see its note in flow.js). It is
-  // called for a human seat even under replay — that is the whole point, since it is what returns
-  // the guess the player ACTUALLY made rather than re-deriving one from the bot.
-  const dec=human?await bakeoffPrompt(p,setup,fallback):{g:fallback,w:0};
+  /* A-2 (Wyatt, 2026-08-28: "Yes. Build it. Bakeoff IS the game coming to life."): a bot's bake
+     PLAYS on every screen now, where it used to resolve invisibly in one tick. `perform` is when
+     any bench is worth drawing at all — never under replay (its sleeps no-op but the watcher's
+     animations would run in real time), and for a bot never under fast-forward either (a human's
+     bake ends the skip itself, via bakeoffPrompt's ffEndNow). When it is false the bot bakes
+     silently, exactly as it always did. */
+  const perform=!appState.replaying&&(human||!appState.ff);
+  // bakeoffPrompt owns replay and the decision log (see its note in flow.js). It is called for a
+  // human seat even under replay — that is the whole point, since it is what returns the guess the
+  // player ACTUALLY made rather than re-deriving one from the bot. The bot's guess is the engine's
+  // own fallback either way: the performance publishes a decision already made, it never makes one.
+  let dec;
+  if(human)dec=await bakeoffPrompt(p,setup,fallback);
+  else{ if(perform)await botBakePerform(p,setup,fallback); dec={g:fallback,w:0}; }
   /* WHERE A RE-WATCH IS ACTUALLY PAID FOR — three cases, one debit site, and the engine is the
      only thing that ever moves a coin.
        LOCAL, LIVE      already charged, one click at a time, by flow.js's onRewatch — so the purse
@@ -1019,12 +1008,57 @@ async function bakeTurnLive(p){
      is also what reconciles the buyer's optimistic figure back to the settled one. */
   if(dec.w&&(appState.replaying||!decisionIsLocal(p.idx)))g.bakeRewatch(p,dec.w);
   const out=g.bakeResolve(p,dec.g);
-  if(human&&!appState.replaying)await benchReveal(p,out.res);
+  // A-2: the verdict reveals for EVERY performed bake, not only a human's — the crates a bot's
+  // watchers just studied come off the same way, through the same one publish.
+  if(perform)await benchReveal(p,out.res);
   liveRender();
   // narrateLastEvent() reads events[length-1], NOT appState.evIdx — so it narrates whichever event
   // bakeAttempt emitted last: the `finish` on a perfect bake, otherwise the `bake` verdict. Walking
   // evIdx to narrate both was a mistake; that field drives the scrubber, not this.
   await narrateLastEvent();
+}
+/* A-2 — THE BOT'S BAKE, PERFORMED (Wyatt, 2026-08-28: "Yes. Build it. Bakeoff IS the game coming
+   to life.").
+
+   T-23's trace was right and is now closed: the entire watcher pipeline already existed — a bot
+   seat is never decisionIsLocal, so benchPublish -> applyBenchSnap -> benchWatch draws a bench on
+   EVERY screen, the publisher's own included (that is what solo is). The one missing thing was a
+   publisher, and this is it: the same discrete moments a human baker's onBench publishes, through
+   the same benchPublish, so a bot's bake and a human's bake are one display path (rule 23).
+
+   IT DECIDES NOTHING AND DRAWS NOTHING FROM THE SEEDED STREAM (BOT-DESIGN-PRINCIPLES; the race
+   planner's determinism contract). bakeSetup already shuffled and already computed `fallback`
+   before this runs; this function reads those and paces them out loud. Whether anyone watched can
+   never change what the bot guessed.
+
+   THE PACING IS THE CHOREOGRAPHY'S OWN (rule 9 — nothing is a constant): bakeoff.js answers how
+   long its cover-and-swap animation takes (benchChoreoMs, from the same COVER/SWAP/SETTLE numbers
+   the animation runs on), the study window is the game's original PREVIEW_MS, and picks land one
+   per SETTLE_MS — the beat that file already defends as the line between trackable and blur. The
+   added seconds on a bot's bake day are the point, not a cost: this is the game coming to life.
+
+   THE TAP LIST IS THE ENGINE'S OWN DATA: fallback[k] is null exactly at steps already locked
+   (botGuess's expansion), so "which crates does the bot tap, in what order" is read straight off
+   the guess — no re-derivation that could disagree with what scoreAttempt will be handed. */
+async function botBakePerform(p,setup,fallback){
+  const spec={order:p.bake.order.slice(),
+    before:(setup.before||p.bake.slots).slice(),
+    swaps:(setup.swaps||[]).map(sw=>[sw[0],sw[1]]),
+    locked:p.bake.locked.slice(),
+    attempts:p.bake.attempts,
+    baker:pn(p.idx)};
+  benchPublish(spec,p.idx,{phase:"open"});      // the bench appears; the bot "studies"
+  await sleep(BENCH_STUDY_MS);
+  benchPublish(spec,p.idx,{phase:"shuffle"});   // Ready — every watcher's crates cover and swap
+  await sleep(benchChoreoMs(spec));
+  const picks=[];
+  for(let k=0;k<spec.order.length;k++){
+    if(fallback[k]==null)continue;              // a locked step is never tapped
+    await sleep(BENCH_BEAT_MS);
+    picks.push(fallback[k]);
+    benchPublish(spec,p.idx,{phase:"pick",picks:picks.slice()});
+  }
+  await sleep(BENCH_BEAT_MS);                   // the last badge lands before the crates lift
 }
 /* THE VERDICT — the one bench moment the HOST publishes, because the host is the only thing that
    scores (04-01 Task 3, MP-05).
@@ -1287,6 +1321,14 @@ export async function liveResolveEndNet(){
   appState.liveDone=true;
   playWinScreen(); // D-05: the host's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06
   liveRender();
+  /* A STATE CHANGE IS NOT AN EVENT (found by the 2026-08-28 sea trial, both solo legs stuck on a
+     silent board with the voyage over). Since A-13 the drain consumes each event exactly once, so
+     the liveRender() above draws NOTHING here — the `end` event was consumed lines ago, while
+     liveDone was still false, and board.js's showStats gate re-hid the stats on that render. The
+     redraw for the FLAG has to be explicit, exactly as applyEndMeta (this function's guest twin)
+     has always done: liveDone=true, playWinScreen(), render(). one_event_consumer_check §5 holds
+     both twins to it. */
+  render();
   // The victory box that used to be flashed here is GONE, deliberately — do not restore it. Its
   // three pieces (the "wins!" line, the recipe picture, the Best Baker sentence) now render in the
   // gold End of Voyage banner via showStats(), which liveRender() has just called. Flashing them
@@ -1452,11 +1494,10 @@ export function watchDraftPrompt(){
    drained event's older snapshot back onto live engine objects mid-loop would corrupt the game.
    Nothing in the branch decides what is DRAWN.
 
-   KNOWN, ACCEPTED DIVERGENCE, localized here on purpose: the host's drain hands this consumer
-   only the LATEST event per liveRender() call (two engine events pushed back-to-back coalesce),
-   while a guest consumes every event individually. Same consumer, different feed rate — fixing
-   the feed is a follow-up with player-visible consequences (extra pops/sounds on the host), so
-   it is flagged for Wyatt rather than slipped in. */
+   THE FEED-RATE DIVERGENCE IS CLOSED (A-13, Wyatt 2026-08-28: "host and guest parity is the #1
+   goal"): the host's drain (liveRender) now hands this consumer EVERY unconsumed event in order,
+   exactly as the guest's wire does — the shared evConsumed frontier is what makes double-draws
+   and skips both impossible. */
 export async function consumeEvent(e){
   if(!e)return;
   if(!appState.isHost){
@@ -1491,6 +1532,7 @@ export function watchEvents(){
     const e=fixEv(snap.val());
     appState.game.events.push(e);
     appState.evIdx=appState.game.events.length-1;
+    appState.evConsumed=appState.game.events.length;   // A-13: the wire IS this tier's drain — keep the one frontier true
     /* THE HISTORY THIS CALLBACK EARNED, preserved with it (2026-08-19, measured on a real driven
        guest): the guest's appState.game used to be a photograph taken the instant the voyage
        began — round stayed 0, windNow null, every pos at spawn — so the BOARD (drawn from
@@ -2176,7 +2218,7 @@ export function beginGame(cfg,seed){
   // rebuilt from scratch on a resume, where the base must come from the SAVE, not from storage.
   appState.game.seaSeat=appState.mySeat;
   appState.game.seaBase=(appState.soloMeta&&appState.soloMeta.seaBase)||0;
-  appState.live=true;appState.liveDone=false;appState.evIdx=0;appState.evPushed=0;appState.appliedMeta=false;
+  appState.live=true;appState.liveDone=false;appState.evIdx=0;appState.evPushed=0;appState.evConsumed=0;appState.appliedMeta=false;
   // fresh start resets the decision log; a reload-replay keeps the log loaded by resumeHostGame
   if(!appState.replaying){appState.dlog=[];appState.dlogIdx=0;appState.dlogN=0;}
   appState.turnOrder=null;
@@ -2203,7 +2245,6 @@ export function beginGame(cfg,seed){
      attach a listener to rooms/null/battle. */
   if(appState.db&&appState.room)watchBattle();
   watchChat(); // unlike narr/ev, every client (including the host) both sends and listens for chat
-  watchPause(); // CLOCK-02: every client tracks the shared whole-game pause flag
   /* The pp4_timerOff read and the host's room-seed of the shared timer flag stood here
      (D-19/P8/FIX-01 — the per-device preference and its cross-game carry). Left with the shot
      clock 2026-08-28; the localStorage key is untouched on players' devices, so their preference
@@ -2291,10 +2332,25 @@ export function wireLobby(){
       try{localStorage.setItem("pp_rematch",JSON.stringify(appState.soloMeta.names));}catch(e){}
     leaveGame();
   };
-  $("scPause").onclick=togglePause;
   $("btnMute").onclick=toggleMute;
   $("btnShowLog").onclick=()=>{$("logModal").style.display="flex";const box=$("log");box.scrollTop=box.scrollHeight;};
-  $("btnShowHow").onclick=()=>{$("howToPlayModal").style.display="flex";};
+  /* A-7 — THE RULES PAGE DERIVES ITS NUMBERS (Wyatt, 2026-08-28: the rules page must update
+     "according to the latest rules" automatically). Every amount in the How-to-Play modal is an
+     empty <b data-rule="key"> span; this fills them from rulesFacts(cfg) — the LIVE game's cfg
+     when a voyage is running (a 2-player table's crate prices are genuinely different), else the
+     4-seat default. Filled once here so the modal is never blank, and again on every open so a
+     modal read mid-voyage tells the truth about THIS voyage. rules_page_check.mjs reads the same
+     rulesFacts, which is what keeps this filler and the gate from drifting apart. */
+  const fillRulesFacts=()=>{
+    const facts=rulesFacts((appState.game&&appState.game.cfg&&appState.game.cfg.recipeSize)
+      ?appState.game.cfg:roundCfg(["human","bot","bot","bot"]));
+    document.querySelectorAll("#howToPlayModal [data-rule]").forEach(el=>{
+      const v=facts[el.dataset.rule];
+      el.textContent=v===undefined?"?":String(v);
+    });
+  };
+  fillRulesFacts();
+  $("btnShowHow").onclick=()=>{fillRulesFacts();$("howToPlayModal").style.display="flex";};
   $("btnShowCredits").onclick=()=>{$("creditsModal").style.display="flex";};
   // KOFI-01: two doors onto one embedded panel — footer, and the Credits modal.
   $("btnKofi").onclick=openKofi;

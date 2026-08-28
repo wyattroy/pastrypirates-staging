@@ -57,13 +57,6 @@ export function netWatchPresence(db, handler, onCancel) {
 }
 
 
-// CLOCK-02: a room-scoped value watcher on the shared whole-table pause flag, attached by
-// every client (host and guest alike).
-export function netWatchPaused(db, room, handler) {
-  if (!db || !room) return null;
-  const ref = db.ref("rooms/" + room + "/paused");
-  return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "paused" });
-}
 
 export function netWatchChat(db, room, handler) {
   if (!db || !room) return null;

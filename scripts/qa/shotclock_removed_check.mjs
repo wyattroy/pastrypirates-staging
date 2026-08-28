@@ -5,15 +5,10 @@
  * RED against the tree that still carried the clock (every assertion below failed on 2026-08-28
  * before the removal commit), then the removal made it green — so it is known to be able to fail.
  *
- * TWO HALVES, AND THE SECOND IS THE DANGEROUS ONE.
- *   1. The clock is GONE: no arming, no countdown, no penalty, no ⏱ toggle, no clock events, no
- *      Barnacle Brain award tallying events that can no longer occur (a 0-0-0 tie-break award is
- *      a visibly wrong End of Voyage screen — inventory D3).
- *   2. What SHARED the clock's state and panel SURVIVES: pause is a separate feature (inventory
- *      D2 — it backs the phone app-switch auto-pause that exists because a hidden tab used to
- *      hang a turn forever), and ask()'s prompts must still resolve without the armed promise
- *      (inventory D1 — the highest-risk edit: delete the seam but leave `armed` and every prompt
- *      in the game hangs on the first question).
+ * TWO HALVES. Half 2 changed meaning on 2026-08-28 evening: it used to assert pause SURVIVED
+ * (inventory D2); Wyatt's A-10 then removed play/pause too, so it now asserts pause is GONE and
+ * only the sweeper belt (the real hidden-tab defence) remains. ask()'s prompts still must resolve
+ * without the armed promise (inventory D1 — half-removed, every prompt hangs).
  *
  * WHEN THE CLOCK COMES BACK (it is TEMPORARILY out, against a converged dispatch): delete this
  * gate in the same commit that reintroduces it, and bring back rule C in DISPLAY-RULES.md.
@@ -36,6 +31,7 @@ const read = f => fs.readFileSync(path.join(REPO, f), "utf8");
    strip, every tombstone comment read as a failure. */
 const strip = src => src
   .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/<!--[\s\S]*?-->/g, "")   // index.html's tombstones are HTML comments — same rule as /* */
   .split("\n").map(l => l.replace(/(^|[^:])\/\/.*$/, "$1")).join("\n");
 // every shipped module that could carry clock code — src/ recursively, plus index.html
 const srcFiles = [];
@@ -90,22 +86,27 @@ for (const id of GONE) {
   else pass("ask(): nothing chains on `armed`");
 }
 
-/* ---- 4. pause SURVIVES (inventory D2) -------------------------------------------------- */
-const KEEP = [
-  ["src/ui/util.js", "toggleShotClockPause", "solo/pass-and-play pause entry"],
-  ["src/ui/util.js", "applyPauseState",      "the shared pause body"],
-  ["src/ui/util.js", "waitWhilePaused",      "what actually freezes bots"],
-  ["src/ui/util.js", "shotClockPaused",      "the pause flag itself (rename is a follow-up, not now)"],
-  ["src/orchestrator.js", "togglePause",     "the networked pause entry"],
-  ["src/orchestrator.js", "watchPause",      "every client mirrors the shared pause flag"],
-  ["src/main.js",    "visibilitychange",     "the phone app-switch auto-pause (a hidden tab used to hang a turn forever)"],
-  ["index.html",     "scPause",              "the ▶/⏸ button"],
-  ["index.html",     "shotClockPanel",       "the panel the pause button lives in"],
-];
-for (const [f, id, why] of KEEP) {
-  if (read(f).includes(id)) pass(`pause survives: ${id} in ${f}`);
-  else fail(`pause LOST: \`${id}\` missing from ${f} — ${why}`);
+/* ---- 4. pause is GONE TOO — Wyatt's A-10 (2026-08-28) SUPERSEDES inventory D2 ----------
+   "I haven't seen the play/pause panel ever in the latest build… you can simply remove
+   play/pause from this latest work — if we need to put it in again later, we'll re-engineer it."
+   This half used to assert the OPPOSITE (pause survives); the ruling flipped it, and it was run
+   RED against the tree that still carried pause before the removal commit. HISTORY THAT MUST
+   RIDE BACK IN WITH ANY RE-ENGINEERED PAUSE: the app-switch auto-pause existed because a hidden
+   tab's throttled timers used to hang a turn forever; sleepMs's sweeper belt (util.js) is the
+   surviving defence against lost timers and MUST stay. */
+const PAUSE_GONE = ["toggleShotClockPause","applyPauseState","waitWhilePaused","shotClockPaused",
+  "togglePause","watchPause","netSetPaused","netWatchPaused","autoPausedByHide","scPause",
+  "shotClockPanel","soloBotGame"];
+for (const id of PAUSE_GONE) {
+  const hits = all.filter(x => x.s.includes(id));
+  if (hits.length) fail(`pause still present: \`${id}\` in ${hits.map(x => x.f).join(", ")}`);
+  else pass(`pause gone: \`${id}\``);
+}
+{
+  const u = strip(read("src/ui/util.js"));
+  if (/pendingSleeps/.test(u) && /SLEEP_SWEEP_MS/.test(u)) pass("sleepMs's sweeper belt survives — the real defence against a hidden tab's lost timers");
+  else fail("sleepMs's sweeper belt is GONE — a hidden tab's lost setTimeout can hang a voyage again (the bug the auto-pause existed for)");
 }
 
-console.log(fails ? `\nFAILED — ${fails} assertion(s)` : "\nPASSED — the shot clock is out and pause survived it");
+console.log(fails ? `\nFAILED — ${fails} assertion(s)` : "\nPASSED — the shot clock and play/pause are both out; the sweeper belt survives");
 process.exit(fails ? 1 : 0);

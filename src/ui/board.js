@@ -2085,7 +2085,7 @@ const MIN_SIDEBAR_W=380,MAX_SIDEBAR_W=560;
 // bottom-aligned with it, or a grid item under the captains box. No CSS can relocate an element
 // across containers, and duplicating it would mean keeping two buttons' state in step.
 export function placeMuteButton(){
-  const row=$("controlsRow"), slot=$("muteSlot"), btn=$("btnMute"), clock=$("shotClockPanel");
+  const row=$("controlsRow"), slot=$("muteSlot"), btn=$("btnMute");   // the clock/pause panel is gone (A-10); the flip plank is the row's remaining tenant
   if(!row||!slot||!btn)return;
   /* ON THE STAGE THERE IS ONLY ONE HOME, AND THE MEASUREMENT BELOW WAS SENDING THE BUTTON TO THE
      OTHER ONE. Wyatt, 2026-08-20: "the host has no mute button (guest does)."
@@ -2123,21 +2123,17 @@ export function placeMuteButton(){
   const fits=(row.getBoundingClientRect().width-used)>=need;
   const wantRow=fits?row:slot;
   if(btn.parentNode===wantRow)return; // no DOM write unless the answer actually changed
-  if(fits&&clock&&clock.nextSibling)row.insertBefore(btn,clock.nextSibling); // snug, right after the clock
-  else if(fits)row.appendChild(btn);
+  if(fits)row.appendChild(btn);   // (it used to slot in after the clock panel — gone at A-10)
   else slot.appendChild(btn);
 }
 let muteRO=null;
 export function watchMutePlacement(){
-  const row=$("controlsRow"), clock=$("shotClockPanel");
+  const row=$("controlsRow");
   if(!row||muteRO||typeof ResizeObserver==="undefined"){placeMuteButton();return;}
-  // Observe the row AND the clock: the row catches viewport/layout changes, the clock catches its
-  // own content growing (the timer toggle appearing, the countdown widening) — either can change
-  // the answer without the other moving. ResizeObserver fires only on real size changes, so this
-  // costs nothing while the game sits still, unlike re-measuring on the 500ms tick.
+  // ResizeObserver fires only on real size changes, so this costs nothing while the game sits
+  // still, unlike re-measuring on the 500ms tick. (It also observed the clock panel until A-10.)
   muteRO=new ResizeObserver(()=>placeMuteButton());
-  muteRO.observe(row);
-  if(clock)muteRO.observe(clock);
+  muteRO.observe(row);   // (the clock panel it also observed is gone — A-10)
   placeMuteButton();
 }
 export function syncBoardSizing(){

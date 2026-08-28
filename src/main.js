@@ -89,7 +89,6 @@ if (typeof window !== "undefined") {
     onLogDecision: orchestrator.logDecision,
     onBeginGame: orchestrator.beginGame,
     onBroadcastFlip: orchestrator.broadcastFlip,
-    onTogglePause: orchestrator.togglePause,
     onCreateRoom: orchestrator.createRoom, // UI-05: "Host a Crew" creates the room directly
     onNetBroadcast: orchestrator.netBroadcast,
     onRenderBattle: orchestrator.renderBattle,
@@ -171,16 +170,11 @@ if (typeof window !== "undefined") {
   // paused the game, and the next sleep() (in practice the trade-wind rim sweep, twice in live
   // playtests) hung the turn forever with no indicator. Only the automatic pause auto-resumes:
   // a pause the player chose by tapping ⏸ stays theirs to end.
-  document.addEventListener("visibilitychange", () => {
-    const st = stateNs.appState;
-    if (document.hidden && st.isHost && ui.soloBotGame() && !st.shotClockPaused) {
-      st.autoPausedByHide = true;
-      ui.toggleShotClockPause();
-    } else if (!document.hidden && st.autoPausedByHide) {
-      st.autoPausedByHide = false;
-      if (st.shotClockPaused) ui.toggleShotClockPause();
-    }
-  });
+  /* The app-switch auto-pause stood here (visibilitychange -> pause while hidden). It left with
+     play/pause at Wyatt's A-10 (2026-08-28: "you can simply remove play/pause from this latest
+     work"). ITS HISTORY, for whoever re-engineers pause: it existed because a hidden tab's
+     throttled timers once hung a turn forever; sleepMs's sweeper belt (src/ui/util.js) is the
+     defence that remains and must stay. */
 
   // the whole-table clock display is self-driving on a 500ms tick (mirrors src/ui/board.js's
   // resize-listener precedent for a standing top-level interval/listener living beside its own

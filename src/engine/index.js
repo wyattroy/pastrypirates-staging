@@ -2981,11 +2981,20 @@ class Game{
       for(const i of order){
         const p=this.players[i];
         if(p.done)continue;
-        if(p.baking)continue;            // their whole turn is the attempt, taken at end of day
+        /* A-1 (Wyatt, 2026-08-28: "player to immediately be able to start their bake-off when
+           they dock at tortuga"). ONE PHASE: a baking captain's turn IS their attempt, taken in
+           their own turn slot — a continuing baker attempts instead of sailing, and a captain who
+           docks this turn lights the ovens and bakes in the same breath. The fairness rule this
+           loop has always carried SURVIVES, because endBakeDay still resolves at day end: two
+           captains arriving the same day both get their attempt before anyone is crowned. What
+           changed is only WHEN the attempt runs, not when the day resolves.
+           DETERMINISM: this reorders the r() interleaving, in lockstep with the live loop
+           (runLiveDayBakeoff) — the 2026-07-26 corpus, already unbound at the cutover, needs its
+           re-record to be against THIS order; SOLO_SCHEMA_V=3 refuses pre-reorder saves. */
+        if(p.baking){this.bakeAttempt(p,null);continue;}
         this.takeTurn(p,wind,storm);
-        this.lightOvens(p);              // arrive -> ovens -> enrolled in today
+        if(this.lightOvens(p))this.bakeAttempt(p,null);
       }
-      for(const i of this.bakersToday(order))this.bakeAttempt(this.players[i],null);
       if(this.endBakeDay())return this.resolveEnd();
     }
     return this.resolveEnd();

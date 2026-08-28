@@ -44,9 +44,9 @@ const BASELINE = {
   "src/ui/board.js":  3,
   "src/ui/flow.js":  13,
   "src/ui/lobby.js":  5,
-  "src/ui/panel.js":  4,   // 7 -> 4: three clock forks left with the shot clock, 2026-08-28
+  "src/ui/panel.js":  3,   // 4 -> 3: pause forks left at A-10, 2026-08-28
   "src/ui/stage.js":  9,
-  "src/ui/util.js":  13,   // 22 -> 13: nine clock forks left with the shot clock, 2026-08-28
+  "src/ui/util.js":  12,   // 13 -> 12: pause forks left at A-10, 2026-08-28
   "index.html":       0,
 };
 

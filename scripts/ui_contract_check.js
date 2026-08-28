@@ -1056,6 +1056,46 @@ export function checkCoinParentheticalNobrk(root) {
   return { ok: failures.length === 0, failures, stats: { scanned } };
 }
 
+/* ---- HTML comments balanced — the fault that RENDERED A COMMENT AS PAGE TEXT (2026-08-28) ----
+   The A-10 shot-clock removal deleted the line carrying a comment's `<!--` opener and left nine
+   lines of its tail rendering inside #controlsRow, with a stray `-->` at the end. 33 gates and a
+   passing DOM probe missed it; a screenshot caught it (rule 19). This scan is the cheapest fence:
+   walk every `<!--`/`-->` in index.html and fail on nesting, a stray close, or an unclosed open —
+   any of which means comment prose is (or is about to be) on a player's screen. */
+function checkHtmlCommentsBalanced(root) {
+  const failures = [];
+  const file = path.join(root, "index.html");
+  if (!fs.existsSync(file)) return { ok: false, failures: ["index.html missing"], stats: {} };
+  const s = fs.readFileSync(file, "utf8");
+  let depth = 0, line = 1, openLine = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\n") line++;
+    if (s.startsWith("<!--", i)) {
+      depth++;
+      if (depth === 1) openLine = line;
+      else failures.push(`HTML-COMMENT-NESTED: index.html line ${line} opens a comment inside the one opened at line ${openLine} — HTML comments do not nest; the inner text will render.`);
+      i += 3;
+    } else if (s.startsWith("-->", i)) {
+      depth--;
+      if (depth < 0) { failures.push(`HTML-COMMENT-STRAY-CLOSE: index.html line ${line} closes a comment nothing opened — the prose above it is rendering as page text (this exact fault shipped from the working tree on 2026-08-28).`); depth = 0; }
+      i += 2;
+    }
+  }
+  if (depth > 0) failures.push(`HTML-COMMENT-UNCLOSED: the comment opened at index.html line ${openLine} never closes — everything after it is swallowed to the end of the file.`);
+  /* The same removal's OTHER casualty, same day: a deleted CSS rule whose line ended `} }` took a
+     media query's closing brace with it, leaving `@media (prefers-reduced-motion: reduce) {` open
+     — every rule below it then applied only under reduced motion and the whole game laid out as a
+     300px stack. So each <style> block's braces must balance too (comments stripped first). */
+  for (const m of s.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
+    const css = m[1].replace(/\/\*[\s\S]*?\*\//g, "");
+    let d = 0, minD = 0;
+    for (const ch of css) { if (ch === "{") d++; else if (ch === "}") { d--; if (d < minD) minD = d; } }
+    if (d > 0) failures.push(`CSS-BRACE-UNCLOSED: a <style> block in index.html ends ${d} level(s) deep — an unclosed {, probably an @media whose closing brace was deleted with a rule inside it; every rule after it is being swallowed (this shipped from the working tree on 2026-08-28).`);
+    if (d < 0 || minD < 0) failures.push(`CSS-BRACE-STRAY: a <style> block in index.html closes more braces than it opens — a rule's opener was deleted without its closer.`);
+  }
+  return { ok: failures.length === 0, failures, stats: {} };
+}
+
 function runAll(root, { quiet = false } = {}) {
   const log = quiet ? () => {} : (...args) => console.log(...args);
   const results = [];
@@ -1107,6 +1147,10 @@ function runAll(root, { quiet = false } = {}) {
   const a12 = checkCoinParentheticalNobrk(root);
   log(`${a12.ok ? "PASS" : "FAIL"} coin-parenthetical-nobrk — every trailing signed-coin parenthetical is wrapped in a nobrk span (FIX-21) [${a12.stats.scanned} of ${COIN_PARENTHETICAL_SITES.length} site(s) scanned]`);
   results.push({ name: "coin-parenthetical-nobrk", ...a12 });
+
+  const a13 = checkHtmlCommentsBalanced(root);
+  log(`${a13.ok ? "PASS" : "FAIL"} html-comments-balanced — every <!-- in index.html has its --> (an unbalanced pair renders comment prose on screen)`);
+  results.push({ name: "html-comments-balanced", ...a13 });
 
   return results;
 }
@@ -1532,9 +1576,43 @@ function drill() {
     if (!drillOk) allDrillsOk = false;
   }
 
+  // --- Drill 10: an unbalanced HTML comment — the 2026-08-28 fault, all three shapes ---
+  {
+    resetFixture();
+    fixture("index.html", `<html><body>\n  orphaned tail of a deleted comment opener\n  still prose -->\n<div id="x"></div>\n</body></html>\n`);
+    const r = checkHtmlCommentsBalanced(tmpRoot);
+    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("HTML-COMMENT-STRAY-CLOSE"));
+    console.log(`${drillOk ? "PASS" : "FAIL"} drill 10a (stray --> with no opener) — expected FAIL, got ${r.ok ? "PASS" : "FAIL"}`);
+    if (!drillOk) allDrillsOk = false;
+  }
+  {
+    resetFixture();
+    fixture("index.html", `<html><body>\n<!-- opened and never closed\n<div id="x"></div>\n</body></html>\n`);
+    const r = checkHtmlCommentsBalanced(tmpRoot);
+    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("HTML-COMMENT-UNCLOSED"));
+    console.log(`${drillOk ? "PASS" : "FAIL"} drill 10b (unclosed <!--) — expected FAIL, got ${r.ok ? "PASS" : "FAIL"}`);
+    if (!drillOk) allDrillsOk = false;
+  }
+  {
+    resetFixture();
+    fixture("index.html", `<html><head><style>\n.a { color: red; }\n@media (prefers-reduced-motion: reduce) {\n/* rule deleted, closing brace went with it */\n.b { color: blue; }\n</style></head><body></body></html>\n`);
+    const r = checkHtmlCommentsBalanced(tmpRoot);
+    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("CSS-BRACE-UNCLOSED"));
+    console.log(`${drillOk ? "PASS" : "FAIL"} drill 10c (an @media left open inside <style>) — expected FAIL, got ${r.ok ? "PASS" : "FAIL"}`);
+    if (!drillOk) allDrillsOk = false;
+  }
+  {
+    resetFixture();
+    fixture("index.html", fs.readFileSync(path.join(REAL_ROOT, "index.html"), "utf8"));
+    const r = checkHtmlCommentsBalanced(tmpRoot);
+    console.log(`${r.ok ? "PASS" : "FAIL"} drill 10d (negative control — the real index.html balances, comments and braces both) — expected PASS, got ${r.ok ? "PASS" : "FAIL"}`);
+    for (const f of r.failures) console.log(`    ${f}`);
+    if (!r.ok) allDrillsOk = false;
+  }
+
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 
-  console.log(`\n${allDrillsOk ? "ALL 9 ASSERTIONS RED-PROOF DRILLED OK" : "DRILL FAILURE — an assertion did not fail against its own synthetic violation"}`);
+  console.log(`\n${allDrillsOk ? "ALL 10 ASSERTIONS RED-PROOF DRILLED OK" : "DRILL FAILURE — an assertion did not fail against its own synthetic violation"}`);
   process.exit(allDrillsOk ? 0 : 1);
 }
 

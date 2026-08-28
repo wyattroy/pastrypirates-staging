@@ -70,6 +70,12 @@ export const appState = {
   turnOrder: null,
   numSeats: 4,
   evPushed: 0,
+  // A-13 (Wyatt, 2026-08-28: "host and guest parity is the #1 goal of this work"): the ONE
+  // consumption frontier. Events at index < evConsumed have been handed to consumeEvent — the
+  // host's drain advances it as it drains, the guest's wire feed advances it as events arrive,
+  // so neither tier can double-draw and neither can skip. Reset with evPushed; jumped past the
+  // rebuilt history at endReplay so a resumed voyage never replays its pops and sounds.
+  evConsumed: 0,
   promptCounter: 0,
   gameStarted: false,
   appliedMeta: false,
@@ -84,13 +90,8 @@ export const appState = {
   curSeat: 0,
   inBattlePrompt: false,
   spectatingBattle: false,
-  // shotClockPaused OUTLIVED the shot clock (removed 2026-08-28 — see src/ui/util.js's ask()):
-  // it is the whole game's pause flag, read by waitWhilePaused/sleep and the app-switch
-  // auto-pause. The clock's own six fields (seat/deadline/timer/force/stash/fired) left with it.
-  shotClockPaused: false,
-  // /4: true only while the CURRENT pause was created by the hide-tab auto-pause (src/main.js) —
-  // the visibility handler auto-resumes exactly that pause on return and never a player's own ⏸
-  autoPausedByHide: false,
+  // The clock's six fields left with the shot clock; shotClockPaused and autoPausedByHide left
+  // with play/pause (Wyatt's A-10, same day). Re-engineered pause starts from git history here.
   // /4 fast-forward: true while a one-shot ⏩ skip runs (armed by the ribbon chip, stage.js;
   // ended by ANY prompt involving the player — flow.js ffEndNow). ffFromEv marks the event index
   // when the skip armed, so the recap covers exactly what played unwitnessed. Pure UI pacing —

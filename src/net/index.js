@@ -22,7 +22,7 @@ import {
   netWatchRecovery, netWatchDraftPrompt, netWatchEvents, netWatchPrompt,
   netWatchNarr,
   netWatchSeats, netWatchStatus, netWatchTurnOrder, netWatchRecipes,
-  netWatchResponse, netWatchDraftResponse, netWatchPaused,
+  netWatchResponse, netWatchDraftResponse,
 } from "./watchers.js";
 import {
   netSetFlip,
@@ -36,7 +36,7 @@ import {
   netForfeitOnDisconnect, netClearForfeitOnDisconnect,
   netSetDlog, netPushEvent,
   netSetRecovery, netRemoveRecovery,
-  netCreateRoom, netSetFeedback, netSetPaused,
+  netCreateRoom, netSetFeedback,
 } from "./writers.js";
 import {
   netReadMeta, netReadRoom, netReadDlog, netReadEv, netClaimSeat,
@@ -48,7 +48,7 @@ export {
   netWatchRecovery, netWatchDraftPrompt, netWatchEvents, netWatchPrompt,
   netWatchNarr,
   netWatchSeats, netWatchStatus, netWatchTurnOrder, netWatchRecipes,
-  netWatchResponse, netWatchDraftResponse, netWatchPaused,
+  netWatchResponse, netWatchDraftResponse,
 };
 export {
   netSetFlip,
@@ -62,7 +62,7 @@ export {
   netForfeitOnDisconnect, netClearForfeitOnDisconnect,
   netSetDlog, netPushEvent,
   netSetRecovery, netRemoveRecovery,
-  netCreateRoom, netSetFeedback, netSetPaused,
+  netCreateRoom, netSetFeedback,
 };
 export {
   netReadMeta, netReadRoom, netReadDlog, netReadEv, netClaimSeat,

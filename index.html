@@ -150,7 +150,6 @@
   #game.layoutWide #boardwrap { max-width: none !important; width: 100%; }
   #game.layoutWide #footerRow { width: calc(var(--boardW, 820px) + 14px + var(--sideW, 300px)); max-width: 100%; margin: 0 auto; }
   #flipPanel { flex: 0 0 auto; }
-  #shotClockPanel { flex: 0 0 auto; }
   #board { background: linear-gradient(160deg, var(--sea), var(--sea2)); display: block; width: 100%; height: auto; border-radius: 10px; border: 1.5px solid var(--line); overflow: hidden; }
   /* #1b: storm overlay — a light dark tint + two rain layers that fall in the wind's direction.
      The rain angle/travel is driven by CSS vars set per-storm from the wind (see render()).
@@ -713,17 +712,6 @@
   /* ---- shot clock: a brass ship's gauge, left-aligned like a real instrument readout ---- */
   /* UI-01: the gauge art fills the panel exactly (100% 100%) rather than `cover`, which was
      scaling it up and cropping the left/right edges of the frame off. */
-  #shotClockPanel { background: linear-gradient(160deg, rgba(138,95,47,.6), rgba(92,61,28,.6)), var(--clock-img) center/100% 100% no-repeat;
-    border: 2px solid #d9a84e;
-    border-radius: clamp(8px,3cqw,14px); padding: clamp(5px,2cqw,9px) clamp(8px,3cqw,14px);
-    min-width: clamp(70px,26cqw,118px); position: relative; }
-  #shotClockPanel.idle { opacity: .55; }
-  #scPause { position: absolute; top: 3px; right: 4px; width: 16px; height: 16px; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    border: 1px solid #d9a84e; border-radius: 50%;
-    background: rgba(0,0,0,.25); cursor: pointer; }
-  #scPause:hover { background: rgba(0,0,0,.4); }
-  #scPause img { width: 60%; height: 60%; object-fit: contain; }
   /* THE PAUSED BEACON (Wyatt, 2026-08-06). A stopped game must announce itself: a player who steps
      away from the tab comes back to a board that is simply not moving, with nothing saying why.
      The clock face already goes silver and reads "paused"; this makes the one control that FIXES it
@@ -735,49 +723,19 @@
      on this screen), and neither triggers layout on a button pinned in the clock's corner.
      Honours prefers-reduced-motion by dropping to a STATIC glow rather than to nothing at all —
      the whole point is visibility, so the message must survive the animation being switched off. */
-  @keyframes scPulse {
-    0%,100% { box-shadow: 0 0 0 0 rgba(245,166,35,.65); transform: scale(1); }
-    50%     { box-shadow: 0 0 10px 4px rgba(245,166,35,.15); transform: scale(1.14); } }
-  #scPause.scPulse { animation: scPulse 1.4s ease-in-out infinite;
-    border-color: #f5a623; background: rgba(245,166,35,.35); }
-  @media (prefers-reduced-motion: reduce) {
-    #scPause.scPulse { animation: none; box-shadow: 0 0 8px 3px rgba(245,166,35,.5); } }
-  /* (#scTimerToggle's rule stood here — the ⏱ toggle left with the shot clock, 2026-08-28.) */
-  #shotClockPanel.urgent { background: linear-gradient(160deg, rgba(90,95,102,.72), rgba(37,40,44,.72)), var(--clock-img) center/100% 100% no-repeat;
-    border-color: #e2564c;
-    animation: clockurgent 0.9s ease-in-out infinite; }
+  /* (#scTimerToggle's rule and a reduced-motion @media for #scPause.scPulse stood here — both
+     left with the shot clock, 2026-08-28. The first cut of that removal deleted the line holding
+     the @media's CLOSING brace but not its opener, which left the media query swallowing every
+     rule below it — the whole game laid out as a 300px-tall stack, caught only by a screenshot.
+     If you remove a rule whose line ends `} }`, one of those braces belongs to the block ABOVE.) */
   /* notes/edits #11: paused always reads as silver/inert, regardless of whose turn it was paused
      on or whether it was already urgent — distinct from both the normal brass panel and .urgent */
-  #shotClockPanel.paused { background: linear-gradient(160deg, rgba(154,161,168,.72), rgba(107,114,120,.72)), var(--clock-img) center/100% 100% no-repeat;
-    border-color: #c7ccd1;
-    animation: none; opacity: 1; }
-  #shotClockPanel.paused #scLabel, #shotClockPanel.paused #shotClockSub { color: #e8ebee; }
-  #shotClockPanel.paused #shotClockNum, #shotClockPanel.paused #scUnit { color: #fff; }
-  #scLabel { font-size: clamp(7px,2cqw,10px); color: #e0c58f; letter-spacing: .5px; text-transform: uppercase; line-height: 1.2; }
-  #shotClockPanel.urgent #scLabel { color: #ff9b93; }
   /* UI-02: outer edge radiates orange as the 20s window counts to 0 (--heat 0→1, set in setClockUI) */
-  #shotClockPanel.warming { box-shadow: 0 0 calc(4px + var(--heat,0) * 22px) calc(var(--heat,0) * 6px) rgba(245,159,45,calc(.15 + var(--heat,0) * .6)); }
-  #scRow { display: flex; align-items: baseline; gap: 4px; line-height: 1; margin: 1px 0; }
-  #shotClockNum img { width: 1em; height: 1em; object-fit: contain; vertical-align: middle; }
-  #shotClockNum { font-size: clamp(16px,6cqw,30px); font-weight: 700; font-variant-numeric: tabular-nums; color: #ffe9b8;
-    display: inline-block; min-width: 2ch; }
-  #shotClockPanel.urgent #shotClockNum { color: #ff8f86; }
   /* CLOCK-02 UX: while paused the frozen number is click-to-resume (setClockUI adds .tappable) —
      the ⏸-symbol paused branch already reads as a button, but this numeric branch did not. Dotted
      underline + hover lift signal it's tappable without disturbing the tabular-nums layout. */
-  #shotClockNum.tappable { cursor: pointer; text-decoration: underline dotted rgba(255,255,255,.65);
-    text-underline-offset: 3px; border-radius: 6px; padding: 0 2px;
-    transition: background .12s ease, transform .12s ease; }
-  #shotClockNum.tappable:hover { background: rgba(255,255,255,.2); transform: scale(1.05); }
-  @media (prefers-reduced-motion: reduce) { #shotClockNum.tappable { transition: none; }
-    #shotClockNum.tappable:hover { transform: none; } }
   /* reserve room for the widest label ("seconds"/"or lose your turn") so the panel doesn't
      narrow when the idle state clears these to shorter placeholder text */
-  #scUnit { font-size: clamp(7px,2.2cqw,12px); color: #e0c58f; display: inline-block; min-width: 7ch; }
-  #shotClockPanel.urgent #scUnit { color: #ff9b93; }
-  #shotClockSub { font-size: clamp(7px,2.2cqw,11px); color: #e0c58f; line-height: 1.2; min-width: 18ch; }
-  #shotClockPanel.urgent #shotClockSub { color: #ff9b93; }
-  @keyframes clockurgent { 0%, 100% { box-shadow: 0 0 0 0 rgba(226,75,74,.65); } 50% { box-shadow: 0 0 0 9px rgba(226,75,74,0); } }
   /* AUDIO-02/D-15 (phase 21): standalone #controlsRow sibling, right of the clock — narrow
      (no min-width clamp, unlike #btnPlayAgain), so it reads as a control beside the clock rather
      than a second panel. Same border-radius/padding clamp idiom as #btnPlayAgain so it drops into
@@ -814,8 +772,7 @@
      It overflows into the row's 10px gap by ~5.5px a side, which stays clear of the clock. */
   #btnMute::after { content: ""; position: absolute; left: 50%; top: 50%;
     width: 44px; height: 44px; transform: translate(-50%,-50%); }
-  /* standalone, matches #shotClockPanel's footprint (min-width/padding/border-radius) so it
-     drops into the same #controlsRow slot without the layout jumping */
+  /* the end-of-voyage swap: Play again drops into the same #controlsRow slot without the layout jumping */
   #btnPlayAgain { flex: 0 0 auto; min-width: clamp(70px,26cqw,118px);
     padding: clamp(5px,2cqw,9px) clamp(8px,3cqw,14px); border-radius: clamp(8px,3cqw,14px);
     border: 2px solid #d98e00; font-size: clamp(11px,3.5cqw,16px); font-weight: 800;
@@ -1280,10 +1237,6 @@
     #flipCoinWrap.coin { width: clamp(54px,19.5cqw,96px); height: clamp(54px,19.5cqw,96px);
       font-size: clamp(9px,2.85cqw,16.5px); }
     #flipCoinWrap.coin.spin { font-size: clamp(16.5px,5.25cqw,33px); }
-    #shotClockPanel { border-radius: clamp(12px,4.5cqw,21px);
-      padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px);
-      min-width: clamp(105px,39cqw,177px); }
-    #scPause { width: 24px; height: 24px; }
     /* AUDIO-02 (phase 21): #btnMute joins the same narrow-viewport bump — 21-03 made the timer
        toggle visible in solo for the first time, so this row now carries one more control than
        it ever has at this width. */
@@ -1293,10 +1246,6 @@
     #btnMute { font-size: clamp(12px,4.1cqw,14px);
       padding: clamp(2.5px,1.1cqw,3px) clamp(4px,1.6cqw,5px);
       border-radius: clamp(6px,2.2cqw,10px); }
-    #scLabel { font-size: clamp(10.5px,3cqw,15px); }
-    #shotClockNum { font-size: clamp(24px,9cqw,45px); }
-    #scUnit { font-size: clamp(10.5px,3.3cqw,18px); }
-    #shotClockSub { font-size: clamp(10.5px,3.3cqw,16.5px); }
     #btnPlayAgain { min-width: clamp(105px,39cqw,177px); border-radius: clamp(12px,4.5cqw,21px);
       padding: clamp(7.5px,3cqw,13.5px) clamp(12px,4.5cqw,21px); font-size: clamp(16.5px,5.25cqw,24px); }
   }
@@ -2048,7 +1997,6 @@
   #pp4CerSlot #flipPanel { margin:0 !important; transform:scale(2.2); transform-origin:center;
     filter:drop-shadow(0 16px 34px rgba(0,0,0,.55)); }
   #pp4CerSlot { padding:56px 0; }
-  #pp4CerSlot #shotClockPanel, #pp4CerSlot #muteSlot, #pp4CerSlot #btnMute { display:none !important; }
   /* playtest 10 item 5: the old prompt card never shows through the veil — its words move onto it */
   body.pp4Cer #pp4Prompt { visibility:hidden; }
   /* ITEM 7 (Wyatt, 2026-08-23c): "shouldn't all narration boxes only appear after the veil
@@ -2698,32 +2646,40 @@
 </div>
 
 <!-- ===================== HOW TO PLAY (modal) ===================== -->
+<!-- A-7 (Wyatt, 2026-08-28): EVERY TUNED NUMBER IN HERE IS AN EMPTY data-rule SPAN, filled at
+     runtime from rulesFacts(cfg) — the same cfg the engine plays by (fillRulesFacts, wired in
+     orchestrator.js). Never type an amount into this prose: scripts/qa/rules_page_check.mjs
+     fails the build on a digit glued to 🌕 or "squares" outside a span, on a live mechanic this
+     page skips, and on a dead one it still teaches. The words are Wyatt's register — new
+     sentences here are drafts for his rewrite, not settled copy. -->
 <div id="howToPlayModal" class="modalOverlay" style="display:none">
   <div class="modalCard" style="max-width:480px;text-align:left">
     <div class="modalTitle" style="text-align:center">📖 How to play</div>
     <div style="margin-top:14px;max-height:60vh;overflow-y:auto">
       <h4>🎯 The goal</h4>
-      <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. First baker home fires up the ovens!</p>
+      <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. That fires up yer ovens — and the bake-off begins!</p>
       <h4>⚓ Setting sail</h4>
-      <p>Each captain gets a recipe map (5 ingredients), 3 gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — and the fewer that are left, the dearer they get.</p>
+      <p>Each captain gets a recipe map (<b data-rule="recipeSize"></b> ingredients), <b data-rule="startCoins"></b> gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — and the fewer that are left, the dearer they get.</p>
       <h4>Yer turn: sail → act</h4>
       <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's — storms and all. That forecast is never wrong, so ye can plan around it.</p>
-      <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b>4 squares</b> in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b>2</b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
+      <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b data-rule="sailRange"></b> squares in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b data-rule="sailUpwind"></b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
       <p><b>⚓ Act</b> — choose one:</p>
-      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b>3🌕</b>; <b>tails</b> ye spend the turn workin' the docks for <b>1🌕</b>. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
-      <p><b>💰 Crate prices rise.</b> A crate costs <b>6🌕 minus however many are left on that island</b> — so the first off a full island is 3🌕, the next 4🌕, and the last one 5🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
-      <p><b>Attack</b> — fight an adjacent ship! Pay 2🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b>2🌕 to load another broadside</b> and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody, not even a captain who's already fired up the ovens. Ye can't attack a ship with an empty hold; there's nothing to take.</p>
-      <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b>2🌕</b> from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
+      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads"></b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails"></b>🌕. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
+      <p><b>💰 Crate prices rise.</b> A crate costs <b data-rule="crateBase"></b>🌕 <b>minus however many are left on that island</b> — so the first off a full island is <b data-rule="priceFirst"></b>🌕, the next <b data-rule="priceNext"></b>🌕, and the last one <b data-rule="priceLast"></b>🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
+      <p><b>🕯️ The black market.</b> A sold-out island always has ONE more crate under the counter — a flat <b data-rule="blackMarket"></b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two crates</b> from yer hold in trade for it — even two of the same.</p>
+      <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody, not even a captain who's already fired up the ovens. Ye can't attack a ship with an empty hold; there's nothing to take.</p>
+      <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b data-rule="callBounty"></b>🌕 from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
       <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — crates, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
-      <p><b>Start yer bakery!</b> — at the Isle of Tortuga with yer whole recipe? Declare victory! <img class="narrIcon" src="assets/icons/cupcake.png" alt=""></p>
+      <p><b>Muse</b> — do none of it. Sit back, dream o' pastry, and pocket <b data-rule="passCoin"></b>🌕 for yer patience.</p>
       <h4><img class="narrIcon" src="assets/icons/current-swirl.png" alt=""> The trade winds</h4>
       <p>The sea around the rim of the world flows in a mighty clockwise current, in arcs of varying length each game. Sail (or get blown) into it and yer instantly swept to the far corner of that stretch — a daring shortcut for captains in a hurry!</p>
       <h4>⛈️ Storms</h4>
-      <p>The compass warns ye a full day ahead, so a storm is never a surprise. At the top of the day it blows <b>every ship at once</b>, <b>3 squares</b>, all the <b>same direction</b>, before anyone acts. <b>Land and other ships stop ye short</b> — that's the whole of it. Nobody loses a turn, and a dock is just water the storm can push ye onto or off. Mind the rim, though: blown into the trade winds and yer swept clean across the sea.</p>
-      <h4>⏰ The shot clock</h4>
-      <p>Take too long on yer turn and ye'll lose a random ingredient from yer hold (or 5🌕 if yer out of ingredients) and miss the turn.</p>
+      <p>The compass warns ye a full day ahead, so a storm is never a surprise. At the top of the day it blows <b>every ship at once</b>, <b data-rule="stormPush"></b> squares, all the <b>same direction</b>, before anyone acts. <b>Land and other ships stop ye short</b> — that's the whole of it. Nobody loses a turn, and a dock is just water the storm can push ye onto or off. Mind the rim, though: blown into the trade winds and yer swept clean across the sea.</p>
+      <h4><img class="narrIcon" src="assets/icons/cupcake.png" alt=""> The bake-off</h4>
+      <p>Dock at Tortuga holdin' yer whole recipe and yer ovens light <b>that very turn</b>. Yer recipe's revealed, yer ingredient crates get shuffled before yer eyes — and ye must name them back <b>in the recipe's own order</b>, from memory. Pay <b data-rule="bakeRewatch"></b>🌕 to watch the shuffle again, as often as yer purse allows.</p>
+      <p>Crates ye place right <b>lock in</b>; the rest get shuffled again tomorrow, and ye bake again — yer attempt IS yer turn. The whole table watches every bake, so make it a show. Get every crate in its place and ye've baked it!</p>
       <h4><img class="narrIcon" src="assets/icons/crown.png" alt=""> Winning</h4>
-      <p>When the first baker docks home, everyone else gets one last turn. If more than one makes it, there's no contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
+      <p>First captain to bake their full recipe wins the voyage. Two captains bakin' it on the same day? No contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
       <p><i>May yer flips be heads and yer rivals be broke.</i></p>
     </div>
   </div>
@@ -2874,22 +2830,14 @@
       <div id="flipPanel">
         <div class="flipPlank"><div id="flipCoinWrap" class="coin wait">?</div></div>
       </div>
-      <div id="shotClockPanel" class="idle">
-        <button id="scPause" type="button" style="display:none"><img id="scPauseImg" alt="pause/resume"></button>
-        <div id="scLabel">turn clock</div>
-        <div id="scRow"><span id="shotClockNum">–</span><span id="scUnit"></span></div>
-        <div id="shotClockSub">&nbsp;</div>
-      </div>
-      <!-- AUDIO-02/D-15 (phase 21): a #controlsRow sibling to the right of #shotClockPanel, NOT a
-           corners, and 21-03's D-20 change makes the timer toggle visible in solo for the first
-           time, so a third icon there would newly crowd a panel that already clamps to 70-118px.
-           Bare 🔊/🔇 emoji scaffold (D-14): the real speaker icon + blocked-slash overlay is
-           Wave 5's job and needs Wyatt's art pipeline; this ships behaviour complete now with no
-           broken image and no borrowed icon (horn.png already carries the 📯 meaning). Visible
-           content set every tick by setClockUI(); click bound once in wireLobby().
-           MUTE-01 (2026-08-02): the button itself lives in #muteSlot, a #layout grid child, so it can
-           sit under the captains box when the row is too narrow — see the #muteSlot rule. Its cqw
-           sizing still resolves against this row, because #muteSlot shares this row's box. -->
+      <!-- #shotClockPanel stood here until 2026-08-28 (the clock removed on Wyatt's order, then
+           play/pause outright with it — A-10; git log at this file for the panel's history). The
+           MUTE button outlived it: it lives in #muteSlot further down (see the MUTE-01 comment
+           there), its visible content set every tick by setClockUI(), click bound once in
+           wireLobby(). NOTE, earned the day A-10 shipped: the first cut of this removal deleted
+           the line carrying this comment's OPENER and left its tail rendering as page text inside
+           #controlsRow — caught only by looking at a screenshot (rule 19), after 33 gates and a
+           passing probe missed it. Balance the comment markers when editing here. -->
       <button id="btnPlayAgain" type="button" style="display:none">🔁 Play again</button>
     </div>
     <div id="actionPanel" style="display:none"><div id="apGrid"><div id="apGridInner"></div></div></div>
