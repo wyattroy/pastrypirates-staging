@@ -1148,8 +1148,15 @@ function runAll(root, { quiet = false } = {}) {
   log(`${a12.ok ? "PASS" : "FAIL"} coin-parenthetical-nobrk — every trailing signed-coin parenthetical is wrapped in a nobrk span (FIX-21) [${a12.stats.scanned} of ${COIN_PARENTHETICAL_SITES.length} site(s) scanned]`);
   results.push({ name: "coin-parenthetical-nobrk", ...a12 });
 
-  const a13 = checkHtmlCommentsBalanced(root);
-  log(`${a13.ok ? "PASS" : "FAIL"} html-comments-balanced — every <!-- in index.html has its --> (an unbalanced pair renders comment prose on screen)`);
+  /* ALWAYS THE LIVE index.html, whatever tree the register checks run against. CEO Review 9
+     caught this aimed wrong on the day it shipped: the chain runs this gate `--tree=classic`
+     (preserving pre-cutover register coverage), which pointed the balance check at the FROZEN
+     v1 page — while the fault it exists for (the A-10 removal leaving an @media and a comment
+     unbalanced) happened in the live page. "A gate aimed at the wrong tree is not silent, it is
+     reassuring" — this repo's own lesson, recurring. The drill still passes its fixture root by
+     calling the check function directly, which is why the function keeps its root parameter. */
+  const a13 = checkHtmlCommentsBalanced(REAL_ROOT);
+  log(`${a13.ok ? "PASS" : "FAIL"} html-comments-balanced — every <!-- in the LIVE index.html has its -->, and every <style> block's braces balance (checked against the live tree regardless of --tree)`);
   results.push({ name: "html-comments-balanced", ...a13 });
 
   return results;

@@ -54,8 +54,11 @@ const LEGS = {
   PLUMBING: ["solo-phone", "passplay-phone", "crew-phone"],
   /* The full matrix. crew-phone is here because it is the square Wyatt actually playtested and the
      one that had no leg at all until 2026-08-26 — most of his 35 findings came from it. */
-  FULL: ["solo-desktop", "solo-phone", "passplay-phone", "passplay-desktop",
-         "crew-desktop", "crew-phone", "solo-desktop-wk", "solo-phone-wk"],
+  /* THE THREE SIZES (Wyatt, 2026-08-28): desktop, phone, and tablet portrait — both engines play
+     solo at all three; Chrome carries the multiplayer modes. gear.mjs's sweep line said "all three
+     sizes" while only two existed; his order made the text true instead of the text being fixed. */
+  FULL: ["solo-desktop", "solo-phone", "solo-tablet", "passplay-phone", "passplay-desktop",
+         "crew-desktop", "crew-phone", "solo-desktop-wk", "solo-phone-wk", "solo-tablet-wk"],
   NONE: [],
 };
 const legs = LEGS[gear] || LEGS.FULL;

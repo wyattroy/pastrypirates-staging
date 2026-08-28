@@ -79,10 +79,7 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
   const srv = httpPort ? spawn("python3", ["-m", "http.server", String(httpPort)], { cwd: serveRoot, stdio: "ignore" }) : null;
   if (profileDir) fs.rmSync(profileDir, { recursive: true, force: true });
   await sleep(900);
-  const browser = await webkit.launch();          // headless: never takes over Wyatt's screen
-  const page = await browser.newPage({
-    viewport: { width: W, height: H }, deviceScaleFactor: dsf,
-    hasTouch: mobile, isMobile: mobile });
+
   /* MUTED, ALWAYS — and this mount has to do it by hand. Wyatt's standing rule is that a browser a
      probe drives is headless AND silent; he should never be able to hear a run. lib/cdp.mjs gets
      that free from Chrome's `--mute-audio` flag, and the first draft of THIS file simply forgot,
@@ -95,7 +92,7 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
           nothing it can observe about its own state changes.
      Deliberately NOT done: touching the game's own mute control. That is a subsystem with live
      defects (docs/AUDIO.md) and flipping it would put the thing under test into a different state. */
-  await page.addInitScript(() => {
+  const MUTE_INIT = () => {
     const M = window.HTMLMediaElement && window.HTMLMediaElement.prototype;
     if (M) {
       const play = M.play;
@@ -113,11 +110,76 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
         return connect.apply(this, arguments);
       };
     }
-  });
+  };
 
+  /* THE WEB PROCESS DIES AND THE VOYAGE SURVIVES IT — measured 2026-08-28, then engineered around.
+     Playwright's Linux WebKit (WPEWebProcess, build 2336) segfaults MID-VOYAGE in this container:
+     a core dump shows SIGSEGV inside libWPEWebKit's own compositing walk (a repeating 4-frame
+     recursion on a glib worker thread; symbols stripped). It is NOT load — 5/5 isolated runs on a
+     quiet machine died by day 9 — and NOT memory (cgroup oom_kill 0), and
+     WEBKIT_DISABLE_DMABUF_RENDERER=1 does not stop it (crashed day 7 under it). It is WebKit's
+     own binary; no flag of ours reaches it, and real Safari on Wyatt's devices shares none of it.
+
+     So the mount rides it out instead: a PERSISTENT context keeps localStorage on disk, which is
+     where the game's own solo save lives — and the game AUTO-RESUMES a saved solo voyage on boot
+     (the fbinit-before-solo-resume contract in ui_contract_check). On a crash the mount relaunches
+     the context, reloads the last URL, waits for the resume, and retries the one call that failed.
+     Every recovery is COUNTED and printed, and playtest_gate surfaces the count in the leg summary
+     — a leg that finished with recoveries says so; it never quietly passes as an untroubled run. */
   const consoleErrs = [];
-  page.on("pageerror", e => consoleErrs.push("EXC " + String(e).slice(0, 200)));
-  page.on("console", m => { if (m.type() === "error") consoleErrs.push("ERR " + m.text().slice(0, 200)); });
+  let context = null, page = null, lastURL = null;
+  const ctxOpts = { viewport: { width: W, height: H }, deviceScaleFactor: dsf,
+                    hasTouch: mobile, isMobile: mobile };
+  const profile = profileDir || path.join(os.tmpdir(), `wk-prof-${Date.now()}`);
+  const boot = async () => {
+    context = await webkit.launchPersistentContext(profile, ctxOpts);   // headless default: never takes over Wyatt's screen
+    await context.addInitScript(MUTE_INIT);
+    page = context.pages()[0] || await context.newPage();
+    handle.page = page;
+    pageCrashed = false;
+    page.on("crash", () => { pageCrashed = true; });   // proactive: the next op recovers first
+    page.on("pageerror", e => consoleErrs.push("EXC " + String(e).slice(0, 200)));
+    page.on("console", m => { if (m.type() === "error") consoleErrs.push("ERR " + m.text().slice(0, 200)); });
+  };
+  const CRASH_RE = /Target crashed|Target closed|Target page, context or browser has been closed|browser has been closed|wk-op-timeout/i;
+  /* A HANG IS A CRASH THAT FORGOT TO SAY SO — measured 2026-08-28, the first proving run of this
+     recovery: the leg froze at day 10 for 100 minutes with the web process ALIVE and no error
+     thrown anywhere. page.evaluate has no default timeout, so one wedged call held the driver
+     inside a single await where even the leg's 35-minute budget could not fire. So every mount
+     operation carries a hard ceiling, and blowing it takes the same relaunch-and-resume road as a
+     real crash — the voyage lives in the game's own save either way. 60s is deliberately far
+     above any honest op (a sig read is milliseconds, a screenshot seconds) so this can only catch
+     the pathological case, never race a slow-but-working one. */
+  const OP_TIMEOUT_MS = 60000;
+  const withTimeout = (p, label) => Promise.race([p, new Promise((_, rej) => {
+    const t = setTimeout(() => rej(new Error(`wk-op-timeout: ${label} after ${OP_TIMEOUT_MS}ms`)), OP_TIMEOUT_MS);
+    if (t.unref) t.unref();          // never hold the gate process open on our own watchdog
+  })]);
+  let pageCrashed = false;
+  const recover = async () => {
+    handle.recoveries++;
+    console.log(`[wk-mount] WPEWebProcess died (the known container SIGSEGV) — relaunching and resuming the voyage from its own save. Recovery #${handle.recoveries}.`);
+    try { await context.close(); } catch {}
+    await boot();
+    if (lastURL) {
+      await page.goto(lastURL, { waitUntil: "load" }).catch(() => {});
+      /* the game boots, finds its solo save, and replays it back to the frontier — give the
+         rebuild a real beat before the driver's next read, or the first read sees mid-replay */
+      await sleep(6000);
+    }
+  };
+  /* every public operation retries ONCE through a recovery; a second failure surfaces as before */
+  const guarded = (fn, fallback) => async (...args) => {
+    try {
+      if (pageCrashed) throw new Error("Target crashed (crash event)");
+      return await withTimeout(fn(...args), fn.name || "op");
+    } catch (e) {
+      if (!CRASH_RE.test(String(e.message))) { if (fallback) return fallback(e); throw e; }
+      await recover();
+      try { return await withTimeout(fn(...args), fn.name || "op-retry"); }
+      catch (e2) { if (fallback) return fallback(e2); throw e2; }
+    }
+  };
 
   /* THE PAGE MUST BELIEVE IT IS VISIBLE, for exactly the reason cdp.mjs spells out: the game
      pauses itself on document.hidden and a paused game is an immaculate forgery of a stall.
@@ -129,24 +191,25 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
     if (method === "Page.bringToFront") { await page.bringToFront().catch(() => {}); return {}; }
     return {};                                     // Emulation.* etc: not applicable to this mount
   };
-  const ev = async (expr) => {
-    try { return await page.evaluate(expr); }
-    catch (e) { return { __err: String(e.message).slice(0, 200) }; }
-  };
-  const shot = async (file) => { await page.screenshot({ path: file }); return file; };
-  const clickXY = async (x, y) => {               // a REAL mouse, same discipline as the CDP mount
+  const ev = guarded(async (expr) => page.evaluate(expr),
+                     (e) => ({ __err: String(e.message).slice(0, 200) }));
+  const shot = guarded(async (file) => { await page.screenshot({ path: file }); return file; });
+  const clickXY = guarded(async (x, y) => {       // a REAL mouse, same discipline as the CDP mount
     await page.mouse.move(x, y);
     await page.mouse.down();
     await page.mouse.up();
-  };
-  const type = async (text) => page.keyboard.insertText(text);
-  const nav = async (url) => page.goto(url, { waitUntil: "load" }).catch(() => {});
+  });
+  const type = guarded(async (text) => page.keyboard.insertText(text));
+  const nav = guarded(async (url) => { lastURL = url; await page.goto(url, { waitUntil: "load" }).catch(() => {}); });
   const close = async () => {
-    try { await browser.close(); } catch {}
+    try { await context.close(); } catch {}
     if (srv) { try { srv.kill("SIGKILL"); } catch {}
                try { execSync(`pkill -f "http.server ${httpPort}"`, { stdio: "ignore" }); } catch {} }
   };
-  return { W, H, httpPort, send, ev, shot, clickXY, type, nav, close, consoleErrs, sleep, page, engine: "webkit" };
+  const handle = { W, H, httpPort, send, ev, shot, clickXY, type, nav, close, consoleErrs, sleep,
+                   page: null, recoveries: 0, engine: "webkit" };
+  await boot();
+  return handle;
 }
 
 export { sleep };

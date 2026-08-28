@@ -268,6 +268,20 @@ re-derive them each time at great time and cost." Every line below was paid for 
 difference is listed here — if you are about to fight one that is not, add it to this section in
 the same session.
 
+### The matrix a FULL trial sails (Wyatt's 2026-08-28 ruling)
+
+| | desktop 1890×960 | tablet 768×954 | phone 390×664 |
+|---|---|---|---|
+| **Chrome** | solo, passplay, crew | solo | solo, passplay, crew |
+| **Safari (WebKit)** | solo | solo | solo |
+
+Ten legs. **Three sizes** — desktop, tablet portrait, phone — with the tablet's 954 being D-42's
+honest-viewport rule applied to an iPad (1024 screen minus browser chrome). **Both engines play
+solo at every size**; Chrome alone carries the multiplayer modes, on the recorded argument that
+the engines diverge on rendering/animation/layout, never on the wire. The leg table itself is
+`legDefs` in `scripts/playtest_gate.mjs`; the FULL list is in `scripts/sea_trial.mjs` — change
+either only with a matching edit to this table.
+
 ### From a Claude Code cloud container
 
 ```bash
