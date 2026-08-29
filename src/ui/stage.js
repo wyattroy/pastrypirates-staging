@@ -39,7 +39,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.08.29.1-staging@0fb6d710";
+const PP4_STAMP = "2026.08.29.2-staging@e2e52b84";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1093,8 +1093,22 @@ function wireEovDrag(){
   wrap.addEventListener("wheel", e => {
     const parked = wrap.classList.contains("pp4EovParked");
     const moving = wrap.classList.contains("pp4EovDrag");
+    /* THE LIST GETS THE FIRST INCH — Wyatt's ruling, 2026-08-29, on Q-20.
+       This used to engage the dock when the scroller was at its TOP, which is where the award list
+       always starts. So the very first wheel-down was always taken by the dock gesture and
+       preventDefault()ed, `scrollTop` could never rise above 0, and therefore no LATER wheel-down
+       could reach the content either: the awards below the fold were reachable by dragging or by
+       the scrollbar, never by scrolling. Not a regression — it had always been so — and on a laptop
+       scrolling is the first thing anyone tries.
+       Now the list scrolls normally and only a scroll at the very BOTTOM docks the card, which is
+       also the natural place for it: you have read the awards, you keep going, the card gets out of
+       the way. Docking by dragging is untouched, and so is the parked strip's tap-to-restore.
+       A card whose list does not overflow is at its bottom the moment it is at its top, so the
+       gesture behaves exactly as before there — which is most desktop games. */
+    const s = eovScroller(wrap);
+    const atBottom = s.scrollHeight - s.clientHeight - s.scrollTop <= 1;
     // an ordinary scroll through the card's own content is left entirely alone
-    if (!(moving || parked || (eovScroller(wrap).scrollTop <= 0 && e.deltaY > 0))) return;
+    if (!(moving || parked || (atBottom && e.deltaY > 0))) return;
     const g = eovParkGeometry(wrap);
     if (g.dY <= 0) return;
     const y = Math.max(0, Math.min(g.dY, eovTranslateY(wrap) + e.deltaY));

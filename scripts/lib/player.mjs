@@ -166,8 +166,28 @@ export function makePlayer(c, { log = () => {}, isGuest = false } = {}) {
   async function answerSlider() {
     const s = await ev(`(() => { const el = document.querySelector('#pp4Prompt .apSlider'); if (!el) return null;
       const r = el.getBoundingClientRect(); const out = document.querySelector('.apSliderOut');
-      return { x: r.left + r.width * 0.67, y: r.top + r.height / 2, val: out ? out.textContent : el.value, vis: getComputedStyle(el).visibility !== 'hidden' && r.width > 10 }; })()`);
+      return { x: r.left + r.width * 0.67, y: r.top + r.height / 2, val: out ? out.textContent : el.value,
+               disabled: !!el.disabled, min: +el.min, max: +el.max,
+               vis: getComputedStyle(el).visibility !== 'hidden' && r.width > 10 }; })()`);
     if (!s || !s.vis) return false;
+    /* A SLIDER THE GAME DELIBERATELY TURNED OFF IS NOT A DEAD CONTROL — and this probe called 12 of
+       them dead on one leg of the 2026.08.29.1 trial, on 7 legs of 10, in a game that was behaving
+       correctly. W6-1 shipped the broke-purse case Wyatt asked for ("the slider appears greyed out"
+       instead of vanishing), so for the first time there IS a slider on screen when there is nothing
+       to offer. This function only ever asked "did the readout move", and an immovable bar answers
+       no however good the reason.
+       IT STILL HAS TO BE ABLE TO FAIL, which is the whole point. A disabled slider is only correct
+       when it has nowhere to go — the game sets `disabled` on exactly one call and passes `max:min`
+       in the same breath (src/ui/flow.js). So the assertion is not "disabled, therefore fine": it is
+       that a disabled slider MUST have min === max, and a greyed bar with room to move is a real
+       defect this now catches and never used to. */
+    if (s.disabled) {
+      cover("slider disabled", "seen");
+      if (s.min === s.max) { cover("slider disabled", "clicked"); log(`slider deliberately disabled at ${s.min} — nowhere to move, not a dead control`); }
+      else { P.deadButtons.push({ label: "slider greyed with room to move", at: `min ${s.min} max ${s.max}` });
+             log(`DEAD CONTROL: slider is disabled but min ${s.min} !== max ${s.max} — it has somewhere to go and cannot be taken there`); }
+      return true;
+    }
     cover("slider", "seen");
     await c.clickXY(s.x, s.y); await sleep(400);
     const after = await ev(`(() => { const out = document.querySelector('.apSliderOut'); const el = document.querySelector('#pp4Prompt .apSlider'); return out ? out.textContent : (el ? el.value : null); })()`);

@@ -170,6 +170,24 @@ try {
   say(`   (could not read report.json to verify what actually sailed: ${e.message})`);
 }
 const ranLegs = legs.filter(l => !notRun.some(n => n.leg === l));
+/* PRINT FROM THE FINAL SUMMARY, NOT THE LAST 60 LINES — and this cost two whole legs.
+   The 2026.08.29.1 report printed 8 verdicts for 10 legs: `slice(-60)` cut the summary in half and
+   `solo-desktop: FAIL` and `solo-phone: FAIL` fell off the top, while the header table above went
+   on saying "voyages that did NOT run: none". A leg with no printed verdict, counted as
+   accounted-for, is the NOT-RUN column failing in a new costume — the exact thing the 2026-08-26
+   note twenty lines up was written to stop, one layer down.
+   DERIVED, NOT A BIGGER NUMBER: find the LAST place the first leg reports, and print from there, so
+   the block is however long the fleet needs. Widening 60 to 200 would only move the cliff. */
+const gateLines = gateOut.trim().split("\n");
+const firstLegMark = ranLegs.length ? gateLines.map((l, i) => [l, i])
+  .filter(([l]) => l.includes(`== ${ranLegs[0]}:`)).map(([, i]) => i).pop() : -1;
+/* THE FALLBACK IS THE WHOLE OUTPUT, NOT A TAIL. If no leg marker is found something has changed
+   about the gate's format, and that is precisely when truncating is most likely to hide the thing
+   you need to read. Too much output is a nuisance; a silently dropped verdict is a lie. */
+const voyagesBlock = (firstLegMark >= 0 ? gateLines.slice(firstLegMark) : gateLines).join("\n") || "(none run)";
+/* …AND SAY SO LOUDLY IF ONE IS STILL MISSING. A report that can drop a leg silently is worth less
+   than one that admits it, so this checks its own output rather than trusting the slice above. */
+const voyagesMissing = ranLegs.filter(l => !voyagesBlock.includes(`== ${l}:`));
 const mins = Math.round((Date.now() - started) / 60000);
 /* A LEG THAT DID NOT RUN IS NOT A PASS, and until the CEO review of 2026-08-26 this file said so
    in its own header and then contradicted itself in code: "PASSED WITH GAPS" exited 0. The verdict
@@ -197,9 +215,9 @@ const report = `# Sea trial — build \`${STAMP}\`
 ${notRun.length ? "## What did NOT run, and why\n\n" + notRun.map(n => `**${n.leg}**\n\n\`\`\`\n${n.why}\n\`\`\`\n`).join("\n") + "\nA leg that did not run is **not** a leg that passed. This section exists so that distinction cannot be lost.\n" : ""}
 ${unitOk ? "" : "## The browser-free checks failed\n\n```\n" + unitTail + "\n```\n"}
 ## The voyages, in full
-
+${voyagesMissing.length ? `\n> ⚠ **${voyagesMissing.length} leg(s) sailed but have NO verdict printed below: ${voyagesMissing.join(", ")}.**\n> Their result exists in \`sea-trial-shots/log.txt\` and did not reach this file. Do not read their\n> absence as a pass — go and read the log.\n` : ""}
 \`\`\`
-${gateOut.trim().split("\n").slice(-60).join("\n") || "(none run)"}
+${voyagesBlock}
 \`\`\`
 
 Screenshots and contact sheets: \`sea-trial-shots/\` (not committed — 100MB+ per run).

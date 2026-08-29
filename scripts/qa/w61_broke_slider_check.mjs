@@ -20,12 +20,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 let fails = 0;
 const pass = m => console.log("PASS " + m);
 const fail = m => { console.log("FAIL " + m); fails++; };
 
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+const strip = sharedStrip;   /* JS only — the CSS strip below stays block-only, `//` is not a comment in CSS */
 const flow = strip(fs.readFileSync(path.join(REPO, "src/ui/flow.js"), "utf8"));
 const util = strip(fs.readFileSync(path.join(REPO, "src/ui/util.js"), "utf8"));
 const html = fs.readFileSync(path.join(REPO, "index.html"), "utf8");

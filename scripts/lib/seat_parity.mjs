@@ -102,10 +102,26 @@ export function compareSeats(a, b, { aName = "host", bName = "guest" } = {}) {
   if (a.day !== b.day) say("day", `${aName} shows ${JSON.stringify(a.day)}, ${bName} shows ${JSON.stringify(b.day)}`);
   if (a.wind !== b.wind) say("wind", `${aName} shows ${JSON.stringify(a.wind)}, ${bName} shows ${JSON.stringify(b.wind)}`);
 
-  // SET, not order — pass-and-play floats the acting captain to the top of the box by design.
+  /* SET, not order — the captains box is rotated so each browser's own captain sits on top, which
+     is Wyatt's own ruling (2026-08-20, "the active player, whether host or guest, should always
+     see their captain's name on top") and pass-and-play floats the acting captain there too.
+     …AND THE MESSAGE NAMES ONLY WHAT DIFFERS. It used to print both full lists, and on
+     2026-08-29 that cost real time: the report read
+       host: test1:1,Dough:6,Flaky:6,test2:2   guest: test2:2,test1:1,Dough:7,Flaky:6
+     and the eye lands on the rotation, which is correct and deliberate, rather than on the single
+     purse that actually disagreed. A comparison that ignores order must not then print an ordered
+     list as its evidence — the reader cannot tell which half the check objected to. */
   const setOf = s => (s || "").split(",").filter(Boolean).sort().join(",");
-  if (setOf(a.captains) !== setOf(b.captains))
-    say("captains", `${aName}: ${a.captains || "(none)"}   ${bName}: ${b.captains || "(none)"}`);
+  if (setOf(a.captains) !== setOf(b.captains)) {
+    const A = new Map((a.captains || "").split(",").filter(Boolean).map(x => [x.slice(0, x.lastIndexOf(":")), x.slice(x.lastIndexOf(":") + 1)]));
+    const B = new Map((b.captains || "").split(",").filter(Boolean).map(x => [x.slice(0, x.lastIndexOf(":")), x.slice(x.lastIndexOf(":") + 1)]));
+    const diffs = [...new Set([...A.keys(), ...B.keys()])]
+      .filter(k => A.get(k) !== B.get(k))
+      .map(k => `${k}: ${aName} ${A.has(k) ? A.get(k) : "(absent)"} vs ${bName} ${B.has(k) ? B.get(k) : "(absent)"}`);
+    say("captains", diffs.length
+      ? `${diffs.join("; ")}   (row ORDER differs by design and is not part of this finding)`
+      : `${aName}: ${a.captains || "(none)"}   ${bName}: ${b.captains || "(none)"}`);
+  }
 
   if (a.lit !== b.lit) say("whose turn", `${aName} lights ${a.lit}, ${bName} lights ${b.lit}`);
 

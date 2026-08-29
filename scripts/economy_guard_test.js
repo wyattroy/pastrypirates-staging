@@ -23,6 +23,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { moveCrate } from "../src/ui/flow.js";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./qa/lib/strip_comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -105,9 +110,7 @@ console.log("\n3. CR-03 — the battle flee settles no side bets");
   // Strip comments before matching. The CR-03 fix leaves a DO-NOT-RESTORE comment that quotes the
   // deleted line verbatim, so a raw source grep would match the prose describing the bug and report
   // the bug as still present. A gate that a comment can fool is not a gate — it must read code.
-  const block = src.slice(gateIdx, fleeIdx)
-    .replace(/\/\*[\s\S]*?\*\//g, " ")   // block comments
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1"); // line comments (the guard avoids eating `://` in a URL)
+  const block = sharedStrip(src.slice(gateIdx, fleeIdx));
 
   // presence-before-absence: prove the stripper left real code behind, so the two absence
   // assertions below cannot pass merely because `block` came back empty (15-LEARNINGS #2, the

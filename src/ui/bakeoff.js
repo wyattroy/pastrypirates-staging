@@ -444,11 +444,34 @@ export async function playBakeoffLive(spec,io){
     });
   }
 
-  // MEASURED ONCE, never per frame: the centre-to-centre distance between two bowls, used for the
-  // swap translate. Horizontal, so it is a left-to-left distance and the swap animates translateX.
-  // These two must be changed together — a vertical build measured pitch off .top; leaving one and
-  // not the other yields a pitch of 0 and a shuffle in which nothing visibly moves.
-  const pitch=bowls.length>1?(bowls[1].getBoundingClientRect().left-bowls[0].getBoundingClientRect().left):0;
+  /* THE PITCH IS READ WHEN THE CRATES MOVE, NOT WHEN THE SHELL IS BUILT — W3-2, and Wyatt named
+     the symptom exactly: "the crates start moving smoothly then jump to their final resting
+     positions after the animation. It looks like the animation is not correctly calculating their
+     end positions at the beginning."
+
+     IT WAS MEASURED ONCE, HERE, and this line runs before the ghost fade, before the ready-wait,
+     before `bench({phase:"shuffle"})` re-renders and before the cover sweep. `.bkoBowl` is
+     `flex:1 1 0` inside a panel whose CONTENT changes across all of that, so the crates are not the
+     same width when they move as when they were first drawn.
+     MEASURED, on attempt 2 at 1200x950: the frozen pitch was 62.1px and the crates were 66.8px
+     apart when they actually moved. A one-crate swap therefore travelled 62.1 and stopped 4.7px
+     short of its destination; a two-crate swap travelled 124.2 against 133.6 and stopped 9.4px
+     short. The commit then swaps the contents and clears the transform in a single frame, which is
+     invisible ONLY if the crate had arrived — so instead of an invisible reconcile a player sees
+     the crate jump the last 5-9px. That is his sentence, in numbers.
+     (`d` for a one-crate swap IS the pitch, which is how the frozen value could be read straight
+     off the animation's own travel and compared with the live layout.)
+
+     WHY ATTEMPT 2+ AND NOT THE FIRST: the bench carries more on a later attempt — the attempt
+     label, the locked crates, the rewatch line — so there is more for the panel to reflow between
+     the two moments. On the first attempt the two numbers happen to agree.
+
+     SO IT IS DERIVED AT USE (rule 9), not frozen at build. It is still read ONCE per shuffle rather
+     than per frame — the crates do not resize mid-shuffle — but that once is now inside
+     shuffleSlots, after every phase that can move them. The vertical-build warning below still
+     stands: a vertical bench must measure `.top` here AND animate translateY there, together. */
+  const readPitch=()=>{const bs=[...row.querySelectorAll(".bkoBowl")];
+    return bs.length>1?(bs[1].getBoundingClientRect().left-bs[0].getBoundingClientRect().left):0;};
 
   // ---- phase 0: let the previous line's GHOST finish fading ----
   // panel() clones the outgoing .apMsg and cross-fades it over GHOST_FADE_MS as an absolutely
@@ -516,6 +539,9 @@ export async function playBakeoffLive(spec,io){
   await runSwaps();
 
   async function runSwaps(){
+  /* READ IT HERE, once, at the moment the crates are about to move — every phase that can reflow
+     the panel has already run by now. This is the whole of W3-2's fix. */
+  const pitch=readPitch();
   for(const [a,b] of swaps){
     const A=bowls[a],B=bowls[b];
     if(!A||!B)continue;
@@ -524,7 +550,7 @@ export async function playBakeoffLive(spec,io){
       await sleep(340);
       A.classList.remove("flash");B.classList.remove("flash");
     }else{
-      const d=(b-a)*pitch;
+      const d=(b-a)*pitch;   // pitch read at the top of this shuffle — see readPitch()
       /* THE ARC (Wyatt, 2026-08-10, confirmed in his words before building: "move up/down
          vertically smoothly in an arc as they travel — not linearly — reaching the apex at the
          halfway point of their travel before vertically moving back down to baseline as they

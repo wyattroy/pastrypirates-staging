@@ -92,6 +92,22 @@ if (netTracked && fingerCancels && fingerKeepsDistance)
 else
   fail(`the two input paths are not wired as the source claims (wheel tracks a net direction:${netTracked}, a finger cancels the pending wheel release:${fingerCancels}, the finger still uses the distance threshold:${fingerKeepsDistance})`);
 
+/* (5) THE AWARD LIST GETS THE FIRST INCH — Wyatt's ruling on Q-20, 2026-08-29.
+   The dock gesture must engage at the BOTTOM of the card's own list, not the top. Engaging at the
+   top is what made the awards unreachable by wheel at all: the first scroll-down was always taken
+   and preventDefault()ed, so scrollTop could never leave 0 and no later scroll could reach the
+   content either. */
+{
+  const engage = (wheelBlk.match(/if\s*\(!\([^)]*moving[\s\S]{0,160}?\)\)\s*return;/) || [""])[0];
+  const bottom = /scrollHeight\s*-\s*[\w.]*\.?clientHeight\s*-\s*[\w.]*\.?scrollTop/.test(code)
+    && /atBottom\s*&&\s*e\.deltaY\s*>\s*0/.test(wheelBlk);
+  const stillTop = /scrollTop\s*<=\s*0\s*&&\s*e\.deltaY\s*>\s*0/.test(wheelBlk);
+  if (bottom && !stillTop)
+    pass("the dock engages at the BOTTOM of the award list, so the list itself scrolls first — his Q-20 ruling");
+  else
+    fail(`the dock still engages at the TOP of the list (bottom test present:${bottom}, top test survives:${stillTop}) — that takes the first scroll and leaves the awards below the fold unreachable by wheel entirely`);
+}
+
 console.log(fails ? `\nFAILED — ${fails} failure(s)`
-  : "\nPASSED — the text found: every declared settle curve ends at or below 1, the duration is written as fullMs * Math.max(floor<1, frac) with fullMs read back from the stylesheet, the wheel handler calls no settle(), and the release is a net-direction test a finger can cancel. What the card DOES is measured by scripts/qa/w34_eov_park_glide.mjs, not here.");
+  : "\nPASSED — the text found: every declared settle curve ends at or below 1, the duration is written as fullMs * Math.max(floor<1, frac) with fullMs read back from the stylesheet, the wheel handler calls no settle(), the release is a net-direction test a finger can cancel, and the dock engages at the bottom of the award list rather than the top. What the card DOES is measured by scripts/qa/w34_eov_park_glide.mjs, not here.");
 process.exit(fails ? 1 : 0);

@@ -30,6 +30,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./qa/lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /* A conditional on who is playing. Deliberately NOT matching comments — a comment explaining a fork
@@ -50,9 +55,7 @@ const BASELINE = {
   "index.html":       0,
 };
 
-const strip = src => src
-  .replace(/\/\*[\s\S]*?\*\//g, "")            // block comments
-  .split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");   // line comments
+const strip = sharedStrip;
 
 let failed = false, total = 0, baseTotal = 0;
 const rows = [];

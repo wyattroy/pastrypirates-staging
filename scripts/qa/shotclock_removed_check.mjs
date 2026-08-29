@@ -16,6 +16,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let fails = 0;
@@ -29,10 +34,7 @@ const read = f => fs.readFileSync(path.join(REPO, f), "utf8");
    would force deleting the very records the removal is supposed to leave. What this gate asserts
    is that no LIVE code references the clock. Red-proofed both ways on 2026-08-28: without the
    strip, every tombstone comment read as a failure. */
-const strip = src => src
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .replace(/<!--[\s\S]*?-->/g, "")   // index.html's tombstones are HTML comments — same rule as /* */
-  .split("\n").map(l => l.replace(/(^|[^:])\/\/.*$/, "$1")).join("\n");
+const strip = src => sharedStrip(src).replace(/<!--[\s\S]*?-->/g, "");   // + index.html's tombstones, which are HTML comments
 // every shipped module that could carry clock code — src/ recursively, plus index.html
 const srcFiles = [];
 (function walk(d){ for (const e of fs.readdirSync(path.join(REPO, d), { withFileTypes: true })) {

@@ -68,5 +68,23 @@ const found = await playwrightDir();
 found ? ok(`resolved playwright at ${found}`)
       : bad("no playwright found — if it IS installed, this resolver is the thing that is wrong");
 
-console.log(fails ? `\nFAIL — ${fails}\n` : "\nPASS — the trial can no longer call a missing leg a pass\n");
+/* ---- 4. AND EVERY LEG THAT SAILED MUST HAVE ITS VERDICT PRINTED ----
+   The 2026.08.29.1 report showed EIGHT verdicts for TEN legs. `solo-desktop: FAIL` and
+   `solo-phone: FAIL` were both in the run's own final summary and neither reached the file, because
+   the writer printed `gateOut.split("\n").slice(-60)` and the summary is longer than sixty lines.
+   Meanwhile the header table went on saying "voyages that did NOT run: none". A leg with no printed
+   verdict, counted as accounted-for, is section 1's lie wearing different clothes: a skimmer reads
+   the table, sees nothing missing, and never learns two voyages failed.
+   Checked in CODE, so it holds for a fleet of any size — a bigger literal would only move the cliff. */
+console.log("\nEvery leg that sailed has its verdict printed");
+const trialCode = fs.readFileSync(path.join(ROOT, "scripts/sea_trial.mjs"), "utf8")
+  .replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+/slice\(-\d+\)[\s\S]{0,40}\|\|\s*"\(none run\)"/.test(trialCode)
+  ? bad("sea_trial.mjs still prints the voyages block as a fixed tail (slice(-N)) — that is what dropped two of ten legs; print from the final summary instead, so the block is as long as the fleet needs")
+  : ok("the voyages block is not a fixed tail of the output");
+/const voyagesMissing\s*=\s*ranLegs\.filter/.test(trialCode) && /voyagesMissing\.length/.test(trialCode)
+  ? ok("the report checks its OWN output for a missing leg and says so in the file, rather than trusting the slice")
+  : bad("the report does not verify that every leg it says sailed actually has a verdict in it — a silent drop is exactly how this was missed");
+
+console.log(fails ? `\nFAIL — ${fails}\n` : "\nPASS — the trial can no longer call a missing leg a pass, nor lose one out of the bottom of its own report\n");
 process.exit(fails ? 1 : 0);

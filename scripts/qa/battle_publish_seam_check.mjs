@@ -16,6 +16,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let fails = 0;
@@ -68,7 +73,7 @@ function fnBody(name) {
       sanctioned direct callers are battlePublish itself and the handler-table row that serves
       renderBattleFromSnap (the GUEST's render path, which must never publish). */
 {
-  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");
+  const stripped = sharedStrip(src);
   const direct = [...stripped.matchAll(/(?<![A-Za-z])renderBattle\(/g)].length;
   // battlePublish's own call + the export declaration's `export function renderBattle(` header
   // (the regex excludes the header via the preceding-letter guard on `function renderBattle`? no —

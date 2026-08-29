@@ -32,9 +32,18 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 let fails = 0;
 const pass = m => console.log("PASS " + m);
 const fail = m => { console.log("FAIL " + m); fails++; };
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy, and every copy deleted BLOCK
+   comments first — so a LINE comment containing the characters that open one swallowed 152
+   lines of src/orchestrator.js, the whole import block included, in eight gates at once.
+   See scripts/qa/lib/strip_comments.mjs for the measurement. */
+import { stripComments as strip } from "./lib/strip_comments.mjs";
 const panel = strip(fs.readFileSync(path.join(REPO, "src/ui/panel.js"), "utf8"));
 const stage = strip(fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8"));
+/* THE RULE MOVED, AND THAT IS THE POINT (Q-18, 2026-08-29). It used to be inlined in panel.js and
+   its ANSWER shipped to the guest as a wire field. It now lives ONCE, in the module both tiers
+   import, and both seats run it over the same event. These assertions follow it there rather than
+   being deleted — a gate that only knew the old address would have gone green on absence. */
+const shared = strip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "utf8"));
 
 /* (1) THE SUBJECT IS WITHHELD WHEN AN EVENT NAMES TWO CAPTAINS.
    CEO Review 20 broke the first version of this: it passed if the block merely CONTAINED the
@@ -43,17 +52,16 @@ const stage = strip(fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8"))
    restored. It now reads the two-captain test itself and requires it to consult BOTH fighters and
    compare them. */
 {
-  const blk = (panel.match(/if\s*\(\s*window\.__pp4\s*\)\s*\{[\s\S]*?\n  \}/) || [""])[0];
-  if (!blk) fail("could not find where the narration subject is set in panel.js — re-anchor this assertion, do not delete it");
-  else {
-    const test = (blk.match(/twoCaptains\s*=\s*([^;]+);/) || [, ""])[1];
-    const real = /\be\.d\b/.test(test) && /\be\.a\b/.test(test) && /!==|!=/.test(test) && !/\bfalse\b/.test(test);
-    const used = /twoCaptains\s*\?\s*null/.test(blk);
-    if (real && used)
-      pass(`a fight takes no subject — the test consults both fighters and compares them (${test.replace(/\s+/g, " ").slice(0, 76)})`);
-    else
-      fail(`the two-captain test is not real (consults both and compares:${real} actually yields null:${used}; test = \`${test.replace(/\s+/g, " ").slice(0, 60)}\`) — a battle event {t:"battle",a,d} would anchor its result to the ATTACKER. Measured in a crew game: 44px off centre on BOTH seats`);
-  }
+  const fn = (shared.match(/function subjectOf\(e\)\{[\s\S]*?\n\}/) || [""])[0];
+  const exported = /\bexport\s*\{[^}]*\bsubjectOf\b[^}]*\}/.test(shared);
+  const test = (fn.match(/twoCaptains\s*=\s*([^;]+);/) || [, ""])[1];
+  const real = /\be\.d\b/.test(test) && /\be\.a\b/.test(test) && /!==|!=/.test(test) && !/\bfalse\b/.test(test);
+  const used = /twoCaptains\s*\?\s*null/.test(fn);
+  const hostCalls = /__pp4\.subject\s*=\s*subjectOf\(e\)/.test(panel);
+  if (fn && exported && real && used && hostCalls)
+    pass(`a fight takes no subject — src/shared/index.js's subjectOf consults both fighters and compares them (${test.replace(/\s+/g, " ").slice(0, 60)}), it is exported, and panel.js calls it rather than spelling the rule out again`);
+  else
+    fail(`the two-captain rule is not one shared function (found in shared:${!!fn} exported:${exported} consults both and compares:${real} yields null:${used} panel calls it:${hostCalls}; test = \`${test.replace(/\s+/g, " ").slice(0, 60)}\`) — a battle event {t:"battle",a,d} would anchor its result to the ATTACKER. Measured in a crew game: 44px off centre on BOTH seats`);
 }
 
 /* (2) A DECIDED SUBJECT BEATS THE COLOUR SNIFF — and this is the half that made the first fix
@@ -85,20 +93,38 @@ const stage = strip(fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8"))
   const writers = strip(fs.readFileSync(path.join(REPO, "src/net/writers.js"), "utf8"));
   const orch = strip(fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8"));
   const sends = /function netSetNarr\([^)]*subj[^)]*\)/.test(writers) && /payload\.subj\s*=/.test(writers);
-  const passes = /netSetNarr\([^;]*subj\s*\)/.test(orch);
-  const guestHonours = /v\.subj\s*!=\s*null/.test(orch) && /subjectSet\s*=\s*true/.test(orch);
-  if (sends && passes && guestHonours)
-    pass("the host's decision crosses the wire and the guest draws from it — one decision, both seats, rather than two rules deciding the same thing (rule 23)");
+  /* `subj` ANYWHERE IN THE ARGUMENT LIST, not pinned to the end. This required it to be the LAST
+     argument, so Q-18 appending `evN` failed the gate on a tree that still passes the subject
+     perfectly. A position is not the requirement; being sent is. `[^;]*` cannot cross a statement
+     boundary, so this still fails outright if the argument is dropped — verified by removing it. */
+  const passes = /netSetNarr\([^;]*\bsubj\b[^;]*\)/.test(orch);
+  /* THE GUEST RUNS THE RULE, and only falls back to the host's answer. This is Wyatt's Q-18 ruling
+     in text: "the guest prefers the real event and falls back to today's picture when it's
+     absent." Both halves are required — preferring the event without the fallback would break
+     every line that carries no event, and the fallback alone is what shipped first and is what
+     CEO Review 24 sent back. */
+  /* READ FROM THE RAW FILE, NOT THE STRIPPED ONE. `strip` deletes block comments with a lazy
+     /* ... *\/ match, and an earlier LINE comment in orchestrator.js contains the characters that
+     open one — so the stripper eats a stretch of the import list, and this assertion measured a
+     region that was not there. An instrument that cannot see its subject reports absence, which
+     reads exactly like a real failure and is worth no more than a real pass. */
+  const orchRaw = fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8");
+  const sharedImport = (orchRaw.match(/import\s*\{[^}]*\}\s*from\s*"\.\/shared\/index\.js"/) || [""])[0];
+  const guestImports = /\bsubjectOf\b/.test(sharedImport);
+  const guestComputes = /subject\s*=\s*subjectOf\(/.test(orch);
+  const guestFallsBack = /v\.subj\s*!=\s*null/.test(orch) && /subjectSet\s*=\s*true/.test(orch);
+  if (sends && passes && guestImports && guestComputes && guestFallsBack)
+    pass("both seats run the SAME subjectOf over the same event, and the host's wire answer survives only as the fallback for a line with no event — one rule, not two kept in step (rule 23)");
   else
-    fail(`the guest does not get the host's decision (writer carries it:${sends} host passes it:${passes} guest honours it:${guestHonours}) — a guest with no subject sniffs the sentence and anchors any line naming exactly one captain, so the battle result stays 44px off centre on the seat Wyatt reported`);
+    fail(`the two seats do not share the rule (writer carries the fallback:${sends} host passes it:${passes} guest imports subjectOf:${guestImports} guest computes from the event:${guestComputes} guest still falls back:${guestFallsBack}) — a guest that decides for itself with a different rule, or does not decide at all, sniffs the sentence and anchors the fight while the host centres it`);
 }
 
 /* (4) ORDINARY LINES STILL ANCHOR, at BOTH ends. Without this, "make fights centred" passes on a
    tree where nothing anchors and the tail/boat design is gone. */
 {
   const drawsAnchored = /subj\s*==\s*null\s*\?\s*" ambient"/.test(stage) && /boatUXY\(subj\)/.test(stage);
-  const blk2 = (panel.match(/if\s*\(\s*window\.__pp4\s*\)\s*\{[\s\S]*?\n  \}/) || [""])[0];
-  const stillSupplies = /e\.p\s*!=\s*null/.test(blk2) && /e\.a\s*!=\s*null/.test(blk2);
+  const fn2 = (shared.match(/function subjectOf\(e\)\{[\s\S]*?\n\}/) || [""])[0];
+  const stillSupplies = /e\.p\s*!=\s*null/.test(fn2) && /e\.a\s*!=\s*null/.test(fn2);
   const sniffSurvives = /named\.length\s*===\s*1/.test(stage);
   if (drawsAnchored && stillSupplies && sniffSurvives)
     pass("a single-captain line still anchors — stage can draw it, panel still supplies the seat, and the colour-sniff fallback for event-less turn banners survives");

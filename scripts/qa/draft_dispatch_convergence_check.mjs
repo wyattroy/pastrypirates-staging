@@ -24,7 +24,11 @@ const fail = m => { console.log("FAIL " + m); fails++; };
 const orch = fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8");
 const flow = fs.readFileSync(path.join(REPO, "src/ui/flow.js"), "utf8");
 
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy, and every copy deleted BLOCK
+   comments first — so a LINE comment containing the characters that open one swallowed 152
+   lines of src/orchestrator.js, the whole import block included, in eight gates at once.
+   See scripts/qa/lib/strip_comments.mjs for the measurement. */
+import { stripComments as strip } from "./lib/strip_comments.mjs";
 function fnBody(src, name) {
   let h = src.indexOf(`export function ${name}(`);
   if (h < 0) h = src.indexOf(`export async function ${name}(`);

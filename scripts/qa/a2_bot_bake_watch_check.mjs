@@ -25,7 +25,11 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 let fails = 0;
 const pass = m => console.log("PASS " + m);
 const fail = m => { console.log("FAIL " + m); fails++; };
-const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy, and every copy deleted BLOCK
+   comments first — so a LINE comment containing the characters that open one swallowed 152
+   lines of src/orchestrator.js, the whole import block included, in eight gates at once.
+   See scripts/qa/lib/strip_comments.mjs for the measurement. */
+import { stripComments as strip } from "./lib/strip_comments.mjs";
 function fnBody(src, name) {
   // strip FIRST, then anchor — a comment naming the function earlier in the file must not win.
   // `function` is REQUIRED in the anchor: an optional prefix let a bare CALL SITE win the search

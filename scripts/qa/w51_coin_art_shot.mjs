@@ -14,12 +14,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve, launch, attach, killAll } from "../mp_rig.mjs";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /* THE LIST IS DERIVED FROM THE GAME'S OWN CONSTANTS, not typed here. A file added to the
    flippenator tomorrow is checked without anybody remembering to add it. */
-const shared = fs.readFileSync(path.join(REPO, "src/shared/index.js"), "utf8")
-  .replace(/\/\*[\s\S]*?\*\//g, "");
+const shared = sharedStrip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "utf8"));
 const FILES = [...new Set((shared.match(/\$\{ASSET_BASE\}icons\/(?:flip-[a-z]+|coin-spin)\.\w+/g) || [])
   .map(m => "assets/" + m.replace("${ASSET_BASE}", "")))];
 if (!FILES.length) { console.log("FAIL — no flip art constants found in src/shared/index.js; re-anchor this gate"); process.exit(1); }

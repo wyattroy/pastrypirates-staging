@@ -33,7 +33,7 @@
 
 import { appState } from "../state/index.js";
 import {
-  SOUND_ON_IMG, SOUND_OFF_IMG, COIN_IMG, HEXCOL, iconImg, emojify,
+  SOUND_ON_IMG, SOUND_OFF_IMG, COIN_IMG, HEXCOL, iconImg, emojify, subjectOf,
 } from "../shared/index.js";
 import {
   boardShipEls, chatBubbles, positionChatBubble, removeChatBubble,
@@ -1079,8 +1079,22 @@ export async function narrateLastEvent(){
      the player calling the battle." Anchoring the result to one fighter was the same fault one
      layer down. Held by scripts/qa/w42_battle_bubble_check.mjs. */
   if(window.__pp4){
-    const twoCaptains = e.d!=null && e.a!=null && e.d!==e.a;
-    window.__pp4.subject = twoCaptains ? null : (e.p!=null?e.p:(e.a!=null?e.a:null));
+    /* ONE RULE, ONE PLACE (Wyatt's Q-18 ruling, 2026-08-29; CEO Review 24). This test used to be
+       spelled out here and its ANSWER shipped to the guest as a wire field, which is two things
+       kept in step by nothing — rule 23's exact shape. `subjectOf` lives in src/shared/index.js,
+       the one module both this tier and the orchestrator already import, and the guest now runs
+       the SAME function over the event it already holds. Neither seat owns the rule any more. */
+    window.__pp4.subject = subjectOf(e);
+    /* AND WHICH EVENT IT WAS READ FROM. CEO Review 25: the first cut sent `events.length-1` with
+       EVERY narration line, but only THIS function is about the last event — every other flash()
+       in the game (prompts, dock lines, ceremonies, bot turn banners, the battle play-by-play)
+       went out carrying a serial for an event it had nothing to do with. The guest then resolved
+       that unrelated event, anchored the bubble to whichever captain it named, and marked the
+       subject DECIDED, while the host left the same sentence to the colour sniff. A host/guest
+       divergence in bubble placement, created by the fix meant to end host/guest divergence, in
+       the very family Wyatt reported (W4-2). THE SERIAL AND THE SUBJECT ARE ONE FACT AND NOW
+       TRAVEL AS ONE: a line that did not read an event sends neither. */
+    appState.narrEvIdx = appState.game.events.length - 1;
     /* DECIDED IS NOT THE SAME AS ABSENT, and conflating them is why the first cut of W4-2 changed
        nothing on either seat. stageFlash falls back to sniffing the sentence for captain colours
        whenever the subject is null — a fallback that exists for turn-start lines, which carry no
@@ -1226,10 +1240,30 @@ export async function flash(msg,ms,holdMs,variants,opts){
      neutral line IS the shipped solo wording. Picking unconditionally would have changed solo copy
      nobody asked to change. The broadcast still sends the neutral `msg` so every other client picks
      its own variant, exactly as before. */
+  /* READ THE SUBJECT BEFORE THE LOCAL DRAW SPENDS IT — and this is one level up from where that
+     lesson was learned, which is why it was still broken.
+     MEASURED ON THE WIRE, 2026-08-29, two real browsers, 47 narration lines in one crew game:
+     **NOT ONE carried a subject.** W4-2's second half — "the host's decision crosses the wire so
+     both seats draw it alike" — has never worked in a crew game, and gate 42 could not see it
+     because the code that sends the subject is all present and correct.
+     THE CAUSE IS THE ORDER, TWO LINES APART. On the v2 stage path — every crew game — this
+     function calls `window.__pp4.flash(...)` FIRST, and stageFlash's own act is to read the flag
+     and clear it (`const decided = !!S.subjectSet; S.subjectSet = false;`, src/ui/stage.js). Only
+     THEN does it reach the broadcast, which finds the flag already spent and sends nothing. CEO
+     Review 20 fixed exactly this inside netNarrate — "reading it after would always send nothing"
+     — but the stage path never goes through netNarrate; it goes through netBroadcast, from here.
+     So the decision is captured HERE, before the draw, and handed to the broadcast explicitly.
+     src/ui/ may never import the orchestrator (D-07), so it rides the handler seam like every
+     other cross-tier value. */
   if(window.__pp4){
+    const pre=window.__pp4.subjectSet
+      ? {subj:window.__pp4.subject, evN:appState.narrEvIdx}
+      : null;
     const shown=appState.room?pickNarrVariant({html:msg,variants},appState.mySeat):msg;
     const h=window.__pp4.flash(shown,ms,holdMs,variants,opts);
-    if(h){if(appState.room){const _nh0=netHandlers();if(_nh0.onNetBroadcast)_nh0.onNetBroadcast(msg,variants,opts);}return h;}
+    if(h){if(appState.room){const _nh0=netHandlers();if(_nh0.onNetBroadcast)_nh0.onNetBroadcast(msg,variants,opts,pre);}
+      appState.narrEvIdx=null;   // spent with the line it belonged to, whether or not it was sent
+      return h;}
   }
   const _nh=netHandlers();
   // seam (D-07/criterion 1, RESEARCH Q1b edge 1): was a direct netNarrate(msg) call — netNarrate

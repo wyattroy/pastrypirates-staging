@@ -28,6 +28,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
+   first — so a LINE comment containing the characters that open one swallowed 152 lines of
+   src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
+   of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
+import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 let fails = 0;
@@ -91,7 +96,7 @@ const modalNoComments = modal.replace(/<!--[\s\S]*?-->/g, "");
   (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else if (p.endsWith(".js")) srcFiles.push(p); } })(path.join(REPO, "src"));
   // comments stripped first: util.js's graveyard tombstone NAMES the removed clock functions, and
   // an unstripped scan read that as the clock being alive (caught on this gate's first green run)
-  const stripJs = s => s.replace(/\/\*[\s\S]*?\*\//g, "").split("\n").map(l => l.replace(/\/\/.*$/, "")).join("\n");
+  const stripJs = sharedStrip;
   const clockLive = srcFiles.some(p => /startShotClock|shotClockTick/.test(stripJs(fs.readFileSync(p, "utf8"))));
   if (!clockLive) {
     if (modalText.includes("shot clock")) fail("the shot clock is gone from src/ (removed 2026-08-28) but the rules page still teaches it — a player will wait for a timer that never comes");
