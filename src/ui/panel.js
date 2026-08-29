@@ -1061,7 +1061,35 @@ export async function narrateLastEvent(){
   // pickNarrVariant, so building this from anything OTHER than the neutral default would leak
   // the host's own personalised phrasing into every other seat's broadcast.
   const L=describeFor(e,NEUTRAL_VIEWER);if(!L)return;
-  if(window.__pp4){window.__pp4.subject=(e.p!=null?e.p:(e.a!=null?e.a:null));window.__pp4.evType=e.t;}
+  /* W4-2 (Wyatt): "Guest battle narration box is not centred", narrowed by him to the BATTLE box
+     because the tap-to-sail box was correctly centred on the same screen.
+     MEASURED IN A REAL CREW GAME BEFORE CHANGING THIS, and it corrects his premise once and sharpens
+     it once: NOT guest-only — the battle result sat 44px right of centre on BOTH seats — and within
+     ONE battle two lines were drawn two ways, "Dough Hook attacks Flaky Jack!" centred at offset 0
+     and "Dough Hook wins 1–0" anchored at 44.
+     THE CAUSE IS THIS LINE. A bubble with a subject anchors to that captain's boat and grows a tail,
+     which is right for "Flaky Jack takes the wheel". A battle event is {t:"battle", a:attacker,
+     d:defender}, so `e.a` handed the RESULT to the attacker — one of the two fighters, arbitrarily.
+     THE RULE IS DERIVED FROM THE EVENT'S OWN SHAPE, never a list of event names that would need
+     editing every time a new two-captain event appears: AN EVENT THAT NAMES TWO CAPTAINS IS NOT
+     ABOUT ONE OF THEM, so it takes no subject and its bubble is ambient — centred, like the opening
+     line of the same fight already is.
+     This is also what the codebase already says out loud about fights, in the camera hold a few
+     hundred lines away in stage.js: "the director should focus battles on the players fighting, not
+     the player calling the battle." Anchoring the result to one fighter was the same fault one
+     layer down. Held by scripts/qa/w42_battle_bubble_check.mjs. */
+  if(window.__pp4){
+    const twoCaptains = e.d!=null && e.a!=null && e.d!==e.a;
+    window.__pp4.subject = twoCaptains ? null : (e.p!=null?e.p:(e.a!=null?e.a:null));
+    /* DECIDED IS NOT THE SAME AS ABSENT, and conflating them is why the first cut of W4-2 changed
+       nothing on either seat. stageFlash falls back to sniffing the sentence for captain colours
+       whenever the subject is null — a fallback that exists for turn-start lines, which carry no
+       event at all. A battle result names exactly ONE captain (the winner), so the sniff cheerfully
+       re-anchored the very line this rule had just decided to centre. The flag says "an event was
+       read and it yielded no subject", which the sniff must not override. */
+    window.__pp4.subjectSet = true;
+    window.__pp4.evType=e.t;
+  }
   const variants=narrationVariants(e);
   // notes/edits #1 follow-up: this used to be netNarrate()+a flat 3000ms sleep, a leftover from
   // before the typewriter/hold/fade system existed. That fixed window never accounted for reveal

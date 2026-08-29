@@ -203,7 +203,7 @@ async function playSeat(c, tag, rec, { untilOver = true, quests = true } = {}) {
       for (const k of (rec.screens.at(-1).motionOnly || [])) log(`  [${tag}] during-animation only (not a failure) ${k.rule}: ${k.what}`);
     } else shotN--;
     const st = await player.state();
-    if (st && st.day !== lastDay) { lastDay = st.day; log(`  [${tag}] DAY ${st.day}`); }
+    if (st && st.day !== lastDay) { lastDay = st.day; rec.days = st.day; log(`  [${tag}] DAY ${st.day}`); }
     if (st && st.over) { log(`  [${tag}] END OF VOYAGE at day ${st.day}`);
       const f2 = `${OUT}/${tag}-eov.png`; await c.shot(f2); rec.screens.push({ shot: f2, sig: "end of voyage", fails: [] });
       rec.finished = true; return; }
@@ -223,6 +223,28 @@ async function playSeat(c, tag, rec, { untilOver = true, quests = true } = {}) {
 function legVerdict(rec) {
   const v = [];
   if (!rec.finished) v.push("did not finish the voyage");
+  /* A RESCUE IS NOT A FREE PASS — CEO Review 12, 2026-08-28: "nothing bounds the recoveries…
+     A leg needing eleven relaunches should not produce the same shaped verdict as one needing
+     none," and this repo has already paid once for an instrument that was reassuring rather than
+     silent. The mount absorbs ANY WebKit death, so without this a future crash caused by OUR OWN
+     game code would relaunch, resume, and report finished:true with a small asterisk.
+     TWO RULES, both derived rather than typed:
+       - ANY recovery on a NON-WebKit leg fails outright. The crash we sanction is WebKit's own
+         (diagnosed by core dump); Chrome has never once needed one, so a Chrome relaunch is by
+         definition not the known bug.
+       - A WebKit leg gets a budget of ONE RESCUE PER FOUR GAME-DAYS SAILED (floor 2). A voyage
+         that has to be restarted more often than that is not sailing, it is crash-looping, and
+         the verdict should say so. The divisor is the honest knob: the 2026-08-28 fleet ran
+         11 rescues over 29 days (budget 7 — FAILS, correctly: the CEO called that leg a limp),
+         2 over 19 and 1 over 16 (budgets 4 and 4 — both pass). Change it when observation
+         changes, and say what you observed. */
+  const rescues = rec.recoveries || 0;
+  if (rescues) {
+    const wk = /-wk$/.test(rec.name);
+    const budget = Math.max(2, Math.ceil((rec.days || 1) / 4));
+    if (!wk) v.push(`${rescues} browser relaunch(es) on a Chrome leg — Chrome has never needed one; this is NOT the sanctioned WebKit crash`);
+    else if (rescues > budget) v.push(`${rescues} WebKit relaunch(es) over ${rec.days || "?"} day(s) — above the ${budget} this voyage's length allows; that is a crash loop being ridden out, not a voyage`);
+  }
   const structFails = rec.screens.flatMap(s => s.fails);
   if (structFails.length) v.push(`${structFails.length} structural check failure(s)`);
   for (const seat of rec.seats || [rec]) {

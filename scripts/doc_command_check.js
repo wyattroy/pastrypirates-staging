@@ -46,19 +46,35 @@ const DOCS = [".claude/CLAUDE.md", ".claude/CEO-BRIEF.md",
 console.log("doc_command_check — every command and link the docs name must exist\n");
 
 /* ---- 1. `node <path>` commands ------------------------------------------------------------- */
-let cmds = 0, badCmds = [];
+let cmds = 0, badCmds = [], homeRooted = [];
 for (const doc of DOCS) {
   if (!exists(doc)) { fail(`${doc} — the doc itself is missing`); continue; }
   const text = fs.readFileSync(path.join(REPO, doc), "utf8");
-  for (const m of text.matchAll(/\bnode\s+([A-Za-z0-9_./-]+\.(?:mjs|js|cjs))/g)) {
+  /* `~` IS IN THE CLASS ON PURPOSE — see the home-rooted assertion below. It used to be absent,
+     which meant `node ~/foo.cjs` did not match this pattern AT ALL, so the `startsWith("~")` skip
+     on the next line was dead code that could never fire. Two layers of the same hole, and a wrong
+     command sat in CLAUDE.md rule 21 behind them. */
+  for (const m of text.matchAll(/\bnode\s+([~A-Za-z0-9_./-]+\.(?:mjs|js|cjs))/g)) {
     const rel = m[1];
-    if (rel.startsWith("~") || rel.includes("node_modules")) continue;   // outside the repo on purpose
+    if (rel.includes("node_modules")) continue;
+    if (rel.startsWith("~")) { homeRooted.push(`${doc} -> node ${rel}`); continue; }
     cmds++;
     if (!exists(rel)) badCmds.push(`${doc} -> node ${rel}`);
   }
 }
 for (const b of badCmds) fail(`a doc tells a session to run a file that does not exist: ${b}`);
 if (!badCmds.length) pass(`all ${cmds} \`node …\` commands in the docs point at real files`);
+
+/* A DOCUMENTED COMMAND MUST RUN FROM A FRESH CHECKOUT — Wyatt, 2026-08-28, by falling into it.
+   Rule 21 said `node ~/.claude/gsd-core/bin/gsd-tools.cjs validate health`. That path exists on
+   Wyatt's Mac and not in a cloud container, so a cloud session ran it, got "No such file", and
+   reported to him that the health check "cannot run in a cloud session" — which was false. The
+   same tool is in the repo at .claude/gsd-core/bin/. A home-rooted path in a doc is a command that
+   works for exactly one machine and silently misleads every other one, so it fails here rather
+   than being skipped as "outside the repo on purpose", which is what the old skip called it. */
+for (const h of homeRooted)
+  fail(`a doc gives a home-rooted command that only runs on one machine: ${h} — use the path inside the repo so it works in every checkout`);
+if (!homeRooted.length) pass("every documented `node …` command is repo-relative — it runs the same in a cloud container as on the laptop");
 
 /* ---- 2. relative markdown links between repo files --------------------------------------- */
 let links = 0, badLinks = [];

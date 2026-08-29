@@ -9,8 +9,15 @@ import { fileURLToPath } from "node:url";
 const SRC = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."), "src/ui/flow.js");
 const s=fs.readFileSync(SRC,"utf8");
 
-// pull the label expression actually passed to coinSlider in buildOffer's step 2
-const m=s.match(/const n=await coinSlider\(p\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,"Offer it!"\);/);
+/* Pull the label expression actually passed to coinSlider in buildOffer's step 2.
+   THE TAIL IS NOT PINNED ANY MORE. It used to require the call to end exactly
+   `minC,minC,maxC,"Offer it!");`, and W6-1 added two arguments after that — a decline label for an
+   empty purse — so this assertion failed a correct tree and reported itself "pointed at the wrong
+   place". It was right to fire: it watches this call and the call changed. But an assertion that
+   breaks whenever an unrelated argument is APPENDED is watching the shape of the line rather than
+   the thing it cares about, which is the LABEL CLOSURE. So it now anchors on what it is actually
+   about and lets the argument list grow. */
+const m=s.match(/const n=await coinSlider\(p\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,"Offer it!"[^;]*\);/);
 let fails=0; const ok=m=>console.log("  PASS  "+m); const bad=m=>{fails++;console.log("  FAIL  "+m);};
 if(!m){ bad("could not find the coinSlider label in buildOffer — check is pointed at the wrong place"); }
 else{

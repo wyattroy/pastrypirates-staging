@@ -1491,7 +1491,14 @@ export function backButtonHTML(idx){return `<button class="apBack" data-i="${idx
        decision-log requirement satisfied BY CONSTRUCTION rather than by care, which is the point,
        because HARD-WON-LESSONS §5 is the account of this very control replaying at its floor. */
 export function sliderWrapHTML(sl){
-  return `<div class="apSliderWrap"><input class="apSlider" type="range" min="${sl.min}" max="${sl.max}" value="${sl.start}" step="1" aria-label="${escHtml(sl.aria||"Amount")}"><output class="apSliderOut">${sl.start}</output></div>`;
+  /* W6-1 (Wyatt): "'Would ye offer any coin on top?' appears with NO SLIDER when the player has no
+     money left. Expectation: the slider appears greyed out." A dead purse still gets the control —
+     the question makes no sense without it — but it must LOOK dead, because a live-looking bar that
+     cannot move invites a drag that does nothing. `disabled` does both jobs at once: the browser
+     stops the drag and stops the keyboard, and the stylesheet greys it, so there is no second
+     mechanism to keep in step. */
+  const dead = sl.disabled ? " disabled" : "";
+  return `<div class="apSliderWrap${sl.disabled ? " apSliderDead" : ""}"><input class="apSlider" type="range" min="${sl.min}" max="${sl.max}" value="${sl.start}" step="1"${dead} aria-label="${escHtml(sl.aria||"Amount")}"><output class="apSliderOut">${sl.start}</output></div>`;
 }
 /* The deal re-stated at THIS stop. `fmt` on the tier that has the game, `texts` on the tier that was
    handed the strings — one function so the two can never say different things at the same stop. */
@@ -1524,7 +1531,17 @@ export function sliderWirePayload(sl){
   if(!sl)return null;
   const texts=[];
   for(let n=sl.min;n<=sl.max;n++){const t=sliderText(sl,n);texts.push(t==null?"":String(t));}
-  return {min:sl.min,max:sl.max,start:sl.start,aria:sl.aria||"Amount",texts};
+  /* `disabled` CROSSES THE WIRE, and leaving it off was a rule-23 fault caught by CEO Review 19.
+     W6-1 greys the control when there is nothing to choose; the guest rebuilds its spec from THIS
+     payload alone (orchestrator.js Object.assigns it), so a flag missing here means the host sees a
+     dead bar and the guest sees a live one — in the exact control TRADE-SYSTEM.md says every seat
+     drags. The commit that added the greying argued the case against itself: "a live-looking bar
+     that cannot move invites a drag that does nothing." That was the guest's screen for one commit.
+     Omitted when false so an older client reading a newer payload is unaffected, the same additive
+     shape the rest of this payload uses. */
+  const out={min:sl.min,max:sl.max,start:sl.start,aria:sl.aria||"Amount",texts};
+  if(sl.disabled)out.disabled=true;
+  return out;
 }
 // opts[i] can come back missing — a remote seat's answer can resolve to null (remotePrompt
 // resolves null when Firebase gives back a response with no `choice` field, e.g. a dropped
@@ -1607,7 +1624,7 @@ export function ask(msg,opts,colors,sub,extra){
        shorts:opts.map(o=>o&&o.short!=null?o.short:""),
        //   `seats` — the SEVENTH field of this exact class, and the last one still missing when
        // 02.1-03 went looking. An option carrying `seat` blooms its circle over the boat it NAMES
-       // rather than around the boat choosing (stage.js:1174 reads it back off data-seat) — the
+       // rather than around the boat choosing (stage.js's radial placement reads it back off data-seat — named, not line-numbered, because the line moves and the citation rots) — the
        // battle side-bet's "Call Dough Hook" is the case that needs it. Without this the spectating
        // guest got the ordinary fan while the host got the anchored one: same words, different
        // game, which is the same sentence the `stage` fix five lines up had to be written in.

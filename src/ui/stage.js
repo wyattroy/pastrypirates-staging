@@ -39,7 +39,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.08.28.4-staging@25158042";
+const PP4_STAMP = "2026.08.29.1-staging@0fb6d710";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -72,7 +72,7 @@ export function hideStageLayer(){
     const e=document.getElementById(id);
     if(e)e.style.display="none";
   }
-  document.body.classList.remove("pp4Stage","pp4Side");
+  document.body.classList.remove("pp4Stage","pp4Side","pp4CapBleed");
 }
 /* The other half. Clears the inline display rather than setting one, so each element goes back
    under CSS control and whatever the game logic wanted for it (a pill hidden in a mode that has no
@@ -93,6 +93,7 @@ const S = {
   lock: false,              // a player gesture holds the camera until the next sail prompt
   battle: null,             // [attacker, defender] while a fight is live — the camera holds on it
   subject: null,            // seat index the next flash() line is about (stashed by panel.js)
+  subjectSet: false,        // …and whether that was DECIDED from an event (so the colour sniff must not override it)
   evType: null,
   hurry: null,              // resolver for tap-to-hurry on the live bubble
   bubPlace: null,           // live bubble's positioner — run every tick, same loop as the camera
@@ -497,8 +498,25 @@ function peekHintTick(box){
   // because a hint nobody sees teaches nobody (D-39).
   const blockers = busy.filter(r => r.bottom > foot - AIR && r.top < foot + sr.height + AIR);
   const above = blockers.length ? Math.round(Math.min(...blockers.map(r => r.top)) - sr.height - AIR) : foot;
-  for (const y of [foot, above, head]){
-    if (clear(y)){ hint.style.top = y + "px"; return; }
+  /* W4-5 — NEAREST THE CARD IS TRIED FIRST. Wyatt: "move the tooltip closer to the recipe card…
+     in a way, it is a button — a button that reveals the sea."
+     MEASURED at the recipe picker before changing: the hint sat 295px above the card at 1200 and
+     768, and 222px at 390 — the far end of the board from the thing it is about. The cause was this
+     very list: with a card up, the card blocks `foot` and `above`, so the search fell through to
+     `head` every time. The old order was written when the hint's job was to sit "over the sea it
+     names", which is right when nothing is asking a question and wrong the moment something is.
+     THIS IS A CHANGE OF PREFERENCE, NOT A NEW FIXED POSITION, and that distinction is the whole
+     safety of it. The hint used to be pinned at band.bottom - 44 and the 2026-08-21 gate caught it
+     drawn across "Stay put", across a trade's ✓ and over the second line of "Call Flaky Jack" —
+     five judge findings, one cause. Every candidate below, this one included, still goes through
+     clear(), and hiding is still the last resort, so none of that can return.
+     Derived from the card's own rect, never a typed offset, so it is right at every size. */
+  const cardEl = box.querySelector("#actionPanel");
+  const cardR = cardEl ? cardEl.getBoundingClientRect() : null;
+  const nearCard = (cardR && cardR.width > 2 && cardR.height > 2)
+    ? Math.round(cardR.top - sr.height - AIR) : null;
+  for (const y of [nearCard, foot, above, head]){
+    if (y !== null && clear(y)){ hint.style.top = y + "px"; return; }
   }
   hint.style.display = "none";          // taught nothing this tick beats covering the answer
 }
@@ -924,6 +942,10 @@ function gestures(wrap){
        captains and the screen size.
    Pointer Events cover touch, mouse-drag and pen in one listener set; wheel is handled separately
    below because a trackpad/mouse scroll never fires a pointer drag. */
+// how long the wheel must be quiet before it counts as "let go" — the wheel's stand-in for a
+// pointerup, since a trackpad never sends one. An interaction feel, on the same footing as
+// EOV_PARK_RELEASE_FRACTION below.
+const WHEEL_QUIET_MS = 110;
 const EOV_PARK_RELEASE_FRACTION = 0.32; // a UI-feel ratio (how much of the travel counts as "let
   // go of it"), not a game quantity — CLAUDE.md rule 9 governs prices, thresholds and caps the
   // economy computes, not an interaction's own release feel. What IS derived is the pixel distance
@@ -975,8 +997,21 @@ const eovScroller = wrap => wrap.querySelector("#statsScroll") || wrap;
 function wireEovDrag(){
   const wrap = $("statsWrap"); if (!wrap || wrap._pp4DragWired) return;
   wrap._pp4DragWired = true;
+  /* THE FULL-TRAVEL TIME IS THE STYLESHEET'S, READ ONCE, NOT RE-TYPED HERE. index.html owns
+     `transition:transform var(--pp4EovSettle,.25s)`; this reads that computed value before
+     anything has set the variable, so the two can never drift. Cached because the moment settle()
+     writes --pp4EovSettle, reading it back would return this function's own last answer. */
+  const fullMs = Math.round((parseFloat(getComputedStyle(wrap).transitionDuration) || 0.25) * 1000);
   const settle = (y, park) => {
     wrap.classList.remove("pp4EovDrag");
+    /* THE GLIDE IS AS LONG AS THE JOURNEY (W3-4). A flat quarter-second is right for the full
+       park and far too fast for the 30px correction a released drag usually needs — the same
+       distance-blind constant that made one wheel notch look like a slam. The floor keeps a tiny
+       settle from reading as an instant jump; it is an interaction feel, like
+       EOV_PARK_RELEASE_FRACTION above, not a game quantity. */
+    const g = eovParkGeometry(wrap);
+    const frac = g.dY > 0 ? Math.min(1, Math.abs(y - eovTranslateY(wrap)) / g.dY) : 1;
+    wrap.style.setProperty("--pp4EovSettle", Math.round(fullMs * Math.max(0.4, frac)) + "ms");
     wrap.style.transform = y ? `translateY(${y}px)` : "";
     wrap.classList.toggle("pp4EovParked", park);
   };
@@ -986,6 +1021,11 @@ function wireEovDrag(){
     // normal scroll down to see below the fold stays a normal scroll) — or the card is already
     // parked, so pulling up from the strip can restore it from anywhere on the strip
     if (!wrap.classList.contains("pp4EovParked") && eovScroller(wrap).scrollTop > 0) return;
+    /* A FINGER LANDING WITHIN THE WHEEL'S QUIET WINDOW CANCELS ITS RELEASE (CEO Review 23). The two
+       paths share the release rule's timing, not just its arithmetic: without this, a wheel notch
+       followed inside 110ms by a drag lets wheelRelease fire DURING the drag — settle() strips
+       pp4EovDrag, jumps the card to one end, and the next pointermove yanks it back. */
+    if (wheelIdle){ clearTimeout(wheelIdle); wheelIdle = null; wheelNet = 0; }
     eovDrag = { id: e.pointerId, startY: e.clientY, base: eovTranslateY(wrap), moved: 0 };
     wrap.setPointerCapture(e.pointerId);
   });
@@ -1018,17 +1058,53 @@ function wireEovDrag(){
   };
   wrap.addEventListener("pointerup", up);
   wrap.addEventListener("pointercancel", up);
-  // desktop wheel: scrolling further down while already at the top of the content parks it;
-  // scrolling up while parked restores it — same rule as the drag, driven by delta instead of a
-  // pointer position, because a trackpad/mouse wheel never fires a pointer drag at all
+  /* THE WHEEL DRAGS THE CARD, IT DOES NOT FIRE IT — W3-4, and this is the half Wyatt actually
+     hit, because he is at a laptop. The old handler took the FIRST wheel notch past the top of the
+     content and called settle() for the entire journey: measured, one 4px trackpad notch threw the
+     card 688px in 250ms while his fingers were still moving, then bounced 28px past the captains
+     box. From where he sits that is not a scroll at all, it is a slam.
+     A wheel is now accumulated into the card's position exactly as a finger is — same clamp, same
+     class, same live transform — and when the wheel goes quiet the SAME release rule the pointer
+     drag uses decides which end it settles to. One rule, two input devices, so they cannot drift
+     apart (rule 23); before this they were two rules that already had. */
+  let wheelIdle = null, wheelNet = 0;
+  /* A WHEEL HAS NO POSITION, ONLY A DIRECTION — CEO Review 23, and it caught a regression I put in.
+     The finger's release rule asks WHERE the card ended up: an unparked card parks only if the drag
+     carried it past (dY - threshold), which is fine for one continuous swipe. A trackpad is also
+     one continuous swipe, so it inherits that happily. A CLICK-WHEEL MOUSE IS NOT: one detent is
+     about 100px against the 688px of travel measured on a 1200px desktop, and the 110ms of quiet
+     that stands in for a finger lifting falls BETWEEN detents. So every notch sprang straight back
+     and the card could no longer be parked or unparked at all — I had traded a slam for a shrug.
+     The shared parts are real and stay shared: both paths accumulate into the same transform, use
+     the same clamp, and commit on release. What differs is only the commit TEST, because the two
+     devices report different things — a finger reports a position and a wheel reports a rate. So
+     the wheel commits on the NET DIRECTION of the gesture it just made, which is the only thing a
+     wheel actually tells you, and the distance threshold stays where it belongs, on the finger.
+     Saying they share one rule outright would be the tidier sentence and it would not be true. */
+  const wheelRelease = () => {
+    wheelIdle = null;
+    const net = wheelNet; wheelNet = 0;
+    const g = eovParkGeometry(wrap);
+    if (g.dY <= 0){ wrap.classList.remove("pp4EovDrag"); return; }
+    const wasParked = wrap.classList.contains("pp4EovParked");
+    const park = wasParked ? !(net < 0) : net > 0;
+    settle(park ? g.dY : 0, park);
+  };
   wrap.addEventListener("wheel", e => {
     const parked = wrap.classList.contains("pp4EovParked");
-    if (!parked && eovScroller(wrap).scrollTop <= 0 && e.deltaY > 0){
-      const g = eovParkGeometry(wrap);
-      if (g.dY > 0){ settle(g.dY, true); e.preventDefault(); }
-    } else if (parked && e.deltaY < 0){
-      settle(0, false); e.preventDefault();
-    }
+    const moving = wrap.classList.contains("pp4EovDrag");
+    // an ordinary scroll through the card's own content is left entirely alone
+    if (!(moving || parked || (eovScroller(wrap).scrollTop <= 0 && e.deltaY > 0))) return;
+    const g = eovParkGeometry(wrap);
+    if (g.dY <= 0) return;
+    const y = Math.max(0, Math.min(g.dY, eovTranslateY(wrap) + e.deltaY));
+    wrap.classList.add("pp4EovDrag");
+    wrap.style.transform = y ? `translateY(${y}px)` : "";
+    e.preventDefault();
+    // the wheel has no "finger up", so quiet stands in for it
+    wheelNet += e.deltaY;
+    if (wheelIdle) clearTimeout(wheelIdle);
+    wheelIdle = setTimeout(wheelRelease, WHEEL_QUIET_MS);
   }, { passive: false });
 }
 
@@ -1287,7 +1363,14 @@ function stageFlash(msg, ms, holdMs, variants, opts){
      question itself. Everyone else still reads "…is deciding…". */
   if (waitLineIsSelfAddressed(variants, opts)) return Promise.resolve();
   let subj = S.subject; S.subject = null;
-  if (subj == null && typeof msg === "string"){
+  /* DECIDED BEATS SNIFFED. `subjectSet` means an event was actually read and yielded this subject —
+     including a deliberate null for a line about two captains or the whole table. The sniff below
+     is a FALLBACK for lines that carry no event (turn-start banners), and it must not overturn a
+     decision that was made. Consumed here with the subject, so it cannot leak into the next line.
+     Both seats read this one flag: the host sets it from the event, the guest sets it from the
+     host's decision on the wire — one decision, drawn the same way on both screens (rule 23). */
+  const decided = !!S.subjectSet; S.subjectSet = false;
+  if (!decided && subj == null && typeof msg === "string"){
     /* turn-start lines ("X sets sail") carry no event — sniff the speaker from pn()'s colour.
        ONE CAPTAIN NAMED, OR NOBODY. T-08 — his checklist #32 (Wyatt, 2026-08-26): "the storm narration that reported
        how players were moved appeared connected to the player 1; it shouldn't -- it should appear
@@ -1796,8 +1879,15 @@ function sweepGuard(){
   document.addEventListener("click", e => {
     if (!S.active) return;
     const cell = e.target.closest && e.target.closest(".sailCell");
-    // any tap that is NOT on a previewed square clears the preview and forgets it
-    if (!cell || !cell.classList.contains("sailSwept")){ if (!cell) { clearSweep(); sweepBtn = null; } return; }
+    /* ANY TAP THAT IS NOT ON A PREVIEWED SQUARE CLEARS THE PREVIEW AND FORGETS IT — and until
+       2026-08-29 that sentence was true only of the comment. The teardown was nested inside
+       `if (!cell)`, so it fired only when the tap missed EVERY sail square; tap a plain yellow one
+       and `cell` exists, the guard returned, and the dashed track, the end circle and the ghost hull
+       all stayed on the board. That is Wyatt's W3-5, and it is rule 6 in the shape the rulebook
+       names: a comment is a statement of intent by somebody who has since left the room.
+       The teardown is unconditional now. The two-tap gesture is untouched — the SAME square still
+       commits on its second tap, one line below. */
+    if (!cell || !cell.classList.contains("sailSwept")){ clearSweep(); sweepBtn = null; return; }
     if (sweepBtn === cell){ clearSweep(); sweepBtn = null; return; }   // second tap: let it through
     e.stopPropagation(); e.preventDefault();                           // first tap: show the ride
     sweepBtn = cell;
@@ -2112,6 +2202,9 @@ function computeStageGeometry(){
     // captains column sits beside it, level with the board's top, at a fixed comfortable width and
     // hugging its own content height (index.html).
     body.classList.add("pp4Side");
+    /* the wall-to-wall rule is a STACKED-layout question only — beside the board the card is a
+       column with its own gap, and Wyatt's ruling was about the card UNDER the board. */
+    body.classList.remove("pp4CapBleed");
     mountColumn(true);
     body.style.setProperty("--pp4W", boardSideFull + "px");
     body.style.setProperty("--pp4Top", topBand + "px");
@@ -2142,20 +2235,41 @@ function computeStageGeometry(){
   mountColumn(false);
   body.style.removeProperty("--pp4CapColW"); body.style.removeProperty("--pp4Top"); body.style.removeProperty("--pp4Left");
   const candidate = Math.max(240, Math.min(boardSideFull, iw));
-  /* THE VOID HAS TO HOLD THE CARD *AND* THE AIR UNDER IT (D-52). On desktop the stacked card is
-     inset by --pp4CapGap on three sides (index.html), so it is measured at the width it will
-     actually have — a card measured 28px wider than it renders is a card that wraps a row nobody
-     reserved space for — and the board is narrowed by the gap as well, so the air beneath the card
-     can never be squeezed to nothing. The phone is byte-identical: it has no inset, and its own
-     media query is the one that decides that, so `gapBelow` reads the same boundary the CSS does
-     rather than a second copy of it. */
+  /* THE VOID HAS TO HOLD THE CARD *AND* THE AIR UNDER IT (D-52), and the card's SIDES follow a
+     separate rule that Wyatt set on 2026-08-28: "I want tablet view to go wall to wall in line with
+     the board. I want desktop view to have some padding around it like it currently is."
+
+     WHAT SEPARATES HIS TWO CASES IS ALREADY COMPUTED HERE, so nothing needs a typed breakpoint
+     (rule 9). On a tablet the board fills the window and there is no surround beside it; on desktop
+     it is letterboxed with the page's gradient showing either side. The board's own surround IS
+     that difference: (iw - board) / 2. When there is less surround per side than the air we would
+     inset by, there is nothing for the card to sit inside and it goes wall-to-wall with the board.
+     When there is more, the card keeps its air and the two desktop branches still draw the same
+     component the same way — which is the rule-8 reason the inset existed in the first place, one
+     comment up, and which his ruling deliberately preserves for desktop only.
+
+     TWO PASSES, BECAUSE THE MEASUREMENT AND THE DECISION DEPEND ON EACH OTHER. The card's natural
+     height depends on how wide it is; how wide it is depends on whether it insets; whether it
+     insets depends on the board size, which depends on the card's height. So: measure once at the
+     full width to get an honest board size, decide from that, and re-measure only if the card turns
+     out to be inset after all. Deterministic, no loop.
+     `capGapBelow` is the VERTICAL air under the card and is a different quantity from the side
+     inset — they were one variable before, which is exactly the fault W4-4 was fixing one layer up.
+     It still reads the same @media (min-width:601px) boundary the CSS uses, not a second copy. */
   const insetCard = pillRidesRibbon();                 // the same @media (min-width:601px) boundary
-  const capInset = insetCard ? capGap : 0;
-  const capH = measureCapNaturalHeight(Math.max(240, candidate - capInset * 2));
+  const capGapBelow = insetCard ? capGap : 0;          // vertical air under the card — NOT a side inset
+  let capH = measureCapNaturalHeight(Math.max(240, candidate));
+  let boardSideStacked = Math.max(240, Math.min(candidate, ih - capH - capGapBelow));
+  const surroundPerSide = (iw - boardSideStacked) / 2;
+  const capBleeds = !insetCard || surroundPerSide < capGap;
+  body.classList.toggle("pp4CapBleed", capBleeds);
+  if (!capBleeds) {                                    // desktop: the card really is inset, so measure it that way
+    capH = measureCapNaturalHeight(Math.max(240, boardSideStacked - capGap * 2));
+    boardSideStacked = Math.max(240, Math.min(candidate, ih - capH - capGapBelow));
+  }
   S.capNeed = capH;   // camFrame's band reservation reads the same measurement (D-46 fault 3)
-  const boardSideStacked = Math.max(240, Math.min(candidate, ih - capH - capInset));
   body.style.setProperty("--pp4W", boardSideStacked + "px");
-  if (cap) cap.style.setProperty("max-height", Math.max(capH, ih - boardSideStacked - capInset) + "px");
+  if (cap) cap.style.setProperty("max-height", Math.max(capH, ih - boardSideStacked - capGapBelow) + "px");
   refreshNameMarquees();   // same reason as the side-by-side branch above — the board (and with
                            // it the name column, which spans the same derived width) just resized
 }
@@ -2308,7 +2422,31 @@ function retireEchoBubble(){
 }
 function peekHintLast(){
   const box = $("pp4Prompt");
-  if (!box || !box.classList.contains("radial")) return;
+  /* W4-5 — IT ALSO RUNS WHEN A CARD IS UP, and until 2026-08-29 it did not. The guard was
+     radial-only, so with the recipe picker on screen the placement search NEVER RAN: the hint stayed
+     wherever the last radial prompt had put it, which is why Wyatt saw it stranded at the far end of
+     the board from the card (measured 295px at 1200 and 768, 222px at 390). It was not mis-placed —
+     it was UNPLACED, a stale position from a previous prompt.
+     THE COMMENT ON peekHintTick SAID "inside whichever prompt box is up" AND THAT WAS INTENT, NOT
+     RUNTIME — rule 6, again, and the reason the first attempt at this item changed the preference
+     order and moved nothing at all.
+     A card prompt is over the board exactly as the radial one is, so D-39's rule ("a prompt IS over
+     the board here, so the gesture is taught until it has been learned") applies unchanged. The
+     condition is DERIVED from what is on screen — a visible panel — not from a list of prompt class
+     names that would need editing every time a new prompt kind appears. */
+  if (!box) return;
+  /* ⚠ NARROWED AFTER CEO REVIEW 18, WHICH CAUGHT A REGRESSION THIS FUNCTION HAD JUST INTRODUCED.
+     The first cut ran for ANY prompt with a visible panel. But promptTick() deliberately REMOVES
+     the hint for plain card prompts (`if (hint) hint.remove()`), and peekHintTick() re-creates one
+     when it does not find it — so the hint reappeared on prompts that had chosen not to show it,
+     INCLUDING "Stay put", a trade's ✓ and "Call Flaky Jack": the exact three screens the five judge
+     findings of 2026-08-21 were about. Nobody measured that; it was a side effect.
+     THE RULE NOW: this function PLACES a hint, it never decides one should exist. It runs for the
+     radial bloom (which creates its own), or when a hint is ALREADY in the box because something
+     upstream chose to show it. Whoever owns "should the gesture be taught on this screen" keeps
+     that decision; this only answers "where". */
+  const already = !!box.querySelector(".pp4PeekHint");
+  if (!box.classList.contains("radial") && !already) return;
   peekHintTick(box);
 }
 function promptTick(){
@@ -2431,11 +2569,19 @@ function promptTick(){
       hint.innerHTML = `<span>${peekHintText()}</span>`;   // D-40: one sentence, device-correct verb
       box.insertBefore(hint, ap);
     }
-    // over the SEA, high on the board — measured off the board's own rect rather than a guessed
-    // viewport fraction, so it lands on water at any screen height
-    const bw = document.getElementById("boardwrap");
-    const br = bw ? bw.getBoundingClientRect() : null;
-    hint.style.top = Math.round(br && br.height ? br.top + br.height * 0.10 : vhPx() * 0.20) + "px";
+    /* ⚠ THE PIN THAT USED TO BE HERE IS GONE, AND THIS REVERSES AN EARLIER RULING OF WYATT'S.
+       It read `hint.style.top = br.top + br.height * 0.10` — "over the SEA, high on the board" —
+       and the comment above records that HE ASKED FOR THAT in playtest 21 item 2: "a pill over the
+       water… away from the sheet entirely."
+       W4-5 IS HIM CHANGING HIS MIND, IN HIS OWN WORDS: "move the tooltip closer to the recipe card,
+       and give it the same pulse as the buttons — in a way, it is a button, a button that reveals
+       the sea." His newer ruling wins; the older one is recorded here rather than quietly deleted,
+       because CEO Review 15 caught exactly this reversal-without-saying-so one item ago and CEO
+       Review 18 caught it again here.
+       IT IS ALSO A ONE-WRITER FIX. For a while both this line and peekHintTick() set the hint's
+       position — this one first, overwritten a moment later — which is two things kept in step by
+       nothing (rule 23). peekHintTick() is now the only writer, so the placement cannot disagree
+       with itself, and the comment above no longer describes something the screen contradicts. */
     const msg = ap.querySelector(".apMsg");
     if (msg && !ap.querySelector(".pp4RecipeHint")){
       const rh = document.createElement("div");
@@ -2862,7 +3008,75 @@ function promptTick(){
          few times lets a pair that is pinned against one edge walk along that edge instead of
          through it. */
       const clampSpot = s => [Math.min(Math.max(s[0], xMin), xMax), Math.min(Math.max(s[1], yMin), yMax)];
-      let spots = anchors.map(([ax, ay]) => clampSpot([ax - D / 2, ay + 26]));   // just off the stern
+      /* BESIDE THE BOAT, NEVER ON IT — W5-2 (Wyatt): "The buttons to call other battling captains
+         sit on top of their boats… They should be directly beside the boats — side, top or bottom
+         — so the player can read the wind and the situation."
+         The seed was `ay + 26`, and 26 IS A CONSTANT STANDING IN FOR HALF A BOAT (rule 9). A boat
+         is drawn `cell` wide, so it grows with the board: measured with the real prompt posed in
+         Chromium, the circle covered 0–5% of its own hull on a 390px phone (35px boats), 12% on a
+         1200px desktop (67px) and 24–27% on a 768px tablet (83–88px). The bigger the board, the
+         more of the hull the answer hides — which is the half of his complaint about reading the
+         wind, because what the circle covers is the hull and its flag.
+         So the offset is DERIVED from the boat the button names: its own rendered half-size, plus
+         half a petal AT THE TOP OF ITS PULSE (--pp4GrowPeak, the same swell every other spacing in
+         this function already reserves), plus the 6px of air every stacked floater here leaves.
+         The SIDE is chosen rather than assumed — the four cardinals scored on staying inside the
+         band, clearing every hull, and pointing AWAY from the other captains in the fight, so two
+         circles open outward instead of colliding over the water between the boats. */
+      const ships = boardShipEls() || [];
+      // the boat's own rendered size. A translate cannot change a box's WIDTH, so this is the one
+      // number that is safe to read off a ship mid-glide; its position comes from the anchors.
+      const boatRad = i => { const el = ships[i]; if (!el) return D / 2;
+        const r = fixedRect(el); return Math.max(r.width, r.height) / 2 || D / 2; };
+      // every hull, projected through the SAME camera the anchors used — a rect read straight off
+      // a gliding ship would disagree with a target-transform anchor by however far it has left to go
+      const hulls = ships.map((_, i) => { const u = boatUXY(i); if (!u) return null;
+        const [bx, by] = toScreen(u[0], u[1]); const rad = boatRad(i);
+        return { l: bx - rad, t: by - rad, r: bx + rad, b: by + rad }; }).filter(Boolean);
+      const AIR = 6;
+      const HALF = Math.round(D * S.growPeak) / 2;
+      const onHull = (l, t) => hulls.some(h => l < h.r && l + D > h.l && t < h.b && t + D > h.t);
+      const inBand = (l, t) => l >= xMin && l <= xMax && t >= yMin && t <= yMax;
+      /* NOT ON A HULL IS NOT THE SAME AS NOT BESIDE ONE — found by re-running the probe on the
+         shipped tree, which is the whole reason it is committed. A circle placed 11px above the
+         boat it names sat 4px from a THIRD captain's hull, diagonally up-left: nothing covered,
+         nothing overlapping, and a player reading the board is still told the wrong thing. So the
+         side is also scored on how much clear water it leaves round every OTHER hull — edge to
+         edge, because "beside" is about adjacency, not about which centre is closer. A full petal
+         of clearance is treated as unambiguous; beyond that there is nothing left to buy. */
+      const clearOfOthers = (l, t, mine) => {
+        let worst = Infinity;
+        hulls.forEach((h, i) => {
+          if (i === mine) return;
+          const dx = Math.max(h.l - (l + D), l - h.r, 0), dy = Math.max(h.t - (t + D), t - h.b, 0);
+          worst = Math.min(worst, Math.hypot(dx, dy));
+        });
+        return worst === Infinity ? D : worst;
+      };
+      let spots = anchors.map(([ax, ay], k) => {
+        const rad = boatRad(anchorSeats[k]);
+        // the heading away from everyone else this question is about
+        let away = [0, 1];
+        if (anchors.length > 1){
+          const o = anchors.filter((_, j) => j !== k);
+          const cx = o.reduce((t2, p) => t2 + p[0], 0) / o.length, cy = o.reduce((t2, p) => t2 + p[1], 0) / o.length;
+          const dx = ax - cx, dy = ay - cy, m = Math.hypot(dx, dy);
+          if (m > 1) away = [dx / m, dy / m];
+        }
+        let best = null;
+        for (const [ux, uy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){
+          const l = ax + ux * (rad + HALF + AIR) - D / 2, t = ay + uy * (rad + HALF + AIR) - D / 2;
+          /* whole-band and clear-of-every-hull first, then how much water it leaves round the
+             OTHER boats, and the away heading breaks what is left. The clearance term outweighs
+             the heading deliberately: opening outward is a nicety, standing unambiguously beside
+             one boat is the ask. */
+          const score = (inBand(l, t) ? 2 : 0) + (onHull(l, t) ? 0 : 2)
+            + 1.5 * Math.min(1, clearOfOthers(l, t, anchorSeats[k]) / D)
+            + (ux * away[0] + uy * away[1]);
+          if (!best || score > best.score) best = { score, spot: [l, t] };
+        }
+        return clampSpot(best.spot);
+      });
       const NEED = SEP;   // D-44: derived, never typed — swollen petal + quarter-gap, see the SEP note above
       for (let pass = 0; pass < 4; pass++){
         let moved = false;
@@ -2891,11 +3105,67 @@ function promptTick(){
         const rowY = Math.min(Math.max(spots.reduce((t, p) => t + p[1], 0) / n, yMin), yMax);
         spots = spots.map((_, i) => [startX + (n > 1 ? (span / (n - 1)) * i : 0), rowY]);
       }
-      spots = lastLowest(spots);   // D-48, and it holds for the anchored-boats fan too
+      /* …AND ONE LAST PUSH OFF ANY HULL THE SEPARATION OR THE CLAMP LANDED ON. The passes above
+         only know about each other; the band clamp and the even-row fallback know about neither.
+         Out along whichever edge is nearest — the smallest disturbance that satisfies the rule. */
+      for (let pass = 0; pass < 3; pass++){
+        let shifted = false;
+        spots = spots.map(sp => {
+          const h = hulls.find(hh => sp[0] < hh.r && sp[0] + D > hh.l && sp[1] < hh.b && sp[1] + D > hh.t);
+          if (!h) return sp;
+          shifted = true;
+          const outs = [[h.l - D - AIR - sp[0], 0], [h.r + AIR - sp[0], 0], [0, h.t - D - AIR - sp[1]], [0, h.b + AIR - sp[1]]];
+          outs.sort((a, b2) => (Math.abs(a[0]) + Math.abs(a[1])) - (Math.abs(b2[0]) + Math.abs(b2[1])));
+          for (const [dx, dy] of outs){
+            const c = clampSpot([sp[0] + dx, sp[1] + dy]);
+            if (!onHull(c[0], c[1])) return c;
+          }
+          return sp;
+        });
+        if (!shifted) break;
+      }
+      /* D-48 IS DELIBERATELY NOT APPLIED HERE, AND THAT IS THE SECOND HALF OF W5-2. Wyatt: the
+         call buttons are "often on the WRONG boat". lastLowest() is a SWAP between two spots, which
+         is harmless while every spot is interchangeable — a fan around your own ship, where "Pass"
+         may take any of them. These spots are NOT interchangeable: each one is anchored to the boat
+         its label names. Whenever the LAST option's captain was not already the rightmost (or, on a
+         vertical spread, the lowest), the swap moved each circle to the other captain's boat.
+         MEASURED, by posing the same prompt with the options in the order that fires the swap: on a
+         768px tablet "Call Captain 2" landed 425px from Captain 2 and sat 24% on Captain 1's hull,
+         and vice versa — both circles beside the wrong boat, in one prompt. It fires whenever the
+         attacker's boat is right of the defender's, which is about half of all fights. "Often."
+         D-48 still governs the ordinary fan below, where it belongs. */
+      /* EACH CIRCLE TAKES THE SPOT NEAREST ITS OWN BOAT — the answer to "what makes these two
+         agree?" (rule 23), one scale down. Everything above was still index-matched: spot i was
+         option i's only because nothing upstream had reordered the array, and the wrong-boat bug
+         was precisely something upstream reordering the array. A CEO review made that concrete by
+         re-introducing the swap BY HAND, three lines above this one, without using the name the
+         gate was watching for — the exact fault Wyatt reported, fully restored, and every source
+         check still green. A gate that reads text can always be walked past by writing different
+         text; this cannot, because the assignment is decided by distance to the named boat rather
+         than by position in a list.
+         Greedy nearest-pair, which is optimal at the two-to-four options this branch ever sees and
+         is deterministic — the same prompt always lays out the same way. */
+      const claim = spots.map(() => -1);
+      const taken = spots.map(() => false);
+      for (let n = 0; n < spots.length; n++){
+        let bi = -1, bj = -1, bd = Infinity;
+        for (let i = 0; i < anchors.length; i++){
+          if (claim[i] >= 0) continue;
+          for (let j = 0; j < spots.length; j++){
+            if (taken[j]) continue;
+            const d = Math.hypot(spots[j][0] + D / 2 - anchors[i][0], spots[j][1] + D / 2 - anchors[i][1]);
+            if (d < bd){ bd = d; bi = i; bj = j; }
+          }
+        }
+        if (bi < 0) break;
+        claim[bi] = bj; taken[bj] = true;
+      }
       menu.forEach((b, i) => {
+        const sp = spots[claim[i] >= 0 ? claim[i] : i];
         b.style.position = "fixed";
-        b.style.left = spots[i][0] + "px";
-        b.style.top = spots[i][1] + "px";
+        b.style.left = sp[0] + "px";
+        b.style.top = sp[1] + "px";
       });
       return;
     }
@@ -3341,6 +3611,15 @@ export function initStage(){
        stageFlash the same five arguments and any rule about a payload is written exactly once. */
     narr: (html, opts, variants) => (S.active ? stageFlash(html, undefined, undefined, variants, opts) : null),
     set subject(v){ S.subject = v; }, get subject(){ return S.subject; },
+    /* subjectSet NEEDS ITS OWN ACCESSOR, and forgetting it made W4-2's fix a no-op that MEASURED as
+       working. This object is a BRIDGE, not the state — `subject` and `evType` reach S only through
+       the pairs above. panel.js writes `window.__pp4.subjectSet = true`; without this line that set
+       a plain property on the bridge and never arrived, so `decided` was always false, the colour
+       sniff always ran, and a battle result naming one captain was re-anchored exactly as before.
+       Caught by driving the real flash() path and reading the bubble's class — the seam test that
+       matters, as opposed to the one I ran first, which evaluated panel.js's expression alone and
+       reported success on a fix that did nothing. */
+    set subjectSet(v){ S.subjectSet = v; }, get subjectSet(){ return S.subjectSet; },
     set evType(v){ S.evType = v; }, get evType(){ return S.evType; },
     sailCells: (seat) => { if (S.active) camFitSail(seat); },
     /* THE SHOT IS THE FIGHT, AND IT IS HELD. Called at the top of asyncBattle (before the opening

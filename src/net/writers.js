@@ -76,9 +76,23 @@ export function netSetResponse(db, room, payload, onError) {
 // reading a new payload simply never sees the key. A wait line registers no dismissal deadline on
 // the client that draws it (see stageFlash); without this field the guest's copy would expire on
 // the hold curve while the host's sat there, which is a NEW divergence in the act of closing four.
-export function netSetNarr(db, room, html, onError, variants, wait) {
+export function netSetNarr(db, room, html, onError, variants, wait, subj) {
   const payload = variants && variants.length ? { html, t: Date.now(), variants } : { html, t: Date.now() };
   if (wait) payload.wait = 1;
+  /* W4-2 / rule 23 — THE SUBJECT CROSSES THE WIRE, because otherwise two seats decide it two ways.
+     A narration bubble anchors to a captain's boat when it has a subject and is centred when it does
+     not. The HOST computes that from the event itself (panel.js: an event naming two captains is not
+     about one of them, so a battle is centred). A GUEST never sees the event — it receives this
+     payload and, with no subject in it, falls back to sniffing the sentence for captain colours,
+     which anchors whenever exactly ONE captain is named. A battle result names exactly one, the
+     winner. So the host centred it and the guest anchored it: the same line drawn two ways, which
+     CEO Review 20 found still broken on the seat Wyatt actually reported.
+     Sent as -1 rather than omitted when the host decided "no subject", because ABSENT and
+     DELIBERATELY NONE are different: absent must keep meaning "fall back to the sniff", or every
+     turn-start line an older client draws would lose its anchor. Additive and omitted when there is
+     nothing to say, the same shape `wait` and `variants` already use. */
+  if (subj != null) payload.subj = subj;
+  else if (subj === null) payload.subj = -1;
   return withReporter(db.ref("rooms/" + room + "/narr").set(payload), onError);
 }
 

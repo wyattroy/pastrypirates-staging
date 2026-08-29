@@ -1314,3 +1314,101 @@ a `NONE` verdict on a day you changed game code as the tell.
 **This is the third time this shape has appeared** (the working-tree version, the origin/main
 version, and now the post-push version). A gate whose subject can vanish will eventually report on
 an empty set and call it a pass.
+
+---
+
+## 11. 2026-08-28 — the tool that got judged, and three ways a number lied about its own coverage
+
+**§10 was the day every instrument lied. This is the day an instrument was *silenced by this repo's
+own safety rules* and still filed a report.** Environment-and-coordination lessons, from the first
+day two machines and three sessions worked one branch at once.
+
+**The decision guide these produced is [`CLOUD-VS-LOCAL.md`](CLOUD-VS-LOCAL.md)** — where to run a
+long job and what it costs. This section is why.
+
+### 11a. A CHILD `claude -p` INHERITS THIS REPO'S HOOKS — and fails silently, and intermittently
+
+The vision judge shells out to a second `claude` per screenshot. Run from the repo, that child
+loads `.claude/settings.json` and runs **this project's hooks**. A FULL local trial therefore
+returned `judge ERROR: vision call timed out` on **every screen — 75 calls, zero verdicts** — while
+the legs sailed on looking perfectly healthy.
+
+The mechanism: each call is a **new session id**, so `playtest-checklist-last.cjs`'s
+once-per-session guard never applied. It fired on all of them, blocked the Stop, and sent each
+judge off to write a staging checklist instead of returning JSON. Fingerprint: **73
+`checklist-asked` marker dirs**, all inside the failed window, none after the fix.
+
+Red-proofed both directions — same call, same image, **cwd the only difference**: from the repo,
+still running at 40 s; from a temp dir, answered in 37 s.
+
+**The reusable rule: ANY tool that shells out to a second `claude` must run from OUTSIDE the tree.**
+Our own guard rails are indiscriminate — they cannot tell a subprocess doing one narrow job from a
+session that should be held to the full process.
+
+**And it is worse than a consistent break.** The hook decides by comparing **file mtimes**, which a
+`git checkout` resets in whatever order it writes files. The cloud got 14 judge findings on this
+same code hours earlier. **So the eyes can be open on one run and shut on the next, with nothing
+announcing the difference.** An intermittent silent instrument is harder than a broken one.
+
+### 11b. A PER-ITEM RESULT WITH NO DENOMINATOR HIDES ITS OWN COVERAGE
+
+The trial prints `vision judge FAILED 4 screen(s)` per leg. It never prints **out of how many**.
+
+The judge only ever looks at the **first 30 distinct screens of a leg** (`JUDGE_CAP`,
+`scripts/playtest_gate.mjs:58`, applied `:481`). One run captured **349** and submitted **267** —
+**82 screens never shown to the judge at all.** The write-up then said *"two screens were never
+judged"*, counting only the timeouts: **wrong by a factor of forty, in the section headed *what
+this run does NOT establish*.**
+
+The sharpest case: `crew-desktop`, **the one leg that did not finish its voyage**, captured 60
+screens, had 30 judged, and all 30 came back PASS. **It reads as visually clean. Half of it was
+never opened.**
+
+**CEO Review 14 called this a recurrence of Review 13's *"the instrument announces more than it
+actually checked"* — third review running, third surface.** The fix is arithmetic: print
+`judged 30 of 60`. **Whenever a check samples, the sample size belongs in the output, beside the
+result, every time.**
+
+### 11c. A HARDCODED OUTPUT PATH IS A SILENT OVERWRITE THE MOMENT THERE ARE TWO OF YOU
+
+`sea_trial.mjs` wrote `.planning/SEA-TRIAL.md` at a fixed path. With two machines sailing, whoever
+finished last **silently replaced** the other's verdict — leaving one authoritative-looking report,
+real build stamp and all, describing a run from the **other machine**. Rule 24 stands on opening
+that file and believing it.
+
+**A merge conflict is loud; this was silent.** Fixed by `--report=<path>` plus a machine name
+derived from `os.hostname()` in every report, gated by
+`scripts/qa/trial_report_ownership_check.mjs`. It was **not theoretical** — one run stamped
+`19:35:09Z` over another's `18:44:08Z` before it was caught.
+
+**The half still open, and the general form:** that fix separated the **reports**, not the
+**evidence**. `sea-trial-shots/` — including the `report.json` that decides *which legs sailed* — is
+still one shared path, and two Claude sessions can share one checkout on one machine. **When you
+fix a shared-path collision, fix it for every artifact the process writes, not the one that
+collided.**
+
+### 11d. A BUILD STAMP THAT DOES NOT MOVE MAKES TWO GAMES ONE LABEL
+
+`a4069ed2` changed `index.html` while `PP4_STAMP` read `2026.08.28.4` on both sides of it. So that
+string names at least two different games.
+
+**This breaks rule 24's check by making it pass.** "Compare the report's stamp with the one in the
+game's ☰ menu" silently stops working when one stamp covers two builds: the two will match while
+describing different code. `GIT-AND-DEPLOY.md` §5 already made this argument for staging — *"the
+sha stayed because it is what makes it a build identity"*. **Bump the stamp in the same commit as
+the game change, and pin any claim to a sha.**
+
+### 11e. THREE SMALL INSTRUMENT FAULTS, ALL THE SAME SHAPE
+
+Each cost a wrong answer on the day, and each is the §2 lesson in miniature — *the check measured
+something other than what it named.*
+
+| the check | what it actually measured |
+|---|---|
+| `ps ax \| grep -c "remote-debugging-port"` | **its own command text.** The grep's arguments contain the pattern, so a clean machine reports live probes. Use `pgrep -x`, and confirm a hit is real before acting |
+| `find … -newermt '-60 minutes'` | **nothing** — macOS `find` rejects a relative `-newermt` and errors out. With `2>/dev/null` that is indistinguishable from "no matches". It reported 0 marker dirs when 73 existed |
+| `ls .planning/hooks/.read-state \| wc -l` | **directories, not markers.** Typed into a report as "75"; counting the ones that actually held the marker file gave **73** |
+
+**All three were caught, but only because something else disagreed with them.** The last is the
+worst: it broke *"never hand-type a number that can be counted"* **inside the very finding written
+to warn about unverified claims.**

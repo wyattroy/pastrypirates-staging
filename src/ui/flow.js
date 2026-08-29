@@ -1702,13 +1702,35 @@ function logQuantity(n){
    {i,n} unpack. That means the ONE logQuantity() call below fires for a remote drag exactly as it
    does for a local one, and for the first time the decision log's LENGTH does not depend on how the
    trade was routed: an N-coin counter cost N+2 entries on the stepper and costs 2 either way now. */
-async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt){
+async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declineLabel){
   if(max<=min){
-    // nothing to choose — do not present a slider with one stop on it
-    const opts=[{label:confirmLabel,value:"ok",cls:"primary"}];
+    /* W6-1 (Wyatt): "'Would ye offer any coin on top?' appears with NO SLIDER when the player has no
+       money left. Expectation: the slider appears greyed out, and the button reads 'Nah' instead of
+       'Offer it!'"
+       THIS BRANCH USED TO SAY "nothing to choose — do not present a slider with one stop on it",
+       and for a range like 3..3 that is still right reasoning. It is wrong for an EMPTY PURSE,
+       because there the missing control is the answer to the question: the sentence asks whether to
+       add coin and the screen shows nothing to add it with. So the slider is drawn, DISABLED, at its
+       one stop — the browser refuses the drag and greys it, one mechanism doing both.
+       THE DECLINE LABEL IS THE CALLER'S. "Nah" answers "would ye offer any coin on top?"; the
+       counter-offer's sentence STATES a fact ("ye're ASKIN' X for yer Y"), where the same word would
+       read as cancelling the whole counter rather than declining the coin. Same mechanism, different
+       sentence, so the word travels with the sentence. That rule-8 exception is recorded for him in
+       .planning/CTO-QUESTIONS.md rather than decided here. */
+    /* ⚠ THE DECLINE WORD ONLY FITS WHEN NOTHING IS ACTUALLY OFFERED, and the first cut of W6-1 got
+       this wrong — caught by CEO Review 19, which put it plainly: "the button says no and offers a
+       coin." This branch fires on `max<=min`, which is NOT the same as "broke". A coins-only offer
+       from a captain holding exactly ONE coin has minC=1, maxC=1, so it lands here too — and the
+       button read "Nah" while pressing it returned logQuantity(1) and offered that coin. A new wrong
+       screen, reachable by anyone down to their last coin, where the old label had at least been
+       truthful.
+       So the word is chosen by the AMOUNT, not by the branch: at zero the button declines, above
+       zero it confirms, because above zero it really does commit something. */
+    const nothingOffered = min === 0;
+    const opts=[{label:(nothingOffered && declineLabel) || confirmLabel,value:"ok",cls:"primary"}];
     if(extraOpt)opts.push(extraOpt);
     opts.push({label:"← Back",back:true,value:"__back__"});
-    const v0=await ask(msgFor(min),opts);
+    const v0=await ask(msgFor(min),opts,null,null,{slider:{min,max:min,start:min,ref:{value:min},fmt:msgFor,aria:"Coins",disabled:true}});
     if(appState.turnExpired)return null;
     if(v0==="ok")return logQuantity(min);
     if(v0==="__back__"||v0==null)return "__back__";
@@ -1809,7 +1831,7 @@ export async function humanTrade(p){
          the floor to 1. The control knew; only the sentence did not. Nothing new is computed here. */
       const n=await coinSlider(p.idx,
         k=>st.baseIng?`Would ye offer any coin on top?`:`How many coins?`,
-        minC,minC,maxC,"Offer it!");
+        minC,minC,maxC,"Offer it!",null,"Nah");
       if(n==null)return false;
       if(n==="__back__"){step=1;continue;}
       st.extraCoins=n;step=3;

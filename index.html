@@ -544,6 +544,11 @@
     box-shadow: 0 3px 10px rgba(0,0,0,.32); cursor: grab; }
   .apSlider::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: #fffdf2;
     border: 3px solid #f5a623; box-shadow: 0 3px 10px rgba(0,0,0,.32); cursor: grab; }
+  /* W6-1 — A DEAD PURSE'S SLIDER READS AS DEAD. Drawn (the question makes no sense without the
+     control it refers to) but plainly not draggable. `:disabled` is the same signal the browser
+     already honours, so there is no second state to keep in step with the markup. */
+  .apSlider:disabled { opacity: .38; cursor: not-allowed; }
+  .apSliderWrap.apSliderDead .apSliderOut { opacity: .38; }
   .apSliderOut { min-width: 2.2em; text-align: center; font-weight: 900; font-size: 15px;
     color: #8a5a12; font-variant-numeric: tabular-nums; }
   .apBtns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -676,8 +681,12 @@
        before, padding 30px -> VS sits  9.1px above the coin's centre
        after,  padding  9px -> VS sits  8.5px above the coin's centre  */
   .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 9px; }
+  /* --coinRing is a token because the flip ceremony has to multiply it (W5-1). Under the old
+     `transform:scale(2.2)` the ring came along for free at 6.6px; sizing the coin properly leaves
+     a literal 3px hairline round a 167px coin unless the ring is scaled with it. */
+  :root { --coinRing: 3px; }
   .coin { width: 74px; height: 74px; margin: 0 auto 9px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 13px; letter-spacing: .5px; border: 3px solid; position: relative; }
+    font-weight: 800; font-size: 13px; letter-spacing: .5px; border: var(--coinRing) solid; position: relative; }
   .coin.wait { background: #f4f4f4; border-color: #dcdcdc; color: #c2c2c2; font-size: 24px; }
   /* the flippenator's wood socket art already reads as "empty, waiting for a flip" on its own —
      no placeholder circle/mark needed on top of it (unlike the battle scoreboard's bare .coin.wait
@@ -691,13 +700,26 @@
   .coin .bs { position: absolute; top: -9px; right: -9px; font-size: 16px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
   /* ---- flippenator: the one physical spot every coin flip happens — the coin IS the
      button, so the whole thing is a single circle on the wood plank, not two elements ---- */
+  /* THE FLIPPENATOR'S SIZE IS ONE SET OF TOKENS, BECAUSE TWO PLACES NEED IT (W5-1, rule 23).
+     The flip CEREMONY draws this same panel much bigger, and it used to do it with
+     `transform:scale(2.2)` — which stretches the RASTER rather than asking for a bigger one, so
+     the plank's rope border stair-stepped while the rest of the game stayed crisp. Measured on a
+     390px phone at DPR 3: a 76px layout box painted at 167px = 502 device pixels, drawn from a
+     raster made for 76px. The art was never the problem — flip-heads.png is 384x384 and the
+     socket 512x512.
+     So the ceremony multiplies these tokens instead (--pp4CerZoom below) and the browser
+     rasterises at the size it will actually paint. Hoisting them means the magnified copy can
+     never drift from the ordinary one: there is one clamp per dimension, not two. */
+  :root { --flipCoinD: clamp(36px,13cqw,64px); --flipPad: clamp(6px,2.4cqw,11px);
+          --flipFont: clamp(6px,1.9cqw,11px); --flipSpinFont: clamp(11px,3.5cqw,22px);
+          --pp4CerZoom: 2.2; }
   .flipPlank { display: flex; align-items: center; justify-content: center; width: fit-content;
     border-radius: 14%; background: var(--flip-socket-img) center/cover; background-color: #8a5f2f;
-    padding: clamp(6px,2.4cqw,11px); box-shadow: 0 2px 5px rgba(0,0,0,.28); overflow: hidden; }
+    padding: var(--flipPad); box-shadow: 0 2px 5px rgba(0,0,0,.28); overflow: hidden; }
   .flipPlank:has(#flipCoinWrap.active) { animation: plankglow 1s ease-in-out infinite; }
-  #flipCoinWrap.coin { width: clamp(36px,13cqw,64px); height: clamp(36px,13cqw,64px);
-    font-size: clamp(6px,1.9cqw,11px); margin: 0; }
-  #flipCoinWrap.coin.spin { font-size: clamp(11px,3.5cqw,22px); }
+  #flipCoinWrap.coin { width: var(--flipCoinD); height: var(--flipCoinD);
+    font-size: var(--flipFont); margin: 0; }
+  #flipCoinWrap.coin.spin { font-size: var(--flipSpinFont); }
   /* UI-09: the coin shows its plain heads art now (no orange wash). Only the word FLIP is orange,
      with a dark outline so it stays legible over the gold coin. */
   #flipCoinWrap.active { border-color: var(--accent); background-color: #f5a623;
@@ -1233,10 +1255,10 @@
   /* super-narrow phones: the flippenator + shot clock read as too small to tap accurately —
      bump every dimension here ~1.5x over their normal clamp() ranges */
   @media (max-width: 480px) {
-    .flipPlank { padding: clamp(9px,3.6cqw,16.5px); }
-    #flipCoinWrap.coin { width: clamp(54px,19.5cqw,96px); height: clamp(54px,19.5cqw,96px);
-      font-size: clamp(9px,2.85cqw,16.5px); }
-    #flipCoinWrap.coin.spin { font-size: clamp(16.5px,5.25cqw,33px); }
+    /* the ~1.5x bump is now a re-declaration of the same four tokens, so the ceremony's
+       magnified copy follows it here too without a second set of numbers to keep in step */
+    :root { --flipCoinD: clamp(54px,19.5cqw,96px); --flipPad: clamp(9px,3.6cqw,16.5px);
+            --flipFont: clamp(9px,2.85cqw,16.5px); --flipSpinFont: clamp(16.5px,5.25cqw,33px); }
     /* AUDIO-02 (phase 21): #btnMute joins the same narrow-viewport bump — 21-03 made the timer
        toggle visible in solo for the first time, so this row now carries one more control than
        it ever has at this width. */
@@ -1499,7 +1521,24 @@
     flex: 0 0 auto; padding-left: 8px; }
 
   /* ================= /4 stage ================= */
-  body.pp4Stage { overflow:hidden; background:#3d7d99; }
+  /* W4-3 (Wyatt): "The centre div has its own blue background, layered on top of the page
+     gradient under the board and the captains box. The gradient should be the only background."
+     He was exactly right, and MEASURED: `background:#3d7d99` lived here, GLOBALLY, while the
+     page's own surround — five radial gradients sampled from the board art — is painted on
+     `html` inside @media(min-width:601px). Body is max-width:430px and centred while the stage is
+     up, so on any wide screen this flat colour covered the gradient in precisely the centre
+     column: a flat band behind the board and captains box with the real gradient showing either
+     side of it. Seen in a screenshot before it was touched, not inferred.
+     IT IS SCOPED, NOT DELETED. Below 601px the html surround does not exist ("the phone's board
+     fills the viewport, so there is no surround to paint"), so there this flat colour IS the only
+     ground and removing it would drop the phone onto the pale default gradient.
+     AND IT IS `none`, NOT MERELY "NOT BLUE": simply deleting the flat colour left body painting
+     its OWN base `linear-gradient(160deg,#dcece9,#e6efe1,#f5f0dd)` from the top of this file —
+     which would have swapped his blue band for a PALE one, in the same place, and read as a worse
+     bug. Measured after the first cut, before the screenshot could show it. */
+  body.pp4Stage { overflow:hidden; background:none; }
+  /* the phone's flat #3d7d99 went with it (2026-08-28): the surround now paints at every width,
+     so there is no width left where a flat colour is the only ground. */
   /* D-31 (2026-08-21) — REPLACES the item-22 stopgap (D-18). Wyatt's ruling: two real desktop
      sizes, both DERIVED from the window's own geometry, never a breakpoint table. The mechanism
      item 22 built stays — it is exactly right, just fed a computed number instead of a literal one.
@@ -1529,25 +1568,37 @@
      rather than displacing it, exactly as it already does on phone, so no ribbon-height subtraction
      belongs in this number) and the captains panel's OWN rendered content (never a typed number).
      The 430px fallback covers only the one frame before that first measurement lands. */
+  /* ON EVERY WIDTH, INCLUDING PHONE — Wyatt, 2026-08-28, with a screenshot marking four
+     strips of flat blue either side of the board and the captains box: "there seems to be a
+     blue background behind the captain's box AND the board div, which I don't want -- i want
+     the page's 5-gradient background to show up behind it. On all screen widths, including
+     phone." This rule lived inside @media(min-width:601px) on the reasoning that "the phone's
+     board fills the viewport, so there is no surround to paint" — his screenshot and his
+     ruling retire that reasoning. It also ANSWERS the question parked as Q-14 the same hour.
+     */
+  /* THE SEA AROUND THE BOARD (Wyatt, 2026-08-21: "the background color is pretty gruesome — use a
+     blue scattered radial gradient that matches the board better"). Every colour below is SAMPLED
+     FROM assets/board.png rather than picked by eye — the art's own dominant blues, in order of
+     how much of the ocean they cover: #186078 (deep, ~44% of sea pixels), #306090, #307890,
+     #4890a8, with #60a8a8 as the rare highlight. The base is a darkened #186078 so the board
+     still reads as the brightest thing on screen, and the scattered ellipses echo the swirl of
+     the water without competing with it. Desktop only — the phone's board fills the viewport, so
+     there is no surround to paint (D-18/D-31: the phone stays byte-identical). */
+  html {
+    background-color:#0c3442;
+    background-image:
+      radial-gradient(ellipse 55% 45% at 12% 16%, rgba(48,120,144,.50), transparent 70%),
+      radial-gradient(ellipse 48% 40% at 88% 24%, rgba(48,96,144,.45), transparent 72%),
+      radial-gradient(ellipse 62% 46% at 80% 84%, rgba(24,96,120,.55), transparent 74%),
+      radial-gradient(ellipse 50% 38% at 18% 86%, rgba(72,144,168,.28), transparent 70%),
+      radial-gradient(circle at 50% 52%, rgba(96,168,168,.13), transparent 62%);
+    background-attachment:fixed;
+  }
+
   @media (min-width: 601px) {
-    /* THE SEA AROUND THE BOARD (Wyatt, 2026-08-21: "the background color is pretty gruesome — use a
-       blue scattered radial gradient that matches the board better"). Every colour below is SAMPLED
-       FROM assets/board.png rather than picked by eye — the art's own dominant blues, in order of
-       how much of the ocean they cover: #186078 (deep, ~44% of sea pixels), #306090, #307890,
-       #4890a8, with #60a8a8 as the rare highlight. The base is a darkened #186078 so the board
-       still reads as the brightest thing on screen, and the scattered ellipses echo the swirl of
-       the water without competing with it. Desktop only — the phone's board fills the viewport, so
-       there is no surround to paint (D-18/D-31: the phone stays byte-identical). */
-    html {
-      background-color:#0c3442;
-      background-image:
-        radial-gradient(ellipse 55% 45% at 12% 16%, rgba(48,120,144,.50), transparent 70%),
-        radial-gradient(ellipse 48% 40% at 88% 24%, rgba(48,96,144,.45), transparent 72%),
-        radial-gradient(ellipse 62% 46% at 80% 84%, rgba(24,96,120,.55), transparent 74%),
-        radial-gradient(ellipse 50% 38% at 18% 86%, rgba(72,144,168,.28), transparent 70%),
-        radial-gradient(circle at 50% 52%, rgba(96,168,168,.13), transparent 62%);
-      background-attachment:fixed;
-    }
+    /* THE SEA AROUND THE BOARD moved OUT of this desktop-only block — see the global rule
+       above the media query. Wyatt, 2026-08-28: "i want the page's 5-gradient background to show
+       up behind it. On all screen widths, including phone." */
     /* min-height, not height: <body> holds no in-flow content once the stage is up (every stage
        element is position:fixed, per the note above), so its own box collapses to near-0 tall
        without this — and util.js's vwPx()/vhPx() read that same box, so a collapsed body would
@@ -1666,8 +1717,33 @@
      (D-18/D-31). */
   @media (min-width: 601px) {
     body.pp4Stage:not(.pp4Side) #pp4Cap {
+      /* W4-4 — AND WYATT RULED THE TRADE HIMSELF, 2026-08-28: "I want tablet view to go wall to
+         wall in line with the board. I want desktop view to have some padding around it like it
+         currently is."
+
+         SO THE INSET STAYS HERE, and the comment directly above is why it should: the card is
+         spaced by the same --pp4CapGap the side-by-side column uses, "so the two desktop branches
+         draw the same component with the same air around it (rule 8), instead of one floating card
+         and one wall-to-wall slab." That was a deliberate consistency choice. An earlier version of
+         this fix deleted it at every width and never mentioned the reversal — caught by CEO Review
+         15, and it was rule 10 (read the graveyard) missed. His ruling keeps it for desktop and
+         overrides it for tablet, which is the half he actually reported.
+
+         WHICH CASE APPLIES IS DERIVED, NEVER TYPED (rule 9). There is no "tablet ends here" number:
+         computeStageGeometry() already measures the board's own surround — (window - board) / 2 —
+         and adds `.pp4CapBleed` when there is less of it per side than the air we would inset by.
+         On a tablet the board fills the window, so there is nothing for the card to sit inside and
+         it goes wall-to-wall; on desktop the page's gradient shows either side and the card keeps
+         its air. Measured: 7px of surround per side at 768, 225px at 1200.
+
+         --pp4CapGap therefore keeps its ONE meaning — a separation, which computeStageGeometry()
+         reads as exactly that — and the JS no longer uses one number for both the side inset and
+         the air beneath the card. Held by scripts/qa/w44_captains_width_check.mjs. */
       left:var(--pp4CapGap); right:var(--pp4CapGap); bottom:auto; height:auto;
       border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.28); }
+    /* HIS TABLET HALF: no surround to sit inside, so the card runs flush with the board. Same card,
+       same elevation, same corner radius — simply wider. */
+    body.pp4Stage:not(.pp4Side).pp4CapBleed #pp4Cap { left:0; right:0; }
   }
   #pp4Cap { position:fixed; left:0; right:0; bottom:0; z-index:22; background:rgba(255,253,242,.97);
     border-radius:14px 14px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,.28);
@@ -1699,7 +1775,13 @@
   body.pp4Peek #pp4Prompt.pp4Center { opacity:1; pointer-events:auto; }
   #pp4Prompt.centered { left:50% !important; top:44% !important; transform:translate(-50%,-50%);
     width:min(348px, 94vw) !important; max-height:78vh; overflow:auto; }
-  #pp4Prompt #actionPanel { margin:0; box-shadow:0 10px 30px rgba(0,0,0,.35); border-radius:13px; }
+  /* W4-1 (Wyatt): "Choose yer recipe card is not horizontally centred… Don't apply this fix only
+     for pass-and-play, it should apply to all games architecturally." MEASURED: the cards are
+     centred in their row and the row in the panel — it is THE PANEL that sits left, because it is
+     capped at max-width:628px and this rule replaced the base rule's `margin: 0 auto` with
+     `margin:0`. 53px left of centre at 1200px, 17px on a phone. The centre-stage variant escaped
+     it only because its container flex-centres; the ORDINARY prompt is most of the game. */
+  #pp4Prompt #actionPanel { margin:0 auto; box-shadow:0 10px 30px rgba(0,0,0,.35); border-radius:13px; }
   /* N4 radial: the menu blooms around the ship as circular choices */
   /* ITEM 22 (D-18): 100%, not 100vh — see the #boardwrap note above; a percentage height on a
      position:fixed box follows whatever containing block is actually in force (body's capped
@@ -1842,13 +1924,44 @@
 
      Once buildStage() moves the panel, this selector stops matching, so the sheet opens and closes
      exactly as before. Scoped to body.pp4Stage, so the classic layout is untouched. */
+  /* W4-4, SECOND HALF — THE ROWS FILL THE BOX. Wyatt: the captain rows end short of the panel's
+     own right edge. MEASURED at tablet 768x954, after the box itself was widened above:
+       --boardW               632px   the CLASSIC layout's board width
+       #pp4Cap                754px   the STAGE board's width
+       #captainsPanel.panel   632px   max-width:632px  <- still wearing the classic cap
+       #players/.player-row   606px
+     111px of the box sat empty to the right of every row. The shared classic rule
+     `#controlsRow, #actionPanel, #captainsPanel, … { max-width: var(--boardW) }` keeps governing a
+     panel that has been RE-PARENTED into a stage container sized by a different computation, so the
+     panel obeys the old layout while its box obeys the new one.
+     WIDENING THE BOX ALONE MADE IT WORSE — the empty strip grew from 84px to 111px — which is why
+     both halves are one change. Scoped to the captains box on purpose: the same cap also sizes the
+     recipe card, and widening THAT is a taste call Wyatt has not made (parked as a question), not a
+     bug he reported. Held by scripts/qa/w44_captains_width_check.mjs. */
+  body.pp4Stage #pp4Cap > .panel,
+  body.pp4Stage #pp4Cap > #captainsPanel { max-width:none; width:100%; }
+
   body.pp4Stage #layout > #chatPanel { display:none; }
   body.pp4Stage #chatBubbles { display:none; }
   body.pp4Stage .fcChip, body.pp4Stage .ppHud { display:none; }  /* the pill is the instrument now */
   body.pp4Stage #controlsRow { display:none; }  /* coin + clock left the sheet: ceremony + menu toggle */  /* sea-creature bubbles don't track the camera yet */
   #pp4Ribbon { position:fixed; top:0; left:0; right:0; z-index:20; display:flex; align-items:center;
     gap:10px; padding:9px 12px calc(7px + env(safe-area-inset-top)); color:#fff; font-weight:800;
-    background:linear-gradient(180deg,rgba(10,40,48,.88),rgba(10,40,48,.5) 75%,transparent);
+    /* NO WASH OF ITS OWN. It used to paint linear-gradient(180deg, rgba(10,40,48,.88),
+       rgba(10,40,48,.5) 75%, transparent) — a dark slab across the top of the page, on top of the
+       surround gradient the page already paints. Wyatt circled it in red on 2026-08-28, the same
+       complaint as W4-3's flat band behind the board and the captains box: "i want the page's
+       5-gradient background to show up behind it. On all screen widths, including phone."
+       NO TEXT SHADOW EITHER, AND THAT IS A CORRECTION. One was added with the removal, justified by
+       a written prediction that the bar would sit over the bright sea on a phone and lose contrast.
+       THE PREDICTION WAS MEASURED AND IT WAS WRONG: on a phone the board starts at y≈82, below both
+       this bar and the wind pill, so the bar is on the page's dark ground at every size. That left a
+       visual change Wyatt had not asked for, resting on a reason that no longer existed — CEO Review
+       16 flagged it as unrequested and its legibility as asserted rather than measured, and both were
+       fair. If the bar's text is ever seen over bright water, this is the thing to put back, with a
+       contrast figure beside it. Held by scripts/qa/w43_one_background_check.mjs, which finds this
+       bar BY SHAPE, not by id, and now also catches a wash arriving via a pseudo-element, a
+       full-bleed child, a comma-listed selector, a backdrop-filter or an inset shadow. */
     display:none; }
   body.pp4Stage #pp4Ribbon { display:flex; }
   #pp4Round { font-size:13px; letter-spacing:1px; }
@@ -1963,7 +2076,10 @@
   #footerRow.pp4MenuList #btnMute::after { content:"Sound: ON"; position:static; width:auto;
     height:auto; transform:none; font:inherit; }
   #footerRow.pp4MenuList #btnMute[aria-pressed="true"]::after { content:"Sound: OFF"; }
-  body.pp4Stage #actionPanel { margin:0; }
+  /* W4-1: and this one applies in EVERY mode, which is what made the fault architectural rather
+     than a pass-and-play quirk. Same reason as the rule above — the panel is capped, so a zero
+     horizontal margin pins it left. */
+  body.pp4Stage #actionPanel { margin:0 auto; }
 
   /* playtest 22 item 7: the clipped host every board-anchored floater lives in. It spans the
      board's visible window — below the wind ribbon, above the captains box — and stage.js resizes
@@ -1994,9 +2110,30 @@
   .pp4CerSub { color:#e8f4ee; font-weight:700; font-style:italic; font-size:14px; text-align:center;
     transition:opacity .3s; }
   #pp4Veil.resolving .pp4CerSub { opacity:0; }
-  #pp4CerSlot #flipPanel { margin:0 !important; transform:scale(2.2); transform-origin:center;
-    filter:drop-shadow(0 16px 34px rgba(0,0,0,.55)); }
-  #pp4CerSlot { padding:56px 0; }
+  /* SIZED, NOT SCALED — W5-1 (Wyatt: "the coin flip is low-res while the rest of the game is
+     not"). This carried `transform:scale(2.2)`, and a transform stretches the picture the browser
+     already drew; it does not ask for a better one. Multiplying the flippenator's own size tokens
+     by the same 2.2 asks the browser to rasterise the coin and its socket at the size they will
+     actually be painted. Same painted size, a real raster behind it. */
+  /* EVERYTHING THE TRANSFORM USED TO CARRY IS NOW CARRIED DELIBERATELY (CEO Review 22). A
+     `transform:scale(2.2)` magnifies shadows, rings and flares for free; sizing the element does
+     not. So the panel's drop-shadow, the coin's attention ring and the landing flare are all
+     multiplied by the same --pp4CerZoom the sizes are, and there is one number each. */
+  #pp4CerSlot #flipPanel { margin:0 !important; transform-origin:center;
+    filter:drop-shadow(0 calc(16px * var(--pp4CerZoom)) calc(34px * var(--pp4CerZoom)) rgba(0,0,0,.55)); }
+  #pp4CerSlot #flipCoinWrap { --pp4GlowR: calc(10px * var(--pp4CerZoom)); }
+  #pp4CerSlot { --pp4LandFlare: var(--pp4CerZoom); }
+  #pp4CerSlot .flipPlank { padding: calc(var(--flipPad) * var(--pp4CerZoom)); }
+  #pp4CerSlot #flipCoinWrap.coin { width: calc(var(--flipCoinD) * var(--pp4CerZoom));
+    height: calc(var(--flipCoinD) * var(--pp4CerZoom));
+    font-size: calc(var(--flipFont) * var(--pp4CerZoom));
+    border-width: calc(var(--coinRing) * var(--pp4CerZoom)); }
+  #pp4CerSlot #flipCoinWrap.coin.spin { font-size: calc(var(--flipSpinFont) * var(--pp4CerZoom)); }
+  /* THE 56px WAS THE TRANSFORM'S OVERFLOW, NOT AIR SOMEBODY CHOSE. A scaled element lays out at
+     its small size and paints past it — about 125px of overhang here, which 56px top and bottom
+     very nearly covers. Now that the panel lays out at the size it paints, that reservation is
+     counted twice and the ceremony column grows by the whole of it. */
+  #pp4CerSlot { padding:0; }
   /* playtest 10 item 5: the old prompt card never shows through the veil — its words move onto it */
   body.pp4Cer #pp4Prompt { visibility:hidden; }
   /* ITEM 7 (Wyatt, 2026-08-23c): "shouldn't all narration boxes only appear after the veil
@@ -2015,9 +2152,9 @@
   #pp4CerSlot #flipCoinWrap.pp4Land { animation:pp4LandFx .62s ease-out; }
   @keyframes pp4LandFx {
     0%   { transform:none; filter:none; }
-    16%  { transform:scale(1.14) rotate(-2.5deg); filter:drop-shadow(0 0 18px rgba(255,205,90,.95)); }
-    34%  { transform:scale(1.06) rotate(2deg);    filter:drop-shadow(0 0 13px rgba(255,205,90,.8)); }
-    52%  { transform:scale(1.1)  rotate(-1deg);   filter:drop-shadow(0 0 9px rgba(255,205,90,.6)); }
+    16%  { transform:scale(1.14) rotate(-2.5deg); filter:drop-shadow(0 0 calc(18px * var(--pp4LandFlare,1)) rgba(255,205,90,.95)); }
+    34%  { transform:scale(1.06) rotate(2deg);    filter:drop-shadow(0 0 calc(13px * var(--pp4LandFlare,1)) rgba(255,205,90,.8)); }
+    52%  { transform:scale(1.1)  rotate(-1deg);   filter:drop-shadow(0 0 calc(9px  * var(--pp4LandFlare,1)) rgba(255,205,90,.6)); }
     100% { transform:none; filter:none; }
   }
   /* playtest 10 item 1: the recipe chooser is a BOTTOM sheet — the sea it asks you to read stays
@@ -2259,7 +2396,18 @@
        content stays free and native) while the JS only takes over once the pull goes PAST the top —
        the same shape as a native pull-to-refresh. transform is the only thing either gesture ever
        animates, so this never triggers layout mid-drag (HARD-WON-LESSONS: compositor-only motion). */
-    touch-action:pan-y; transition:transform .25s cubic-bezier(.2,.9,.3,1.15); }
+    /* W3-4 (Wyatt: "The End of Voyage card SLAMS down to the captains box. It should scroll
+       smoothly."). TWO THINGS MADE IT A SLAM, and both are here or beside here.
+       (1) The curve ENDED ABOVE 1 — cubic-bezier(...,1.15) overshoots its destination and springs
+       back. Measured: the card travelled 688px on a 1200px desktop and went 28px PAST the
+       captains box before returning; 762px and 31px on a tablet. A bounce on arrival is the
+       definition of a slam, so the curve now lands on 1 and decelerates into place.
+       (2) The DURATION is no longer a flat quarter-second for every journey. --pp4EovSettle is
+       set by stage.js in proportion to how far the card actually has to travel, so a short
+       correction is quick and the full park keeps exactly the timing it has always had. The
+       fallback here is that same .25s, and it is the ONE place the number is written. */
+    touch-action:pan-y;
+    transition:transform var(--pp4EovSettle,.25s) cubic-bezier(.2,.9,.3,1); }
   /* mid-drag: no transition, or the card would lag a live finger/mouse by 250ms */
   body.pp4Stage #statsWrap.pp4EovDrag { transition:none; }
   /* parked: freeze the internal scroll so the strip's own content can't drift under it while it
@@ -2382,9 +2530,16 @@
      The stage owns the whole screen, so the glow needs no motion — it IS the coin's ceremony cue,
      now shared by every stage control: the coin itself, the Ahoy barrier button, centre-stage
      circles, battle buttons, and the Start-the-voyage buttons of every mode's setup screen. */
+  /* --pp4GlowR is a token for one reason: the flip CEREMONY draws the coin 2.2x, and until W5-1
+     the whole panel was TRANSFORMED, so this ring came along for free at 22px. Sizing the coin
+     properly (which is what made it sharp) left the ring at its literal 10px round a 167px coin —
+     the single call-to-action on a full-screen ceremony, shrunk by more than half. Caught by CEO
+     Review 22, and it is the same class of fault as the coin's own border: everything a transform
+     used to carry has to be carried deliberately once the transform is gone. */
+  :root { --pp4GlowR: 10px; }
   @keyframes pp4Glow {
     0%,100% { box-shadow: 0 0 0 0 rgba(245,159,45,.55); }
-    50%     { box-shadow: 0 0 0 10px rgba(245,159,45,0); } }
+    50%     { box-shadow: 0 0 0 var(--pp4GlowR) rgba(245,159,45,0); } }
 
   /* ============================ THE REVEAL RACE (2026-08-25) ============================
      WHY EVERY ATTENTION RULE BELOW SAYS `#actionPanel:not(.pendingReveal)`.
@@ -2430,6 +2585,13 @@
      tell you so. ========================================================================== */
   #flipCoinWrap.active,
   .ahoyGlow,
+  /* W4-5 — THE SEA HINT PULSES LIKE A BUTTON, from THIS rule and not a copy of it. Wyatt:
+     "give it the same pulse as the buttons — in a way, it is a button, a button that reveals the
+     sea." It measured animation-name:none at all three sizes. Named here rather than given its own
+     @keyframes because rule 8 is that one gesture has one definition; a second copy is how the
+     dock coin's glow and the stage's drifted apart before. It stays pointer-events:none — the
+     gesture is holding the SEA, so this is the attention cue for that, not a new tap target. */
+  .pp4PeekHint span,
   #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]),
   #actionPanel .btlBtn:not(:disabled):not([aria-disabled="true"]),
   #btnStart:not(:disabled),

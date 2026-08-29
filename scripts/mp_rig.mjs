@@ -142,6 +142,28 @@ export async function makeHost(C, url, name = "Host") {
   return await C.ev(`document.getElementById('roomCode').textContent.trim()`);
 }
 
+/* START THE VOYAGE — AND CLICK THROUGH THE CONFIRM, WHICH IS THE STEP THAT ATE FOUR ATTEMPTS.
+   `#btnStart` does NOT start the game. It opens `#startConfirmModal` — "⛵ Set sail? Is everyone at
+   the table? Once the voyage starts, no one else can join" — and the voyage only begins when
+   `#btnConfirmStart` is pressed. A driver that clicks Start and then waits sits in the lobby
+   forever, with the board blurred behind a modal, showing NO prompt buttons at all.
+   IT IS ALSO INVISIBLE TO THE OBVIOUS PROBE: the modal's buttons are in a `.modalCard`, not in
+   `#actionPanel` or `#pp4Prompt`, so a probe reading the prompt panel reports an empty screen and
+   says nothing about why. Four crew attempts on 2026-08-28/29 died here, three of them producing no
+   output at all; a screenshot is what finally showed it.
+   Returns true once a seat is actually on the stage, so a caller cannot mistake "clicked" for
+   "started" — the distinction those four attempts turned on. */
+export async function startVoyage(C, { timeoutMs = 30000 } = {}) {
+  await C.waitFor(`(()=>{const b=document.getElementById('btnStart');return !!(b&&b.offsetParent)})()`, timeoutMs, "host: Start the voyage visible");
+  await C.ev(`document.getElementById('btnStart').click();true`);
+  await sleep(700);
+  /* the confirm is a MODAL, and it is the whole point of this helper */
+  await C.waitFor(`(()=>{const b=document.getElementById('btnConfirmStart');return !!(b&&b.offsetParent)})()`, timeoutMs, "host: set-sail confirm");
+  await C.ev(`document.getElementById('btnConfirmStart').click();true`);
+  await C.waitFor(`document.body.classList.contains('pp4Stage')`, timeoutMs, "host: stage is up");
+  return true;
+}
+
 export async function makeGuest(C, url, code, name = "Guest") {
   await boot(C, url, "guest");
   await C.waitFor(`(()=>{const e=document.getElementById('choiceJoin');return !!(e&&e.offsetParent)})()`, 25000, "guest: Join a Crew visible");

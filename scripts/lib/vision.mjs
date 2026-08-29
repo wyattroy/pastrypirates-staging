@@ -8,6 +8,7 @@
 // 2026-08-21 to catch the build-v empty tower + name/coin overlap from one general prompt.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 
 export const RUBRIC = `You are a meticulous UI reviewer looking at ONE screenshot of the browser board game "Pastry Pirates".
 Judge ONLY the visual layout and presentation — NOT the gameplay, and NOT which islands/ships/recipes appear (those are randomized and always fine).
@@ -47,11 +48,23 @@ export function judgeScreen(imgPath, context = "", { model = "claude-sonnet-5", 
        child process has to be told where the bundle is; the parent's own trust does not inherit.
        FEATURE-DETECTED, never assumed: the file exists in a container and not on Wyatt's Mac, so
        this is a no-op on the laptop rather than a second thing to keep in step. */
+    /* THE JUDGE MUST NOT RUN INSIDE THIS REPO, OR THIS REPO'S OWN HOOKS JUDGE IT INSTEAD.
+       Measured 2026-08-28 on the laptop: every screen came back `judge ERROR: vision call timed
+       out`, 0 verdicts in 75 calls. Cause: a child `claude -p` inherits the trial's cwd, so it
+       loads .claude/settings.json and runs this project's hooks. Each call is a NEW session, so
+       playtest-checklist-last.cjs's once-per-session guard never applies -- it fired on every
+       one, blocked the Stop, and sent the judge off to write a checklist instead of a verdict.
+       The fingerprint was 75 `checklist-asked` markers in .claude/hooks/.read-state/.
+       Same call, same image, only the cwd different: from the repo it was still running at 40s;
+       from a temp dir it answered in 37s.
+       imgPath is absolute (playtest_gate passes it that way), so the judge has no need of the
+       repo cwd at all. Do not "restore" it. */
+    const CWD = os.tmpdir();
     const CA = "/root/.ccr/ca-bundle.crt";
     const env = { ...process.env };
     if (!env.NODE_EXTRA_CA_CERTS && fs.existsSync(CA)) env.NODE_EXTRA_CA_CERTS = CA;
     const child = execFile("claude", ["-p", prompt, "--model", model, "--output-format", "json"],
-      { maxBuffer: 8 * 1024 * 1024, env }, (err, stdout) => {
+      { maxBuffer: 8 * 1024 * 1024, env, cwd: CWD }, (err, stdout) => {
         if (err && !stdout) return resolve({ verdict: "ERROR", issues: ["vision call failed: " + String(err.message || err).slice(0, 120)], confidence: 0 });
         let text = stdout;
         let outer = null;

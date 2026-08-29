@@ -233,6 +233,33 @@ later read can miss it.
 
 ## 5c. Driving a GUEST seat while a human hosts
 
+> ### ⚠ `#btnStart` DOES NOT START THE GAME. IT OPENS A CONFIRM MODAL.
+>
+> **Four crew attempts died here on 2026-08-28/29, three of them producing no output at all.**
+>
+> Pressing `Start the voyage!` opens `#startConfirmModal` — *"⛵ Set sail? Is everyone at the table?
+> Once the voyage starts, no one else can join — empty seats sail with bots."* The voyage begins only
+> when **`#btnConfirmStart`** ("Everyone's aboard?") is pressed. A driver that clicks Start and then
+> waits sits in the lobby for as long as you let it, with the board blurred behind a modal.
+>
+> **AND THE OBVIOUS PROBE CANNOT SEE IT.** The modal's buttons live in a `.modalCard`, not in
+> `#actionPanel` or `#pp4Prompt`, so a probe reading the prompt panel reports an empty screen and
+> says nothing about why — "no buttons, no day, no stage" for twenty-six samples running. A
+> screenshot is what finally showed it. **If a crew rig reports an empty screen, take the picture
+> before theorising.**
+>
+> **Use the helper, do not re-roll it:** `startVoyage(C)` in `scripts/mp_rig.mjs` clicks both buttons
+> and returns only once a seat is genuinely on the stage — so a caller cannot mistake *clicked* for
+> *started*, which is the distinction all four attempts turned on.
+>
+> ```js
+> const code = await makeHost(H, url, "HostCap");
+> await makeGuest(G, url, code, "GuestCap");
+> await startVoyage(H);          // clicks Start AND the confirm, waits for the stage
+> await driver(H, ""); await driver(G, "");
+> ```
+
+
 This is the setup for verifying multiplayer without a second person. The human hosts in one browser;
 this drives the other seat.
 

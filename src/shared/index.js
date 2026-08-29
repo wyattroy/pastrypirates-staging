@@ -38,6 +38,19 @@ const DOCK_IMG=`${ASSET_BASE}dock.png`;
 const WIND_ARROW_IMG=`${ASSET_BASE}wind-arrow.png`;
 const TRADE_SWIRL_IMG=`${ASSET_BASE}trade-swirl.png`;
 const PLAY_IMG=`${ASSET_BASE}icons/play.png`,PAUSE_IMG=`${ASSET_BASE}icons/pause.png`;
+/* W5-1, THE ART HALF: TRIED, AND THE REPO'S MASTERS CANNOT BE USED. Wyatt's ruling was "try repo
+   assets else park". art-review/ holds 2048x2048 masters of all four flip images and the shipped
+   files are 382-512, so on the arithmetic they looked like a straight win. THEY ARE OPAQUE.
+   Sampled in a browser: every corner of every master reads alpha 255 over a near-black ground
+   (rgba 1,5,8,255) while the shipped files read 0,0,0,0. They are the PRE-CUTOUT renders —
+   somebody cut the coin and the plank out by hand to make the art the game ships.
+   Re-exported at 768 they put a hard black square behind the flippenator. Measured AND SEEN: the
+   decode check passed in both Chromium and WebKit at 768x768 and the screenshot showed the black
+   square, which is rule 19's whole point — the numbers were right and the picture was wrong.
+   So the art stays as it is and the question goes to Wyatt (CTO-QUESTIONS Q-19): are there
+   cut-out masters somewhere, or should these be re-cut? scripts/qa/w51_reexport_coin_art.mjs is
+   kept, and now refuses an opaque master rather than shipping one. What DID ship for W5-1 is the
+   other half: the ceremony no longer stretches a small raster, so the same art is drawn sharp. */
 const FLIP_HEADS_IMG=`${ASSET_BASE}icons/flip-heads.png`,FLIP_TAILS_IMG=`${ASSET_BASE}icons/flip-tails.png`;
 const CROWN_IMG=`${ASSET_BASE}icons/crown.png`,CRATE_OVERBOARD_IMG=`${ASSET_BASE}icons/crate-overboard.png`,
   CURRENT_SWIRL_ICON_IMG=`${ASSET_BASE}icons/current-swirl.png`,CUPCAKE_IMG=`${ASSET_BASE}icons/cupcake.png`,

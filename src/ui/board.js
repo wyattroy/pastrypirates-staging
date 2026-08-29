@@ -293,6 +293,14 @@ export function drawBoard(){
     }
     // dock is drawn before the crate icons below so it always sits underneath them — it
     // stretches to the shared edge with the island and would otherwise occlude a crate there
+    /* W5-3 — THE DOCK'S PLACEMENT IS COMPUTED ONCE AND THE FLAG READS IT. Wyatt: "the black market
+       flags are not attached to the docks. For every dock orientation, set the base of the flag on
+       the dock." The flag used to be positioned from the bare dock CELL with a hand-picked vertical
+       fraction, while the dock itself is drawn half a cell TOWARD its island — so the two agreed
+       only when the dock happened to face up, and the flag floated free on the other three
+       orientations. Two placements for one object, kept in step by nothing (rule 23), and the typed
+       fraction was the tell (rule 9). Hoisted here so there is one answer to "where is this dock". */
+    let dockPx=null, dockPy=null;
     if(appState.game.cfg.singleDock){
       const d=appState.game.dockOf[ing];
       const adj=Object.values(DIRS).find(dd=>appState.game.islands[[d[0]+dd[0],d[1]+dd[1]]]===ing);
@@ -301,6 +309,7 @@ export function drawBoard(){
       const{rot:dockRotDeg,flip:dockFlip}=adj?dockOrient(adj):{rot:0,flip:false};
       const px=adj?(d[0]+.5+adj[0]*.5)*cell:(d[0]+.5)*cell;
       const py=adj?(d[1]+.5+adj[1]*.5)*cell:(d[1]+.5)*cell;
+      dockPx=px; dockPy=py;
       iconAt(svg,px,py,cell,DOCK_IMG,dockRotDeg,dockFlip);
     }
     // one big icon per remaining crate, one per island square — a taken crate turns fully
@@ -323,7 +332,17 @@ export function drawBoard(){
       // the two tells can never disagree.
       if(appState.game.cfg.blackMarket&&appState.game.dockOf&&appState.game.dockOf[ing]){
         const fd=appState.game.dockOf[ing];
-        const f=el("text",{x:(fd[0]+.5)*cell,y:(fd[1]+.42)*cell,"text-anchor":"middle",
+        /* W5-3 — ITS BASE STANDS ON THE DOCK, AT EVERY ORIENTATION. `dockPx/dockPy` is the dock's
+           OWN drawn centre, already offset half a cell toward its island, so the flag follows the
+           dock instead of guessing where it is. A <text> baseline is the bottom of the glyph, so
+           putting the baseline at the dock's centre stands the flag ON it rather than floating it
+           above — which is his ask in his words, "set the base of the flag on the dock".
+           The fallback is the bare cell centre, used only where there is no single dock to read
+           (the unlimited-crate lab config), and it is the same .5 centre the whole board uses
+           rather than a fraction picked for this one glyph. */
+        const fx = dockPx!=null ? dockPx : (fd[0]+.5)*cell;
+        const fy = dockPy!=null ? dockPy : (fd[1]+.5)*cell;
+        const f=el("text",{x:fx,y:fy,"text-anchor":"middle",
           "font-size":Math.round(cell*.55)},svg);
         f.textContent="🏴";f.id=`bmflag_${ing}`;f.style.opacity=0;
       }

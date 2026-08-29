@@ -82,7 +82,16 @@ ${prev}
 2. What was delivered that he did NOT ask for, and whether it displaced something he did.
 3. Any claim unsupported by what is in the repo? Cite file:line.
 4. Is the fault from the last verdict fixed, or has it recurred in new clothing?
-5. One sentence Wyatt should read first.
+5. DID THE CTO SPEND ITS OWN HEAD ON READING IT COULD HAVE DELEGATED? Wyatt, 2026-08-28: a session
+   that fills its context with bulk file contents "gets stupid and stale", and by the time it does,
+   it is too late to notice. So check the account of the work for BULK READING DONE IN THE MAIN
+   THREAD — whole files read to find one rule, long trial reports or git archaeology read line by
+   line, tool output dumped rather than filtered — where a subagent could have read it and handed
+   back findings. NAME the specific reads, or say plainly that you found none.
+   THE EXCEPTIONS ARE NOT FAILURES AND MUST NOT BE REPORTED AS ONE: Wyatt's own words and
+   screenshots (rule 22), the rendered game (rule 19), and a file being actively edited all belong
+   in the main thread by design. Delegating THOSE is the worse fault, and if you see it, say so.
+6. One sentence Wyatt should read first.
 
 **RULES:** Plain English — he is a founder and designer, not an engineer; define any professional
 term once in the same sentence. **You may say NO.** A criticism with no file:line citation is an

@@ -268,6 +268,37 @@ re-derive them each time at great time and cost." Every line below was paid for 
 difference is listed here — if you are about to fight one that is not, add it to this section in
 the same session.
 
+> **WHICH environment to pick, and what each costs, is a separate question with its own document:
+> [`CLOUD-VS-LOCAL.md`](CLOUD-VS-LOCAL.md)** — the measured 10-leg comparison, the traps unique to
+> each, and the one thing only a Mac can answer (Safari). This section is the *how*; that one is
+> the *where*.
+
+### IS IT PROVEN? — the honest answer, 2026-08-28
+
+He asked: *"Make sure the full Sea Trial can run in safari and chrome, at the three sizes, whether
+in a cloud container or local… can you confirm this is the case?"*
+
+| | status |
+|---|---|
+| **Chrome, all three sizes, cloud** | ✅ **proven** — build 2026.08.28.4, 10/10 voyages `finished=true` |
+| **Safari (WebKit), all three sizes, cloud** | ✅ **proven, with a caveat that must be read** |
+| **Either engine, local Mac** | ⏳ **not yet run here.** The runbook below is written and a session on his Mac holds `HANDOFF-2026-08-28-LOCAL-TRIAL.md`; until that run reports, the local half is documented, not demonstrated. Do not claim it. |
+
+**THE SAFARI CAVEAT, stated plainly because it is the difference between "works" and "survives":**
+Playwright's Linux WebKit (`WPEWebProcess`) **segfaults mid-voyage in the cloud container** —
+diagnosed by core dump on 2026-08-28: SIGSEGV inside `libWPEWebKit`'s own compositing walk. Not
+load (5/5 isolated runs died), not memory (cgroup `oom_kill` 0), and
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` does not stop it. **No flag of ours reaches it.** So the mount
+does not prevent the crash — it *rides it out*: a persistent context keeps the game's own solo
+save on disk, and on a crash it relaunches, reloads, lets the game's boot-resume replay the
+voyage, and retries the failed call. That run's three WebKit legs took **11, 2 and 1** relaunches
+and all three still finished. **Every recovery is counted and printed (`✱ N WebKit relaunch(es)`)
+in the leg summary — a recovered leg must never read as an untroubled one.**
+
+**Real Safari on real devices shares none of this**, and a local Mac run uses a macOS WebKit
+build: **zero relaunches there confirms the crash is container-only; any relaunch there overturns
+the diagnosis.** That row is the most valuable cell in the cloud-vs-local comparison.
+
 ### The matrix a FULL trial sails (Wyatt's 2026-08-28 ruling)
 
 | | desktop 1890×960 | tablet 768×954 | phone 390×664 |

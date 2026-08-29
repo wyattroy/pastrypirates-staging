@@ -190,7 +190,13 @@ export function toggleMute(){
 // asks the payload one question the picked STRING cannot answer — is this wait line about a
 // question arriving at this browser. Handing the render seam what a guest's watchNarr already
 // hands it is the convergence PAR-14 names; the picked line it draws is unchanged.
-export function netNarrate(html,variants,opts){if(appState.replaying)return;showNarration(pickNarrVariant({html,variants},appState.mySeat),opts,variants);if(appState.isHost&&appState.db&&appState.room)netSetNarr(appState.db,appState.room,html,netFail("narration"),variants,opts&&opts.wait);}
+export function netNarrate(html,variants,opts){if(appState.replaying)return;
+  /* READ THE SUBJECT BEFORE DRAWING, because showNarration CONSUMES it (`S.subject = null` on the
+     way through). Reading it after would always send nothing, and the guest would keep sniffing —
+     which is the fault this line exists to close (W4-2, CEO Review 20). */
+  const subj = (window.__pp4 && window.__pp4.subjectSet) ? window.__pp4.subject : undefined;
+  showNarration(pickNarrVariant({html,variants},appState.mySeat),opts,variants);
+  if(appState.isHost&&appState.db&&appState.room)netSetNarr(appState.db,appState.room,html,netFail("narration"),variants,opts&&opts.wait,subj);}
 // broadcast narration to spectators WITHOUT touching this screen's panel — used during
 // battles so the local scoreboard (coins) stays put while others still get the play-by-play
 export function netBroadcast(html,variants,opts){if(appState.replaying)return;if(appState.isHost&&appState.db&&appState.room)netSetNarr(appState.db,appState.room,html,netFail("narration"),variants,opts&&opts.wait);}
@@ -1738,7 +1744,14 @@ export function watchNarr(){
     // the per-flip "X flips HEADS" broadcasts are already reflected in the scoreboard coins, and
     // letting them overwrite the panel made the battle box flicker away between flips (#9)
     if(v&&!appState.spectatingBattle&&!appState.inBattlePrompt)
-      Promise.resolve(flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined)).catch(()=>{});});
+      {
+        /* THE HOST'S DECISION WINS OVER THE SNIFF. -1 means "the host deliberately gave this line no
+           subject" (a fight, a table-wide report) and must NOT fall through to the colour sniff,
+           which would anchor it to whichever single captain the sentence happens to name. A payload
+           with no `subj` at all is an older host, and keeps the old sniff behaviour. */
+        if(v.subj!=null&&window.__pp4){window.__pp4.subject=(v.subj===-1?null:v.subj);window.__pp4.subjectSet=true;}
+        Promise.resolve(flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined)).catch(()=>{});
+      }});
 }
 
 /* ================= welcome modal ================= */

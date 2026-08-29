@@ -5,7 +5,7 @@ closing a phase, and **surface what it finds in your reply**. This document is t
 warnings actually mean, which ones are permanent noise, and the gap it cannot cover.
 
 ```bash
-node ~/.claude/gsd-core/bin/gsd-tools.cjs validate health --ws <workstream>
+node .claude/gsd-core/bin/gsd-tools.cjs validate health --ws <workstream>
 ```
 
 Drop `--ws <workstream>` for the whole project.
