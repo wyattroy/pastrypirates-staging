@@ -246,7 +246,25 @@ function legVerdict(rec) {
     else if (rescues > budget) v.push(`${rescues} WebKit relaunch(es) over ${rec.days || "?"} day(s) — above the ${budget} this voyage's length allows; that is a crash loop being ridden out, not a voyage`);
   }
   const structFails = rec.screens.flatMap(s => s.fails);
-  if (structFails.length) v.push(`${structFails.length} structural check failure(s)`);
+  /* NAME THEM. A COUNT IS NOT ACTIONABLE, AND THIS ONE HID THE BIGGEST FINDING IN THE FLEET.
+     Every other line in this verdict names its subject — dead controls list their labels,
+     unreachable controls their `what`, unexercised kinds their names — and this one alone said
+     only "2 structural check failure(s)". Rule 24 stands on Wyatt being able to OPEN THE REPORT
+     and see what happened; a bare number sends him to a 5,000-line log or nowhere.
+     WHAT IT COST, 2026-08-29: the FULL trial for build 2026.08.29.2 reported "1" and "2"
+     structural failures per leg. Behind those numbers were 22 failures, 14 of them on
+     crew-phone-guest, and they say `on-screen: clickable off-screen: sailCell` and
+     `sail-clickable: 2 sail square(s) covered ... <- #pp4Cap` — the trial had independently
+     reproduced "sail squares a guest cannot tap", the TOP item on the backlog, and the summary
+     line threw the evidence away. Grouped by RULE rather than listed flat, because one broken
+     screen trips the same rule repeatedly and a flat list would be its own kind of noise. */
+  if (structFails.length) {
+    const byRule = new Map();
+    for (const k of structFails) byRule.set(k.rule, (byRule.get(k.rule) || 0) + 1);
+    const named = [...byRule.entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}×${n}`).join(", ");
+    const first = (structFails[0] && structFails[0].what) ? ` — first: ${String(structFails[0].what).slice(0, 110)}` : "";
+    v.push(`${structFails.length} structural check failure(s): ${named}${first}`);
+  }
   for (const seat of rec.seats || [rec]) {
     const P = seat.player; if (!P) continue;
     if (P.deadButtons.length) v.push(`${P.deadButtons.length} dead control(s): ${P.deadButtons.map(d => d.label).slice(0, 5).join(", ")}`);
