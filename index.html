@@ -2585,13 +2585,19 @@
      tell you so. ========================================================================== */
   #flipCoinWrap.active,
   .ahoyGlow,
-  /* W4-5 — THE SEA HINT PULSES LIKE A BUTTON, from THIS rule and not a copy of it. Wyatt:
-     "give it the same pulse as the buttons — in a way, it is a button, a button that reveals the
-     sea." It measured animation-name:none at all three sizes. Named here rather than given its own
-     @keyframes because rule 8 is that one gesture has one definition; a second copy is how the
-     dock coin's glow and the stage's drifted apart before. It stays pointer-events:none — the
-     gesture is holding the SEA, so this is the attention cue for that, not a new tap target. */
-  .pp4PeekHint span,
+  /* ⚠ THE SEA HINT USED TO BE IN THIS LIST, AND HIS OWN RULING TOOK IT OUT AGAIN — 2026-09-01.
+     W4-5 put it here: "give it the same pulse as the buttons — in a way, it is a button, a button
+     that reveals the sea", after it had measured animation-name:none at all three sizes. That
+     stood until he weighed it against the launch: "just remove the animation from the 'Click and
+     hold the sea' -- it works in chrome but still doesnt' work in safari and it's not worth
+     fixing." Deleted, not disabled — an `animation:none` override here would leave the hint in
+     the list and not pulsing, which CEO Review 18 named as worse than being out of it.
+     THE HINT ITSELF IS UNTOUCHED: same words, same placement search, same pointer-events:none,
+     same yielding to every control. Only the pulse is gone, and only from the hint — every other
+     member of this rule (the stage buttons, the battle buttons, the start buttons, the flip coin)
+     still reads the one shared pp4Glow, so rule 8's "one gesture, one definition" is intact.
+     Guarded by scripts/qa/w45_sea_hint_check.mjs, whose assertion 3 was inverted in the same
+     commit and now fails if the hint ever animates again. */
   #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]),
   #actionPanel .btlBtn:not(:disabled):not([aria-disabled="true"]),
   #btnStart:not(:disabled),

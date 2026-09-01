@@ -96,27 +96,44 @@ const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || [, ""])[1].replace
     fail(`the hint no longer yields (clear-guarded:${loopGuarded} position-writes-in-stage.js:${writesAll} (must be exactly 2, all inside peekHintTick — found ${writesHere} there) hides-as-last-resort:${hides} air-declared:${air}) — pinning it re-opens the five judge findings of 2026-08-21: drawn across "Stay put", across a trade's ✓, and over "Call Flaky Jack"`);
 }
 
-/* (3) IT PULSES LIKE A BUTTON, AND FROM THE ONE VOCABULARY. Rule 8: same gesture, same behaviour,
-   everywhere. A second @keyframes for the same cue is how two gestures drift apart, so the hint must
-   be named in the SAME rule the stage buttons read, not given an animation of its own. */
+/* (3) THE HINT DOES NOT ANIMATE AT ALL — REVERSED 2026-09-01, ON HIS INSTRUCTION.
+   Wyatt, verbatim: "just remove the animation from the \"Click and hold the sea\" -- it works in
+   chrome but still doesnt' work in safari and it's not worth fixing."
+
+   WHAT THIS REPLACES, KEPT SO THE REVERSAL IS NEVER QUIET (CEO Reviews 15 and 18 both caught a
+   silent reversal on THIS element). This assertion used to demand the OPPOSITE: that the hint be
+   named in the shared attention-vocabulary rule beside the stage buttons, because W4-5 was his own
+   ruling — "give it the same pulse as the buttons — in a way, it is a button, a button that reveals
+   the sea" — and it had measured animation-name:none at all three sizes. That ruling stood from
+   2026-08-2x until today.
+
+   WHY IT IS REVERSED AND NOT MERELY DROPPED: the pulse works in Chrome and has never worked in
+   Safari, and he weighed the fix against the launch and chose to delete rather than debug. His
+   words are the whole reason; nothing here inferred it.
+
+   RULE 8 IS NOT VIOLATED BY THIS. The shared vocabulary is untouched — the stage buttons, the
+   battle buttons, the start buttons and the flip coin all still read the one pp4Glow rule. What
+   left is one MEMBER of that list, deliberately, so there is still exactly one definition of the
+   pulse and one thing that no longer wears it. */
 {
   const vocab = css.match(/([^{}]*#flipCoinWrap\.active[^{]*)\{([^}]*animation\s*:\s*pp4Glow[^}]*)\}/);
   if (!vocab) fail("could not find the one attention-vocabulary rule that grants pp4Glow — re-anchor this assertion, do not delete it");
   else if (/pp4PeekHint/.test(vocab[1]))
-    pass("the sea hint is named in the SAME rule the stage buttons read for their pulse — one gesture, not a second copy that can drift");
+    fail("the sea hint is STILL named in the attention-vocabulary rule — his 2026-09-01 instruction was to remove the animation from it entirely (Safari never ran it)");
   else
-    fail("the sea hint is not in the attention-vocabulary rule — Wyatt: \"in a way, it is a button, a button that reveals the sea\", and it measured animation-name:none at all three sizes");
-  /* and it must not have grown a private animation instead */
-  /* BEING NAMED IN THE RULE IS NOT THE SAME AS ANIMATING. A later `animation:none` on the hint
-     would leave assertion 3 green and the pulse gone (CEO Review 18), so both a competing animation
-     AND a cancelling one fail here. */
-  const own = /\.pp4PeekHint[^{}]*\{[^}]*animation\s*:\s*(?!pp4Glow)[a-zA-Z]/.test(css);
-  const cancelled = /\.pp4PeekHint[^{}]*\{[^}]*animation[^:;}]*:\s*none/.test(css);
-  if (own) fail("the sea hint has been given an animation of its own instead of the shared one — that is a second gesture for one cue, and the two will drift (rule 8)");
-  else if (cancelled) fail("the sea hint is named in the vocabulary but a later rule cancels its animation — it is in the list and does not pulse, which is worse than being out of the list");
-  else pass("the hint has no private animation competing with the shared vocabulary, and nothing later cancels it");
+    pass("the sea hint is out of the attention-vocabulary rule — no pulse, per his 2026-09-01 instruction");
+  /* AND IT MUST NOT HAVE GAINED A PRIVATE ONE ON THE WAY OUT. The old assertion's own lesson,
+     inverted with it: being absent from the list is not the same as not animating. */
+  const own = /\.pp4PeekHint[^{}]*\{[^}]*animation\s*:\s*(?!none)[a-zA-Z]/.test(css);
+  /* ⚠ THE MESSAGE, CORRECTED BY CEO REVIEW 71: this regex spans the whole SELECTOR LIST, so it
+     also fires when the hint is back in the SHARED rule — which is exactly what happened when the
+     gate was red-proofed against the pre-change tree. The check is correct and strictly stronger
+     than "a private animation"; only the old sentence misdirected, by naming a cause it cannot
+     distinguish. It now says what it actually knows. */
+  if (own) fail("the sea hint is carrying an animation — shared rule or its own, this check cannot tell which, and he asked for NO animation on it (2026-09-01)");
+  else pass("the hint carries no animation of its own either — it is genuinely still");
 }
 
 console.log(fails ? `\nFAILED — ${fails} assertion(s)`
-  : "\nPASSED — the hint tries the card-adjacent spot first, still yields to every control with air, and pulses from the one shared vocabulary");
+  : "\nPASSED — the hint tries the card-adjacent spot first, still yields to every control with air, and carries NO pulse (his 2026-09-01 reversal of W4-5)");
 process.exit(fails ? 1 : 0);
