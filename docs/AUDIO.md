@@ -18,10 +18,29 @@ currently doing wrong, and what is meant to fill it.**
 
 ---
 
-## 1. Three defects that are live right now
+## 1. Three defects — TWO OF THEM WERE FIXED AT THE CUTOVER. This section was stale for weeks.
 
-**Fix these before buying or wiring a single new sound.** None needs a new asset. Two of them make
-the game actively worse than silence.
+> **⚠ CORRECTED 2026-08-31, and the correction matters more than the defects did.**
+> DEFECT-1 and DEFECT-2 were fixed by commit `fb74eedc` (the cutover). This page went on saying
+> they were "live right now" — and on 2026-08-31 a session read that heading, believed it, and told
+> Wyatt an eight-second storm was blasting at players. **It was not.** A doc that says LIVE is a
+> claim about runtime, and rule 6 applies to a document exactly as it applies to a comment: it is
+> intent by somebody who has since left the room. **Measure before repeating it.** Verified by
+> running the map: `soundForEvent({t:"anchorHold"})` returns `{name:"fishing", bus:"master"}`.
+>
+> **DEFECT-3 (the stems were never levelled) is UNVERIFIED either way** and stays below as written.
+>
+> **What was genuinely still open, and is now closed:** nothing guarded the fix. This page said at
+> the time *"worth adding both assertions with the fix, red first"* and nobody did.
+> `scripts/audio_mapping_test.js` now asserts `anchorHold` plays `fishing`, that `fishing` is
+> reachable at all, and — reading the SOURCE, because a finished object cannot show it — that
+> `EVENT_SOUND` declares no key twice.
+>
+> **And the suite that would have caught it has been DEAD SINCE 2026-08-28.** It imported
+> `SHOTCLOCK_SOUND_PLACEHOLDER`, which left with the shot clock, so the whole file crashed on load
+> — unnoticed because it lives in `test:v1`, parked by the cutover. **Every audio assertion in this
+> project has been unrun for weeks while `npm test` reported green about other things.** Repaired;
+> it runs again, and it immediately reported three real failures (below).
 
 ### DEFECT-1 — `fishing.mp3` can never play. One of six sounds is dead.
 
@@ -36,13 +55,20 @@ disagree.** Every game downloads and decodes a 55 KB file that nothing can trigg
 
 Introduced in `0d3a71c` (the v2 ruleset), copied verbatim into `/3` and `/4`.
 
-**Fix: delete the second `anchorHold` line.** That is the whole change.
+~~**Fix: delete the second `anchorHold` line.** That is the whole change.~~
+**ALREADY DONE — see the correction box above.** There is no second line; `src/ui/audio.js:105` is
+the only `anchorHold` key left in the object literal. Left struck through rather than deleted,
+because this exact sentence read further down than the correction box is what put "delete the
+`anchorHold` line" back on the Helm as a live question on 2026-08-31 and got it ruled on a second
+time — the box at the top of this section was read; this one was not.
 
-**And `npm test` passes.** `scripts/audio_mapping_test.js` is a real, thorough suite — it asserts
+~~**And `npm test` passes.** `scripts/audio_mapping_test.js` is a real, thorough suite — it asserts
 the storm-cue pairing, the placeholders, the bus volumes — but it **never mentions `anchorHold` or
 `fishing` at all**, and nothing anywhere checks the literal for duplicate keys. So the green tick
 is not evidence: this check cannot fail on this defect. Worth adding both assertions with the fix,
-red first.
+red first.~~
+**DONE.** `scripts/audio_mapping_test.js` now asserts `anchorHold` plays `fishing`, that `fishing`
+is reachable at all, and that `EVENT_SOUND` declares no key twice — all four PASS.
 
 ### DEFECT-2 — Anchoring in a storm dumps 8 seconds of weather at full volume, once per ship
 
@@ -56,7 +82,27 @@ It fires once per ship: `noteStormOutcome()` is called per player. Three captain
 storm stacks three 8-second storms, on top of the storm cue that already played — and `fadeStorm()`
 cannot retire any of them, because `stormNode` is only set on the `newround` path.
 
-**Fix: the same single line.** This defect exists only because of DEFECT-1.
+~~**Fix: the same single line.**~~ **ALREADY FIXED, same commit as DEFECT-1** (`fb74eedc`) —
+this defect existed only because of DEFECT-1. `noteStormOutcome()` now plays `fishing`, not
+`storm`, so nothing lands on the master bus at full volume any more.
+
+### THREE ASSERTIONS THAT FAIL THE MOMENT THE SUITE RUNS AGAIN (2026-08-31, undiagnosed)
+
+Repairing the crash made these visible for the first time since the cutover. **They are recorded,
+not fixed, and NOT put into `npm test` while red — a red gate in the chain is a broken build, and
+quietly editing the numbers to make them pass is the thing the numbers exist to prevent.**
+
+```
+EVENT_NARRATION has exactly 25 keys (the shared inventory size)   got=9  want=25
+EVENT_SOUND has exactly 25 keys (matches EVENT_NARRATION)         got=33 want=25
+EVENT_SOUND invents no key of its own (every key also in EVENT_NARRATION)   got=false
+```
+
+Two readings, and nobody has separated them: either the sound map has drifted away from the
+narration map and some sounds are now unreachable — the same shape as DEFECT-1 — or the coupling
+was abandoned deliberately when v2 rewrote the event set, and these are **hand-typed counts that
+the game outgrew** (CLAUDE.md §5: *never hand-type a number that can be counted*). The 9-versus-25
+gap on the narration side suggests the second, but suggests is not measured.
 
 ### DEFECT-3 — The six stems were never levelled against each other
 

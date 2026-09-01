@@ -18,7 +18,7 @@
 import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { REPO, CHROME, LINUX_ARGS, gameURL } from "./lib/chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 // D-42: the phone size is 390x664 — the viewport a real iPhone-class Safari/Chrome gives the page
@@ -42,7 +42,7 @@ const T0 = Date.now();
 const log = (...a) => { const s = `[${((Date.now() - T0) / 1000).toFixed(0).padStart(4)}s] ` + a.join(" "); console.log(s); fs.appendFileSync(path.join(OUT, "log.txt"), s + "\n"); };
 
 // --- one server for the whole run, a fresh port (module cache is per URL — DRIVING-THE-GAME.md §1)
-const srv = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" });
+const srv = spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" });
 const own = { dbg: [] };
 const killAll = () => {
   try { srv.kill("SIGKILL"); } catch {}

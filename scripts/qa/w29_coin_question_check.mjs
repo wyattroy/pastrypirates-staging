@@ -17,7 +17,13 @@ const s=fs.readFileSync(SRC,"utf8");
    breaks whenever an unrelated argument is APPENDED is watching the shape of the line rather than
    the thing it cares about, which is the LABEL CLOSURE. So it now anchors on what it is actually
    about and lets the argument list grow. */
-const m=s.match(/const n=await coinSlider\(p\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,"Offer it!"[^;]*\);/);
+/* THE SEAT COMES FROM WHATEVER THE FUNCTION CALLS ITS PLAYER — `\w+\.idx`, not `p.idx`.
+   This was pinned to the literal name `p` and went red on 2026-08-31 when that parameter was
+   renamed to `player` at Wyatt's request ("why are both players and prompts called p? it's
+   unnecessarily lazy code"). Nothing about the coin question changed. A gate that depends on a
+   LOCAL VARIABLE'S NAME is asserting about spelling rather than behaviour, and it blocks exactly
+   the readability work it should be indifferent to. */
+const m=s.match(/const n=await coinSlider\(\w+\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,"Offer it!"[^;]*\);/);
 let fails=0; const ok=m=>console.log("  PASS  "+m); const bad=m=>{fails++;console.log("  FAIL  "+m);};
 if(!m){ bad("could not find the coinSlider label in buildOffer — check is pointed at the wrong place"); }
 else{

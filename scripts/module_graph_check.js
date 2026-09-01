@@ -101,7 +101,14 @@ function tierOf(file) {
 // Matches against the WHOLE file content, not line-by-line — src/net/index.js wraps a single
 // import statement's name list across multiple physical lines, and a per-line regex would
 // silently miss those specifiers.
-const IMPORT_RE = /(?:from\s+|import\()\s*["']([^"']+)["']/g;
+/* THE THIRD SPELLING, added 2026-08-31 after red-proofing found it. `import "./x.js";` — a bare
+   side-effect import with no binding — was INVISIBLE here, so it bypassed every tier rule silently:
+   src/shared/ could import src/ui/, src/engine/ could import src/ui/, and this gate stayed green.
+   Found by planting each of the four-layer plan's three layering violations and watching NONE of
+   them fail; the plant used the bare spelling, and the gate could not see it. Nothing in src/ uses
+   that spelling today, which is exactly why it was worth closing now rather than after something
+   did. `import\s+["']` cannot swallow `import {a} from "b"` — the brace blocks it. */
+const IMPORT_RE = /(?:from\s+|import\(|import\s+)\s*["']([^"']+)["']/g;
 
 function importsOf(file) {
   const content = fs.readFileSync(file, "utf8");

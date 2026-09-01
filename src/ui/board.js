@@ -12,6 +12,45 @@
 // anything inside them; a structural regression here is the milestone's known Safari risk
 // (11-CONTEXT.md D-12, re-verified live on Safari in 11-08).
 //
+// SCOPED EXCEPTION — ONE DIRECTOR STEP 1 (Wyatt-approved 2026-08-31). Recorded HERE, in the header
+// a reader checks first, because a checker's verdict was that without it the next reader is
+// entitled to revert this in good faith — and would be right to. His words, granting it:
+// "i approve you changing board.js and anything else you need to change to execute our 4-layer plan".
+// THAT APPROVAL IS SCOPED TO THE FOUR-LAYER PLAN, not to this region generally. A change in here
+// that is not part of that plan still needs its own ruling.
+// WHAT CHANGED: render()'s backward walk for "whose turn is it", and activeTurnSeat()'s, now call
+// deriveActiveSeat() in src/shared/storyboard.js instead of each keeping a private copy.
+// AND, LATER THE SAME DAY: render() previously derived the seat once and passed NO list, silently
+// taking a default while the other ring site passed the narrow one — so the two disagreed. Wyatt
+// then ruled "rings follow active player the whole game with no exception including during
+// bakeoff", which collapsed the two lists into one and let the option be DELETED. render() derives
+// once again, from the one rule, and the ring, the captains box and the pass-and-play row order
+// all read it. Nothing else in either body moved.
+// (This paragraph said "nothing else in either body moved" while render()'s body had moved a second
+// time — caught by CEO review 40. The header is what the unruled-exception gate blesses, so a
+// header that is behind its own region is the one comment in this file that must never be stale.) The same fact was being derived FIVE times in three files; it is now
+// derived once, and the shared module is a leaf tier that scripts/module_graph_check.js forbids
+// from importing src/ui/ or src/state/ at all.
+// WHY THAT IS SAFE, in BUG-01's own terms — the same test the two exceptions below apply. BUG-01
+// was a LIVE CSS GRADIENT plus a MASK composited every frame, and a narration height animating on
+// every typewriter tick. This edit replaces a `for` loop over a JavaScript array with a function
+// call returning the same value: no gradient, no mask, no layer, no animation, no per-frame work,
+// no DOM. LAYERS is still 4.
+// AND IT WAS NOT LEFT AT REASONING. Verified on WebKit 26.5 at 1280x800 and 390x664 with storms
+// forced every 1.5s: the full four-layer storm stack mounted on both, the shared walk agreed with
+// live appState.curSeat 110/110 and 97/97, and there were ZERO pageerrors, console errors, crashes
+// or disconnects. A screenshot shows the active ripple ring on the correct ship mid-storm — the
+// exact thing this walk drives. Limit, stated: neither run passed Day 1, so a long voyage, a live
+// ovens/bake and a newround boundary were NOT exercised in a browser; those are covered instead by
+// a 20,000-stream differential against the old walks (0 mismatches for every consumer).
+// ONE HONEST DIFFERENCE, since "byte-for-byte" would be unearned: where an establishing event
+// carries p === undefined the old walks returned undefined and this returns null. No consumer can
+// tell — every reader uses `!= null` or compares against an integer — but the type moved, and that
+// is worth a reader knowing.
+// AND A PRECEDENT NOT TO FOLLOW: render()'s ovens/bake widening is a deliberate change to this body
+// that was never recorded in this header either. That is a second unrecorded deviation, not a
+// licence for a third.
+//
 // SCOPED EXCEPTION TO THE ABOVE — G19 (Wyatt-approved 2026-07-30), recorded here so the next reader
 // is not entitled to revert it. buildStormLayers() WAS changed, deliberately and narrowly, in two
 // ways: (a) its RNG source swapped from unseeded Math.random() to a private mulberry32 seeded from
@@ -114,6 +153,8 @@ import {
   // that used them rather than being left behind as plausible-looking dependencies.
   assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx,
 } from "./util.js";
+import { deriveActiveSeat } from "../shared/storyboard.js";
+import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
 import { playFlip } from "./audio.js";
 
@@ -501,7 +542,7 @@ export function drawBoard(){
   }
   // ships
   shipEls=[];
-  appState.game.players.forEach((p,i)=>{
+  appState.game.players.forEach((player,i)=>{
     // DERIVED from SHIP_GLIDE_MS, not written as a literal `.35s`. util.js's constant carried the
     // comment "must match drawBoard()'s ship `transition: transform .35s`" — two numbers kept in
     // step by hand, in different files, one of them the pacing basis for every per-square animation
@@ -516,8 +557,8 @@ export function drawBoard(){
     shipEls.push(g);
   });
   // seat the ships on their Isle of Tortuga docks right away, before the first event renders
-  appState.game.players.forEach((p,i)=>{
-    const [x,y]=shipXY(p.pos,i,appState.game.players,cell);
+  appState.game.players.forEach((player,i)=>{
+    const [x,y]=shipXY(player.pos,i,appState.game.players,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
   });
 }
@@ -1422,8 +1463,8 @@ export function renderLiveShips(){
   if(appState.replaying)return;      // reload-replay rebuilds state silently — same guard liveRender() uses
   if(!shipEls.length)return;         // board not built yet
   const live=appState.game.players;  // shipXY() only reads .pos off each entry
-  live.forEach((p,i)=>{
-    const [x,y]=shipXY(p.pos,i,live,cell);
+  live.forEach((player,i)=>{
+    const [x,y]=shipXY(player.pos,i,live,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
     // A CAPTAIN AT THE OVENS FADES OUT (Wyatt, 2026-08-08: "in a past version, the boat faded
     // semitransparent when docked. I removed that feature in v2, but now i want it back because we
@@ -1432,11 +1473,14 @@ export function renderLiveShips(){
     // free — so the boat being half-there is the honest picture of the rule. Anything still solid
     // on this board can be interacted with; anything faded cannot.
     // opacity only (PERF-01), and written unconditionally because it is one property on four nodes.
-    shipEls[i].style.opacity=p.baking?0.42:1;
+    shipEls[i].style.opacity=player.baking?0.42:1;
     if(chatBubbles[i])positionChatBubble(i,x,y); // keep an active chat bubble riding along with its boat
   });
   // the active-turn ripple has to travel with the ship it's ringing, or it's left behind mid-push.
   // G14: the whose-turn-is-it scan now lives in activeTurnSeat() below, shared with paintShipAt().
+  // CORRECTED 2026-08-31: the two copies are NOT identical and have not been since ovens/bake was
+  // added to render()'s alone. Both now call one walk (shared/storyboard.js); they differ only in
+  // the event list each passes, which is stated at each call site instead of hidden in a loop body.
   // It was previously duplicated inline here because this file's header forbids touching render()'s
   // body ("moved BYTE-IDENTICAL... do not refactor... anything inside them" — the v1.0 BUG-01
   // Safari storm-crash fix). render() KEEPS its own copy and is still NOT touched; extracting the
@@ -1491,13 +1535,14 @@ function ringTo(seat,x,y){
 // `turn` (stopping at a round boundary). Extracted from renderLiveShips so paintShipAt can ring the
 // right ship too. render() has an identical inline copy which is deliberately LEFT ALONE — see the
 // file header's BYTE-IDENTICAL rule.
+/* ONE WALK (2026-08-31). This was the FOURTH private copy of the backward scan, found by the
+   sweep. It now shares the walk in src/shared/storyboard.js, which has one rule and no options
+   what it was — this scan has never known about ovens/bake, unlike render()'s — and the split is
+   now VISIBLE at this one line instead of being a silent difference between two lookalike loops. */
 function activeTurnSeat(){
-  for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
-    const t=appState.game.events[i].t;
-    if(t==="turn")return appState.game.events[i].p;
-    if(t==="newround")break;
-  }
-  return null;
+  // TURN_ESTABLISHING, moved here with render()'s copy on 2026-08-31 — "rings follow active player
+  // the whole game with no exception including during bakeoff". The gate keeps these two in step.
+  return deriveActiveSeat(appState.game.events,appState.evIdx);
 }
 // G14 (Wyatt-approved 2026-07-30): move ONE ship element to an arbitrary cell, without touching game
 // state or the event stream. The per-square painter behind the trade-wind rim sweep.
@@ -1630,10 +1675,10 @@ export function render(){
   const st=e.state;
   // recipes are secret: only the local human's own recipe target is revealed.
   // in a spectator-only game (no human seat, e.g. a bot-vs-bot design test) everything stays visible.
-  const humanIdxs=appState.game.players.map((p,i)=>p.strategy==="human"?i:-1).filter(i=>i>=0);
+  const humanIdxs=appState.game.players.map((player,i)=>player.strategy==="human"?i:-1).filter(i=>i>=0);
   const youIdx=humanIdxs.length===1?humanIdxs[0]:-1;
   const spectator=humanIdxs.length===0;
-  appState.game.players.forEach((p,i)=>{
+  appState.game.players.forEach((player,i)=>{
     const [x,y]=shipXY(st[i].pos,i,st,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
     // v2.1 (Wyatt, 2026-08-06): "they don't need to fade out visually when they dock at Tortuga —
@@ -1668,8 +1713,13 @@ export function render(){
     // pass & play: your own recipe never auto-reveals — it only shows once you've tapped
     // "check my recipe" during your own live turn (see humanTurn/passGate), so a device
     // changing hands mid-battle or mid-trade can never carry someone else's recipe on screen.
-    const canReveal=spectator||(i===appState.mySeat&&(!appState.passAndPlay||appState.recipeRevealed));
-    const offerCheckBtn=appState.passAndPlay&&i===appState.mySeat&&i===appState.activeTurnSeat&&!appState.recipeRevealed;
+    /* THE RULE LIVES IN src/shared/visibility.js — pure, gated, and knowing no mode's name. These
+       two lines used to spell out `appState.passAndPlay` inline, which made a GAME RULE (your own
+       recipe is yours, everyone else's is private) look like a pass-and-play feature. It is not:
+       on separate devices the hardware enforces it for free, on one shared screen the same rule
+       needs a tap. Step 5's narrow half, at Wyatt's choosing, 2026-08-31. */
+    const canReveal=mayRevealRecipe({isMySeat:i===appState.mySeat,spectator,sharedDevice:appState.passAndPlay,askedThisTurn:appState.recipeRevealed});
+    const offerCheckBtn=offersRecipeCheck({isMySeat:i===appState.mySeat,isActiveSeat:i===appState.activeTurnSeat,sharedDevice:appState.passAndPlay,askedThisTurn:appState.recipeRevealed});
     if(canReveal){
       $("prowRecipe"+i).innerHTML=`${iconImg(SCROLL_IMG)} ${recipeTitle(appState.game.players[i].recipe)}`;
       $("prowRecipe"+i).classList.add("hasRecipe");
@@ -1735,12 +1785,38 @@ export function render(){
      the box must follow the narration playhead rather than run ahead of it (see applyCaptainOrder
      below). That is a design call, not a patch, so it waits for Wyatt rather than being guessed at
      while he sleeps. Do not "fix" this by reading curSeat here as well — that makes three. */
-  let active=null;
-  for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
-    const t=appState.game.events[i].t;
-    if(t==="turn"||t==="ovens"||t==="bake"){active=appState.game.events[i].p;break;}
-    if(t==="newround")break;
-  }
+  /* ONE DERIVATION (2026-08-31). This walk used to live here, private, as the THIRD independent
+     answer to "whose turn is it". It has moved to src/shared/storyboard.js — the pure leaf tier,
+     where module_graph_check GATES its purity rather than trusting it. The list of events that
+     establish a turn, the round boundary that stops the walk, and the 80-event bound are all
+     unchanged; they now have one spelling instead of a copy per reader. The `done` filter below
+     stays here, because it reads render state and the derivation must not. */
+  /* ONE ANSWER FOR EVERY SURFACE — Wyatt, 2026-08-31, and this ruling REPLACED two earlier ones
+     the same day: "rings follow active player the whole game with no exception including during
+     bakeoff. Consistency is a design value."
+
+     So the ring, the captains-box highlight and the pass-and-play row order all read THIS value,
+     derived once from TURN_ESTABLISHING — the list that counts `ovens` and `bake`, because during
+     a bake the captain at the ovens IS the active player. renderLiveShips()'s ring reads the same
+     list through activeTurnSeat().
+
+     THE HISTORY, because two reversals in one day is exactly what a later reader will mistake for
+     drift. Earlier today he ruled "no ripple ring in the ovens", which was applied to the ring and
+     then — after CEO review 40 caught it — scoped so the box kept the wider list, because
+     `ovens`/`bake` were added to that list FOR the box (T-09, 2026-08-26: "Dough hook, who just
+     played, is still displayed as the active player ship in the top header, AND IN THE CAPTAIN'S
+     BOX"). Shown the split, he closed it the other way: one rule, every surface. That is the
+     ruling that stands, and it also settles T-09 in the same breath.
+
+     WHAT WAS ACTUALLY BROKEN, and it survives every version of the ruling: this line used to pass
+     NO list, and an omitted option is not "no answer" — it is the DEFAULT answer, while the other
+     ring site passed the narrow one. The two derivations therefore disagreed (measured 2026-08-31:
+     on [newround, turn p1, sail p1, ovens p3, bake p3] they returned seat 1 and seat 3). The
+     option is now gone entirely — one rule, nothing to pass, nothing to forget.
+     scripts/qa/ripple_one_answer_check.mjs fails the build if any surface comes apart from the
+     others — it asserts AGREEMENT first and the current ruling second, which is what let this
+     reversal be a one-line change instead of an argument. */
+  let active=deriveActiveSeat(appState.game.events,appState.evIdx);
   if(active!=null&&st[active].done)active=null;
   if(activeRing){
     if(active!=null){
@@ -1750,13 +1826,14 @@ export function render(){
       activeRing.style.opacity=1;
     }else activeRing.style.opacity=0;
   }
-  appState.game.players.forEach((p,i)=>{
+  appState.game.players.forEach((player,i)=>{
     const row=$("prow"+i);if(row)row.classList.toggle("activeTurn",i===active);
   });
   // Pass & Play only: float the captain whose turn it is to the top of the box, rest in sailing
-  // order. Driven from `active` above (the same derivation the ring and the highlight use) so the
-  // box moves in step with the narration playhead, not ahead of it. See applyCaptainOrder.
-  applyCaptainOrder(active);
+  // order. Driven from the SAME `active` as the ring and the highlight, so no two of the three can
+  // ever point at different captains, and in step with the narration playhead rather than ahead of
+  // it. See applyCaptainOrder, and the one-answer note above.
+  applyCaptainOrder(active);   // the SAME value as the ring and the highlight — see the note above
   if(appState.game.cfg.crates<1e9)for(const ing of appState.game.ings){
     const remaining=e.tokens[ing];
     for(let idx=0;idx<appState.game.cfg.crates;idx++){
@@ -2005,7 +2082,7 @@ export function showStats(){
   const victoryLine=!winRecipe?"":`<div class="victoryText">${pn(w)} baked ${(a=>a?a+" ":"")(recipeArticle(winRecipe))}${winRecipeSpan(w)} and won <b>Best Baker in the Caribbean!</b></div>`;
   const wi=winRecipe?recipeInfo(winRecipe):null;
   const victoryPic=wi&&wi.img?`<img class="victoryRecipe" src="${wi.img}" alt="">`:""; // art, not copy
-  const luck=appState.game.players.map(p=>p.flips?(p.heads/p.flips):0);
+  const luck=appState.game.players.map(player=>player.flips?(player.heads/player.flips):0);
   // notes/edits EOV-04: one keepsake per captain (see assignBadges) — emblem, pirate name + byline,
   // the captain (big, colored, no seat dot) filling the card above a rule, and the stat beneath it.
   const badges=assignBadges();
@@ -2033,14 +2110,14 @@ export function showStats(){
 
      This is a NEW quantity. `finishOrder` is untouched and still means what it always meant — it
      orders the finishers and other code depends on that. Do not repoint it at this. */
-  const bakersHome = appState.game.players.filter(p => p.baking || p.done).length;
+  const bakersHome = appState.game.players.filter(player => player.baking || player.done).length;
   // @copy misc.board.statsheadings
   const statsTable=`<table>
     <tr><td>Days</td><td>${appState.game.round}</td></tr>
     <tr><td>Battles</td><td>${appState.game.battles} (attacker won ${appState.game.battles?Math.round(100*appState.game.attWins/appState.game.battles):0}%)</td></tr>
     <tr><td>Trades</td><td>${appState.game.trades}</td></tr>
     <tr><td>Bakeries</td><td>${bakersHome===0?"no bakers home":bakersHome===1?"1 baker home":bakersHome+" bakers home"}</td></tr>
-    ${appState.game.players.map((p,i)=>`<tr><td style="color:${HEXCOL[i]}">${pname(i)} heads-luck</td><td>${p.flips?Math.round(100*luck[i]):0}% of ${p.flips} flips</td></tr>`).join("")}
+    ${appState.game.players.map((player,i)=>`<tr><td style="color:${HEXCOL[i]}">${pname(i)} heads-luck</td><td>${player.flips?Math.round(100*luck[i]):0}% of ${player.flips} flips</td></tr>`).join("")}
     </table>`;
   $("statsPanel").innerHTML=`<div class="winner-banner">${banner}${victoryPic}${victoryLine}</div>
     <div class="awardsRow">${awards}</div>

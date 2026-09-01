@@ -27,7 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
-import { REPO, CHROME, LINUX_ARGS, gameURL } from "./lib/chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
 // screenshots: $MP_RIG_SHOTS, else ./mp-rig-shots under the caller's cwd (was a dead scratchpad path)
 export const SHOTS = process.env.MP_RIG_SHOTS || path.join(process.cwd(), "mp-rig-shots");
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -38,7 +38,7 @@ const procs = [];
 const ports = { dbg: [], http: [] };   // so killAll() can scope its pkill to THIS rig's processes only
 
 export function serve(port) {
-  const p = spawn("python3", ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
+  const p = spawn(PYTHON, ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
   procs.push(p); ports.http.push(port);
   return gameURL(port);
 }

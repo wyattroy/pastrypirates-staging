@@ -45,6 +45,7 @@
 import { appState } from "../state/index.js";
 import { pingStart } from "./usage.js";
 import { roundCfg } from "../engine/index.js";
+import { present } from "../shared/storyboard.js";   // L3: the storyboard this file performs
 import {
   // F5 (2026-07-29): dockFlavor -> dockFlavorIcon. The tails buy prompt (:below) was this file's
   // only dockFlavor consumer, and it now needs the icon placed by the declared {prefix,name} split
@@ -58,7 +59,7 @@ import {
   liveRender, panel, setNeedsAction, narrateLastEvent, flash, showNarration,
 } from "./panel.js";
 import {
-  pn, poss, apBtnStyle, optionButtonsHTML, backButtonHTML, sliderWrapHTML, wireSlider, ask, stepDelay, botBeat, setActor, applyActiveSeat, seatLocal,
+  pn, poss, apBtnStyle, optionButtonsHTML, backButtonHTML, sliderWrapHTML, wireSlider, ask, stepDelay, botBeat, applyActiveSeat, seatLocal,
   decisionIsLocal, sleepMs, seatStrat, saveSoloState,
   getSeaBase, advanceSeaCursor,
   replayShortfall, STORM_STEP_MS, describeFor, narrationVariants, isLocalTo, NEUTRAL_VIEWER,
@@ -269,8 +270,8 @@ export function localAsk(msg,opts,colors,sub,extra){
   // ONE renderer, nothing else. The drawing all lives in renderAskPrompt above.
   return new Promise(res=>{renderAskPrompt({msg,opts,colors,sub,slider:extra&&extra.slider},res);});
 }
-export async function humanFlip(p,label,allowBack,sub){
-  setActor(p.idx);
+export async function humanFlip(player,label,allowBack,sub){
+  applyActiveSeat(player.idx);
   const opts=[{label:"🌕 FLIP!",value:1,flip:true}];
   if(allowBack)opts.push({label:"← Back",back:true,value:"back"});
   // `sub` is the italic helper line beneath the buttons — used by the dock flip to explain what
@@ -288,12 +289,12 @@ export async function humanFlip(p,label,allowBack,sub){
      the coin is on screen for FLIP_SPIN_MS however slow the chain was. Through this file's own
      `sleep`, so fast-forward, pause and reload-replay behave exactly as before. */
   await sleep(flipSpinLeftMs());
-  const h=appState.game.flip(p);
+  const h=appState.game.flip(player);
   netHandlers().onBroadcastFlip(h?"H":"T");
   // same fixed-3000ms leftover as narrateLastEvent() had — flash() scales the hold to this
   // (short) message's own length instead of a flat timer unrelated to how long it takes to read
   // @copy adhoc.flip.announce
-  await flash(`${pn(p.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`,undefined,undefined,[{seat:p.idx,html:`${pn(p.idx)} — ye flip ${h?"⚪ HEADS!":"⚫ TAILS"}`}]);
+  await flash(`${pn(player.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`,undefined,undefined,[{seat:player.idx,html:`${pn(player.idx)} — ye flip ${h?"⚪ HEADS!":"⚫ TAILS"}`}]);
   netHandlers().onBroadcastFlip("wait");
   return h;
 }
@@ -302,13 +303,13 @@ export async function humanFlip(p,label,allowBack,sub){
 // exist to prevent. Coins now enter play only at a dock (rule 10) and by calling a battle
 // correctly (rule 5). The sugarfish/candycrab art and the "fishing" sfx stay on disk in the
 // shared assets/ and sfx/ at the repo root — the classic game at /classic reaches them as ../assets and ../sfx.
-export function reachable(p){
+export function reachable(player){
   // v2 rule 1, and the ONE place the human's highlighted squares are computed. The rule itself
   // lives in the engine (Game.sailStates) so the board a player is shown can never disagree with
   // where a bot is allowed to sail — humans and bots read the same function. A human may
   // deliberately ride the trade winds, so the rim stays a legal destination here (throughRim);
   // bots stay out of the channel except via rimEscape().
-  return [...appState.game.sailStates(p,{throughRim:true}).keys()].map(k=>k.split(",").map(Number));
+  return [...appState.game.sailStates(player,{throughRim:true}).keys()].map(k=>k.split(",").map(Number));
 }
 // D-25/D-35 (Wyatt-approved 2026-07-29): the one sail-prompt message, shared by BOTH transports —
 // composed once in pickCell() and rendered by the ONE converged renderer, renderPickPrompt()
@@ -331,17 +332,17 @@ export function reachable(p){
 
    Costs a few hundred node visits per prompt, i.e. nothing. If it ever fires, the message names the
    wind, the position and the offending squares — so the screenshot IS the bug report. */
-export function sailSelfCheck(p,cells){
+export function sailSelfCheck(player,cells){
   const g=appState.game,wind=g.windNow;
-  if(!wind||!p||!p.pos)return null;
+  if(!wind||!player||!player.pos)return null;
   const passable=o=>!g.blocked(o)&&!g.isIsland(o)&&!g.isHome(o);
   // A BAKING captain is off the board (Game.inPlay: !done && !baking) — no storm moves them and
   // their square is a legal landing. This check predated the bake-off and still counted them as
   // occupying, so on a bake day it flagged the (correct) squares beside Tortuga as illegal —
   // Wyatt's DAY-15 screenshot, wind N at 10,9, cells 8,7/7,8: both held baking captains. The
   // engine was right; the check was stale.
-  const occupied=o=>g.players.some(q=>q!==p&&!q.done&&!q.baking&&q.pos[0]===o[0]&&q.pos[1]===o[1]);
-  const origin=p.pos.join(",");
+  const occupied=o=>g.players.some(q=>q!==player&&!q.done&&!q.baking&&q.pos[0]===o[0]&&q.pos[1]===o[1]);
+  const origin=player.pos.join(",");
   const legal=new Map();
   const walk=(cell,len,usedUp,hitRim)=>{
     if(len>0){
@@ -357,7 +358,7 @@ export function sailSelfCheck(p,cells){
       walk(o,len+1,u,g.onRim(o));
     }
   };
-  walk([p.pos[0],p.pos[1]],0,false,false);
+  walk([player.pos[0],player.pos[1]],0,false,false);
   const bad=(cells||[]).filter(c=>!legal.has(c[0]+","+c[1]));
   const ev=g.events[appState.evIdx];
   const dialWind=(ev&&ev.wind)||wind;
@@ -365,8 +366,8 @@ export function sailSelfCheck(p,cells){
   if(bad.length)problems.push(`illegal: ${bad.map(c=>c.join(",")).join(" ")}`);
   if(dialWind!==wind)problems.push(`compass shows ${dialWind}, movement uses ${wind}`);
   if(!problems.length)return null;
-  console.error("[sail self-check]",{wind,dialWind,pos:p.pos,bad,cells});
-  return `⚠️ SAIL BUG — screenshot this: wind ${wind} at ${p.pos.join(",")} · ${problems.join(" · ")}`;
+  console.error("[sail self-check]",{wind,dialWind,pos:player.pos,bad,cells});
+  return `⚠️ SAIL BUG — screenshot this: wind ${wind} at ${player.pos.join(",")} · ${problems.join(" · ")}`;
 }
 /* W2-8 (Wyatt, 2026-08-27): "'Tap to sail' -> 'Tap square again to sail trade winds'". A blue
    square is the ONE square in the set that does not commit on the first tap — sweepGuard()
@@ -505,7 +506,7 @@ const SAIL_HL_SCALE=0.9;
 
      "<crate> lies N squares off — no square ye can reach this day sits on that dock."
         -> "the helper text is stupid and unhelpful: 'fresh milk lies 0 squares off' makes no
-           sense." It is worse than unhelpful, it is WRONG: `man(p.pos, dock)` is the distance to
+           sense." It is worse than unhelpful, it is WRONG: `man(player.pos, dock)` is the distance to
            the DOCK SQUARE, and a captain moored on that very square measures 0 while being told
            nothing he can reach sits on it.
 
@@ -603,9 +604,21 @@ export function renderPickPrompt(spec,answer){
   // unchanged.
   panel(sailPanelHTML(spec.msg||sailPickMsg(appState.mySeat),spec.hint),true);
   $("apStay").onclick=()=>done(null);
+  /* THE CAMERA REQUEST RIDES WITH THE SQUARES — rule 23's converge move, and the missing half of a
+     guest's sail prompt. camFitSail() had exactly ONE caller: pickCell(), which runs on the machine
+     running the ENGINE. In a crew game that is the HOST — so a guest drew its squares and nobody
+     ever asked the director to frame them; its camera sat wherever the last narration's camToSeat()
+     glide (640/1.9 — the 336.84-unit window in every probe trace) had parked it, and whichever
+     square fell outside that window could not be tapped. Measured 2026-09-01 (posed, seed 7, room
+     ZTNK): square (3,8) at x=-23 on a 390px guest, centre outside, elementFromPoint = nothing.
+     Whoever DRAWS the squares asks for the frame — one renderer, both tiers, so the request cannot
+     fork again. spec.pos is the authoritative boat square (the stay-square rule above) — never this
+     client's own players[].pos. After panel(), so camFitSail's reserve measures the real pill; a
+     zero-delay beat, because unlike pickCell's call the squares here are already in the DOM. */
+  if(window.__pp4)setTimeout(()=>window.__pp4.sailCells(null,spec.pos),0);
   return teardown;
 }
-export function pickCell(p,cells){
+export function pickCell(player,cells){
   if(appState.replaying){
     if(appState.dlogIdx<appState.dlog.length){
       appState.dlogN++;
@@ -627,12 +640,16 @@ export function pickCell(p,cells){
     }
     endReplay();
   }
-  setActor(p.idx);
+  applyActiveSeat(player.idx);
   // /4 stage: frame the whole sail window once the highlight cells exist (they are drawn just
   // after this call returns its promise — a beat later is soon enough for a lerping camera).
-  // p.idx, NOT the viewer: on a spectating host this used to frame the HOST's own ship at the
+  // player.idx, NOT the viewer: on a spectating host this used to frame the HOST's own ship at the
   // start of every guest's turn (Wyatt, 2026-08-20). See camFitSail() in ui/stage.js.
-  if(window.__pp4)setTimeout(()=>window.__pp4.sailCells(p.idx),180);
+  // SINCE 2026-09-01 the client that DRAWS the squares frames them from renderPickPrompt itself
+  // (which is what fixed the guest, who never reached this line — pickCell runs on the engine's
+  // machine). This call remains for the client that does NOT run that renderer: the spectator,
+  // whose empty cell list collapses the same camFitSail to "frame the asked captain's ship".
+  if(window.__pp4)setTimeout(()=>window.__pp4.sailCells(player.idx),180);
   // @copy misc.draftwait.sailchoosing
   // D-10 DELIVERY (F7): same conversion as ask() — the spectator line is the neutral broadcast and
   // the ACTOR's variant is the empty string (their own board highlighting is their feedback). This
@@ -645,7 +662,7 @@ export function pickCell(p,cells){
   // explanation, which is the exact complaint item 19 is. Stage 1 built the no-deadline wait line
   // and wired it to the recipe draft; this per-turn line never got it. Fire-and-forget, so it meets
   // the flag's stated safety condition (see stageFlash's note: a wait line must never be awaited).
-  netHandlers().onBroadcast(`${pn(p.idx)} is choosing where to sail…`,[{seat:p.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(`${pn(player.idx)} is choosing where to sail…`,[{seat:player.idx,html:""}],{wait:true});
   /* EVERY CAPTAIN'S SQUARES ARE CHECKED, NOT JUST THE ONES ON THIS DEVICE. G6 (Wyatt-approved
      2026-07-30) is "yes, build this check and apply it to all situations", and it was applied to
      one: sailSelfCheck ran inside localPickCell, so it covered a captain whose decision is LOCAL
@@ -656,7 +673,7 @@ export function pickCell(p,cells){
      Hoisted here, ahead of the fork, where the answer is the same for both tiers by construction.
      It is a pure read — geometry over the live game, no RNG, no mutation — so it is safe on the
      host's authoritative state and cannot fork the determinism stream. */
-  const bug=sailSelfCheck(p,cells);
+  const bug=sailSelfCheck(player,cells);
   // THE TRACER (02.15-02 Task 3): ONE spec, built ONCE, handed to BOTH branches — the local render
   // and the remote wire payload can never drift apart because they are literally the same object.
   // kind/cells/msg/hint/pos on the wire — id and seat keep being stamped by remotePrompt()
@@ -665,14 +682,14 @@ export function pickCell(p,cells){
   // guest's game.players[].pos is a stale render shell and must never be read for this.
   // `cells` is handed to sailPickMsg for W2-8: the line says a blue square takes two taps only
   // when one of THESE squares is a blue one. Same list the renderer is about to colour.
-  const spec={kind:"pick",cells,msg:sailPickMsg(p.idx,cells),hint:bug||null,pos:[p.pos[0],p.pos[1]]};
-  const base=decisionIsLocal(p.idx)?localPickCell(p,spec)
-    :netHandlers().onRemotePrompt(p.idx,spec);
+  const spec={kind:"pick",cells,msg:sailPickMsg(player.idx,cells),hint:bug||null,pos:[player.pos[0],player.pos[1]]};
+  const base=decisionIsLocal(player.idx)?localPickCell(player,spec)
+    :netHandlers().onRemotePrompt(player.idx,spec);
   return base.then(c=>{netHandlers().onLogDecision(c);return c;});
 }
 /* ================= the bake-off's decision seam =================
 
-   bakeoffPrompt(p,setup,fallback) — one captain's attempt, made REPLAYABLE and CLOCKED. It is
+   bakeoffPrompt(player,setup,fallback) — one captain's attempt, made REPLAYABLE and CLOCKED. It is
    pickCell()'s shape, and it exists for a specific failure rather than for symmetry.
 
    REPLAY. Without a logged decision, a solo refresh mid-bake would re-run the attempt with the
@@ -714,19 +731,19 @@ export function pickCell(p,cells){
    at all — not a bench, not a waiting note (.planning/phases/04-the-networked-bakeoff/shots/t1/).
    So the branch below is not symmetry; it is the fix for that.
 
-   THE FORK IS decisionIsLocal(p.idx), NEVER isHost AND NEVER seatLocal (DISPLAY-RULES Rule B).
+   THE FORK IS decisionIsLocal(player.idx), NEVER isHost AND NEVER seatLocal (DISPLAY-RULES Rule B).
    decisionIsLocal is true for EVERY human seat at a pass-and-play table, which is what keeps that
    mode working when several seats are local on one device.
 
    The FALLBACK below is a different thing again and is genuinely live: it is the shot-clock
    forfeit, which any mode can hit, and which a `null` reply from a remote captain reuses. */
-export async function bakeoffPrompt(p,setup,fallback){
+export async function bakeoffPrompt(player,setup,fallback){
   await (ffEndNow()||0);   // the bake is his own hands-on turn — recap first if a skip was live
   // Before the replay early-return, exactly as humanTurn does it: passGate self-handles replay by
   // silently syncing appState.mySeat rather than showing anything, and a baker never takes an
   // ordinary turn on the day they bake — so this is the ONLY thing keeping mySeat in step with a
   // baking seat across a resumed pass-and-play voyage.
-  await passGate(p.idx);
+  await passGate(player.idx);
   if(appState.replaying){
     if(appState.dlogIdx<appState.dlog.length){
       appState.dlogN++;
@@ -737,10 +754,10 @@ export async function bakeoffPrompt(p,setup,fallback){
     }
     endReplay();
   }
-  setActor(p.idx);
+  applyActiveSeat(player.idx);
   // {wait:true} — same fault, found by the rule-8 sweep rather than by Wyatt: this is the other
   // per-turn spectator line whose subject is "nothing is happening yet". Also fire-and-forget.
-  netHandlers().onBroadcast(`${pn(p.idx)} steps up to the ovens…`,[{seat:p.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(`${pn(player.idx)} steps up to the ovens…`,[{seat:player.idx,html:""}],{wait:true});
   /* THE ONE SPEC, BUILT ONCE, HANDED TO BOTH BRANCHES — pickCell()'s tracer pattern verbatim
      (see the `const spec={kind:"pick",...}` comment 60 lines up). The local render and the remote
      wire payload cannot drift apart because they are literally the same object, and the captain in
@@ -754,19 +771,19 @@ export async function bakeoffPrompt(p,setup,fallback){
      `id` and `seat` keep being stamped by remotePrompt() (orchestrator.js), never added here —
      same rule the sail payload follows, and the prompt-field parity gate asserts it. */
   const spec={kind:"bake",
-    order:p.bake.order.slice(),
-    before:(setup.before||p.bake.slots).slice(),
+    order:player.bake.order.slice(),
+    before:(setup.before||player.bake.slots).slice(),
     swaps:(setup.swaps||[]).map(sw=>[sw[0],sw[1]]),
-    locked:p.bake.locked.slice(),
-    attempts:p.bake.attempts,
+    locked:player.bake.locked.slice(),
+    attempts:player.bake.attempts,
     cost:BAKE_REWATCH_COST,
     /* T-25 (Wyatt, 2026-08-26): "the bakeoff title shouldn't say The Bake-off, it should say
        {Captain's name}'s bake-off, or {Your captain's name}, Yer Bake-Off."
        IT RIDES IN THE SPEC rather than being looked up on each screen, for the reason the whole
-       spec exists: a watcher has no `p`, and a name resolved independently on two machines is two
+       spec exists: a watcher has no `player`, and a name resolved independently on two machines is two
        answers waiting to disagree. One field, built once, read by baker and watcher alike. */
-    baker:pn(p.idx),
-    coins:p.coins};
+    baker:pn(player.idx),
+    coins:player.coins};
   // Spending a coin goes through the ENGINE, live, one at a time — so the purse on screen drops the
   // moment the player buys a look rather than after the whole prompt resolves. `canAfford` lets the
   // button grey out without the UI having to know the price.
@@ -775,17 +792,17 @@ export async function bakeoffPrompt(p,setup,fallback){
   // engine to debit, so its own copy of this pair (orchestrator.js's bake branch) decrements the
   // purse ON SCREEN and reports the COUNT back in the single reply, which the host then charges
   // authoritatively. The engine stays the only thing that moves a real coin.
-  const onRewatch=(n)=>appState.game.bakeRewatch(p,n)>0&&(liveRender(),true);
-  onRewatch.canAfford=()=>p.coins>=BAKE_REWATCH_COST;
+  const onRewatch=(n)=>appState.game.bakeRewatch(player,n)>0&&(liveRender(),true);
+  onRewatch.canAfford=()=>player.coins>=BAKE_REWATCH_COST;
   /* THE BENCH IS PUBLISHED BY WHOEVER IS BAKING (04-01 Task 3, MP-05). Only the captain with their
      hand on the crates knows when Ready was pressed or which crate was just named, so the same
      `io.onBench` hook exists on both tiers and the guest's copy (orchestrator.js's bake branch)
      is the identical call. It is handed the SAME spec the choreography is running from, so a
      watcher can never be sent a bench that disagrees with the one being played. */
-  const onBench=(patch)=>netHandlers().onBenchPublish(spec,p.idx,patch);
-  const base=decisionIsLocal(p.idx)
+  const onBench=(patch)=>netHandlers().onBenchPublish(spec,player.idx,patch);
+  const base=decisionIsLocal(player.idx)
     ? playBakeoffLive(spec,{onRewatch,onBench})
-    : netHandlers().onRemotePrompt(p.idx,spec);
+    : netHandlers().onRemotePrompt(player.idx,spec);
   return base
     .then(r=>{
       // ONE TAIL FOR BOTH BRANCHES, which is what keeps the roadmap's fourth criterion true by
@@ -793,7 +810,7 @@ export async function bakeoffPrompt(p,setup,fallback){
       // captain replies with the SAME SHAPE, so nothing below has to know which tier answered. A
       // shot-clock forfeit — or a `null` from a captain whose tab went away — resolves null and
       // forfeits to the engine's own guess, having bought nothing.
-      const answer=fillLocked(p.bake,(r&&r.guess)||fallback);
+      const answer=fillLocked(player.bake,(r&&r.guess)||fallback);
       const watched=(r&&r.rewatches)||0;
       // LOGGED TOGETHER, as one decision. The coins a rewatch spends are game state that the
       // end-of-voyage ranking reads, so a resume that replayed the guess but not the spending would
@@ -817,10 +834,10 @@ function fillLocked(bake,guess){
 // converged renderer, renderPickPrompt(), in a Promise and resolves it from the answer callback.
 // Reached through pickCell()'s decisionIsLocal() fork; `spec` is the SAME {kind,cells,msg,hint}
 // object the remote branch hands to netHandlers().onRemotePrompt, never re-authored here.
-export function localPickCell(p,spec){
+export function localPickCell(player,spec){
   // his sail prompt — the natural end of every full-round skip; recap first, prompt after
   const pre=ffEndNow();
-  if(pre)return pre.then(()=>localPickCell(p,spec));
+  if(pre)return pre.then(()=>localPickCell(player,spec));
   return new Promise(res=>{
     // The activePickCleanup registration stood here — the shot clock's expireShotClock was its
     // ONLY reader (inventory D4), so the registration left with the clock 2026-08-28. The
@@ -998,47 +1015,112 @@ export function rimSweepPointAt(curve,t){
   return [curve[i][0]+(curve[i+1][0]-curve[i][0])*f,curve[i][1]+(curve[i+1][1]-curve[i][1])*f];
 }
 // G14 (Wyatt-approved 2026-07-30): THE ONE TRADE-WIND STEPPER, called identically by the host sites
-// and by the guest's watchEvents(). Takes NO PARAMETERS on purpose — no call site can pass something
-// a different call site doesn't, so the two tiers cannot be paced or aimed differently.
+// and by the guest's watchEvents(). It takes exactly ONE argument — the event being drawn — and
+// every call site hands over that one thing, so no call site can mean a different event by it and
+// the two tiers cannot be paced or aimed differently.
 //
-// Derives its path from the EVENT STREAM, which both tiers have: the last event must be a
-// `tradewind`; `to` is that event's own state snapshot, `from` is the PREVIOUS event's. It then
-// refuses to animate unless rimSweepPath(from) is non-empty AND lands exactly on `to`. NEVER
-// INVENTS A PATH — if the derivation does not check out, it returns and today's instant render
-// stands.
+// Derives its path from the EVENT STREAM, which both tiers have: the event must be a `tradewind`;
+// `to` is that event's own state snapshot, `from` is the PREVIOUS event's. It then refuses to
+// animate unless rimSweepPath(from) is non-empty AND lands exactly on `to`. NEVER INVENTS A PATH —
+// if the derivation does not check out, it returns and today's instant render stands.
 //
-// WHERE THE DERIVATION HOLDS (an event exists AT the entry cell):
+// WHERE THE DERIVATION HOLDS — an event exists AT the entry cell, which is now every way a ship
+// reaches the rim:
 //   - a human sailing into the rim — the `sail` event is emitted at the entry cell
-//   - a human storm push onto the rim — `windmove`/`blownOut` likewise
-//   - the engine's rimEscape() — `windmove` at the rim cell, THEN the sweep. That is exactly the
-//     bot-teaching case G18 just turned on.
-// WHERE IT FALLS BACK to today's instant render, honestly listed rather than overclaimed:
-//   - the engine's INTERNAL windPush sweep (a bot storm), which emits nothing between stepping onto
-//     the rim and sweeping, so there is no `from` to read
-//   - the battle-flee sweep (src/orchestrator.js), where `def.pos=dest` is not recorded before
-//     tradewind() runs
-// Both render exactly as they do today — no regression, and no invented path. Closing that residue
-// would require the ENTRY CELL in the event stream, i.e. the STORM-02 class of change, which stays
-// parked on its own merits and is NOT added to the re-record batch.
-let _lastSweptEvIdx=-1;
-// Returns true only when a ride actually animated — runStormLive uses that to know whether its
-// own reconstructed-entry fallback (animateRimSweepRun below) still needs to play the ride.
-export async function animateRimSweepIfAny(){
+//   - a storm push onto the rim — stormStep emits `windmove` AT the entry square before it sweeps
+//     (src/engine/index.js). It did not until W9, and that omission is what left the guest — whose
+//     ONLY route into this animator is consumeEvent — watching a teleport while the host rode.
+//   - the engine's rimEscape() — `windmove` at the rim cell, THEN the sweep. The shape the other
+//     two were converged onto.
+//   - a ship fleeing a battle into the channel — the flee is recorded AT the destination before
+//     tradewind() runs (src/orchestrator.js).
+// THERE IS NO LONGER A HOST-ONLY FALLBACK. runStormLive used to reconstruct the entry square by
+// hand and call animateRimSweepRun directly, because the stream did not carry it; that hatch is
+// deleted, and animateRimSweepRun is now reached only from here. The entry cell went ON THE WIRE
+// instead — which does change what the engine emits, so it belongs in the determinism re-record
+// batch (`npm run test:determinism`, itself already broken by the cutover — see .planning/BACKLOG.md).
+/* THE STORM'S WIDE SHOT IS A FUNCTION OF THE EVENT, NOT OF WHO YOU ARE (W9, rule 23).
+   playtest 22 item 1 (Wyatt): "The director should zoom out to show all boats and their end squares
+   before moving them in a storm." That cue used to be one line inside runStormLive, which is
+   host-only (src/orchestrator.js) — so the host framed the whole table for a storm and the guest
+   sat at whatever zoom it happened to be at. A tester measured what that costs now that the guest
+   RIDES the sweep instead of sliding: on a posed storm the swept ship's destination sat at screen
+   x = -292, off the left edge of the guest's own viewport. A ride nobody can watch is not a fix.
+   A camera cue that exists on one tier and not the other is the same display-path fork the ride
+   itself was, so the cue is now ONE function of the `storm` event, entered from wherever: the host
+   calls it with the event it just emitted, the guest with the event it is consuming. The window is
+   computed from the players' positions at that moment, and a `storm` event is emitted BEFORE any
+   hull moves on either tier, so both tiers compute the same window from the same board.
+   Returns whether the cue fired — false off the /4 stage, where there is no director to ask. */
+export function stormCamForEvent(ev){
+  if(!ev||ev.t!=="storm"||!ev.dir)return false;
+  if(!(window.__pp4&&window.__pp4.stormCam))return false;
+  window.__pp4.stormCam(ev.dir);
+  return true;
+}
+/* IT RIDES THE EVENT IT IS HANDED — the same correction W7 made to animateSailRoute, made here
+   because it is the same fault. This used to take no arguments and read g.events[n-1], so any
+   event that landed behind a sweep before its consumer ran cost that player the ride (watchEvents
+   pushes each arriving event BEFORE awaiting consumeEvent, so the top of the pile is regularly not
+   the event being consumed). Every call site now hands over exactly one thing, the event being
+   drawn, and no call site can mean a different event by it. No argument now rides nothing.
+
+   RE-ENTRY GUARD: a WeakSet of events already ridden, NEVER a flag stamped on the event object —
+   the host broadcasts events verbatim (pushEvents -> JSON.parse(JSON.stringify(...))), so an extra
+   field would leak straight into the Firebase payload and can trip scripts/net_contract_check.js.
+   It replaces a module-local ARRAY POSITION, which had the second defect W7b measured on the sail
+   walker: an index survives a new Game, so "Play again" in one page load silently dropped the ride
+   for whichever sweep landed on the index the last voyage finished on. A fresh voyage's events are
+   fresh objects, so this cannot happen and there is no frontier for anyone to remember to reset.
+
+   The ride's STARTING square still has to come from the event before this one — a sweep records
+   where the ship ended, not where it entered the channel — so the previous event is found by
+   IDENTITY (indexOf the event handed over), never by a position a caller passed in. */
+/* W9 — PUT THE EVENTS ON THE WIRE BEFORE ANYBODY RIDES THEM.
+   `liveRender()` does two unrelated jobs in one call: it drains the local consumer AND (on the
+   host) publishes. Every call site that awaited an animation and THEN called liveRender was
+   therefore holding the whole table still for the length of its own animation. Measured in a real
+   two-browser crew room, 2026-08-30: the host emitted the storm sweep at t=2326ms, rode it inline
+   for 1447ms, and the event did not reach the wire until t=3989ms. The guest received it 47ms later
+   and started its own ride 64ms after that. THE NETWORK WAS 47ms; nothing on the guest was slow —
+   it simply had not been told yet. (A guest being a moment behind is expected and is NOT what this
+   fixes, docs/INTENDED-BEHAVIOUR.md §3. What is being removed is an artificial hold that grows with
+   the host's own animation.)
+   This is the publish half on its own, so an animating call site can hand the table the event at
+   the moment it is recorded and then take its own time drawing it. Host-guarded and handler-seamed
+   exactly as liveRender's publish line is (ui-tier may never import src/net/, D-07), and pushEvents
+   is a monotonic while-loop over appState.evPushed, so an early call costs one extra no-op pass and
+   can never double-send or reorder.
+   WHY NOT SIMPLY MOVE liveRender() ABOVE THE RIDE — the tempting one-line version: liveRender's
+   drain is FIRE-AND-FORGET (`_nh.onConsumeEvent(e).catch(...)`, deliberately not awaited, because
+   liveRender must stay synchronous for its 57 call sites). consumeEvent itself rides the sweep, and
+   _rodeSweep below is idempotent — so draining first would make the call site's own `await` return
+   false immediately, and the host would stop WAITING for the ride it is showing while a guest
+   (whose watchEvents awaits consumeEvent serially) still waits. That trades a publish-order defect
+   for a pacing divergence between the tiers, which is the fault rule 23 exists to prevent. Publish
+   early, ride unchanged: nothing about what is drawn, or about who waits for it, moves.
+   NO "AM I THE HOST" TEST LIVES HERE, and that is not an oversight — mode_fork_check.js failed the
+   build when one did, correctly: this file DRAWS, and a conditional on who is playing has no
+   business in it. The publish is host-only because PUBLISHING is host-only, so the guard sits on
+   pushEvents itself (src/orchestrator.js), where rule 23 sanctions "who computes" and where it
+   protects every caller rather than this one. */
+export function publishNow(){
+  const h=netHandlers();
+  if(h.onEvents)h.onEvents();
+}
+const _rodeSweep=new WeakSet();
+export async function animateRimSweepIfAny(ev){
   const g=appState.game;
   if(!g||appState.replaying)return false;
-  const n=g.events.length;
-  if(n<2)return false;
-  const last=g.events[n-1];
-  if(!last||last.t!=="tradewind")return false;
-  // RE-ENTRY GUARD: a module-local index, NEVER a flag stamped on the event object. The host
-  // broadcasts events verbatim (pushEvents -> JSON.parse(JSON.stringify(...))), so an extra field
-  // would leak straight into the Firebase payload and can trip scripts/net_contract_check.js.
-  if(_lastSweptEvIdx===n-1)return false;
-  _lastSweptEvIdx=n-1;
-  const seat=last.p;
-  const prev=g.events[n-2];
-  if(!last.state||!prev||!prev.state)return false;
-  const to=last.state[seat]&&last.state[seat].pos;
+  if(!ev||ev.t!=="tradewind")return false;
+  if(_rodeSweep.has(ev))return false;
+  _rodeSweep.add(ev);
+  const i=g.events.indexOf(ev);
+  if(i<1)return false;
+  const prev=g.events[i-1];
+  const seat=ev.p;
+  if(!ev.state||!prev||!prev.state)return false;
+  const to=ev.state[seat]&&ev.state[seat].pos;
   const from=prev.state[seat]&&prev.state[seat].pos;
   if(!to||!from||!g.onRim(from))return false;
   return animateRimSweepRun(seat,from,to);
@@ -1104,8 +1186,8 @@ export async function animateRimSweepRun(seat,from,to){
         // routed sail uses it (see routeTick): this is the same driven motion, and a ship that
         // judders on one of them and glides on the other is one gesture with two behaviours.
         const t=Math.min(1,(Date.now()-began)/total);
-        const p=rimSweepPointAt(curve,t);
-        if(p)paintShipAtPoint(seat,p[0],p[1]);
+        const point=rimSweepPointAt(curve,t);
+        if(point)paintShipAtPoint(seat,point[0],point[1]);
         if(t>=1)break;
         await routeTick(RIM_SWEEP_TICK_MS);
       }
@@ -1183,7 +1265,98 @@ const routeTick=(ms)=>appState.replaying?Promise.resolve():(Promise.race([
   new Promise(res=>requestAnimationFrame(()=>res())),
   sleepMs(appState.ff?Math.min(ms||SAIL_ROUTE_TICK_MS,40):(ms||SAIL_ROUTE_TICK_MS)*8),
 ]));
-export async function animateSailRoute(seat,from,path){
+/* THE ONE SAIL STEPPER, called identically by the host's turn loop and by the guest's consumer —
+   the same split animateRimSweepIfAny/animateRimSweepRun already proved above. Everything it needs
+   is on the EVENT, which both tiers hold: the engine bakes the drawn line into the sail event's
+   presentation lane (Game.ev / bakeDraw), and that lane is self-contained, starting with the square
+   the boat left. Returns true only when a route actually walked.
+
+   IT TAKES THE EVENT TO RIDE, AND THIS IS THE FIX W7b MEASURED. The first cut took no parameters
+   on the reasoning that a shared no-argument entry is what keeps the two tiers from being aimed
+   differently — and it did the opposite, because "no argument" still had to mean SOMETHING, and
+   what it meant was `events[events.length-1]`. That is not one subject: it is the sail on the host,
+   where the turn loop emits and rides with nothing in between, and whatever landed last on a guest,
+   where watchEvents pushes each arriving event before awaiting consumeEvent and the engine emits a
+   sail and calls tradewind(player) in the same breath. Measured on eight sails in two real crew rooms:
+   the host walked all eight, the guest walked five and slid across the islands on three.
+   Handing it the event is the STRONGER version of the same principle — every call site now hands it
+   exactly one thing, the event being drawn, and no call site can mean a different event by it.
+   No argument now rides nothing; there is no silent fall back to the pile.
+
+   RE-ENTRY GUARD: a WeakSet of events already ridden, NEVER a flag stamped on the event object —
+   the host broadcasts events verbatim, so an extra field would leak straight into the Firebase
+   payload. This is what makes the host's inline call and the drain's call the same ride rather than
+   two. It replaces a module-local index, which had a second defect of its own: an index survives a
+   new Game, so "Play again" in the same page load silently dropped the ride for whichever sail
+   landed on the index the last voyage finished on (W7b case C). A fresh voyage's events are fresh
+   objects, so this cannot happen and there is no frontier for anyone to remember to reset. */
+const _rodeRoute=new WeakSet();
+/* ============================================================================
+   L4 — THE PERFORMER. Plays a storyboard; decides nothing.
+   ============================================================================
+   Step 1 of the one-director plan. `present()` in src/shared/storyboard.js (L3, purity gated by
+   module_graph_check) turns an event into an ordered list of beats; this plays them in order.
+
+   IT DECIDES NOTHING, AND THAT IS THE ENTIRE CONTRACT. No reordering, no filtering by client type,
+   no beat of its own. The list's order IS the order. The moment a performer starts choosing, there
+   are two directors again, which is the fault the whole plan exists to remove.
+
+   AN UNKNOWN BEAT THROWS. It does not skip, and it does not warn-and-continue — a skipped beat is
+   precisely a screen quietly failing to draw something, which is the class of bug this project
+   keeps paying for. A beat kind that reaches here without a performer is a build mistake and
+   should be as loud as one.
+
+   NO PLAYER SEES ANYTHING CHANGE TODAY, and the honest reason is in storyboard.js's header: `sail`
+   was already drawn identically everywhere. What this buys is that the sequence is now DATA, which
+   is what the golden-file parity gate needs to exist at all. */
+export async function playStoryboard(beats){
+  if(!Array.isArray(beats))return false;
+  let played=false;
+  for(const b of beats){
+    switch(b&&b.do){
+      case "walkRoute":
+        /* THE SAME RUNNER THE OLD PATH CALLS, not a reimplementation — the whole point of a
+           strangler fig is that the new path reaches the identical code. animateSailRouteRun holds
+           the ride; animateSailRoute holds the DECISION to ride, and that decision has moved into
+           present(). */
+        played=(await animateSailRouteRun(b.seat,b.from,b.path))||played;
+        break;
+      default:
+        throw new Error(`playStoryboard: no performer for beat "${b&&b.do}" — a beat kind reached L4 that L4 cannot play. This is a build mistake, not a runtime condition; skipping it would be a screen silently not drawing something.`);
+    }
+  }
+  return played;
+}
+
+export async function animateSailRoute(ev){
+  const g=appState.game;
+  if(!g||appState.replaying)return false;
+  /* ANY EVENT CARRYING A BAKED ROUTE, not one event name. This used to demand t==="sail", which
+     is a second place that has to be told about every move a boat makes — and it had already been
+     missed once: a ship fleeing a battle sails on average 3.93 squares, 13.3% of them straight
+     through an island, and this walker refused it purely because of what the event was called.
+     The presentation lane IS the test: Game.bakeDraw only ever produces draw.route for a move it
+     could vouch for (the route must land exactly on the pos baked beside it), so an event that
+     carries one is by construction a move worth walking. */
+  if(!ev)return false;
+  if(_rodeRoute.has(ev))return false;
+  _rodeRoute.add(ev);
+  /* THE DECISION TO RIDE NOW LIVES IN present() — src/shared/storyboard.js, L3, pure and gated.
+     What used to be three lines of policy here (does it carry a baked route? is it long enough to
+     have a corner?) is the same three lines there, moved verbatim so that converting this kind
+     could not quietly change which sails walk.
+     `null` MEANS "NOT CONVERTED", not "no beats", and the distinction is what makes the migration
+     safe one kind at a time: a kind present() does not know falls through to whatever this function
+     did before. Today only `sail` returns a list; everything else returns null and lands here.
+     The WeakSet guard stays ABOVE this, unchanged: idempotency is a property of this call site
+     (the host's own flow.js:2381/2489 calls versus consumeEvent's), not of the storyboard. */
+  const beats=present(ev);
+  if(beats)return playStoryboard(beats);
+  return false;
+}
+/* The walker itself: squares in hand, no derivation. Kept separate for the same reason
+   animateRimSweepRun is — one place decides WHETHER to ride, one place performs the ride. */
+export async function animateSailRouteRun(seat,from,path){
   if(appState.replaying)return false;
   if(!Array.isArray(path)||path.length<2||!from)return false;   // no corner to draw
   const pts=[from,...path];
@@ -1251,43 +1424,49 @@ export async function animateSailRoute(seat,from,path){
    function only animates it, square by square, so the board is never behind the narration. */
 export async function runStormLive(dirKey){
   const g=appState.game;
-  g.ev({t:"storm",dir:dirKey,dist:STORM_PUSH});
+  const evStorm=g.ev({t:"storm",dir:dirKey,dist:STORM_PUSH});
   liveRender();
-  // playtest 22 item 1: pull the shot wide BEFORE the first hull moves, so the whole table and the
-  // water it is about to be driven across are on screen for the announcement. See stage.js stormCam.
-  if(window.__pp4&&window.__pp4.stormCam)window.__pp4.stormCam(dirKey);
+  stormCamForEvent(evStorm);
   await narrateLastEvent();
   // furthest downwind moves first, so the lead ship clears its square before the ship behind it
   // arrives — the engine owns that ordering too (rule 7b)
-  for(const p of g.stormOrder(dirKey)){
-    const wasDocked=g.adjPort(p)!==null;
-    const before=[...p.pos];
+  for(const player of g.stormOrder(dirKey)){
+    const wasDocked=g.adjPort(player)!==null;
+    const before=[...player.pos];
     let outcome="moved";
     for(let s=0;s<STORM_PUSH;s++){
-      const was=[...p.pos];
+      const was=[...player.pos];
       const evBefore=g.events.length;
-      outcome=g.stormStep(p,dirKey);
-      const movedSquare=(p.pos[0]!==was[0]||p.pos[1]!==was[1]);
+      outcome=g.stormStep(player,dirKey);
+      const movedSquare=(player.pos[0]!==was[0]||player.pos[1]!==was[1]);
       if(movedSquare&&outcome!=="swept"){
         // D-22, carried into v2: paint THIS square before anything about the next one can narrate.
         // renderLiveShips(), not liveRender() — an ordinary storm square emits no event, and
         // render() draws ships from the last emitted event's snapshot, so liveRender() here would
         // repaint the square the ship has just left and the push would be invisible.
-        // A SWEPT step is excluded: p.pos is already the whirlpool by now, so this paint WAS the
+        // A SWEPT step is excluded: player.pos is already the whirlpool by now, so this paint WAS the
         // teleport Wyatt recorded ("swept around the rim!" with no ride). The sweep animation
         // below paints its own arrival at the entry square instead.
         renderLiveShips();
         await sleep(STORM_STEP_MS);
       }
       if(outcome==="swept"){
-        // The event-derived animator declines a storm sweep (no rim-entry event exists to read —
-        // its own documented fallback), so reconstruct the entry square the driver knows
-        // first-hand: stormStep moved exactly one straight square downwind from `was` before
-        // tradewind() fired. animateRimSweepRun re-derives the path and refuses to guess.
-        if(!await animateRimSweepIfAny()){
-          const entry=[was[0]+DIRS[dirKey][0],was[1]+DIRS[dirKey][1]];
-          if(g.onRim(entry))await animateRimSweepRun(p.idx,entry,[...p.pos]);
-        }
+        /* THE HOST-ONLY ESCAPE HATCH IS GONE (W9, rule 23). This used to reconstruct the rim-entry
+           square by hand — from `was` plus the wind — because the event stream did not contain it,
+           and then call animateRimSweepRun directly. runStormLive is host-only, and that was
+           animateRimSweepRun's ONLY call site in the tree, so the host watched a ship carried
+           around the rim and the guest watched it appear at the whirlpool: one game, two pictures.
+           stormStep now emits AT the entry square (src/engine/index.js), so the ONE event-derived
+           animator draws this on every tier. The fix was to put what the hatch reconstructed onto
+           the wire and DELETE the hatch — never to give the guest a matching one.
+           The emitter holds its own moment: stormStep pushed the sweep one synchronous statement
+           ago, so the top of the pile is that event (and if it swept nowhere, the guard declines). */
+        /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES. The sweep event exists as of the
+           stormStep one statement above; the ride below takes ~1.4s, and until this line the only
+           publisher was the liveRender() underneath it — so every other browser sat on a frozen
+           board for exactly the length of the host's own animation. Publish, then ride. */
+        publishNow();
+        await animateRimSweepIfAny(g.events[g.events.length-1]);
         liveRender();
       }
       // stormStep records its own `blocked` event when a ship holds the square ahead.
@@ -1311,9 +1490,9 @@ export async function runStormLive(dirKey){
       if(g.events.length>evBefore){liveRender();if(g.events[g.events.length-1].t!=="tradewind")await narrateLastEvent();}
       if(outcome!=="moved")break;
     }
-    const moved=(p.pos[0]!==before[0]||p.pos[1]!==before[1]);
+    const moved=(player.pos[0]!==before[0]||player.pos[1]!==before[1]);
     const evBefore=g.events.length;
-    g.noteStormOutcome(p,outcome,moved,wasDocked);
+    g.noteStormOutcome(player,outcome,moved,wasDocked);
     // The per-ship event still fires — it carries this ship's board pop, its captain-panel note and
     // its audio cue — but it no longer NARRATES (playtest 21 item 3, the four texts withdrawn in
     // src/ui/util.js). liveRender still runs so the square it landed on is painted at the moment it
@@ -1358,10 +1537,10 @@ function crateOpt(list,i){
    tap: Back at step one returns to the buy prompt with the hold untouched, Back at step two
    re-picks the first crate. Returns [a,b], or null if the captain walked away.
    Duplicates are legal, which is exactly why the buttons carry their counts. */
-async function pickBarterCrates(p,ing){
+async function pickBarterCrates(player,ing){
   let first=null;
   for(;;){
-    const pool=p.ing.slice();
+    const pool=player.ing.slice();
     if(first!==null){const at=pool.indexOf(first);if(at>=0)pool.splice(at,1);}
     const opts=[...new Set(pool)].map(i=>crateOpt(pool,i));
     opts.push({label:"← Back",back:true,value:"__back__"});
@@ -1390,8 +1569,8 @@ async function pickBarterCrates(p,ing){
    more — crates are bought, won in battle, or traded for. The purchase is offered after EITHER
    outcome, on the same turn, with the coins just earned (rule 10a/10c), and the price is
    6 − however many crates are left on the island, so it climbs 3 → 4 → 5 as the island empties. */
-export async function humanDock(p,port){
-  setActor(p.idx);
+export async function humanDock(player,port){
+  applyActiveSeat(player.idx);
   const ing=port;
   const g=appState.game;
   // v2 rule 10d: an empty island still pays. There is treasure in the sand and work on the dock
@@ -1402,10 +1581,10 @@ export async function humanDock(p,port){
   // message stays short and the rules go in the helper line, which is where the narration box
   // already puts explanatory text (and, per the standing top-to-bottom rule, is revealed last).
   // @copy misc.paramprompt.dockflip
-  const h=await humanFlip(p,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
+  const h=await humanFlip(player,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
     `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy a crate.`);
   if(h==="back")return "back";
-  p.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
+  player.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
   let got=h?"treasure":"dockhand";
   const price=g.cratePrice(ing);
   /* THE CAPTAINS PANEL IS DRAWN FROM THE LAST EVENT'S SNAPSHOT, not from live player state — so
@@ -1417,7 +1596,7 @@ export async function humanDock(p,port){
      .purse) and logs nothing — its whole job is to make the panel tell the truth. Every other coin
      change in the game emits its event in the same breath as the mutation; this one could not,
      because a prompt sits in between. */
-  g.ev({t:"purse",p:p.idx});
+  g.ev({t:"purse",p:player.idx});
   liveRender(); // the purse changed — show it before the buy prompt prices anything against it
   let buy=null;
   if(g.cfg.dockBuy&&price!==null){
@@ -1441,21 +1620,21 @@ export async function humanDock(p,port){
       // it is SHOWN — re-read every pass, because the shot clock can take a coin while a prompt is
       // open. That rule is why the barter appears the moment the shelves go bare and greys out
       // when the hold is short: a captain carrying one crate still learns the swap exists.
-      const canBuy=p.coins>=price;
-      const canBarter=g.canBlackMarket(p,ing);
+      const canBuy=player.coins>=price;
+      const canBarter=g.canBlackMarket(player,ing);
       /* ITEM 17 (Wyatt, 2026-08-23c): the greyed-out explainer said "The price has risen to 3🌕 —
          more than ye can pay" when the price had never risen — it STARTED at 3 and he held 1. The
          honest sentence states the cost and the purse, and it is written ONCE: the same string is
          the button's tap-why and the italic helper line, so the two can never tell two stories
          about one greyed circle (rule 23). */
-      const shortWhy=`It costs ${price}🌕 and ye've ${p.coins}🌕 — ${price-p.coins}🌕 short.`;
+      const shortWhy=`It costs ${price}🌕 and ye've ${player.coins}🌕 — ${price-player.coins}🌕 short.`;
       const opts=[
         {label:`Buy ${ilabelImg(ing)} <span class="nobrk">−${price}🌕</span>`,short:`Buy ${iconImg(ING_IMG[ing])} −${price}🌕`,value:"coin",disabled:!canBuy,
           why:shortWhy},
       ];
       // @copy misc.blackmarket.barterbtn — draft, Wyatt rewrites
       if(black)opts.push({label:`Trade any 2 crates fer ${ilabelImg(ing)}`,short:`2 crates → ${iconImg(ING_IMG[ing])}`,value:"barter",disabled:!canBarter,
-        why:`The barter takes 2 crates off yer hands, and ye're carryin' ${p.ing.length}.`});
+        why:`The barter takes 2 crates off yer hands, and ye're carryin' ${player.ing.length}.`});
       opts.push({label:"Nah",value:false});
       // @copy misc.blackmarket.whisper — draft, Wyatt rewrites
       /* HIS COPY PASS, 2026-08-25. The black-market whisper said in a sentence what the two
@@ -1492,17 +1671,17 @@ export async function humanDock(p,port){
       // D-40 safety net: buyCrate re-reads the purse itself — `canBuy` was computed BEFORE the
       // await, and the shot clock's penalty can take a coin while this prompt sits open. One
       // purchase path with the bots (Game.buyCrate), so the two can never diverge on the rule.
-      if(v==="coin"){buy=g.buyCrate(p,ing);if(buy)got="bought";break;}
+      if(v==="coin"){buy=g.buyCrate(player,ing);if(buy)got="bought";break;}
       if(v==="barter"){
-        const give=await pickBarterCrates(p,ing);
+        const give=await pickBarterCrates(player,ing);
         if(!give)continue;                       // backed out of the picker — offer the berth again
-        buy=g.barterCrate(p,ing,give);if(buy)got="bought";
+        buy=g.barterCrate(player,ing,give);if(buy)got="bought";
         break;
       }
       break;                                     // "Nah"
     }
   }
-  g.ev({t:"dock",p:p.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
+  g.ev({t:"dock",p:player.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
     paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
     black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
   /* HIS ITEM 9: THE CRATE LANDS WHEN YE BUY IT. One call moved, none added.
@@ -1523,7 +1702,7 @@ export async function humanDock(p,port){
      The two player-state writes travel WITH the render rather than staying behind it, so
      liveRender() sees byte-identically the state it saw before this change. Neither is read by
      narrateLastEvent(), which reads the event. */
-  p.firstFlip.add(ing);p.dockedNow.add(ing);
+  player.firstFlip.add(ing);player.dockedNow.add(ing);
   liveRender();
   await narrateLastEvent();
 }
@@ -1597,7 +1776,7 @@ const counterTerms=(offer,r)=>appState.game.counterTerms(offer,r);
 
    THE COUNTER STALL (playtest 22, Wyatt: "when i counter-offer a bot trade the entire game stalls
    and stops... it happened immediately when i clicked counter offer"). It was ONE character of
-   nesting on the message line below — `poss(pn(p.idx))` where poss(), like pn(), takes a SEAT INDEX
+   nesting on the message line below — `poss(pn(player.idx))` where poss(), like pn(), takes a SEAT INDEX
    and renders the name itself. pname() computes `NAMES[i].replace("Capt. ","")` unconditionally,
    before any early return, so an array indexed by a finished `<b …>` string gives undefined and the
    .replace throws. Not sometimes: EVERY tap of Counter, for every seat, since the counter rebuild
@@ -1613,17 +1792,17 @@ const counterTerms=(offer,r)=>appState.game.counterTerms(offer,r);
    Both earlier attempts (a6b81cd, 69b9f23) were reasoning about what a counter SETTLES, which is
    everything downstream of a prompt that never rendered. When a stall is reported at a tap, prove
    the prompt appears before improving what it decides. 4/scripts/seat_arg_check.js is the gate. */
-async function counterOffer(q,p,offer){
+async function counterOffer(q,player,offer){
   const g=appState.game;
   // what THEY are carrying, minus the crate already on the table — offering it back is not a counter
-  const theirs=[...new Set(p.ing)].filter(i=>i!==offer.giveIng);
-  const room=Math.max(0,p.coins);
+  const theirs=[...new Set(player.ing)].filter(i=>i!==offer.giveIng);
+  const room=Math.max(0,player.coins);
   for(;;){
     if(appState.turnExpired)return null;
-    const opts=theirs.map(i=>crateOpt(p.ing,i));
+    const opts=theirs.map(i=>crateOpt(player.ing,i));
     // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost
     opts.push({label:`💰 Coin instead`,short:`💰 Coin`,value:"__coinsonly__",disabled:room<1,
-      why:`${pn(p.idx)} has no coin at all — it must be a crate.`});
+      why:`${pn(player.idx)} has no coin at all — it must be a crate.`});
     opts.push({label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"__deny__"});
     opts.push({label:"← Back",back:true,value:"__back__"});
     // @copy prompt.trade.counterwant — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
@@ -1632,8 +1811,8 @@ async function counterOffer(q,p,offer){
     // UNCONDITIONALLY on an array indexed by that string: undefined.replace, a TypeError, thrown on
     // the first line of the first counter prompt. That is the whole of playtest 22's counter stall —
     // see the note above counterOffer.
-    const pick=await ask(`${pn(q.idx)}: what o' ${poss(p.idx)} will ye have instead?`,opts,null,
-      theirs.length?null:`${pn(p.idx)} has no other cargo — ye can ask for coin, or deny.`);
+    const pick=await ask(`${pn(q.idx)}: what o' ${poss(player.idx)} will ye have instead?`,opts,null,
+      theirs.length?null:`${pn(player.idx)} has no other cargo — ye can ask for coin, or deny.`);
     if(appState.turnExpired)return null;
     if(pick==null||pick==="__back__")return "__back__";
     if(pick==="__deny__")return "deny";
@@ -1651,7 +1830,7 @@ async function counterOffer(q,p,offer){
          I4, nothing that prices a trade may be a constant — there is no 6-coin rule anywhere in
              RULES-V2, and a purse ranges over an order of magnitude across a voyage;
          I3, bots and humans have the same affordances — openingBid bounds a bot's bid by
-             `p.coins - reserve`, its whole purse, so the cap applied to the human alone. */
+             `player.coins - reserve`, its whole purse, so the cap applied to the human alone. */
     const minC=askIng?0:1;
     const maxC=room;
     if(maxC<minC){
@@ -1752,17 +1931,17 @@ async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declin
   if(v==="__back__"||v==null)return "__back__";
   return v;
 }
-export async function humanTrade(p){
-  setActor(p.idx);
+export async function humanTrade(player){
+  applyActiveSeat(player.idx);
   const g=appState.game;
   // DEFENSE IN DEPTH, symmetric with step 0's "nobody has cargo I want" guard four lines below:
   // a captain with nothing at all to give (0 coins AND an empty hold) can never complete step 1
-  // regardless of what they WANT — step 1 is built purely from p.ing/p.coins, never from st.want —
+  // regardless of what they WANT — step 1 is built purely from player.ing/player.coins, never from st.want —
   // so decline here, before the want prompt even renders, instead of dead-ending them one screen
   // deeper with no way out. humanAct's own canOffer gate (the button itself) is the real fix and
   // makes this unreachable through the normal menu; this guard exists for any other caller.
   // @copy adhoc.trade.nothingtogive
-  if(!p.coins&&!p.ing.length){await flash(`${pn(p.idx)} has nothin' to trade.`);return false;}
+  if(!player.coins&&!player.ing.length){await flash(`${pn(player.idx)} has nothin' to trade.`);return false;}
   const st={want:undefined,baseIng:undefined,extraCoins:undefined};
   let step=0;
   while(step<3){
@@ -1771,7 +1950,7 @@ export async function humanTrade(p){
     if(step===0){
       // every crate in the game, with the ones nobody holds greyed out (rule 4, Wyatt's ruling)
       const opts=g.ings.map(i=>{
-        const holders=g.holdersOf(i,p);
+        const holders=g.holdersOf(i,player);
         // playtest 21 item 5: the greyed crate says which crate it is and why it is out of reach,
         // so the reason survives even when the shared helper line is explaining something else
         return {label:ilabelImg(i),value:i,disabled:!holders.length,
@@ -1789,8 +1968,8 @@ export async function humanTrade(p){
       st.want=want;step=1;
     }else if(step===1){
       // An offer is a crate, coins, or both — sweeten a crate with a few coins on top.
-      const canOfferCoins=p.coins>0;
-      const ingOpts=[...new Set(p.ing)].map(i=>crateOpt(p.ing,i));
+      const canOfferCoins=player.coins>0;
+      const ingOpts=[...new Set(player.ing)].map(i=>crateOpt(player.ing,i));
       ingOpts.push({label:"— coins only —",value:"__coinsonly__",disabled:!canOfferCoins,
         why:`Yer purse is empty — ye've no coin to offer, so it must be a crate.`});
       ingOpts.push({label:"← Back",back:true,value:"__back__"});
@@ -1805,7 +1984,7 @@ export async function humanTrade(p){
       // ye may offer everything ye have — the same ceiling the counter now uses, and the same one
       // openingBid gives a bot. See counterOffer for why the old 6 had to go; fixing one and not
       // the other would leave the human able to ASK for a whole purse but not OFFER one.
-      const maxC=p.coins;
+      const maxC=player.coins;
       const minC=st.baseIng?0:1; // a coins-only offer needs at least 1 coin
       if(maxC<minC){
         // @copy prompt.trade.nothingtooffer
@@ -1829,7 +2008,7 @@ export async function humanTrade(p){
          THE SIGNAL ALREADY EXISTED, one line up. `st.baseIng` is null exactly when the captain
          picked "— coins only —" (:1806), and `minC` at :1812 was already branching on it to raise
          the floor to 1. The control knew; only the sentence did not. Nothing new is computed here. */
-      const n=await coinSlider(p.idx,
+      const n=await coinSlider(player.idx,
         k=>st.baseIng?`Would ye offer any coin on top?`:`How many coins?`,
         minC,minC,maxC,"Offer it!",null,"Nah");
       if(n==null)return false;
@@ -1840,10 +2019,10 @@ export async function humanTrade(p){
   if(appState.turnExpired)return false;
   const offer={want:st.want,giveIng:st.baseIng,giveCoins:st.extraCoins||0};
   const offerDisplay=g.offerLabel(offer,0)||"nothing";
-  // announcing an offer is itself public information — the whole table now knows what p is after,
+  // announcing an offer is itself public information — the whole table now knows what player is after,
   // and that is exactly how bots learn each other's recipes without ever seeing one (see noteDemand)
-  g.noteDemand(p,offer.want,1);
-  g.ev({t:"openoffer",p:p.idx,want:offer.want,offer:offerDisplay});
+  g.noteDemand(player,offer.want,1);
+  g.ev({t:"openoffer",p:player.idx,want:offer.want,offer:offerDisplay});
   liveRender();
   await narrateLastEvent();
 
@@ -1851,9 +2030,9 @@ export async function humanTrade(p){
   const responses=[];
   // Only hail captains for whom something has actually changed since they last said no — the
   // memory lives in the engine so bots spam neither each other nor, more importantly, the human.
-  for(const q of g.holdersOf(offer.want,p).filter(q=>g.worthReAsking(p,q,offer.want,offer))){
+  for(const q of g.holdersOf(offer.want,player).filter(q=>g.worthReAsking(player,q,offer.want,offer))){
     if(q.strategy==="human"){
-      setActor(q.idx);
+      applyActiveSeat(q.idx);
       // @copy prompt.trade.accept
       // playtest 20 (Mando: "Bug in 'name your price' - the game simply acted as if I had rejected
       // the trade and moved on"). TWO separate ways that happened, both fixed here:
@@ -1870,27 +2049,27 @@ export async function humanTrade(p){
       //      this prompt, and only "✗ Deny" denies.
       //
       // `room` is what the offerer has spare AFTER the coins already in the offer.
-      const room=Math.max(0,p.coins-offer.giveCoins);
+      const room=Math.max(0,player.coins-offer.giveCoins);
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(`${pn(q.idx)}: ${pn(p.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
+        const v=await ask(`${pn(q.idx)}: ${pn(player.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
           {label:`${iconImg(CHECKMARK_IMG)} Accept`,value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
           {label:"💰 Ask for summat else",short:"💰 Counter",value:"counter",
-            disabled:room<1&&![...new Set(p.ing)].some(i=>i!==offer.giveIng),
-            why:`${pn(p.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
+            disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
+            why:`${pn(player.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
           {label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?`${pn(p.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
+          room<1?`${pn(player.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
         if(appState.turnExpired)return false;
         if(v==="counter"){
-          const c=await counterOffer(q,p,offer);
+          const c=await counterOffer(q,player,offer);
           if(c==null)return false;                 // shot clock expired mid-counter
           if(c==="__back__")continue;              // BACK MEANS BACK — re-ask, never a denial
           if(c==="deny")responses.push({q,kind:"deny",why:"chose"});
@@ -1899,13 +2078,13 @@ export async function humanTrade(p){
         answered=true;
       }
     }else{
-      responses.push(g.respondToOffer(q,offer,p));
+      responses.push(g.respondToOffer(q,offer,player));
     }
   }
-  setActor(p.idx);
+  applyActiveSeat(player.idx);
   if(!responses.length){
     // @copy adhoc.trade.silence
-    await flash(`Not a soul answers ${pn(p.idx)}'s hail.`,undefined,undefined,[{seat:p.idx,html:`Not a soul answers yer hail.`}]);
+    await flash(`Not a soul answers ${pn(player.idx)}'s hail.`,undefined,undefined,[{seat:player.idx,html:`Not a soul answers yer hail.`}]);
     return true;
   }
 
@@ -1945,16 +2124,16 @@ export async function humanTrade(p){
          what they GET cannot drift apart, which is exactly how a trade UI goes wrong. */
       const t=termsOf(r);
       const bits=bitsOf(t);
-      const haveIng=!t.giveIng||p.ing.includes(t.giveIng);
+      const haveIng=!t.giveIng||player.ing.includes(t.giveIng);
       // a counter that swaps the give side is the dangerous one — say "instead" out loud
       const swap=t.giveIng&&t.giveIng!==offer.giveIng;
       answerLines.push(`💰 ${pn(r.q.idx)} wants ${bits||"nothin'"}${swap?" <i>instead</i>":""}`);
       opts.push({label:`💰 ${pn(r.q.idx)} wants ${bits||"nothin'"}`,
         short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?`+${t.giveCoins}🌕`:""}`,
         value:i,
-        disabled:t.giveCoins>p.coins||!haveIng,
+        disabled:t.giveCoins>player.coins||!haveIng,
         why:!haveIng?`Ye're not carryin' ${t.giveIng?iname(t.giveIng):"that"} any more.`
-          :`That'd cost ye ${t.giveCoins}🌕, and ye've only ${p.coins}🌕 aboard.`});
+          :`That'd cost ye ${t.giveCoins}🌕, and ye've only ${player.coins}🌕 aboard.`});
     }
   }
   const denials=responses.filter(r=>r.kind==="deny");
@@ -1965,11 +2144,11 @@ export async function humanTrade(p){
     :null;
   if(!opts.some(o=>o.value!==-1&&!o.disabled)){
     // nobody said anything ye can act on
-    g.ev({t:"parley",a:p.idx,b:null,offer:offerDisplay,want:offer.want});
+    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
     liveRender();
     // @copy adhoc.trade.alldeclined
     await flash(`No captain will part with ${ilabelImg(offer.want)} for that.`,undefined,undefined,
-      [{seat:p.idx,html:`No captain will part with ${ilabelImg(offer.want)} for that offer of yers.`}]);
+      [{seat:player.idx,html:`No captain will part with ${ilabelImg(offer.want)} for that offer of yers.`}]);
     return true;
   }
   // @copy prompt.trade.pick — APPROVED as written, Wyatt 2026-08-14. One captain per line: the whole point is that
@@ -1979,10 +2158,10 @@ export async function humanTrade(p){
     opts,colors,denyNote);
   if(appState.turnExpired)return false;
   if(pick===-1||pick==null){
-    g.ev({t:"parley",a:p.idx,b:null,offer:offerDisplay,want:offer.want});
+    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
     liveRender();
     // @copy adhoc.trade.walkaway
-    await flash(`${pn(p.idx)} walks away from the table.`,undefined,undefined,[{seat:p.idx,html:`Ye walk away from the table.`}]);
+    await flash(`${pn(player.idx)} walks away from the table.`,undefined,undefined,[{seat:player.idx,html:`Ye walk away from the table.`}]);
     return true;
   }
   const chosen=responses[pick];
@@ -1993,28 +2172,28 @@ export async function humanTrade(p){
   // CR-02 layer 2: settleTrade validates BOTH legs before EITHER mutates, so a trade is atomic —
   // a crate that is no longer held, or coins that are no longer there, routes into the decline
   // path below rather than half-completing.
-  if(!g.settleTrade(p,chosen.q,terms,extra)){
+  if(!g.settleTrade(player,chosen.q,terms,extra)){
     // @copy adhoc.trade.refusalhuman
-    await flash(`${pn(chosen.q.idx)} declines ${pn(p.idx)}'s offer!`,undefined,undefined,[{seat:p.idx,html:`${pn(chosen.q.idx)} declines yer offer!`}]);
+    await flash(`${pn(chosen.q.idx)} declines ${pn(player.idx)}'s offer!`,undefined,undefined,[{seat:player.idx,html:`${pn(chosen.q.idx)} declines yer offer!`}]);
     return true;
   }
   await narrateLastEvent();
   liveRender();
   return true;
 }
-export async function humanAct(p,sailCtx){
-  setActor(p.idx);
-  const port=appState.game.adjPort(p);
-  const canDock=port&&!(appState.game.cfg.singleDock&&appState.game.dockOccupiedBy(port,p));
+export async function humanAct(player,sailCtx){
+  applyActiveSeat(player.idx);
+  const port=appState.game.adjPort(player);
+  const canDock=port&&!(appState.game.cfg.singleDock&&appState.game.dockOccupiedBy(port,player));
   // v2 rule 13: EVERY dock is raidable now, and a captain who has already fired up the ovens is
   // still a legal target ("nobody is safe"). So the target list is simply everyone adjacent — a
   // berth protects no one, and `done` no longer grants immunity.
-  const targets=appState.game.players.filter(q=>q!==p&&man(p.pos,q.pos)<=1);
-  const canAfford=p.coins>=appState.game.cfg.powder;
+  const targets=appState.game.players.filter(q=>q!==player&&man(player.pos,q.pos)<=1);
+  const canAfford=player.coins>=appState.game.cfg.powder;
   // v2 rule 13e: a ship with an empty hold cannot be attacked — there is nothing to take, and the
   // prize is a crate or nothing (rule 9d). Compute real availability once and drive both the
   // button's greying and the action guard from it.
-  const attackable=targets.filter(q=>appState.game.canAttack(p,q));
+  const attackable=targets.filter(q=>appState.game.canAttack(player,q));
   // D-41 EXTENDED (Wyatt-approved 2026-07-29): Parley/Trade is offered whenever any opponent is
   // alive, but the action itself only ever works against someone HOLDING cargo — compute real
   // availability once and drive both the button's `disabled` flag and the action guard (:602 below)
@@ -2025,7 +2204,7 @@ export async function humanAct(p,sailCtx){
   // 02.2 FINAL-QA FIX (a captain who cannot take their turn): a captain with NOTHING TO OFFER —
   // 0 coins AND an empty hold — could still click an enabled Trade button (this line used to check
   // only whether an OPPONENT held cargo, never whether P did). humanTrade()'s "what will ye GIVE"
-  // step is built purely from p.ing/p.coins, independent of what P chose to WANT, so that captain
+  // step is built purely from player.ing/player.coins, independent of what P chose to WANT, so that captain
   // was guaranteed to reach a give-prompt with one permanently-disabled button and no possible way
   // forward — Back only re-asks WANT (step 0), which can never fix a GIVE-side problem, so the
   // captain (and the whole table, which waits on their turn) was stuck forever. Same defect shape
@@ -2034,8 +2213,8 @@ export async function humanAct(p,sailCtx){
   // comment just below). Bot parity check: engine/index.js's composeOffer already refuses to hail
   // when `!giveIng&&!giveCoins` — bots have always declined this state cleanly; canOffer brings the
   // human path to the same rule (rule 13, bot/human parity), not a new behaviour.
-  const canOffer=p.coins>0||p.ing.length>0;
-  const canTrade=canOffer&&appState.game.players.some(q=>q!==p&&!q.done&&q.ing.length>0);
+  const canOffer=player.coins>0||player.ing.length>0;
+  const canTrade=canOffer&&appState.game.players.some(q=>q!==player&&!q.done&&q.ing.length>0);
   const opts=[];
   // F5 (Wyatt-approved 2026-07-29), his own example: *"In the 'Dock at Full Cream Folly' the icon
   // should go directly in front of the island name — 'Dock at 🥛 Full Cream Folly'"*. The icon used
@@ -2095,7 +2274,7 @@ export async function humanAct(p,sailCtx){
   // The bake-off lights the ovens from the turn loop the moment a full recipe reaches Tortuga, so
   // this button can never be the thing that starts a bakery — offering it would promise a finish
   // the engine no longer grants on a click.
-  if(!appState.game.cfg.bakeoff&&!appState.game.needs(p).length&&man(p.pos,appState.game.home)<=1)
+  if(!appState.game.cfg.bakeoff&&!appState.game.needs(player).length&&man(player.pos,appState.game.home)<=1)
     opts.unshift({label:`${iconImg(CUPCAKE_IMG)} Start yer bakery!`,short:`${iconImg(CUPCAKE_IMG)} Bakery!`,value:"bakery"});
   // THE OVENS BUTTON (Wyatt, 2026-08-09: "Where did the button go? This is a celebratory moment!
   // It feels terrible to have to click 'pass'").
@@ -2115,7 +2294,7 @@ export async function humanAct(p,sailCtx){
   // It REPLACES Pass rather than joining it. The "a turn must always be endable" invariant below is
   // what Pass exists for, and this discharges it — same action, right name. Offering both would put
   // the dead option back on screen next to the live one.
-  const canOvens=appState.game.cfg.bakeoff&&appState.game.canBake(p);
+  const canOvens=appState.game.cfg.bakeoff&&appState.game.canBake(player);
   // @copy adhoc.act.fireovens
   if(canOvens)opts.unshift({label:`${iconImg(CUPCAKE_IMG)} Fire up the ovens!`,short:`${iconImg(CUPCAKE_IMG)} Fire ovens!`,value:"ovens",cls:"primary ahoyGlow"});
   // v2 rule 3: Fish is gone from the menu, and rule 4's Trade is table-wide rather than
@@ -2131,7 +2310,7 @@ export async function humanAct(p,sailCtx){
   // offered only if this player's sail step ended in "Stay put" — covers the reported "hit Stay
   // put by accident" complaint. Sailing is free now (rule 2), so there is no purse test.
   const canMoveInstead=sailCtx&&
-    p.pos[0]===sailCtx.preSailPos[0]&&p.pos[1]===sailCtx.preSailPos[1];
+    player.pos[0]===sailCtx.preSailPos[0]&&player.pos[1]===sailCtx.preSailPos[1];
   if(canMoveInstead)opts.push({label:"← Actually, move instead",back:true,value:"moveInstead"});
   // RULE-01: the button states what a pass pays, built exactly like Attack's cost above — same
   // conditional shape, same no-break wrapping, same read off the live round config, and the coin
@@ -2228,14 +2407,14 @@ export async function humanAct(p,sailCtx){
      Trade's why are separate strings on separate buttons, so neither can swallow the other by
      construction, which is stronger than the two independent `if`s this replaced. */
   const sub=null;
-  const prompt=`${pn(p.idx)}, what'll ye do:`;
+  const prompt=`${pn(player.idx)}, what'll ye do:`;
   // @copy prompt.act.menu
   const v=await ask(prompt,opts,null,sub);
   if(appState.turnExpired)return;
   // the clock keeps running (and re-arms fresh) through dock/attack/trade/fish now, instead of
   // stopping here — each ask() inside those sub-flows re-arms it for its own decision
   if(v==="moveInstead"){
-    const dest=await pickCell(p,reachable(p));
+    const dest=await pickCell(player,reachable(player));
     if(appState.turnExpired)return;
     // G6 (COIN-AUDIT.md site 7): reachable() was computed from the pre-await purse and
     // `await pickCell(...)` is the window. A shortfall falls through to the existing "no
@@ -2244,14 +2423,27 @@ export async function humanAct(p,sailCtx){
     // penalty fires at 20s and sets no flag at all.
     if(dest){
       // playtest 21 item 6: the route is derived from the PRE-MOVE square, so it must be taken
-      // before p.pos is written. sailPath asks the same search that made `dest` legal in the first
+      // before player.pos is written. sailPath asks the same search that made `dest` legal in the first
       // place, so the drawn line and the rule can never disagree.
-      const from=[...p.pos];
-      const route=appState.game.sailPath(p,dest,{throughRim:true});
-      p.pos=dest;p.justDocked=false;appState.game.ev({t:"sail",p:p.idx});liveRender();
-      await animateSailRoute(p.idx,from,route);
-      if(appState.game.tradewind(p)){await animateRimSweepIfAny();liveRender();await narrateLastEvent();}}
-    await humanAct(p,sailCtx);return;
+      const from=[...player.pos];
+      // the drawn line INCLUDES the square being left, so what lands on the wire is self-contained
+      const route=[from,...appState.game.sailPath(player,dest,{throughRim:true})];
+      player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route});
+      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
+         object the guest is handed, so both tiers walk identical code on an identical subject.
+         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
+         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
+         loop would stop waiting for the glide. */
+      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
+         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
+         tree, so awaiting the glide before it held every other browser's board still for exactly
+         the length of THIS captain's own animation. Publish, then ride: nothing about what is
+         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
+         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
+      publishNow();await animateSailRoute(evSail);liveRender();
+      const evWind=appState.game.tradewind(player);
+      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}}
+    await humanAct(player,sailCtx);return;
   }
   if(v==="pass"){
     // See Game.nextSeaCreature for the walk. advanceSeaCursor persists where this device's captain
@@ -2260,8 +2452,8 @@ export async function humanAct(p,sailCtx){
     // own derived offsets and never touch it.
     // RULE-01: the dubloon and the event are one shared engine method, so this site, the bot
     // fallback below and the engine's own fallback can never drift apart on what a pass is worth.
-    appState.game.doPass(p);
-    if(p.idx===appState.game.seaSeat)advanceSeaCursor(p);
+    appState.game.doPass(player);
+    if(player.idx===appState.game.seaSeat)advanceSeaCursor(player);
     liveRender();
     await narrateLastEvent();
     return;
@@ -2272,20 +2464,20 @@ export async function humanAct(p,sailCtx){
   // @copy adhoc.act.bakerystart
   if(v==="bakery"){await flash("🧁 Firing up the ovens on the Isle of Tortuga!",1200);return;}
   if(v==="dock"){
-    const r=await humanDock(p,port);
-    if(r==="back"){await humanAct(p,sailCtx);return;}
+    const r=await humanDock(player,port);
+    if(r==="back"){await humanAct(player,sailCtx);return;}
   }
   else if(v==="attack"){
     // #5d: safety net — the button is disabled when you can't afford powder, but guard the action
     // too (e.g. a forced/edge selection) so we never enter a battle you can't pay for.
     // @copy adhoc.act.nopowder
-    if(p.coins<appState.game.cfg.powder||!attackable.length){await flash(`${pn(p.idx)} can't attack.`,1400,undefined,[{seat:p.idx,html:`Ye can't attack — no powder, or nothin' in their holds.`}]);await humanAct(p,sailCtx);return;}
+    if(player.coins<appState.game.cfg.powder||!attackable.length){await flash(`${pn(player.idx)} can't attack.`,1400,undefined,[{seat:player.idx,html:`Ye can't attack — no powder, or nothin' in their holds.`}]);await humanAct(player,sailCtx);return;}
     const t=attackable.length===1?attackable[0]:
       // @copy prompt.act.attacktarget
       await ask("Attack whom?",attackable.map(o=>({label:pn(o.idx),value:o})).concat([{label:"← Back",back:true,value:null}]),
         attackable.map(o=>HEXCOL[o.idx]));
-    if(t===null){await humanAct(p,sailCtx);return;}
-    await netHandlers().onAsyncBattle(p,t);
+    if(t===null){await humanAct(player,sailCtx);return;}
+    await netHandlers().onAsyncBattle(player,t);
     await narrateLastEvent();
   }
   else if(v==="trade"){
@@ -2293,14 +2485,30 @@ export async function humanAct(p,sailCtx){
     // has nothing to offer or no one else holds cargo, but guard the action too (e.g. a
     // forced/edge selection) so we never enter a trade P cannot possibly complete.
     // @copy adhoc.act.notrade
-    if(!canTrade){await flash(`${pn(p.idx)} can't trade.`,1400,undefined,[{seat:p.idx,html:`Ye can't trade — nothin' to offer, or no cargo on the water.`}]);await humanAct(p,sailCtx);return;}
-    const done=await humanTrade(p);if(!done){await humanAct(p,sailCtx);}return;
+    if(!canTrade){await flash(`${pn(player.idx)} can't trade.`,1400,undefined,[{seat:player.idx,html:`Ye can't trade — nothin' to offer, or no cargo on the water.`}]);await humanAct(player,sailCtx);return;}
+    const done=await humanTrade(player);if(!done){await humanAct(player,sailCtx);}return;
   }
 }
-export async function humanTurn(p){
-  applyActiveSeat(p.idx); // ONE ACTIVE SEAT, both tiers — see its note in util.js (02.15-01 Stage 2)
-  await passGate(p.idx);
-  applyActiveSeat(p.idx); // ...and again after the gate, exactly as setActor was called before it
+export async function humanTurn(player){
+  /* THE DEVICE CHANGES HANDS BEFORE THE SCREEN CHANGES CAPTAIN — Wyatt, 2026-08-31: "Move it, I
+     trust the plan." The plan puts pass-and-play's hand-over in the Decider: it is a precondition
+     on OBTAINING a decision from a seat, not a look and not part of the turn.
+
+     WHAT STOOD HERE: applyActiveSeat(player.idx) — then the gate — then applyActiveSeat(player.idx) again,
+     with a note reading "exactly as setActor was called before it", i.e. a shape preserved through
+     a refactor rather than a behaviour anybody chose. It came in with the cutover (fb74eedc).
+
+     WHAT IT COST A PLAYER: the board switched to the incoming captain — ring, captains-box
+     highlight, pass-and-play row order — and THEN the hand-over card appeared. For that instant the
+     OUTGOING captain, still holding the device, was looking at the next captain's board.
+
+     AND TWO OF THE THREE PASS-AND-PLAY PATHS ALREADY DID IT THIS WAY: the secret draft and a bake
+     turn both gate first. One of three disagreeing is rule 8's drift exactly, and nobody had
+     noticed. Gate: scripts/qa/handover_before_turn_check.mjs.
+
+     NOTHING CHANGES OUTSIDE PASS-AND-PLAY — passGate returns immediately in every other mode. */
+  await passGate(player.idx);
+  applyActiveSeat(player.idx); // ONE ACTIVE SEAT, both tiers — see its note in util.js (02.15-01 Stage 2)
   // a prior player's shot-clock expiry can leave this set from their forfeited turn — this
   // flag only ever got cleared by the clock's arming deep inside a decision, too late to
   // save this turn's own early "did the previous turn just die?" guards below, so clear it
@@ -2308,18 +2516,18 @@ export async function humanTurn(p){
   appState.turnExpired=false;
   // pass & play: this seat's own "check my recipe" button is only ever offered while its
   // turn is genuinely live (see render()) — any reveal from a prior turn is already gone.
-  appState.activeTurnSeat=p.idx;appState.recipeRevealed=false;
-  appState.game.ev({t:"turn",p:p.idx});
+  appState.activeTurnSeat=player.idx;appState.recipeRevealed=false;
+  appState.game.ev({t:"turn",p:player.idx});
   liveRender();
   // NARR-03/D-25: the round header already announced the wind moments ago, so the neutral banner
   // does not restate it; only the captain whose turn it is gets the reminder.
   // v2 rule 7: the storm has ALREADY happened by the time a turn begins — it blew the whole table
   // at the top of the round. So the turn banner no longer pre-announces a push that is about to
   // land on this one captain; there is nothing left for it to warn about.
-  const neutralBanner=`⛵ Ahoy, ${poss(p.idx)} turn!`;
-  const addressedBanner=`⛵ Ahoy, ${pn(p.idx)} — yer turn! The wind blows <b>${DIRNAME[appState.game.windNow]}</b> this round.`;
+  const neutralBanner=`⛵ Ahoy, ${poss(player.idx)} turn!`;
+  const addressedBanner=`⛵ Ahoy, ${pn(player.idx)} — yer turn! The wind blows <b>${DIRNAME[appState.game.windNow]}</b> this round.`;
   // @copy adhoc.turn.banner
-  await flash(neutralBanner,1500,undefined,[{seat:p.idx,html:addressedBanner}]);
+  await flash(neutralBanner,1500,undefined,[{seat:player.idx,html:addressedBanner}]);
   // the clock only starts once the player actually reaches a decision (wind response, sail
   // pick, action choice, ...) — not from the raw top of the turn, since the wind step itself
   // eats no time. (Each ask()/pickCell() call re-armed it fresh while the clock lived.)
@@ -2328,12 +2536,12 @@ export async function humanTurn(p){
   // ships around; otherwise the wind only shapes this player's own sail budget below
   // v2.1: a storm can no longer cost anyone a turn — land simply stops the push. The forfeit
   // branch that used to sit here is gone with the rule.
-  if(!appState.game.adjPort(p))p.dockedNow.clear();
-  const preSailPos=[...p.pos],preSailCoins=p.coins; // lets humanAct offer "move instead" if this seat just stayed put
+  if(!appState.game.adjPort(player))player.dockedNow.clear();
+  const preSailPos=[...player.pos],preSailCoins=player.coins; // lets humanAct offer "move instead" if this seat just stayed put
   // v2 rule 2: sailing is FREE. No coin gate, no debit, no "yer too broke to sail" nudge — and
   // rule 1 deletes the lee, so there is no upwind-island warning to give either.
   {
-    const dest=await pickCell(p,reachable(p));
+    const dest=await pickCell(player,reachable(player));
     // playtest 18 (Wyatt's pick): a checked recipe STAYS OPEN for the whole turn — the mid-turn
     // re-locks (here after the sail, and after the action below) are gone. The reveal ends at the
     // turn's own boundaries instead: humanTurn's entry, the expiry path, and passGate itself.
@@ -2342,19 +2550,31 @@ export async function humanTurn(p){
       // playtest 21 item 6 — see the moveInstead site above; both human sail legs route, because a
       // ship that sails honestly on one of them and cuts the corner on the other is the same
       // inconsistency in a new place.
-      const fromSail=[...p.pos];
-      const routeSail=appState.game.sailPath(p,dest,{throughRim:true});
-      p.pos=dest;p.justDocked=false;appState.game.ev({t:"sail",p:p.idx});liveRender();
-      await animateSailRoute(p.idx,fromSail,routeSail);
-      if(appState.game.tradewind(p)){await animateRimSweepIfAny();liveRender();await narrateLastEvent();}
+      const fromSail=[...player.pos];
+      const routeSail=[fromSail,...appState.game.sailPath(player,dest,{throughRim:true})];
+      player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route:routeSail});
+      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
+         object the guest is handed, so both tiers walk identical code on an identical subject.
+         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
+         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
+         loop would stop waiting for the glide. */
+      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
+         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
+         tree, so awaiting the glide before it held every other browser's board still for exactly
+         the length of THIS captain's own animation. Publish, then ride: nothing about what is
+         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
+         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
+      publishNow();await animateSailRoute(evSail);liveRender();
+      const evWind=appState.game.tradewind(player);
+      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}
       // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
       // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
-      else if(appState.game.onRim(p.pos))await flash(`🌀 ${pn(p.idx)} rides at the head o' the current — she's got nowhere to carry ye from here.`);
+      else if(appState.game.onRim(player.pos))await flash(`🌀 ${pn(player.idx)} rides at the head o' the current — she's got nowhere to carry ye from here.`);
     }
   }
   if(appState.turnExpired){appState.activeTurnSeat=null;return;}
-  if(!appState.game.adjPort(p))p.dockedNow.clear();
-  await humanAct(p,{preSailPos,preSailCoins});
+  if(!appState.game.adjPort(player))player.dockedNow.clear();
+  await humanAct(player,{preSailPos,preSailCoins});
   appState.recipeRevealed=false; // the TURN is over — the reveal ends with it (playtest 18: no mid-turn re-locks)
   appState.activeTurnSeat=null;
   // refresh now, not at the next turn's render — otherwise this seat's "check my recipe"
@@ -2370,19 +2590,19 @@ export async function humanTurn(p){
    reach a player it wasn't standing next to, and it only ever fired as a last resort when an
    island had run dry. Rule 4 gives every captain that reach every turn, so the special case is
    gone rather than left running alongside the general one. */
-export async function botOpenTradeLive(p){
+export async function botOpenTradeLive(player){
   const g=appState.game;
-  const offer=g.botOpenOffer(p);
+  const offer=g.botOpenOffer(player);
   if(!offer)return false;
-  g.noteDemand(p,offer.want,1);
+  g.noteDemand(player,offer.want,1);
   const offerDisplay=g.offerLabel(offer,0)||"nothing";
-  g.ev({t:"openoffer",p:p.idx,want:offer.want,offer:offerDisplay});
+  g.ev({t:"openoffer",p:player.idx,want:offer.want,offer:offerDisplay});
   liveRender();
   await botBeat();
   const responses=[];
-  for(const q of g.holdersOf(offer.want,p)){
+  for(const q of g.holdersOf(offer.want,player)){
     if(q.strategy==="human"){
-      setActor(q.idx);
+      applyActiveSeat(q.idx);
       // @copy prompt.trade.accept
       // playtest 20 (Mando: "Bug in 'name your price' - the game simply acted as if I had rejected
       // the trade and moved on"). TWO separate ways that happened, both fixed here:
@@ -2399,27 +2619,27 @@ export async function botOpenTradeLive(p){
       //      this prompt, and only "✗ Deny" denies.
       //
       // `room` is what the offerer has spare AFTER the coins already in the offer.
-      const room=Math.max(0,p.coins-offer.giveCoins);
+      const room=Math.max(0,player.coins-offer.giveCoins);
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(`${pn(q.idx)}: ${pn(p.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
+        const v=await ask(`${pn(q.idx)}: ${pn(player.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
           {label:`${iconImg(CHECKMARK_IMG)} Accept`,value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
           {label:"💰 Ask for summat else",short:"💰 Counter",value:"counter",
-            disabled:room<1&&![...new Set(p.ing)].some(i=>i!==offer.giveIng),
-            why:`${pn(p.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
+            disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
+            why:`${pn(player.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
           {label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?`${pn(p.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
+          room<1?`${pn(player.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
         if(appState.turnExpired)return false;
         if(v==="counter"){
-          const c=await counterOffer(q,p,offer);
+          const c=await counterOffer(q,player,offer);
           if(c==null)return false;                 // shot clock expired mid-counter
           if(c==="__back__")continue;              // BACK MEANS BACK — re-ask, never a denial
           if(c==="deny")responses.push({q,kind:"deny",why:"chose"});
@@ -2427,15 +2647,15 @@ export async function botOpenTradeLive(p){
         }else responses.push({q,kind:v==="accept"?"accept":"deny",why:"chose"});
         answered=true;
       }
-    }else responses.push(g.respondToOffer(q,offer,p));
+    }else responses.push(g.respondToOffer(q,offer,player));
   }
-  setActor(p.idx);
+  applyActiveSeat(player.idx);
   if(!responses.length)return false; // nobody left worth hailing — don't spend the turn on silence
   // remember every refusal, so the same doomed offer is not put to the same captain again
-  const worth=g.offerWorthTurns(p,offer);
+  const worth=g.offerWorthTurns(player,offer);
   for(const r of responses)if(r.kind==="deny"){
-    g.rememberRefusal(p,offer.want,r.q.idx,worth);
-    g.refusedFlagWanted(p,offer,r.q);
+    g.rememberRefusal(player,offer.want,r.q.idx,worth);
+    g.refusedFlagWanted(player,offer,r.q);
   }
   /* THE HUMAN'S COUNTER IS A REAL COUNTER HERE TOO — and it was being thrown away.
 
@@ -2444,7 +2664,7 @@ export async function botOpenTradeLive(p){
      counterTerms(). This path — a BOT hailing the table, the HUMAN answering — is a THIRD copy of
      the same settlement, and it was left reading the raw `offer`:
 
-         g.settleTrade(p, deal, offer, extra)      // the ORIGINAL deal, not what was agreed
+         g.settleTrade(player, deal, offer, extra)      // the ORIGINAL deal, not what was agreed
 
      So a captain who countered asking for a different crate had their counter accepted on screen
      and the ORIGINAL trade executed instead — the crate they asked for never moved, and the one
@@ -2460,28 +2680,28 @@ export async function botOpenTradeLive(p){
   const counters=responses.filter(r=>{
     if(r.kind!=="counter")return false;
     const t=g.counterTerms(offer,r);
-    return (t.giveCoins||0)<=p.coins&&(!t.giveIng||p.ing.includes(t.giveIng));
+    return (t.giveCoins||0)<=player.coins&&(!t.giveIng||player.ing.includes(t.giveIng));
   });
   let deal=null,terms=offer;
   if(accepts.length){
-    accepts.sort((x,y)=>g.crateCostTurns(y.q,offer.want,p)-g.crateCostTurns(x.q,offer.want,p));
+    accepts.sort((x,y)=>g.crateCostTurns(y.q,offer.want,player)-g.crateCostTurns(x.q,offer.want,player));
     deal=accepts[0].q;
   }else if(counters.length){
     const priced=counters.map(r=>{
       const t=g.counterTerms(offer,r);
       let cost=g.coinTurns(t.giveCoins||0);
-      if(t.giveIng)cost+=(p.recipe&&p.recipe.includes(t.giveIng)&&g.cnt(p.ing,t.giveIng)<=1)
-        ?g.acquireTurns(p,t.giveIng).turns
+      if(t.giveIng)cost+=(player.recipe&&player.recipe.includes(t.giveIng)&&g.cnt(player.ing,t.giveIng)<=1)
+        ?g.acquireTurns(player,t.giveIng).turns
         :1.1;   // PLAN.leverageTurns — a spare costs little to let go
       return {r,t,cost};
     }).sort((a,b)=>a.cost-b.cost);
     // only take a counter that still beats getting the crate the hard way — the same test the
     // headless bot applies, so a bot never pays a price on screen it would refuse in simulation
-    if(priced[0].cost<=g.acquireTurns(p,offer.want).turns){deal=priced[0].r.q;terms=priced[0].t;}
+    if(priced[0].cost<=g.acquireTurns(player,offer.want).turns){deal=priced[0].r.q;terms=priced[0].t;}
   }
-  if(!deal||!g.settleTrade(p,deal,terms,0)){
-    for(const r of responses)if(r.kind==="counter")g.rememberRefusal(p,offer.want,r.q.idx,worth);
-    g.ev({t:"parley",a:p.idx,b:null,offer:offerDisplay,want:offer.want});
+  if(!deal||!g.settleTrade(player,deal,terms,0)){
+    for(const r of responses)if(r.kind==="counter")g.rememberRefusal(player,offer.want,r.q.idx,worth);
+    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
     liveRender();
     await botBeat();
     return true; // the offer itself WAS the action — a refused hail still ends the turn
@@ -2514,54 +2734,72 @@ async function botDockCoin(dockEv){
      not. Same constant as the battle flips, so the four paths now answer one question one way. */
   await sleep(FLIP_LAND_HOLD_MS);
 }
-export async function botTurn(p){
-  applyActiveSeat(p.idx); // ONE ACTIVE SEAT, both tiers (02.15-01 Stage 2)
+export async function botTurn(player){
+  applyActiveSeat(player.idx); // ONE ACTIVE SEAT, both tiers (02.15-01 Stage 2)
   const g=appState.game;
-  g.ev({t:"turn",p:p.idx});
+  g.ev({t:"turn",p:player.idx});
   await botBeat();
   // v2.1: no turn is ever lost to weather, so a bot has no forfeit branch either.
-  if(!g.adjPort(p))p.dockedNow.clear();
+  if(!g.adjPort(player))player.dockedNow.clear();
   // PRINCIPLE 1: the WHOLE turn is decided here, before a square is crossed — the square to finish
   // on AND what to do from it, scored as one plan against turns-to-victory. This path only ANIMATES
   // the engine's decision, so a bot on screen can never do something the headless simulation would
   // not have done. See docs/BOT-DESIGN-PRINCIPLES.md.
-  const plan=g.planTurn(p);
+  const plan=g.planTurn(player);
   const target=plan.cell;
-  if(man(p.pos,target)>0){
-    const b=[...p.pos];
+  if(man(player.pos,target)>0){
+    const b=[...player.pos];
     // v2 rule 2: sailing is free. No coin to spend, none to refund.
     // playtest 21 item 6: bots route too. `b` is already the pre-move square, and sailPlan writes
-    // p.pos — so the path is derived AFTER the move, from `b` to where the bot actually ended up,
-    // which is the one square sailPath can no longer be asked about from p. Hence the explicit
+    // player.pos — so the path is derived AFTER the move, from `b` to where the bot actually ended up,
+    // which is the one square sailPath can no longer be asked about from player. Hence the explicit
     // `dest` read. A bot that cut corners while the human sailed honestly would be the same
     // inconsistency wearing a different hat, and bots do most of the sailing a player watches.
-    if(g.sailPlan(p,plan)){p.justDocked=false;g.ev({t:"sail",p:p.idx});
-      // `from:b` — sailPlan has already written p.pos, so the search is told the pre-move square
-      // outright rather than p.pos being temporarily rewound to read the route back out of it.
-      const route=g.sailPath(p,[...p.pos],{throughRim:false,from:b});
-      liveRender();
-      await animateSailRoute(p.idx,b,route);
+    if(g.sailPlan(player,plan)){player.justDocked=false;
+      // `from:b` — sailPlan has already written player.pos, so the search is told the pre-move square
+      // outright rather than player.pos being temporarily rewound to read the route back out of it.
+      // The route is now taken BEFORE the event, because it rides ON the event (Game.ev/bakeDraw).
+      const route=[b,...g.sailPath(player,[...player.pos],{throughRim:false,from:b})];
+      const evSail=g.ev({t:"sail",p:player.idx,route});
+      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
+         object the guest is handed, so both tiers walk identical code on an identical subject.
+         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
+         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
+         loop would stop waiting for the glide. */
+      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
+         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
+         tree, so awaiting the glide before it held every other browser's board still for exactly
+         the length of THIS captain's own animation. Publish, then ride: nothing about what is
+         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
+         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
+      publishNow();await animateSailRoute(evSail);liveRender();
       await botBeat();
-      if(g.tradewind(p)){await animateRimSweepIfAny();liveRender();await narrateLastEvent();}}
+      const evWind=g.tradewind(player);
+      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}}
     // G18: a boxed-in bot escapes through the rim, exactly as the engine's own takeTurn does.
     // rimEscape() records its own events (windmove, then tradewind's sweep line).
-    else if(g.boxedIn(p)&&g.rimEscape(p)){await animateRimSweepIfAny();await botBeat();}
+    /* rimEscape returns whether the ship escaped, not the event, so the sweep it just pushed is
+       read off the top of the pile. That is safe HERE and is not the fault W7/W9 fixed: the fault
+       is a CONSUMER guessing which event it is drawing, and this is the EMITTER, one synchronous
+       statement after its own emit with nothing awaited in between. If the escape found no head to
+       sweep to, the top of the pile is the windmove and the call is a no-op by its own guard. */
+    else if(g.boxedIn(player)&&g.rimEscape(player)){publishNow();await animateRimSweepIfAny(g.events[g.events.length-1]);await botBeat();}
   }
-  if(!g.adjPort(p))p.dockedNow.clear();
+  if(!g.adjPort(player))player.dockedNow.clear();
   liveRender();
   // The plan was costed from plan.cell; a storm or a blocked route can leave the ship short of it,
   // so anything needing adjacency is re-checked against where the ship ACTUALLY is. Not a second
   // decision — the same plan, refusing to pretend it arrived.
-  if(plan.type==="attack"&&man(p.pos,plan.target.pos)<=1&&g.canAttack(p,plan.target)){
-    await netHandlers().onAsyncBattle(p,plan.target);
+  if(plan.type==="attack"&&man(player.pos,plan.target.pos)<=1&&g.canAttack(player,plan.target)){
+    await netHandlers().onAsyncBattle(player,plan.target);
     await botBeat();return;
   }
   if(plan.type==="trade"){
-    if(await botOpenTradeLive(p))return;
+    if(await botOpenTradeLive(player))return;
   }
-  if(plan.type==="dock"&&g.adjPort(p)===plan.ing){
+  if(plan.type==="dock"&&g.adjPort(player)===plan.ing){
     const n0=g.events.length;
-    if(g.doDock(p,plan.ing)){
+    if(g.doDock(player,plan.ing)){
       await botDockCoin(g.events.slice(n0).find(ev=>ev.t==="dock"));   // item 18: the same coin, the same clock
       await botBeat();
       netHandlers().onBroadcastFlip("wait");
@@ -2573,10 +2811,10 @@ export async function botTurn(p){
   // scripts/bakeoff_parity_test.js). A fallback added only to the engine would fix the simulator  [UNGATED-IN-4: bakeoff_parity_test.js reads the root tree, not this one]
   // and leave every real browser game exactly as broken, which is the opposite of the point.
   // Same rule as the engine's: work the berth under your feet, nothing cleverer.
-  const fallbackPort=g.adjPort(p);
-  if(fallbackPort&&g.canDock(p,fallbackPort)){
+  const fallbackPort=g.adjPort(player);
+  if(fallbackPort&&g.canDock(player,fallbackPort)){
     const n0=g.events.length;
-    if(g.doDock(p,fallbackPort)){
+    if(g.doDock(player,fallbackPort)){
       await botDockCoin(g.events.slice(n0).find(ev=>ev.t==="dock"));   // item 18: same as the planned dock above
       await botBeat();
       netHandlers().onBroadcastFlip("wait");
@@ -2584,19 +2822,19 @@ export async function botTurn(p){
     }
   }
   // ITEM 4 / D-15: a bake-eligible captain never reaches the pass line below. canOvens (:1857,
-  // this same file) already suppresses the human's Pass button the instant g.canBake(p) is true
-  // and shows "Fire up the ovens!" instead — the SAME g.canBake(p), not a second hand-written
+  // this same file) already suppresses the human's Pass button the instant g.canBake(player) is true
+  // and shows "Fire up the ovens!" instead — the SAME g.canBake(player), not a second hand-written
   // test, is what makes "same rule for bots and humans" a property of the code rather than two
   // sites that happen to agree today (rule 13). Ending the turn here, silently, is enough:
-  // runLiveDayBakeoff's own g.lightOvens(p) call fires the moment this function returns
+  // runLiveDayBakeoff's own g.lightOvens(player) call fires the moment this function returns
   // (4/src/orchestrator.js:934), exactly as it does for a human whose turn ended on the ovens
   // button — the bot bakes, it does not pass.
-  if(g.cfg.bakeoff&&g.canBake(p))return;
+  if(g.cfg.bakeoff&&g.canBake(player))return;
   // v2 rule 3: no fishing. A bot with nothing worth doing looks into the ocean, exactly as a
   // human does — same action, same narration, same dubloon (RULE-01), so the table reads
   // consistently. The shared engine method is what makes "same" a property of the code rather
   // than a claim about two sites that happen to agree today.
-  g.doPass(p);
+  g.doPass(player);
   await botBeat();
 }
 
@@ -2648,7 +2886,7 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
     // one device, secret options: draft in turn, each behind the pass-the-device screen
     for(const seat of seats){
       await passGate(seat);
-      setActor(seat);
+      applyActiveSeat(seat);
       results[seat]=await localAsk(msgFor(seat),optsFor(seat));
     }
     return results;
@@ -2684,7 +2922,7 @@ export async function netIntroBarrier(msg,btnLabel){
   // /4 playtest 12: the two intro barriers (ahoy + turn order) play CENTER STAGE — board dimmed,
   // message and button centred — instead of a bubble at the top and a lone circle mid-sea
   const opts=[{label:btnLabel,value:0,cls:"primary ahoyGlow",stage:true}];
-  const humans=appState.game.players.filter(p=>p.strategy==="human");
+  const humans=appState.game.players.filter(player=>player.strategy==="human");
   // whoever clicks through first (or isn't last) sits on this instead of a blank panel while the
   // rest of the crew finishes reading — same idea as recipeDraftNet's "waiting for the crew" beat.
   // (On a shared device the dispatcher never shows it: nobody is waiting for anybody.)
@@ -2693,7 +2931,7 @@ export async function netIntroBarrier(msg,btnLabel){
   // FORK 5 IS THE PUBLIC CASE — one showing for a shared device (Wyatt 2026-08-08), every human
   // concurrently when each has their own screen. The whole pass-and-play/networked branch pair that
   // stood here lives in draftDispatch now, where fork 4 shares it.
-  await draftDispatch({seats:humans.map(p=>p.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg});
+  await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg});
 }
 // the opening backstory/context message — stays up until every human player actually reads it
 // and clicks through, rather than auto-advancing on a timer like every other narration
@@ -2798,10 +3036,10 @@ export function battleFooter(o){
    and nobody is paid. */
 export async function collectSideBets(att,def){
   const bets=[],ns=pn;
-  const spectators=appState.game.players.filter(p=>p!==att&&p!==def&&!p.done);
+  const spectators=appState.game.players.filter(player=>player!==att&&player!==def&&!player.done);
   for(const s of spectators){
     if(s.strategy==="human"){
-      setActor(s.idx);
+      applyActiveSeat(s.idx);
       // NAMED, because on one device the prompt arrives out of nowhere (Wyatt, 2026-08-08: "it is
       // wyyy's turn and they are attacking, but juju must call; so the narration should say 'Juju —
       // A battle's brewing!'"). The caller is a SPECTATOR of someone else's fight, so nothing about
@@ -2834,11 +3072,11 @@ export async function settleSideBets(bets,winSide){
   const parts=[];
   const bounty=appState.game.cfg.callBounty;
   for(const bet of bets){
-    const p=appState.game.players[bet.idx];
+    const player=appState.game.players[bet.idx];
     // winSide is null for a NULL battle — nobody won, so no call can be correct (rule 5d)
     const won=winSide!=null&&bet.on===winSide;
     const delta=won?bounty:0;
-    p.coins+=delta;
+    player.coins+=delta;
     appState.game.ev({t:"sidebet",p:bet.idx,won,on:bet.on,delta});
     parts.push(won?`${pn(bet.idx)} +${delta}🌕`:`${pn(bet.idx)} no bounty`);
   }

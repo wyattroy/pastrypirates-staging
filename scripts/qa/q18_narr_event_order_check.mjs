@@ -47,8 +47,38 @@ const shared = read("src/shared/index.js");
    SET against what the corpus was recorded with. A new field of any name fails, whatever it is
    called and however it is written. */
 {
-  const body = (engine.match(/\bev\(o\)\s*\{[\s\S]*?this\.events\.push\(o\);\}/) || [""])[0];
-  const RECORDED = ["round", "wind", "storm", "wind2", "state", "tokens"];
+  /* RE-ANCHORED 2026-08-30, and the reason matters more than the change. The old anchor was
+     /ev\(o\)\s*\{[\s\S]*?this\.events\.push\(o\);\}/ — it required the function to END on the push.
+     W7b then made ev() RETURN the event it pushed (so a caller can hold the event it is drawing
+     instead of reaching back for whatever is on top of the pile), and the anchor stopped matching
+     at all. It did not report "ev() has changed shape"; it reported body:false and therefore
+     "missing: every field", which reads as the determinism corpus having been torn up. An anchor
+     that answers a question about ITSELF in the vocabulary of the thing it guards is worse than no
+     anchor, because the reader believes it.
+     It now BRACE-MATCHES the whole function body instead of pattern-matching its final line, which
+     is also strictly stronger: the old version stopped reading at the push, so `this.events.push(o);
+     o.sneaky=1;` would have been emitted and invisible to it. Comments are stripped first so prose
+     about `o.something =` cannot be read as an assignment. If ev(o) ever disappears the extraction
+     yields nothing and this still fails loudly — which is the correct outcome, not a pass. */
+  const body = (() => {
+    const i = engine.search(/\bev\(o\)\s*\{/);
+    if (i < 0) return "";
+    let j = engine.indexOf("{", i), depth = 0, k = j;
+    for (; k < engine.length; k++) { if (engine[k] === "{") depth++; else if (engine[k] === "}") { depth--; if (!depth) break; } }
+    return depth === 0 ? strip(engine.slice(j, k + 1)) : "";
+  })();
+  /* "draw" ADDED 2026-08-30, and the reason travels with it because this list is the only place
+     that knows the engine's emitted field set is deliberate rather than accidental. THIS GATE DID
+     ITS JOB: it fired the moment the sail route joined the event, which is exactly the change
+     Wyatt authorised that day — "it's cheap for us to change the engine right now -- that's WHY
+     WE'RE DOING THIS!!!! change it!" — over CLAUDE.md's standing "prefer UI-tier fixes", because
+     the determinism corpus is currently inert (package.json marks test:determinism BROKEN BY THE
+     CUTOVER) and a field added now costs nothing that works today.
+     `draw` IS A PRESENTATION LANE, NOT A GAME FACT. It carries how a move is drawn — the route a
+     boat sails — and never what the move was. Anything that decides the OUTCOME of a game belongs
+     in `state`, and a future re-record of the corpus may hash `state` while ignoring `draw`. Do
+     not let that distinction rot: adding a field here is a decision, not a formality. */
+  const RECORDED = ["round", "wind", "storm", "wind2", "state", "tokens", "draw"];
   const assigned = [...body.matchAll(/\bo(?:\.([A-Za-z_$][\w$]*)|\[\s*["'`]([^"'`]+)["'`]\s*\])\s*=/g)]
     .map(m => m[1] || m[2]);
   const extra = [...new Set(assigned)].filter(k => !RECORDED.includes(k));

@@ -41,11 +41,11 @@
 //
 // Usage:  node scripts/trade_offer_measure.js [games]
 
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const engine = await import(path.join(HERE, "..", "src", "engine", "index.js"));
+const engine = await import(pathToFileURL(path.join(HERE, "..", "src", "engine", "index.js")).href);
 const { Game, roundCfg } = engine;
 
 const GAMES = Number(process.argv[2] || 300);

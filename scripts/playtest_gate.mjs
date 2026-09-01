@@ -20,9 +20,10 @@
 //        [--dbg=9800] [--judge=on|off] [--model=claude-sonnet-5] [--max-min=35] [--parallel=2]
 // Exit 1 on any failure. Keeps every screenshot + a contact sheet per leg. Read them.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { REPO, gameURL } from "./lib/chrome.mjs";
+import { REPO, gameURL, PYTHON } from "./lib/chrome.mjs";
 import { openChrome, sleep } from "./lib/cdp.mjs";
 /* THE SECOND ENGINE. Wyatt, 2026-08-26: "your fixes must be verified across Safari and Chrome."
    wk.mjs is a MOUNT, not a second driver — it returns the same handle shape openChrome() does, so
@@ -36,7 +37,7 @@ import { makePlayer, sideQuests, GATE_SRC } from "./lib/player.mjs";
 /* DO THE TWO CAPTAINS SEE THE SAME GAME? This leg already played both seats and threw the
    comparison away — each was judged against the universal rules ALONE, which cannot see "both
    screens are individually fine and they disagree". That is seven of Wyatt's 35 findings. */
-import { legVerdictLine } from "./lib/leg_verdict.mjs";
+import { legVerdictLine, legVerdict } from "./lib/leg_verdict.mjs";
 import { compareWhenSettled } from "./lib/seat_parity.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -54,8 +55,29 @@ const JUDGE_MODE = arg("judge", "on");            // on | queue | off
 const JUDGE = JUDGE_MODE !== "off";
 const MODEL = arg("model", "claude-sonnet-5");
 const MAX_MS = +arg("max-min", 35) * 60_000;
-const PAR = Math.max(1, +arg("parallel", 2));
-const JUDGE_CAP = 30;                     // distinct screens judged per leg (all get structural checks)
+/* HOW MANY LEGS AT ONCE — DERIVED FROM THE MACHINE, NOT TYPED (CLAUDE.md rule 9).
+   A flat `2` was right for the laptop it was written on and wrong everywhere else: it leaves a
+   16-core box idle and it would thrash a 2-core one. And the ceiling is not opinion, it is
+   measured — 2026-08-30, this container: ONE crew-desktop leg (two browsers, a parity sampler and
+   node) held a load average of 2.75 on 4 cores. Two browsers is most of four cores, so the honest
+   conversion is roughly two cores per leg, and a fleet of ten wants about sixteen.
+   WHY OVER-SUBSCRIBING IS NOT MERELY SLOWER: this gate judges by wall clock. waitSettled asks "has
+   the screen stopped moving", and a dead control is one that changed nothing within 9 seconds. On a
+   thrashed box both of those go wrong in the direction of INVENTING findings — screens that
+   "never settled", buttons that look dead. Speed bought that way is paid for in false alarms, and
+   a gate that cries wolf is the failure this repo has already paid for twice. */
+const CORES = (os.cpus() || []).length || 2;
+const PAR = Math.max(1, +arg("parallel", Math.max(1, Math.floor(CORES / 2))));
+/* THE EYES SEE EVERY SCREEN NOW. `JUDGE_CAP = 30` used to stop the vision judge at the first
+   thirty distinct screens of a leg while the structural rules ran on all of them — and the verdict
+   said nothing about the gap, so a 60-screen leg came back "30 judged, all PASS" and read as
+   visually clean with half of it never opened (one fleet: 349 captured, 267 judged, 82 unseen).
+   Wyatt, 2026-08-30: "everything must be seen visually, or else you don't catch your own code
+   errors." The cap existed because each screen was a separate `claude -p` session boot; batching
+   five screens per call (lib/vision.mjs, measured $0.103/31s per five against $0.049/9-43s EACH)
+   is what makes looking at all of them affordable. If a cap is ever needed again, the leg's
+   verdict already prints "N screen(s) NOT looked at" — so it can never be silent again. */
+const JUDGE_BATCH = +arg("judge-batch", 5);
 fs.mkdirSync(OUT, { recursive: true });
 const T0 = Date.now();
 const log = (...a) => { const s = `[${((Date.now() - T0) / 1000 | 0) + ""}s] ` + a.join(" "); console.log(s); fs.appendFileSync(path.join(OUT, "log.txt"), s + "\n"); };
@@ -68,7 +90,7 @@ process.on("exit", killAll); for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) 
 // must NOT own servers: the contact sheet renders after a leg's Chrome closes, and a per-leg server
 // would already be dead by then. Do not edit game files while the gate runs — this serves the disk.
 import { spawn } from "node:child_process";
-const SRV = spawn("python3", ["-m", "http.server", String(PORT0)], { cwd: REPO, stdio: "ignore" });
+const SRV = spawn(PYTHON, ["-m", "http.server", String(PORT0)], { cwd: REPO, stdio: "ignore" });
 ownPorts.http.add(PORT0);
 process.on("exit", () => { try { SRV.kill("SIGKILL"); } catch {} });
 await sleep(900);
@@ -161,6 +183,51 @@ async function hostStart(c) {
 }
 
 // ---------- one seat's play loop: tick, capture every distinct screen, structural-check it -------
+/* ONE CAPTURE PATH FOR EVERY SCREEN, INCLUDING THE LAST ONE.
+   Extracted 2026-08-31. It used to be the body of the loop below, which meant the End of Voyage
+   branch — an early `return`, written as a teardown rather than as a screen — stepped over all of
+   it and pushed `{ fails: [] }`, a hardcoded literal indistinguishable in every report from
+   "checked, and clean". CLAUDE.md rule 23: two things that must agree are ONE thing, or they drift.
+   The moment a SECOND consumer of the capture appeared, the answer was to converge, not to branch.
+
+   The settle wait matters MORE on that last screen than anywhere else, and this is the part that is
+   easy to get backwards. The vision judge already read the EOV shot (it maps over rec.screens), so
+   the eyes were being handed the one frame guaranteed to be mid-flight: w34_eov_park_glide measured
+   that card travelling 688px on desktop and 762px on tablet in 250ms. A card caught in the air is
+   exactly what produces a judge complaint that reads as a real layout defect and is not one. */
+async function settleAndCheck(c, tag, rec, f, sig) {
+  const mMotion = await c.ev(MEASURE);
+  const motionFails = (mMotion && !mMotion.__err) ? structuralChecks(mMotion).filter(k => !k.ok) : [];
+
+  const settle = await waitSettled(c);
+  const fSettled = f.replace(/\.png$/, "-settled.png");
+  await c.shot(fSettled);
+
+  const m = await c.ev(MEASURE);
+  const checks = (m && !m.__err) ? structuralChecks(m) : [{ ok: false, rule: "measure", what: String(m && m.__err) }];
+  const fails = checks.filter(k => !k.ok);
+  /* A screen that never fully stopped is RECORDED, not failed — see the note in waitSettled. */
+  if (!settle.settled) log(`  [${tag}] note: still moving at the cap (${settle.ms}ms) — checked anyway`);
+  rec.screens.push({ shot: fSettled, motionShot: f, sig, fails, settle,
+    motionOnly: motionFails.filter(k => !fails.some(x => x.rule === k.rule)) });
+  if (fails.length) for (const k of fails) log(`  [${tag}] STRUCT FAIL ${k.rule}: ${k.what}`);
+  for (const k of (rec.screens.at(-1).motionOnly || [])) log(`  [${tag}] during-animation only (not a failure) ${k.rule}: ${k.what}`);
+  return fails;
+}
+
+/* A REAL DEADLINE, because a loop condition is not one. playSeat's `while (Date.now() - t0 <
+   MAX_MS)` is only consulted between iterations, so a single await that never resolves runs past
+   any cap forever -- measured 2026-09-01, when a leg overran its 35-minute cap by 17 minutes
+   having produced no screenshot at all, and the trial could not finish. Promise.race is the
+   whole fix: the timer resolves whether or not the work ever does.
+   It RESOLVES rather than rejects, and marks the record, because a leg that ran out of time is
+   a real result to report -- the NOT-RUN principle applied to a hang. */
+function withDeadline(promise, ms, onTimeout) {
+  let timer;
+  const bell = new Promise((res) => { timer = setTimeout(() => { try { onTimeout(); } catch {} res("deadline"); }, ms); });
+  return Promise.race([promise, bell]).finally(() => clearTimeout(timer));
+}
+
 async function playSeat(c, tag, rec, { untilOver = true, quests = true } = {}) {
   const player = makePlayer(c, { log: (m) => log(`  [${tag}] ${m}`) });
   rec.player = player.P;
@@ -184,28 +251,27 @@ async function playSeat(c, tag, rec, { untilOver = true, quests = true } = {}) {
        The settled shot REPLACES the motion shot in `rec.screens`, so the judge and the contact sheet
        see the screen as a player leaves it, and the motion frame is kept beside it for reading. */
     const f = await player.captureIfNew(OUT, tag, ++shotN);
-    if (f) {
-      const mMotion = await c.ev(MEASURE);
-      const motionFails = (mMotion && !mMotion.__err) ? structuralChecks(mMotion).filter(k => !k.ok) : [];
-
-      const settle = await waitSettled(c);
-      const fSettled = f.replace(/\.png$/, "-settled.png");
-      await c.shot(fSettled);
-
-      const m = await c.ev(MEASURE);
-      const checks = (m && !m.__err) ? structuralChecks(m) : [{ ok: false, rule: "measure", what: String(m && m.__err) }];
-      const fails = checks.filter(k => !k.ok);
-      /* A screen that never fully stopped is RECORDED, not failed — see the note in waitSettled. */
-      if (!settle.settled) log(`  [${tag}] note: still moving at the cap (${settle.ms}ms) — checked anyway`);
-      rec.screens.push({ shot: fSettled, motionShot: f, sig: player.P.screens.at(-1).sig, fails, settle,
-        motionOnly: motionFails.filter(k => !fails.some(x => x.rule === k.rule)) });
-      if (fails.length) for (const k of fails) log(`  [${tag}] STRUCT FAIL ${k.rule}: ${k.what}`);
-      for (const k of (rec.screens.at(-1).motionOnly || [])) log(`  [${tag}] during-animation only (not a failure) ${k.rule}: ${k.what}`);
-    } else shotN--;
+    if (f) await settleAndCheck(c, tag, rec, f, player.P.screens.at(-1).sig);
+    else shotN--;
     const st = await player.state();
     if (st && st.day !== lastDay) { lastDay = st.day; rec.days = st.day; log(`  [${tag}] DAY ${st.day}`); }
     if (st && st.over) { log(`  [${tag}] END OF VOYAGE at day ${st.day}`);
-      const f2 = `${OUT}/${tag}-eov.png`; await c.shot(f2); rec.screens.push({ shot: f2, sig: "end of voyage", fails: [] });
+      /* CAPTURE IT THE SAME WAY, WHICH MEANS captureIfNew — NOT AN UNCONDITIONAL SHOT.
+         CEO Review 39 opened the pre-fix 10-leg report and found what I had missed: the loop
+         ABOVE already photographs the ending one tick earlier (signature `… ~ EOV ~`), settled and
+         structurally checked, in all ten legs. This branch's unconditional `c.shot` then added a
+         SECOND record of the same screen carrying `fails: []`.
+         So the fault was never "the ending is checked by nothing" — it was a DUPLICATE entering
+         the report marked clean. Real, and smaller than billed: `fails: []` reads as "checked and
+         clean" in every report, it inflates the screen count, and it costs one paid vision-judge
+         call per leg. Routing through captureIfNew fixes the lot: a genuinely new screen is
+         settled and checked like any other; a screen already in the record is not photographed
+         twice. `finished` is set either way — reaching the ending is what that means. */
+      const f2 = await player.captureIfNew(OUT, tag, ++shotN);
+      if (f2) {
+        const eovFails = await settleAndCheck(c, tag, rec, f2, "end of voyage");
+        log(`  [${tag}] end of voyage: ${eovFails.length ? eovFails.length + " structural finding(s)" : "no structural findings"}`);
+      } else { shotN--; log(`  [${tag}] end of voyage: already captured and checked as an ordinary screen — not recorded twice`); }
       rec.finished = true; return; }
     // side quests once the game is properly underway (day 2+, between prompts)
     if (quests && !questsDone && st && st.day >= 2) { questsDone = true; await sideQuests(c, player, (m) => log(`  [${tag}] ${m}`)); }
@@ -220,86 +286,7 @@ async function playSeat(c, tag, rec, { untilOver = true, quests = true } = {}) {
 }
 
 // ---------- verdicts --------------------------------------------------------------------------
-function legVerdict(rec) {
-  const v = [];
-  if (!rec.finished) v.push("did not finish the voyage");
-  /* A RESCUE IS NOT A FREE PASS — CEO Review 12, 2026-08-28: "nothing bounds the recoveries…
-     A leg needing eleven relaunches should not produce the same shaped verdict as one needing
-     none," and this repo has already paid once for an instrument that was reassuring rather than
-     silent. The mount absorbs ANY WebKit death, so without this a future crash caused by OUR OWN
-     game code would relaunch, resume, and report finished:true with a small asterisk.
-     TWO RULES, both derived rather than typed:
-       - ANY recovery on a NON-WebKit leg fails outright. The crash we sanction is WebKit's own
-         (diagnosed by core dump); Chrome has never once needed one, so a Chrome relaunch is by
-         definition not the known bug.
-       - A WebKit leg gets a budget of ONE RESCUE PER FOUR GAME-DAYS SAILED (floor 2). A voyage
-         that has to be restarted more often than that is not sailing, it is crash-looping, and
-         the verdict should say so. The divisor is the honest knob: the 2026-08-28 fleet ran
-         11 rescues over 29 days (budget 7 — FAILS, correctly: the CEO called that leg a limp),
-         2 over 19 and 1 over 16 (budgets 4 and 4 — both pass). Change it when observation
-         changes, and say what you observed. */
-  const rescues = rec.recoveries || 0;
-  if (rescues) {
-    const wk = /-wk$/.test(rec.name);
-    const budget = Math.max(2, Math.ceil((rec.days || 1) / 4));
-    if (!wk) v.push(`${rescues} browser relaunch(es) on a Chrome leg — Chrome has never needed one; this is NOT the sanctioned WebKit crash`);
-    else if (rescues > budget) v.push(`${rescues} WebKit relaunch(es) over ${rec.days || "?"} day(s) — above the ${budget} this voyage's length allows; that is a crash loop being ridden out, not a voyage`);
-  }
-  const structFails = rec.screens.flatMap(s => s.fails);
-  /* NAME THEM. A COUNT IS NOT ACTIONABLE, AND THIS ONE HID THE BIGGEST FINDING IN THE FLEET.
-     Every other line in this verdict names its subject — dead controls list their labels,
-     unreachable controls their `what`, unexercised kinds their names — and this one alone said
-     only "2 structural check failure(s)". Rule 24 stands on Wyatt being able to OPEN THE REPORT
-     and see what happened; a bare number sends him to a 5,000-line log or nowhere.
-     WHAT IT COST, 2026-08-29: the FULL trial for build 2026.08.29.2 reported "1" and "2"
-     structural failures per leg. Behind those numbers were 22 failures, 14 of them on
-     crew-phone-guest, and they say `on-screen: clickable off-screen: sailCell` and
-     `sail-clickable: 2 sail square(s) covered ... <- #pp4Cap` — the trial had independently
-     reproduced "sail squares a guest cannot tap", the TOP item on the backlog, and the summary
-     line threw the evidence away. Grouped by RULE rather than listed flat, because one broken
-     screen trips the same rule repeatedly and a flat list would be its own kind of noise. */
-  if (structFails.length) {
-    const byRule = new Map();
-    for (const k of structFails) byRule.set(k.rule, (byRule.get(k.rule) || 0) + 1);
-    const named = [...byRule.entries()].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r}×${n}`).join(", ");
-    const first = (structFails[0] && structFails[0].what) ? ` — first: ${String(structFails[0].what).slice(0, 110)}` : "";
-    v.push(`${structFails.length} structural check failure(s): ${named}${first}`);
-  }
-  for (const seat of rec.seats || [rec]) {
-    const P = seat.player; if (!P) continue;
-    if (P.deadButtons.length) v.push(`${P.deadButtons.length} dead control(s): ${P.deadButtons.map(d => d.label).slice(0, 5).join(", ")}`);
-    if (P.findings.length) v.push(`${P.findings.length} unreachable control(s): ${P.findings.map(f => f.what).slice(0, 3).join("; ")}`);
-    // coverage: a kind the game OFFERED but the player never successfully exercised
-    const unexercised = [...P.coverage.entries()].filter(([k, r]) => r.seen > 2 && r.clicked === 0 && !/back|menu close|chat close/.test(k)).map(([k]) => k);
-    if (unexercised.length) v.push(`offered but never exercised: ${unexercised.join(", ")}`);
-  }
-  /* THE TWO SEATS DISAGREEING IS A FAILURE, not a note. This is the class Wyatt's 2026-08-26
-     playtest was mostly made of — seven findings where both screens were individually fine and they
-     showed different games — and until this line the leg had no way to say so. */
-  if (rec.parity && rec.parity.length)
-    v.push(`${rec.parity.length} moment(s) where the two captains saw different games: ` +
-           rec.parity.slice(0, 3).map(p => `${p.field} (${p.why})`).join("; "));
-  if (rec.consoleErrs && rec.consoleErrs.length) v.push(`${rec.consoleErrs.length} console error(s): ${rec.consoleErrs[0]}`);
-  /* A JUDGED SLOT CAN BE EMPTY, AND EVERY READER MUST COPE. judgeAll stops the whole pass on the
-     first FATAL, so screens it never reached come back `undefined` — deliberately, because an
-     unreached screen has NOT been cleared and must never be defaulted to PASS. This crashed a real
-     run of Wyatt's on 2026-08-22 (`Cannot read properties of undefined (reading 'verdict')`, twice:
-     here and in the contact sheet) because the producer learned to leave holes and its consumers
-     did not. Count the holes and say so, rather than assuming a dense array. */
-  const judged = (rec.judged || []).filter(j => j && j.r);
-  const judgeHoles = (rec.judged || []).length - judged.length;
-  const judgeFails = judged.filter(j => j.r.verdict === "FAIL");
-  if (judgeFails.length) v.push(`vision judge FAILED ${judgeFails.length} screen(s)`);
-  const judgeErrs = judged.filter(j => j.r.verdict === "ERROR" || j.r.verdict === "FATAL");
-  if (judgeErrs.length) v.push(`vision judge errored on ${judgeErrs.length} screen(s) — those screens are NOT cleared`);
-  if (judgeHoles) v.push(`${judgeHoles} screen(s) never judged — NOT cleared`);
-  const motionOnly = rec.screens.reduce((n, s) => n + ((s.motionOnly || []).length), 0);
-  if (motionOnly) v.push(`${motionOnly} observation(s) seen only DURING an animation — not failures, read them in the log`);
-  const unsettled = rec.screens.filter(s => s.settle && !s.settle.settled).length;
-  if (unsettled) v.push(`${unsettled} screen(s) never stopped moving before being checked`);
-  if ((rec.queued || []).length) v.push(`vision pass DEFERRED for ${rec.queued.length} screen(s) — queued for a session, NOT cleared`);
-  return v;
-}
+/* legVerdict now lives in lib/verdict.mjs so it can be tested without sailing a fleet. */
 
 async function contactSheet(rec, tag, idx) {
   try {
@@ -329,7 +316,7 @@ async function contactSheet(rec, tag, idx) {
        the same mistake is LOUD instead of reassuring (docs/HARD-WON-LESSONS.md §3). */
     const sheetPort = PORT0 + 70 + idx;
     ownPorts.http.add(sheetPort);
-    const sheetSrv = spawn("python3", ["-m", "http.server", String(sheetPort)], { cwd: OUT, stdio: "ignore" });
+    const sheetSrv = spawn(PYTHON, ["-m", "http.server", String(sheetPort)], { cwd: OUT, stdio: "ignore" });
     await sleep(700);
     await c.nav(`http://127.0.0.1:${sheetPort}/contact-${tag}.html`); await sleep(1200);
     const widths = await c.ev("Promise.all([...document.images].map(i=>i.complete?i.naturalWidth:new Promise(r=>{i.onload=()=>r(i.naturalWidth);i.onerror=()=>r(0);})))");
@@ -469,7 +456,13 @@ async function runLeg(name, idx) {
           await sleep(2500);
         }
       })();
-      await Promise.all([playSeat(host, `${name}-host`, recA), playSeat(guest, `${name}-guest`, recB, { quests: true })]);
+      /* The deadline is a little over one leg cap: each seat already caps itself, so this only
+         fires when a seat has stopped answering entirely -- the case the cap cannot see. */
+      await withDeadline(
+        Promise.all([playSeat(host, `${name}-host`, recA), playSeat(guest, `${name}-guest`, recB, { quests: true })]),
+        MAX_MS * 1.1,
+        () => { rec.error = (rec.error ? rec.error + "; " : "") + `leg hit its hard deadline (${(MAX_MS * 1.1 / 60000).toFixed(0)} min) with a seat not responding -- the per-seat cap cannot fire inside a stuck await`; }
+      );
       sampling = false; await sampler.catch(() => {});
       /* BOTH, NOT EITHER. This was `||` until the CEO review of 2026-08-26: if the host completed
          the voyage while the guest sat stuck on a card forever, the leg reported "finished" and went
@@ -496,13 +489,13 @@ async function runLeg(name, idx) {
   }
   // vision judge over every distinct screen (capped)
   if (JUDGE && rec.screens.length) {
-    const items = rec.screens.slice(0, JUDGE_CAP).map(s => ({ path: s.shot, context: `${name} — ${s.sig.slice(0, 60)}`, shot: s.shot }));
+    const items = rec.screens.map(s => ({ path: s.shot, context: `${name} — ${s.sig.slice(0, 60)}`, shot: s.shot }));
     if (JUDGE_MODE === "queue") {
       rec.queued = (rec.queued || []).concat(items);
       log(`[${name}] ${items.length} screen(s) queued for a session to judge`);
     } else {
       log(`[${name}] vision-judging ${items.length} screen(s)…`);
-      const results = await judgeAll(items, { concurrency: 3, model: MODEL, onEach: (it, r) => { if (r.verdict !== "PASS") log(`  [judge ${r.verdict}] ${path.basename(it.shot)}: ${(r.issues || []).slice(0, 2).join("; ")}`); } });
+      const results = await judgeAll(items, { concurrency: 3, batch: JUDGE_BATCH, model: MODEL, onEach: (it, r) => { if (r.verdict !== "PASS") log(`  [judge ${r.verdict}] ${path.basename(it.shot)}: ${(r.issues || []).slice(0, 2).join("; ")}`); } });
       if (results.fatal) {
         /* THE JUDGE IS DEAD, NOT THE SCREENS. Defer rather than forfeit — see the JUDGE_MODE note. */
         log(`[${name}] !! the vision judge cannot run: ${results.fatal.issues[0]}`);
@@ -513,26 +506,133 @@ async function runLeg(name, idx) {
       }
     }
   }
-  /* THE CONTACT SHEET MUST NOT BE ABLE TO HANG THE WHOLE RUN. 2026-08-22: after the judge failed,
-     the gate stopped here and never exited — 0% CPU, no log line, and its two sheet browsers left
-     alive at 47% of Wyatt's CPU for three hours until a human noticed. A step that only PRESENTS
-     results may never outlive the run that produced them, so it is bounded and its failure is
-     reported rather than fatal. The kill is scoped to this sheet's own port, never a bare pkill. */
-  const sheetPort = DBG0 + 90 + idx;
-  await Promise.race([
-    contactSheet(rec, name, idx),
-    sleep(120000).then(() => { log(`[${name}] contact sheet timed out after 2 min — abandoning it (the screenshots and log are already written)`);
-      try { execSync(`pkill -9 -f "remote-debugging-port=${sheetPort}"`, { stdio: "ignore" }); } catch {} })
-  ]);
+  /* THE CONTACT SHEET NO LONGER RUNS HERE — it is a PRESENTATION step and it was standing in the
+     fleet's way. MEASURED 2026-08-30, crew-desktop alone on an idle container: the voyage reached
+     END OF VOYAGE at 938s and the leg did not finish until 1066s, because the sheet spent 123s
+     opening a THIRD browser and a SECOND web server, then hit its own 2-minute cap and was
+     abandoned having produced nothing. Ten legs is twenty minutes of a ninety-minute trial spent
+     on an image that gets thrown away, on the same cores the voyages are trying to use.
+     It now runs after the whole fleet is home (see `sheets` below), where being slow costs the
+     trial nothing and a failure still cannot outlive the run that produced it. */
   rec.verdict = legVerdict(rec);
   if (rec.error) rec.verdict.push("leg error: " + rec.error);
   return rec;
 }
 
 // ---------- main ------------------------------------------------------------------------------
+/* ============================================================================
+   RESUMABLE, BECAUSE THE MACHINE DOES NOT STAY UP LONG ENOUGH.
+   ============================================================================
+   2026-08-31, observed not inferred: a FULL trial launched at 05:33 was gone by 06:22 with its
+   report still reading IN PROGRESS. Not memory (14.5GB free), not disk, no OOM — `uptime` said
+   "up 1 min". **The cloud container was recycled and took the run with it.** FULL gear is ~104
+   minutes; this machine does not stay up that long, so without this the trial can NEVER finish
+   here, and every attempt starts again from leg one.
+
+   AND `setsid` IS NOT THE FIX, which is worth writing down because it was my first instinct. It
+   protects a process from its parent shell exiting; it does nothing whatever about the host being
+   replaced. Relaunching the identical run with a nicer flag is not a lesson learned.
+
+   HOW IT RESUMES: each leg writes its own result file the moment it finishes. On start, a leg with
+   a result file for THIS BUILD is skipped and its recorded result reused. So a recycle costs the
+   one leg that was mid-voyage, and any number of recycles still converges on a complete fleet.
+
+   KEYED ON THE BUILD STAMP, which is the part that makes it safe. A result from a different build
+   is a result about different code, and reusing one would be exactly the lie rule 24 exists to
+   prevent — so the key includes the stamp and a stale file is ignored rather than trusted.
+   Delete `sea-trial-shots/legs/` to force a clean fleet. */
+/* THE BUILD THIS FLEET IS SAILING. Read the same way sea_trial.mjs and ceo_brief.mjs read it —
+   one spelling of "which build is this", from the file the game itself ships. */
+const STAMP = (() => {
+  try { return (fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8").match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown"; }
+  catch { return "unknown"; }
+})();
+const LEGDIR = path.join(OUT, "legs");
+fs.mkdirSync(LEGDIR, { recursive: true });
+/* THIS RUN'S OWN ID. A leg record used to carry only the BUILD STAMP, which says which GAME
+   was tested and nothing about WHEN. Since a leg is RESUMED whenever a record exists at the
+   same stamp, a record carries the screens of whichever run made it -- so a leg that failed to
+   start today was vouched for by its own ghost from an hour ago, and the report's NOT-RUN
+   column said `none` while three Safari legs had died without starting (CEO Review 64,
+   2026-09-01). Evidence has to carry its provenance. */
+const RUN_ID = `${STAMP}-${Date.now().toString(36)}`;
+
+const legFile = (name) => path.join(LEGDIR, `${name}--${STAMP}.json`);
+const readDone = (name) => {
+  try {
+    const r = JSON.parse(fs.readFileSync(legFile(name), "utf8"));
+    return (r && r.__stamp === STAMP) ? r : null;
+  } catch { return null; }
+};
+
+/* THE LONG-RUN MARKER — this is what replaced the fake heartbeat, 2026-09-01.
+   A trial legitimately produces no commits for an hour or more, so the watchdog used to read it as
+   a dead engine. The previous answer was a background Monitor pulsing HEARTBEAT every 15 minutes,
+   which made the heartbeat a TIMER: it beat whether or not anything was happening, and for 2h31m
+   the only stall detector in the tree was blind — during the exit test meant to prove there are no
+   silent stalls. The honest signal is the one the trial alone possesses: which leg it just finished.
+
+   staleAfterMinutes IS DERIVED FROM THIS RUN'S OWN LEG CAP, never typed (CLAUDE.md rule 9): no leg
+   can exceed MAX_MS by construction, so silence longer than that is genuinely wrong. The half-cap
+   margin is because legs run PAR-at-a-time, so the gap between two completions can legitimately
+   approach one full leg. */
+const LEG_CAP_MIN = MAX_MS / 60000;
+const LONGRUN_STALE_MIN = Math.ceil(LEG_CAP_MIN * 1.5);
+// Rooted at THIS file, not at cwd: the marker must land in the repo being sailed even if some
+// future caller runs the gate from elsewhere.
+const MARKER_REPO = path.resolve(path.dirname((await import("node:url")).fileURLToPath(import.meta.url)), "..");
+let lr = null;
+try { lr = await import("./wyclau/longrun_status.mjs"); } catch { lr = null; }
+const markProgress = (doneCount) => {
+  if (!lr) return; // the helper is vendored; a tree without it must still be able to sail
+  try {
+    lr.writeLongRun(MARKER_REPO, {
+      what: `sea trial, ${LEGS.length} legs`,
+      // The fine clock's threshold: no leg may outlive this, so silence approaching it is a leg
+      // about to be killed. Carried on the marker so a reader never has to reconstruct it.
+      legCapMinutes: LEG_CAP_MIN,
+      progress: `${doneCount}/${LEGS.length} legs`,
+      staleAfterMinutes: LONGRUN_STALE_MIN,
+    });
+  } catch { /* the marker must never be able to fail a trial */ }
+};
+
 const results = [];
-{ let next = 0; await Promise.all(Array.from({ length: Math.min(PAR, LEGS.length) }, async () => {
-    while (next < LEGS.length) { const i = next++; results[i] = await runLeg(LEGS[i], i); } })); }
+{ let next = 0, resumed = 0, done = 0; markProgress(0); await Promise.all(Array.from({ length: Math.min(PAR, LEGS.length) }, async () => {
+    while (next < LEGS.length) {
+      const i = next++, name = LEGS[i];
+      const already = readDone(name);
+      if (already) { results[i] = already; resumed++; done++; markProgress(done); log(`[${name}] RESUMED — a complete result for build ${STAMP} is already on record; not re-sailed`); continue; }
+      results[i] = await runLeg(name, i);
+      /* WRITE IT THE MOMENT IT IS DONE. A result held only in memory until the fleet is home is a
+         result the next recycle destroys — which is the whole failure this guards. */
+      try { fs.writeFileSync(legFile(name), JSON.stringify({ ...results[i], __stamp: STAMP, __runId: RUN_ID })); } catch {}
+      done++; markProgress(done);
+    }
+  }));
+  if (resumed) log(`\n${resumed} of ${LEGS.length} leg(s) were resumed from a previous attempt at this build — they were NOT re-sailed.`);
+}
+
+/* THE SHEETS, ONCE THE FLEET IS HOME. Same bound as before (two minutes, killed by its own debug
+   port, never a bare pkill — this container's shell wrapper matches `chromium` and a bare pkill
+   kills the session itself). Sequential on purpose: nothing is waiting on these, and one browser
+   at a time cannot take cores from a leg that is still finishing in a future wider fleet. */
+/* ⚠ CONTACT SHEETS ARE NOT RENDERED. Removed 2026-08-31 after being MEASURED, not guessed.
+ *
+ * PR #15 (merged 2026-08-30) said in its own summary: "Contact sheets -- 123s each, abandoned at
+ * their own cap, producing nothing -- are out." THEY WERE NOT OUT. The claim was quoted approvingly
+ * into the ledger and into a reply to Wyatt without being checked, and the loop stayed here.
+ *
+ * The FULL trial that night proved the author's own description exactly: 91 CONTACT SHEETS TIMED
+ * OUT at two minutes each against 29 that finished, on a run budgeted at ~85 minutes that took 104.
+ * Each timeout opened a 1700x1000 Chrome, hit the cap, was killed by port, and produced nothing.
+ *
+ * The screenshots and the log are written before this point and are what anyone actually reads;
+ * a sheet was only ever a convenience view of files that already exist on disk.
+ *
+ * contactSheet() itself is deliberately LEFT IN PLACE, unreferenced. It is a working renderer and
+ * the next person to want one should not have to write it again — but nothing calls it, so nothing
+ * pays for it. If you restore the call, put a measured time budget on it first. */
 
 let anyFail = false;
 for (const r of results) {
@@ -542,9 +642,19 @@ for (const r of results) {
   for (const v of r.verdict) log(`   ✗ ${v}`);
   if (r.recoveries) log(`   ✱ ${r.recoveries} WebKit relaunch(es) mid-voyage — the known WPEWebProcess SIGSEGV, resumed from the game's own solo save each time`);
   const P = (r.seats && r.seats[0] && r.seats[0].player) ? r.seats[0].player : null;
-  if (P) log(`   coverage: ${[...P.coverage.entries()].map(([k, c]) => `${k}:${c.clicked}/${c.seen}`).join("  ")}`);
+  // A RESUMED leg's coverage came back from report.json, where it was serialized as a plain
+  // object (Map -> Object.fromEntries, below) -- a live-driven leg's is a real Map. Accept both
+  // rather than assume one: found the hard way, 2026-09-01, when resuming crashed this line
+  // outright instead of reporting the resumed leg's verdict.
+  const covEntries = P && P.coverage ? (P.coverage instanceof Map ? [...P.coverage.entries()] : Object.entries(P.coverage)) : null;
+  if (covEntries) log(`   coverage: ${covEntries.map(([k, c]) => `${k}:${c.clicked}/${c.seen}`).join("  ")}`);
 }
+fs.writeFileSync(path.join(OUT, "runid.json"), JSON.stringify({ runId: RUN_ID, stamp: STAMP }));
 fs.writeFileSync(path.join(OUT, "report.json"), JSON.stringify(results, (k, v) => v instanceof Map ? Object.fromEntries(v) : k === "screens" && Array.isArray(v) && v.length > 60 ? v.slice(0, 60) : v, 2));
+/* THE RUN IS OVER, SO THE MARKER MUST GO. A finished job that leaves its marker behind would hold
+   the watchdog off until the marker aged past its own staleness — the safe direction, but still a
+   lie about what is happening in the tree. */
+if (lr) { try { lr.clearLongRun(MARKER_REPO); } catch { /* never fail a trial on housekeeping */ } }
 log(anyFail ? "\nRESULT: FAIL" : "\nRESULT: PASS");
 /* Write the queue LAST, once, for every leg that deferred — one file for the whole run, because a
    session judging it wants one list, not one per leg. */

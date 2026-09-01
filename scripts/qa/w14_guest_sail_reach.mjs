@@ -73,8 +73,16 @@ const WATCH = `(()=>{
             const inCap=!!(capR&&mx>=capR.left&&mx<=capR.right&&my>=capR.top&&my<=capR.bottom);
             const top=(mx>=0&&my>=0&&mx<W&&my<Hh)?document.elementFromPoint(mx,my):null;
             const covered=!!(top&&!top.classList.contains("sailCell")&&!c.contains(top));
+            /* WYATT'S LEAD, 2026-08-30: are the TRADE-WIND squares the broken ones? They carry
+               the sailSwept class and they are the rim of the circular board by construction, so
+               they are the squares at the extreme edge. Recorded per square, with the grid
+               coordinates the renderer stamped on, so a rect can be checked against where it says
+               it is. (NO BACKTICKS IN THIS COMMENT: the whole block is a template literal handed
+               to the page, and quoting a class name in backticks ended the literal and threw.) */
             return {x:Math.round(r.left),y:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height),
                     off:off,clipped:clipped,inCap:inCap,covered:covered,
+                    swept:c.classList.contains("sailSwept"),
+                    gx:+c.dataset.gx, gy:+c.dataset.gy,
                     by:covered&&top?((top.id?"#"+top.id:"")+"."+(top.className||"").toString().split(" ")[0]):""};})};
       };
       const first=judge();
@@ -140,7 +148,7 @@ prompts.forEach((p, i) => {
      a prompt with many failures the coverers were truncated away — and a tally taken off that
      truncated list read as "which element covers most often" when it was measuring print order. */
   show.forEach(x =>
-    console.log(`      square at ${x.x},${x.y} ${x.w}x${x.h}${x.off ? " OFF-SCREEN" : ""}${x.clipped ? " CLIPPED" : ""}${x.covered ? ` COVERED by ${x.by || "(an element with no id or class)"}` : ""}${x.inCap ? " (centre inside the captains panel)" : ""}`));
+    console.log(`      square at ${x.x},${x.y} ${x.w}x${x.h}${x.off ? " OFF-SCREEN" : ""}${x.clipped ? " CLIPPED" : ""}${x.covered ? ` COVERED by ${x.by || "(an element with no id or class)"}` : ""}${x.swept ? " [TRADE-WIND]" : ""} grid ${x.gx},${x.gy}${x.inCap ? " (centre inside the captains panel)" : ""}`));
   if (show.length) {
     console.log(`    the sequence BEFORE the squares appeared — a snapshot cannot show a race:`);
     p.hist.forEach(h => console.log(`      ${String(h.t).padStart(7)}ms  stage:${h.stage}  viewBox:${h.vb}`));
@@ -159,6 +167,18 @@ for (const p of prompts) { const s2 = score(p.settled); if (!s2) continue;
 console.log(`\n  ${prompts.length} capture(s): ${judged} JUDGED at +400ms, ${unjudged} NOT MEASURED (the driver tapped first).`);
 console.log(`  NOT-MEASURED captures are neither pass nor fail. They are excluded from the rate below, never folded into it.`);
 console.log(`\n  of the ${judged} judged: ${badPrompts} offered an unreachable square, ${firstFrameOnly} were wrong only on the first frame and were clear by +400ms.`);
+/* WYATT'S TRADE-WIND LEAD, ANSWERED WITH A RATE RATHER THAN A COUNT. "8 of the broken ones were
+   trade-wind squares" means nothing without knowing how many trade-wind squares were offered — if
+   they are half the board, half the failures being theirs is exactly no signal. */
+let sweptTot = 0, sweptBad = 0, plainTot = 0, plainBad = 0;
+for (const p of prompts) { const c = p.settled; if (!c) continue;
+  for (const x of c.cells) { const bad = x.off || x.clipped;
+    if (x.swept) { sweptTot++; if (bad) sweptBad++; } else { plainTot++; if (bad) plainBad++; } } }
+const pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "n/a";
+console.log(`\n  WYATT'S LEAD — are the TRADE-WIND squares the ones falling off the screen?`);
+console.log(`    trade-wind (.sailSwept): ${sweptBad} of ${sweptTot} off-screen or clipped  (${pct(sweptBad, sweptTot)})`);
+console.log(`    ordinary yellow:         ${plainBad} of ${plainTot} off-screen or clipped  (${pct(plainBad, plainTot)})`);
+if (!sweptTot) console.log(`    ⚠ NO trade-wind square was offered in this run — his lead is NOT tested by it.`);
 console.log(`\n  WHY the judged failures failed — squares, not prompts, and every one counted:`);
 console.log(`    off the screen entirely: ${tally.off}   clipped at an edge: ${tally.clipped}`);
 console.log(`    covered by the narration bubble: ${tally.coveredBub}   by the captains panel: ${tally.coveredCap}   by something else: ${tally.coveredOther}`);

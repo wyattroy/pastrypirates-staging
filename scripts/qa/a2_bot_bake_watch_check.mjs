@@ -87,7 +87,11 @@ const bko = fs.readFileSync(path.join(REPO, "src/ui/bakeoff.js"), "utf8");
   const body = fnBody(orch, "bakeTurnLive") || "";
   if (/if\(human&&!appState\.replaying\)awaitbenchReveal/.test(body.replace(/\s+/g, "")))
     fail("benchReveal is still human-gated — a bot's verdict never reaches any screen");
-  else if (/benchReveal\(p,out\.res\)/.test(body)) pass("benchReveal runs for bot seats too — the verdict is drawn everywhere");
+  /* \w+ , not the literal `p` — this went red on 2026-08-31 when bakeTurnLive's player parameter
+     was renamed from `p` to `player`. Nothing about the bake changed. A check pinned to a local
+     variable's NAME asserts about spelling, and stands in the way of the readability work it
+     should not care about. Second gate in one commit with this fault; both now read \w+. */
+  else if (/benchReveal\(\w+,out\.res\)/.test(body)) pass("benchReveal runs for bot seats too — the verdict is drawn everywhere");
   else fail("bakeTurnLive no longer calls benchReveal at all");
   /* the guess is still the engine's own fallback — watching changed nothing about the outcome */
   if (/\{g:fallback,w:0\}/.test(body.replace(/\s+/g, ""))) pass("the bot's guess is still the engine's fallback — the performance decides nothing");

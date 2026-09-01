@@ -469,3 +469,36 @@ export CHROME_BIN=/tmp/chromium-tls12
 
 The boundary that stands: the cloud is proven QA-capable for solo and crew browser QA — **Safari
 and Wyatt's own play remain laptop-only**, as the top of this section already says.
+
+---
+
+## COMMIT MESSAGES: `-F -` AND A HEREDOC. NEVER `-m "…"`.
+
+**This repo's commit messages are long, quote Wyatt, and cite code — so they are full of the three
+characters that break a double-quoted shell argument: backticks, double quotes, and `$`.** On
+2026-08-31 that cost **five** failed commits in one session, each one a mangled message or a shell
+error like `step: command not found`, and each one re-typed by hand.
+
+**The rule is about DOUBLE QUOTES, not about length.** A message short enough to look safe is
+exactly the one that gets `-m "…"` and then contains a backtick.
+
+```bash
+git commit -F - <<'MSG'
+subject line
+
+Body with `backticks`, "quotes", $variables and 'apostrophes' — all literal,
+because the heredoc delimiter is QUOTED ('MSG'). Nothing is interpolated.
+MSG
+```
+
+**Two details that matter, both learned the hard way:**
+
+- **Quote the delimiter — `<<'MSG'`, not `<<MSG`.** Unquoted, the shell still expands `$` and
+  backticks inside the body, which is the whole failure again wearing a heredoc's clothes.
+- **`-F -` reads the message from stdin.** `git commit -m "$(cat <<'MSG' … MSG)"` also works and is
+  what several commits here used, but it puts the text back through a double-quoted expansion on
+  its way to `-m`, so it only survives by luck. Prefer `-F -`.
+
+**The same trap applies to any long text going through a shell argument** — `gh pr create --body`,
+`--note`, an `echo` into a file. When the text contains prose, write it to a file or a heredoc and
+point the flag at that.

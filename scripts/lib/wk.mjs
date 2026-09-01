@@ -24,6 +24,9 @@ import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { pathToFileURL } from "node:url";
+import { freshProfileDir } from "./cdp.mjs";
+import { PYTHON } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -36,7 +39,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 export async function playwrightDir() {
   const os = await import("node:os"), path = await import("node:path");
   for (const d of [process.env.PW_DIR, path.join(os.homedir(), ".pw")].filter(Boolean)) {
-    try { await import(path.join(d, "node_modules/playwright/index.mjs")); return d; } catch {}
+    try { await import(pathToFileURL(path.join(d, "node_modules/playwright/index.mjs")).href); return d; } catch {}
   }
   try { await import("playwright"); return "playwright (global)"; } catch {}
   return null;
@@ -59,16 +62,26 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
        3. bare "playwright"  a global or workspace install, if someone has one
      The browsers themselves already live durably in ~/Library/Caches/ms-playwright, so only this
      little package directory was ever the fragile part. */
+  /* ⚠ ONE RESOLVER, AND THIS FUNCTION USED TO KEEP A SECOND ONE. Found 2026-09-01, on the Razer.
+     This built its own candidate list and imported each entry as a RAW PATH. On Windows that is
+     fatal and silent: `import("C:\Users\...\index.mjs")` is parsed as the URL protocol "c:",
+     which ESM rejects (ERR_UNSUPPORTED_ESM_URL_SCHEME) — so every candidate threw, and the error
+     said "playwright not found" while playwright was installed and importable two lines away.
+     THREE SAFARI LEGS HAVE BEEN REPORTING "NOT RUN" ON THIS MACHINE EVER SINCE, and Safari is a
+     stated core requirement of this game, so a tenth of the fleet was silently uncovered.
+     playwrightDir() next door had it right all along — it wraps paths with pathToFileURL — which is
+     exactly the drift this file's own comment predicted ("two answers to one question will drift
+     again"). So there is now ONE answer: ask playwrightDir(), then import from what it found. */
   let webkit;
-  const homePw = path.join(os.homedir(), ".pw", "node_modules/playwright/index.mjs");
-  const candidates = [
-    process.env.PW_DIR ? path.join(process.env.PW_DIR, "node_modules/playwright/index.mjs") : null,
-    homePw,
-    "playwright",
-  ].filter(Boolean);
   const tried = [];
-  for (const c of candidates) {
-    try { ({ webkit } = await import(c)); if (webkit) break; } catch { tried.push(c); }
+  const dir = await playwrightDir();
+  if (dir) {
+    const spec = dir === "playwright (global)"
+      ? "playwright"
+      : pathToFileURL(path.join(dir, "node_modules/playwright/index.mjs")).href;
+    try { ({ webkit } = await import(spec)); } catch (e) { tried.push(`${spec} (${e.code || e.message})`); }
+  } else {
+    tried.push("$PW_DIR, ~/.pw, and a global install");
   }
   if (!webkit) {
     throw new Error("playwright not found. Tried: " + tried.join(", ")
@@ -76,8 +89,8 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
       + `    mkdir -p ~/.pw && cd ~/.pw && npm i playwright && npx playwright install webkit\n`
       + `  scripts/lib/wk.mjs finds ~/.pw automatically; PW_DIR only overrides it.`);
   }
-  const srv = httpPort ? spawn("python3", ["-m", "http.server", String(httpPort)], { cwd: serveRoot, stdio: "ignore" }) : null;
-  if (profileDir) fs.rmSync(profileDir, { recursive: true, force: true });
+  const srv = httpPort ? spawn(PYTHON, ["-m", "http.server", String(httpPort)], { cwd: serveRoot, stdio: "ignore" }) : null;
+  profileDir = freshProfileDir(profileDir);   // same answer as the Chrome mount -- see cdp.mjs
   await sleep(900);
 
   /* MUTED, ALWAYS — and this mount has to do it by hand. Wyatt's standing rule is that a browser a

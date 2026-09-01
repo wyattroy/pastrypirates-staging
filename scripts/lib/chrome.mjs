@@ -13,11 +13,39 @@ export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 // then the Mac app bundle. Fail loudly — a missing binary otherwise reads as "chrome never came up".
 export const CHROME = (() => {
   if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
-  for (const n of ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]) {
-    try { const p = execSync(`command -v ${n}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); if (p) return p; } catch {}
+  if (process.platform !== "win32") {
+    for (const n of ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]) {
+      try { const p = execSync(`command -v ${n}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); if (p) return p; } catch {}
+    }
+    const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    if (fs.existsSync(mac)) return mac;
+  } else {
+    // WINDOWS. `command -v` does not exist here (it is bash's builtin, and this shell is not
+    // bash), so every branch above was a guaranteed miss before this ever ran -- the first attempt
+    // on the Razer 2026-08-31 failed with "no Chrome found" while Chrome was installed and running
+    // every other browser gate fine. The registry's App Paths key is what `where chrome` and the
+    // shell shortcut both resolve through, so it is the one answer that survives a reinstall to a
+    // non-default drive; the two Program Files locations below are the fallback if a stripped-down
+    // environment has no registry access at all.
+    try {
+      const out = execSync(
+        'reg query "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe" /ve',
+        { stdio: ["ignore", "pipe", "ignore"] }
+      ).toString();
+      const m = out.match(/REG_SZ\s+(.+\.exe)\s*$/m);
+      if (m && fs.existsSync(m[1].trim())) return m[1].trim();
+    } catch {}
+    for (const p of [
+      "C:\Program Files\Google\Chrome\Application\chrome.exe",
+      "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]) {
+      if (fs.existsSync(p)) return p;
+    }
+    if (process.env.LOCALAPPDATA) {
+      const p = path.join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe");
+      if (fs.existsSync(p)) return p;
+    }
   }
-  const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  if (fs.existsSync(mac)) return mac;
   console.error("FATAL: no Chrome found — set CHROME_BIN"); process.exit(1);
 })();
 
@@ -44,3 +72,24 @@ export const LINUX_ARGS = process.platform === "linux" ? ["--no-sandbox", "--dis
    appears beside it. */
 export const GAME_PATH = "/";
 export const gameURL = (port, host = "127.0.0.1") => `http://${host}:${port}${GAME_PATH}`;
+
+/* ── ONE SPELLING FOR "run python", FOR THE SAME REASON AS CHROME ABOVE ────────────────────────
+   Every driver that serves the tree over HTTP hardcoded `spawn("python3", ["-m", "http.server", ...])`
+   -- twelve call sites, none of them agreeing with what is actually on the machine running them.
+   `python3` is the Linux/Mac spelling; this checkout's Windows Python (python.org installer, the
+   Razer, 2026-08-31) registers only as `python`, so every one of those twelve spawns failed with
+   ENOENT the first time anything tried to serve a leg here -- found running exactly the short
+   playtest leg this fix exists to unblock.
+
+   Resolved the same way CHROME is: prefer an explicit override, then try each spelling in turn,
+   and fail loudly rather than let a dead spawn read as "the server never came up". */
+export const PYTHON = (() => {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+  for (const n of ["python3", "python"]) {
+    try {
+      execSync(`${process.platform === "win32" ? "where" : "command -v"} ${n}`, { stdio: ["ignore", "pipe", "ignore"] });
+      return n;
+    } catch {}
+  }
+  console.error("FATAL: no python found — set PYTHON_BIN"); process.exit(1);
+})();

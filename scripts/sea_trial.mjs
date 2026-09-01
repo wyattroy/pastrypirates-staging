@@ -27,6 +27,7 @@ import os from "node:os";
 import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { judgeModeFor } from "./lib/judge_mode.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -55,6 +56,27 @@ const say = (...a) => console.log(...a);
 const stampSrc = fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8");   // NOT src — the cutover moved the game to the root
 const STAMP = (stampSrc.match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown";
 const started = new Date();
+
+/* WHICH SEA TRIAL THIS IS. Wyatt, 2026-08-30: "Call it sea trial v2 so we can increment it."
+ *
+ * The build stamp says which GAME was tested. This says which TRIAL tested it — and the two are
+ * independent, which is exactly why a second number is needed: the same build can be sailed by a
+ * weaker instrument and a stronger one, and until now both reports looked identical. A report that
+ * cannot name its own instrument cannot be compared with an older one.
+ *
+ * WHEN TO INCREMENT — when the SHAPE of the trial changes: what it looks at, how much of it it
+ * looks at, or how it decides. NOT when a check is added or a bug is fixed; those are the trial
+ * doing its job, and bumping for them would make the number mean nothing within a week.
+ *
+ * v1  the ten-leg fleet as it stood on 2026-08-29: three modes, three sizes, both engines, judged
+ *     one screenshot per `claude -p` call and only the first 30 distinct screens of each leg.
+ * v2  (2026-08-30) THE EYES SEE EVERYTHING. No judge cap — every distinct screen is looked at, five
+ *     to a call — and the leg verdict prints the denominator, so a half-seen leg can never again
+ *     read as a clean one. Contact sheets moved out of the legs (measured: 123s per leg, abandoned
+ *     at its own cap, producing nothing). Leg concurrency derived from the machine's cores rather
+ *     than typed. Its own rebuild note: .planning/SEA-TRIAL-REBUILD.md
+ */
+const TRIAL_VERSION = "v2";
 
 /* ---- which gear? ---------------------------------------------------------- */
 let gear = arg("gear");
@@ -90,9 +112,47 @@ const legs = LEGS[gear] || LEGS.FULL;
    killed. THE ARTIFACT OUTLIVED THE RUN AND KEPT ITS VERDICT.
    Stamping it IN PROGRESS first means the only way to get a green report is to finish. A crash, a
    kill, a laptop lid closing -- all of them now leave the truth. */
+/* NO REPORT IS EVER OVERWRITTEN — Wyatt, 2026-08-30: "don't overwrite any reports -- increment them!!!"
+ *
+ * WHY IT MATTERED ENOUGH TO SHOUT. The very first thing a run used to do was lay an "in progress"
+ * placeholder ON TOP of the previous report, before sailing a single leg. So starting a trial
+ * destroyed the last one — and if the run then died, was killed, or the container was reclaimed,
+ * the repo held a placeholder and nothing else. That happened tonight: the report on disk described
+ * build 2026.08.30.2, a build that no longer exists, and THREE CONSECUTIVE CEO REVIEWS asked about
+ * it. Rule 24 stands on being able to open the report; it stands just as much on being able to open
+ * the PREVIOUS one and compare.
+ *
+ * THE NUMBER IS DERIVED, NEVER TYPED. It is one more than the highest already in the folder, counted
+ * at run time — a hand-kept counter rots exactly like the thing it counts. The build stamp goes in
+ * the filename too, so the history is readable without opening anything.
+ *
+ * ARCHIVE ONCE, AT THE START. The final write at the end of the run deliberately replaces this same
+ * run's own placeholder and must NOT archive, or every trial would leave a junk copy of its own
+ * "in progress" stub behind. */
+function archivePrevious(reportPath) {
+  if (!fs.existsSync(reportPath)) return null;
+  const dir = path.join(path.dirname(reportPath), "sea-trials");
+  fs.mkdirSync(dir, { recursive: true });
+  const base = path.basename(reportPath, ".md");
+  const seen = fs.readdirSync(dir)
+    .map(f => (f.match(new RegExp("^" + base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "-(\\d+)-")) || [])[1])
+    .filter(Boolean).map(Number);
+  const next = String((seen.length ? Math.max(...seen) : 0) + 1).padStart(3, "0");
+  // name it by the build the OLD report describes, not by today's — the filename should say what is
+  // inside it. Falls back to the file's own mtime when the header cannot be read.
+  const prev = fs.readFileSync(reportPath, "utf8");
+  const oldStamp = (prev.match(/build\s+`([^`]+)`/) || [])[1]
+    || new Date(fs.statSync(reportPath).mtimeMs).toISOString().slice(0, 10);
+  const dest = path.join(dir, `${base}-${next}-${oldStamp}.md`);
+  fs.renameSync(reportPath, dest);
+  say(`  archived the previous report -> ${path.relative(REPO, dest)}  (nothing overwritten)`);
+  return dest;
+}
+archivePrevious(REPORT);
+
 fs.mkdirSync(path.dirname(REPORT), { recursive: true });
 fs.writeFileSync(REPORT,
-`# Sea trial — build \`${STAMP}\`
+`# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\`
 
 **IN PROGRESS — no verdict yet.**  ·  started ${started.toISOString()}  ·  gear **${gear}**  ·  sailed on **${WHERE}**
 
@@ -100,7 +160,7 @@ If this is still what the file says, the trial did not finish. **A trial that di
 a trial that passed.** Nothing here has been proven about build \`${STAMP}\`.
 `);
 
-say(`\n⚓ SEA TRIAL — build ${STAMP}`);
+say(`\n⚓ SEA TRIAL ${TRIAL_VERSION} — build ${STAMP}`);
 say(`   gear: ${gear}  (${gearWhy})`);
 say(`   legs: ${legs.length ? legs.join(", ") : "none — this gear needs no voyage"}\n`);
 
@@ -115,12 +175,46 @@ try {
 }
 say(unitOk ? "   PASS — all of them\n" : "   FAIL\n" + unitTail + "\n");
 
+/* ---- 1b. ARE THE EYES OPEN? ------------------------------------------------
+   CEO Review 38, 2026-08-31: judge_can_see_check.mjs "is run by nothing… it is also not called by
+   scripts/sea_trial.mjs, which is the one place 'can the judge see?' needs answering before a
+   104-minute run." It was right, and the incident it was written for is the reason: on 2026-08-30
+   a FULL trial sailed every leg while the judge returned "unparseable judge reply" 1494 times and
+   hard-failed 120 more. The structural half of that run was real; the eyes were shut for all of
+   it, and NOTHING SAID SO until somebody counted afterwards.
+
+   THIRTY SECONDS BEFORE, NOT AN HOUR AFTER. Three exit codes, three meanings, and none of them
+   stops the trial — a run with shut eyes is still worth its structural half, and refusing to sail
+   would trade a partial answer for none. What must never happen again is that the report reads the
+   same either way. That is the NOT-RUN column's whole principle applied to the judge.  */
+let eyesOk = null, eyesWhy = "not asked for (--judge=off)";
+if (arg("judge", "on") !== "off") {
+  say("── 1b/2  can the judge open a screenshot? ──");
+  const r = spawnSync("node", ["scripts/qa/judge_can_see_check.mjs"], { cwd: REPO, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+  const tail = ((r.stdout || "") + (r.stderr || "")).trim().split("\n").slice(-3).join(" · ");
+  if (r.status === 0)      { eyesOk = true;  eyesWhy = "checked just before sailing — the judge opened a real screenshot and described it"; }
+  else if (r.status === 2) { eyesOk = null;  eyesWhy = `**COULD NOT BE ASKED** — ${tail}`; }
+  else                     { eyesOk = false; eyesWhy = `**THE JUDGE CANNOT SEE** — every visual verdict below is worthless; the structural half still stands. ${tail}`; }
+  say(`   ${eyesOk === true ? "PASS — the eyes are open" : eyesOk === false ? "FAIL — the eyes are SHUT" : "UNKNOWN"}\n`);
+}
+
+/* ACT ON THE EYE TEST, DO NOT MERELY PRINT IT. Earned 2026-09-01, at a cost of 80 minutes: this
+   check said "the eyes are SHUT" and the fleet was handed `--judge=on` regardless, so every screen
+   of every leg burned its full timeout against a judge already proven blind. A check that warns and
+   is then ignored is not a gate. Deferring (queue) rather than disabling keeps every screen
+   judgeable later — see scripts/lib/judge_mode.mjs for why UNKNOWN is not treated as SHUT. */
+const judgeMode = judgeModeFor(arg("judge", "on"), eyesOk);
+if (judgeMode !== arg("judge", "on")) {
+  say(`   → judging DEFERRED to the queue: the screens are still captured and still judgeable, but`);
+  say(`     nothing will be sailed into a judge this run has just proven cannot see.\n`);
+}
+
 /* ---- 2. the voyages -------------------------------------------------------- */
 let gateOk = null, gateOut = "";
 const OUT = path.join(REPO, "sea-trial-shots");
 if (legs.length) {
   say(`── 2/2  playing ${legs.length} voyage(s) with a real mouse ──`);
-  const a = ["scripts/playtest_gate.mjs", `--legs=${legs.join(",")}`, `--out=${OUT}`, `--judge=${arg("judge","on")}`, `--parallel=${arg("parallel","2")}`];
+  const a = ["scripts/playtest_gate.mjs", `--legs=${legs.join(",")}`, `--out=${OUT}`, `--judge=${judgeMode}`, `--parallel=${arg("parallel","2")}`];
   const r = spawnSync("node", a, { cwd: REPO, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
   gateOut = ((r.stdout || "") + (r.stderr || ""));
   gateOk = r.status === 0;
@@ -156,15 +250,23 @@ try {
                     .map(l => `${l.name} ×${l.recoveries}${l.days ? ` over ${l.days} days` : ""}`);
   if (rescued.length) rescueRow =
     `\n| **voyages that only finished after a BROWSER RESTART** | **${rescued.join(", ")}** — the known WebKit crash in this container; each was resumed from the game's own save. A rescued leg is not a clean one. |`;
+  /* PROVENANCE, and this is the whole fix. A leg is only cleared by screens THIS run produced.
+     An inherited record -- the normal case once a fleet is assembled from several runs, which is
+     what happened on 2026-09-01 -- must not testify that a leg sailed now. Unknown provenance
+     counts as NOT sailed, deliberately: the NOT-RUN column exists to be pessimistic, and a leg
+     wrongly listed as not-run costs a re-sail while a leg wrongly cleared costs the truth. */
+  const sailedHere = (leg, runId) => !!(leg && (leg.screens || []).length > 0 && leg.__runId && runId && leg.__runId === runId);
+  let thisRunId = null;
+  try { thisRunId = JSON.parse(fs.readFileSync(path.join(OUT, "runid.json"), "utf8")).runId; } catch { thisRunId = null; }
   for (const leg of rj) {
     const n = (leg.screens || []).length;
-    if (n > 0) continue;                                     // it captured something: it sailed
+    if (sailedHere(leg, thisRunId)) continue;                // it captured something IN THIS RUN: it sailed
     if (notRun.some(x => x.leg === leg.name)) continue;      // already named, keep its reason
     notRun.push({ leg: leg.name, why: (leg.verdict || ["produced no screens at all"]).join("\n") });
   }
   // A leg the phrase-matcher flagged but which DID capture screens is a mid-leg error, not a
   // no-show — do not demote a leg that actually sailed.
-  const captured = new Set(rj.filter(l => (l.screens || []).length > 0).map(l => l.name));
+  const captured = new Set(rj.filter(l => sailedHere(l, thisRunId)).map(l => l.name));
   notRun = notRun.filter(n => !captured.has(n.leg));
 } catch (e) {
   say(`   (could not read report.json to verify what actually sailed: ${e.message})`);
@@ -198,17 +300,22 @@ const verdict = !unitOk ? "FAILED"
   : legs.length ? "PASSED"
   : "NOTHING SAILED";
 
-const report = `# Sea trial — build \`${STAMP}\`
+const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\`
 
 **${verdict}** — ${ranLegs.length} of ${legs.length} voyage(s) sailed${notRun.length ? `, ${notRun.length} NOT RUN` : ""}  ·  ${started.toISOString()}  ·  ${mins} min  ·  gear **${gear}**  ·  sailed on **${WHERE}**
 
 > Gear chosen because: ${gearWhy}
+>
+> Sailed by **sea trial ${TRIAL_VERSION}** — the eyes see EVERY distinct screen (no judge
+> cap), five to a call, and each leg says how many of its screens were actually looked at. A report
+> from an older trial version looked at less; do not compare their silences.
 
 ## What ran
 
 | | |
 |---|---|
 | checks with no browser (\`npm test\`) | ${unitOk ? "PASS" : "**FAIL**"} |
+| **can the vision judge see?** | ${eyesOk === true ? "yes" : eyesOk === false ? "**NO**" : arg("judge", "on") === "off" ? "n/a" : "**unknown**"} — ${eyesWhy} |
 | voyages played with a real mouse | ${ranLegs.length ? ranLegs.join(", ") : "none"} |
 | **voyages that did NOT run** | ${notRun.length ? "**" + notRun.map(n => n.leg).join(", ") + "**" : "none"} |${rescueRow}
 
@@ -227,7 +334,7 @@ Screenshots and contact sheets: \`sea-trial-shots/\` (not committed — 100MB+ p
 live, compare the build stamp above with the one in the game's ☰ menu.*
 `;
 fs.writeFileSync(REPORT, report);
-say(`\n⚓ ${verdict}  —  report: ${path.relative(REPO, REPORT)}  (build ${STAMP}, ${mins} min, ${WHERE})`);
+say(`\n⚓ ${verdict}  —  report: ${path.relative(REPO, REPORT)}  (sea trial ${TRIAL_VERSION}, build ${STAMP}, ${mins} min, ${WHERE})`);
 if (notRun.length) say(`   ${notRun.length} leg(s) did NOT run — read the report, they are not passes.`);
 /* INCOMPLETE and NOTHING SAILED both exit non-zero. Only a trial that actually sailed every leg
    it promised, and passed, is allowed to be green. */

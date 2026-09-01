@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* cto_supervise.mjs — THE SHIFT WORKER. Its only job is to check the marathon worker is working well.
+/* cto_supervise.mjs — THE EXECUTIVE ASSISTANT. Its only job is to check the marathon worker is working well.
  *
  * WYATT'S DESIGN, 2026-08-27, and it is better than either option he was offered:
  *   "i want a shift worker to make sure the marathon worker is always working well. the shift
@@ -231,7 +231,7 @@ if (facts.length)    { console.log("OBSERVED"); facts.forEach(f => console.log(`
 
 if (process.argv.includes("--brief")) {
   console.log(`\n${"─".repeat(78)}\nHAND THIS TO THE SUPERVISING AGENT:\n${"─".repeat(78)}
-You are the SHIFT WORKER for Pastry Pirates. Wyatt, 2026-08-27: "i want a shift worker to make sure
+You are the EXECUTIVE ASSISTANT for Pastry Pirates. Wyatt, 2026-08-27: "i want a shift worker to make sure
 the marathon worker is always working well. the shift worker's only job is to support the marathon
 worker."
 

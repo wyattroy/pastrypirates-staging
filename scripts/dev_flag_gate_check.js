@@ -21,7 +21,7 @@
 // House convention: no test runner, one PASS/FAIL line per case, every case runs before exit.
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let fails = 0;
@@ -37,7 +37,13 @@ const UNGATED = {
 
 /* ---------- 1. devHost() answers correctly, hostname by hostname ---------- */
 console.log("\ndevHost() — who is a developer's machine?");
-const shared = await import(path.join(ROOT, "src/shared/index.js"));
+/* pathToFileURL, NOT the bare path: on Windows an absolute path starts "C:\", and the ESM loader
+   reads "c:" as a URL SCHEME and refuses it outright — ERR_UNSUPPORTED_ESM_URL_SCHEME, which kills
+   the whole gate and every gate after it in the chain. Harmless on macOS, where "/Users/..." is a
+   valid enough file URL to slip through, so this was invisible until the suite was first run on the
+   Razer (2026-08-31). Third fault of exactly this shape found in one sitting; see the same day's
+   em-dash parse error and tree_health_check's backslash-blind allowlist. */
+const shared = await import(pathToFileURL(path.join(ROOT, "src/shared/index.js")).href);
 const EXPECT = [
   ["localhost", true], ["127.0.0.1", true], ["0.0.0.0", true], ["", true], ["mac.local", true],
   ["staging.playpastrypirates.com", true],   // Wyatt plays work-in-progress here (2026-08-27)

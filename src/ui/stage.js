@@ -20,6 +20,7 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
   waitLineIsSelfAddressed } from "./util.js";
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH } from "../shared/index.js";
+import { showsThinkingIndicator } from "../shared/visibility.js";
 
 const $ = id => document.getElementById(id);
 const AR = { N: "↑", S: "↓", E: "→", W: "←" };
@@ -39,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.08.30.1-staging@2cac247d";
+const PP4_STAMP = "2026.09.01.2-staging@159e26e1";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -191,7 +192,37 @@ function camFitCells(cells, maxZoom, reservePx){
   camTo((x0 - P) * cp + bw / 2 - side / 2, (y0 - P) * cp + bh / 2 - side / 2, side);
 }
 // frame the whole sail window: bbox of every highlighted cell + my ship, padded; zoom is
-// whatever that window allows, capped at 2.2x — a legal move is never off screen.
+// whatever that window allows, capped at 2.2x.
+/* THAT LINE USED TO END "— a legal move is never off screen." IT WAS NOT TRUE, and it is the kind
+   of claim CLAUDE.md forbids a comment from making: a statement about runtime behaviour, written
+   as a standing fact, that nothing was checking. MEASURED 2026-08-29 in a real crew game on a
+   390x844 guest: six sail squares at x = -57 to -116 (off the LEFT edge by more than a full
+   square) and one at x=400 on a 390-wide screen. The bbox below genuinely contains every square —
+   the fit is not what fails. What fails is that containment in BOARD coordinates is not
+   containment on SCREEN, and no amount of reasoning about the projection has survived contact:
+   two geometry theories were measured dead over two days before this one.
+   ⚠ BEFORE YOU CHANGE ANYTHING IN THIS FILE'S PLACEMENT OR FRAMING, READ THIS. Wyatt, 2026-08-30,
+   in his own words: "don't touch bubble placement again without a posed comparison — the same
+   seeded sail prompt, before and after, two screenshots. Three probe runs and three 85-minute
+   trials couldn't settle a question that two pictures would have. That's the lesson of the night,
+   and it cost the night to learn it." Pose one with docs/DRIVING-THE-GAME.md §5e.
+   A CONTAINMENT PASS THAT RE-FITS AGAINST THE RENDERED RECTS WAS BUILT AND THEN REMOVED, 2026-08-30,
+   and the reason is worth more than the code was. It is Wyatt's ruling ("zoom out until they all
+   fit") and it is the right shape. But three 8-minute runs of the same probe produced 7, 12 and 5
+   judged captures with completely different cause mixes — a driven crew game yields too few
+   samples in that window to tell a fix from a coin flip, and a change had already been shipped on
+   exactly that kind of noise the night before and withdrawn. THE COMPARISON THIS NEEDS IS A POSED
+   ONE: docs/DRIVING-THE-GAME.md §5e, the same seeded board before and after, not two different
+   voyages. Do not re-add it on run-to-run counts.
+   RE-ADDED 2026-09-01 ON EXACTLY THAT POSED COMPARISON — sailContainTick() below, judged by
+   scripts/qa/sail_containment_probe.mjs --mode=crew --seed=7: the same room (ZTNK), the same
+   board, the same moment (20 squares, day 1), before and after. Before: square (3,8) at x=-23,
+   centre outside, elementFromPoint = nothing. And the missing HALF of the story, found by reading
+   the call graph rather than theorising geometry: camFitSail had ONE caller — pickCell(), which
+   runs on the machine running the ENGINE — so a crew GUEST drew its squares and never asked the
+   director to frame them at all; its camera sat wherever the last narration's camToSeat() glide
+   (640/1.9 = the 336.84-unit window in every probe trace) had parked it. renderPickPrompt now
+   asks for the frame on whichever client draws the squares (rule 23's converge move). */
 /* FRAME THE CAPTAIN BEING ASKED, NOT THE CAPTAIN LOOKING — Wyatt, 2026-08-20, from a two-window
    screenshot: "on guest's turn the host's director moved back up to the host's boat while waiting
    for guest to sail... it should not center on host at the beginning of their turn at all."
@@ -210,10 +241,16 @@ function camFitCells(cells, maxZoom, reservePx){
 
    `seat` is optional and falls back to the viewer, so any future caller with no seat in hand keeps
    the old local behaviour rather than silently framing seat 0. */
-function camFitSail(seat){
+function camFitSail(seat, pos){
   S.lock = false;                                    // a new turn releases any gesture hold
   const g = appState.game; if (!g) return;
-  const who = g.players[seat ?? appState.mySeat ?? 0]; if (!who) return;
+  /* `pos` is the AUTHORITATIVE square of the captain being asked, carried on the prompt spec for
+     both tiers (renderPickPrompt passes it) — on a guest, g.players[].pos is a stale render shell
+     and must never be read for this, the same rule the stay square earned (T-02). The seat lookup
+     remains the fallback for callers with no pos in hand: the spectating host's pickCell call. */
+  const who = g.players[seat ?? appState.mySeat ?? 0];
+  const own = (pos && Number.isFinite(+pos[0])) ? pos : (who && who.pos);
+  if (!own) return;
   // playtest 20: the squares carry their own grid coordinates now (sailHighlightRect writes
   // data-gx/gy). This used to invert that function's inset arithmetic by hand — a second copy of
   // the same maths that had to be kept in step with it, and it stopped being possible at all once
@@ -221,7 +258,7 @@ function camFitSail(seat){
   const cells = [...document.querySelectorAll(".sailCell")]
     .map(r => [+r.dataset.gx, +r.dataset.gy])
     .filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1]));
-  cells.push(who.pos);
+  cells.push(own);
   /* Reserve the room the prompt will need, measured from what is on screen rather than guessed:
      the ask pill and its helper line are what a sail prompt actually draws, and a narration bubble
      is the other thing that has to stand somewhere. Nothing on screen yet (the very first fit of a
@@ -240,6 +277,70 @@ function camFitSail(seat){
      first prompt of a session still reserves nothing, exactly as before. */
   if (need > 0) S.lastPromptNeed = need;
   camFitCells(cells, 2.2, need || S.lastPromptNeed || 0);
+}
+/* THE CONTAINMENT PASS — WYATT'S RULING, BUILT ON THE POSED COMPARISON IT WAITED FOR.
+   His solution, stated twice (2026-08-23: "you can always have the director zoom out more…";
+   2026-09-01, DECISIONS.md "THE RELAY REDESIGN" ruling 7): when sail squares are shown, the camera
+   frames ALL of them fully on-screen, with margin. The fit above is board-unit arithmetic, and the
+   standing measurement is that containment in BOARD coordinates is not containment on SCREEN — so
+   this judges the only thing that counts: the RENDERED rects of the squares themselves, against
+   boardBand(), which already carries the game's own margins (ribbon+pill+8 above, the captains
+   card below, 8px each side). No number here is invented (CLAUDE.md rule 9).
+   BOUNDED — three corrections per prompt — and it acts only on a SETTLED camera: while a glide
+   runs, or the player holds the board (S.lock), or the stage holds attention, it waits. On its
+   first sighting of a new sail window it only starts the clock, so the fit's own glide gets to
+   play before anything is judged. The correction converts the measured union back to board units
+   through toScreen()'s own scale (br.width / cam.w — the renderer's number, not a re-derivation),
+   asks for a window wide enough that the union fits inside the band at the new scale, and aims the
+   union's centre at the band's centre. camTo() clamps as it always has: hard against the board's
+   rim the 8px side margin can give way (the window cannot show water past the edge), but the
+   square itself stays on screen. And the arithmetic is never trusted: the NEXT pass re-measures,
+   so a wrong correction costs one more bounded pass, never a lie.
+   WHY IN tick() AND NOT ONLY AFTER THE FIT: the fault has two orders. A guest whose squares were
+   drawn with no fit at all (the bug this closes), and a fit that lands correctly and is then
+   re-aimed off the squares by a later narration glide (camToSeat at 1.9). A pass that hangs off
+   the fit sees only the first; a pass that watches the settled camera while squares exist sees
+   both. */
+let scKey = "", scTries = 0, scAt = 0;
+function sailContainTick(){
+  if (S.tween || S.lock || stageHoldsAttention()) return;
+  const sq = document.querySelectorAll(".sailCell");
+  if (!sq.length){ scKey = ""; return; }
+  const now = Date.now();
+  const key = (S.turnSerial || 0) + "|" + sq.length;
+  if (key !== scKey){ scKey = key; scTries = 0; scAt = now; return; }
+  if (scTries >= 3 || now - scAt < 350) return;
+  const svg = svgEl(); if (!svg) return;
+  const br = svg.getBoundingClientRect(); if (!(br.width > 0)) return;
+  const band = boardBand();
+  const bx0 = Math.max(band.left, br.left), bx1 = Math.min(band.right, br.right);
+  const by0 = Math.max(band.top, br.top),  by1 = Math.min(band.bottom, br.bottom);
+  if (bx1 - bx0 < 40 || by1 - by0 < 40) return;      // no usable window to judge against
+  let L = 1e9, T = 1e9, R = -1e9, B = -1e9;
+  for (const el of sq){
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0)) continue;
+    if (r.left < L) L = r.left; if (r.top < T) T = r.top;
+    if (r.right > R) R = r.right; if (r.bottom > B) B = r.bottom;
+  }
+  if (R < L) return;
+  if (L >= bx0 && R <= bx1 && T >= by0 && B <= by1) return;   // all of them on screen, with margin
+  scTries++; scAt = now;
+  const sc = br.width / S.cam.w;                     // toScreen()'s own scale, inverted below
+  const vy = (S.vy ?? S.cam.y);
+  const ux0 = S.cam.x + (L - br.left) / sc, ux1 = S.cam.x + (R - br.left) / sc;
+  const uy0 = vy + (T - br.top) / sc,       uy1 = vy + (B - br.top) / sc;
+  let w = Math.max(S.cam.tw || S.cam.w,              // zoom OUT more, never in — his words
+                   (ux1 - ux0) * br.width / (bx1 - bx0),
+                   (uy1 - uy0) * br.width / (by1 - by0));
+  w = Math.min(640, w);                              // the whole ocean; nothing further to zoom to
+  const sc2 = br.width / w;
+  // tick()'s own letterbox (vh = w * aspect), carried to the new width from its live numbers
+  const h2 = Math.min(640, (S.vh && S.cam.w) ? w * (S.vh / S.cam.w) : w);
+  const vyWant = (uy0 + uy1) / 2 - ((by0 + by1) / 2 - br.top) / sc2;
+  camTo((ux0 + ux1) / 2 - ((bx0 + bx1) / 2 - br.left) / sc2,
+        vyWant - w / 2 + h2 / 2,   // camTo takes the square window's y; tick derives vy = centre − h/2
+        w);
 }
 // frame a set of captains — both combatants of a fight, whatever the water between them
 function camFitSeats(seats){
@@ -1205,8 +1306,18 @@ function ribbonTick(){
     // appState.room` is the same networked test the chat panel already uses (orchestrator.js) —
     // reused here rather than inventing a new flag, per the state module's own field for "am I in
     // a room right now."
-    const botsUp = g2 && !appState.liveDone && !appState.passAndPlay && !(appState.db && appState.room) &&
-      act >= 0 && act !== (appState.mySeat ?? 0) && g2.players[act] && !g2.players[act].done;
+    /* A PERFORMER CAPABILITY, not a mode check — the plan's §04.2: "the capability is universal;
+       only its offer is mode-gated". You are told someone is thinking when you are watching
+       another seat's turn and there is nobody in the room to tell you: on a shared device the next
+       captain is sitting beside you, on separate devices the wire carries their turn. The rule
+       reads two HARDWARE facts and no mode name. src/shared/visibility.js, pure and gated. */
+    const botsUp = !!g2 && showsThinkingIndicator({
+      sharedDevice: appState.passAndPlay,
+      networked: !!(appState.db && appState.room),
+      watchingAnotherSeat: act >= 0 && act !== (appState.mySeat ?? 0),
+      seatStillPlaying: !!(g2.players[act] && !g2.players[act].done),
+      voyageOver: appState.liveDone,
+    });
     // explicit inline-flex/none — the CSS base is display:none, so writing "" would fall back to
     // hidden. inline-flex, NOT block: playtest 21 item 8 gave the ⏩ and the clock one shared box
     // rule that centres their contents with flex, and an inline `display:block` written here would
@@ -1528,6 +1639,13 @@ function stageFlash(msg, ms, holdMs, variants, opts){
          TIE-BREAK rather than a cost of its own: among equally clear spots the nearest wins, and no
          amount of distance can buy covering a square. That is what stops a wider search wandering,
          which is the risk the narrower version was written to avoid. */
+      /* ⚠ POSE THE BOARD BEFORE YOU TOUCH THIS. Wyatt, 2026-08-30: "don't touch bubble placement
+         again without a posed comparison — the same seeded sail prompt, before and after, two
+         screenshots. Three probe runs and three 85-minute trials couldn't settle a question that
+         two pictures would have. That's the lesson of the night, and it cost the night to learn
+         it." Two changes to this search were shipped on run-to-run counts that night and both
+         were reverted; the trials read 22 -> 26 -> 31 on the same ten legs. §5e of
+         docs/DRIVING-THE-GAME.md poses the state; two screenshots settle it in minutes. */
       const OBST = [[".sailCell", 1000], [".apBtn,.btlBtn,#apStay", 60], [".apMsg", 40], [".apSub,.apSliderWrap", 15]]
         .flatMap(([sel, w]) => [...document.querySelectorAll(sel)]
           .filter(e => e !== b && !b.contains(e) && e.getBoundingClientRect().width > 4)
@@ -2463,7 +2581,7 @@ function peekHintLast(){
   if (!box.classList.contains("radial") && !already) return;
   peekHintTick(box);
 }
-function promptTick(){
+function promptTick(force){
   const box = $("pp4Prompt"), ap = $("actionPanel");
   if (!box || !ap) return;
   // AT PORT: this loop keeps running (it is the shared stage rAF, not per-game), and it owns
@@ -3382,8 +3500,21 @@ function promptTick(){
     b.style.position = ""; b.style.left = ""; b.style.top = "";
     if (b._radSwapped){ b.innerHTML = b._fullHtml; b._radSwapped = false; }   // card shows the full label
   });
+  /* W3-1 (Wyatt, 2026-08-27): "the battle box choreography is glitchy... it appears for an
+     instant, [then] it moves down to centre." MEASURED, frame by frame (scripts/qa/
+     w31_battle_choreography.mjs): the card's first visible frame carried a stale inline `top`
+     from whatever prompt was on screen before it, and only snapped to `.centered` on a LATER
+     frame. The cause was this throttle: syncPrompt() (below) calls promptTick() SYNCHRONOUSLY,
+     at panel()'s own chokepoint, specifically so a freshly-built prompt is laid out in the frame
+     it was built — but the throttle bailed out before ever reaching the isBattle/big-card
+     placement below, because `fc` (only ever incremented by the real rAF loop in tick()) is not
+     a multiple of 3 on most synchronous calls. The centre-stage path above (`enterCenterStage()`,
+     called before this line) never had this problem for exactly that reason: it never passes
+     through the throttle at all. `force` is that same exemption for this half of the function —
+     true only from syncPrompt's one-off call, so the continuous per-frame case (tick(), where
+     this comment's HOT-PHONE reasoning still applies in full) is unchanged. */
   // HOT-PHONE: the card path reads offsetHeight (layout) — 20Hz is plenty when nothing glides
-  if (!S.tween && fc % 3) return;
+  if (!force && !S.tween && fc % 3) return;
   const big = box.offsetHeight > vhPx() * 0.42;
   const u = boatUXY(appState.mySeat ?? 0);
   /* T-07 (Wyatt, 2026-08-26): "when you observe other players battling, the battle box moves around
@@ -3508,6 +3639,9 @@ function tick(){
     if (S.camHeld && !stageHoldsAttention()){ const t = S.camHeld; S.camHeld = null; camTo(t[0], t[1], t[2]); }
     // pill and ribbon change on human timescales — 10Hz in the fast gear, every beat in slow
     if (S.slow || S.tween || fc % 6 === 0){ pillTick(); ribbonTick(); }
+    // sail squares on screen are FRAMED on screen — the containment pass (see camFitSail's
+    // sibling above). Same human-timescale cadence as the pill; it self-throttles further.
+    if (S.slow || fc % 6 === 0) sailContainTick();
     promptTick();
     retireEchoBubble();   // D-46: one moment, one sentence — every prompt style, not just the fan
     cerBandTick();    // the ceremony's words stay off the captains card, however tall it grows
@@ -3635,7 +3769,9 @@ export function initStage(){
        reported success on a fix that did nothing. */
     set subjectSet(v){ S.subjectSet = v; }, get subjectSet(){ return S.subjectSet; },
     set evType(v){ S.evType = v; }, get evType(){ return S.evType; },
-    sailCells: (seat) => { if (S.active) camFitSail(seat); },
+    // `pos` (optional) is the asked captain's authoritative square off the prompt spec — see
+    // camFitSail. renderPickPrompt passes it; the spectating host's pickCell call passes seat only.
+    sailCells: (seat, pos) => { if (S.active) camFitSail(seat, pos); },
     /* THE SHOT IS THE FIGHT, AND IT IS HELD. Called at the top of asyncBattle (before the opening
        line, so the camera is already there when it speaks) and again by every battle-card render.
        It used to centre the MIDPOINT at a fixed 2.0x, which frames two adjacent ships and crops two
@@ -3686,7 +3822,12 @@ export function initStage(){
     // the slow gear, is up to 125ms away. That window is what made the recipe cards flash at 110px
     // before settling to 163.5px. promptTick is idempotent and already runs every frame, so this
     // is the same work a beat earlier, not extra work.
-    syncPrompt: () => { maybeBuildStage(); if (S.active) promptTick(); },
+    // force=true (W3-1, 2026-09-01): this is a ONE-OFF synchronous call outside the rAF loop, so
+    // the module-level frame counter promptTick's own HOT-PHONE throttle reads (fc, only ever
+    // incremented by tick()) is not something this call controls — without force, roughly 2 calls
+    // in 3 bailed out before reaching the layout work this comment exists to run early, which is
+    // exactly the "painted before it is placed" bug he reported on the battle card.
+    syncPrompt: () => { maybeBuildStage(); if (S.active) promptTick(true); },
     settled: stageSettled,
   };
   recipeGuard();

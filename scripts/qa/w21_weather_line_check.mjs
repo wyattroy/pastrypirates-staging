@@ -19,12 +19,12 @@
  * narration tests that did are in the parked test:v1 chain. This is the only thing standing here.
  */
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // Paths DERIVED from this file's own location, never typed. game_url_check.js fails the build on a
 // hardcoded tree path, and it caught this check on its first run — the cutover moved every path
 // once already, and a gate that 404s when the tree moves protects nothing.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const { EVENT_NARRATION } = await import(path.join(ROOT, "src/ui/util.js"));
+const { EVENT_NARRATION } = await import(pathToFileURL(path.join(ROOT, "src/ui/util.js")).href);
 
 let fails = 0;
 const ok  = (m) => console.log("  PASS  " + m);
@@ -33,7 +33,7 @@ const strip = (h) => String(h).replace(/<[^>]*>/g, "");
 
 const render = (e) => strip(EVENT_NARRATION.newround(e, null, 40, 0).txt);
 
-const { STORM_PUSH } = await import(path.join(ROOT, "src/shared/index.js"));
+const { STORM_PUSH } = await import(pathToFileURL(path.join(ROOT, "src/shared/index.js")).href);
 const rule = (d) => ` It’ll blow every ship ${STORM_PUSH} squares ${d}.`;   // derived, exactly as the line must derive it
 const CASES = [
   ["calm",                  {round:6,dir:"S",next:"N",nextStorm:false,storm:false,streak:0,windStreak:1}, "Day 6: Wind SOUTH. Tomorrow: NORTH."],
@@ -53,7 +53,7 @@ for (const [what, e, want] of CASES) {
 
 // His ruling 1 applies to EVERY surface that names a wind, not just this one (rule 8).
 console.log("\nDirections are CAPS everywhere a wind or storm is named");
-const { DIRNAME } = await import(path.join(ROOT, "src/shared/index.js"));
+const { DIRNAME } = await import(pathToFileURL(path.join(ROOT, "src/shared/index.js")).href);
 for (const [k, v] of Object.entries(DIRNAME))
   v === v.toUpperCase() ? ok(`DIRNAME.${k} = "${v}"`) : bad(`DIRNAME.${k} = "${v}" — not caps`);
 

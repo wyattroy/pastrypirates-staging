@@ -6,7 +6,7 @@ import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { REPO, CHROME, LINUX_ARGS, gameURL } from "./lib/chrome.mjs";   // one resolver for every driver
+import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";   // one resolver for every driver
 const OUT = process.argv[2] || path.join(process.cwd(), "mouse-qa-shots");
 const W = +(process.argv[3] || 1400), H = +(process.argv[4] || 900);
 const PORT = +(process.argv[5] || 8477), DBG = +(process.argv[6] || 9377);
@@ -19,7 +19,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = (...a) => { const s = `[${new Date().toISOString().slice(11,19)}] ` + a.join(" "); console.log(s); fs.appendFileSync(path.join(OUT,"log.txt"), s+"\n"); };
 
 // --- serve + launch ---------------------------------------------------------
-const srv = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" });
+const srv = spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" });
 const chromeArgs = [...LINUX_ARGS, ...(HEADED ? [] : ["--headless=new"]), ...(MUTE ? ["--mute-audio"] : []), `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`,
   "--no-first-run", "--no-default-browser-check", `--window-size=${W},${H}`, "--autoplay-policy=no-user-gesture-required", "about:blank"];
 // HEADED: launch through LaunchServices so the window belongs to the GUI session (a Chrome spawned from a

@@ -109,7 +109,7 @@ import {
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
   reachable, pickCell, localAsk, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, draftDispatch, wireRestoreFail,
   startPassAndPlay,
-  endReplay, animateRimSweepIfAny,
+  endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
   wireRecipeModal, recipeInfo, winRecipeSpan, recipeCardHTML, passGate,
   getMyId, preloadAssets, resumeSoloGame, genCode, saveSession, clearSession, seatStrat,
@@ -123,7 +123,7 @@ import {
   optionButtonsHTML, backButtonHTML, // 02.1-03: the ONE button-row builder, shared with localAsk
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
-  decisionIsLocal, resolveOpt, setActor, applyActiveSeat, stepDelay, ask, pickNarrVariant,
+  decisionIsLocal, resolveOpt, applyActiveSeat, stepDelay, ask, pickNarrVariant,
   sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
@@ -401,7 +401,7 @@ function benchWatch(snap){
        bench, cleared it, and left the watching captain staring at nothing for the rest of the bake.
        Teardown after setup. The flag says "somebody else owns the panel now; do not tidy it". */
     markSuperseded:()=>{ctl.superseded=true;},
-    setPicks:(p)=>{picks=p||[];if(pickCb)pickCb(picks);}};
+    setPicks:(player)=>{picks=player||[];if(pickCb)pickCb(picks);}};
   _bench=sess;
   playBakeoffLive({order:snap.order,before:snap.before,swaps:snap.swaps||[],
                    locked:snap.locked||[],attempts:snap.attempts||0,baker:snap.baker},{watch:ctl})
@@ -524,14 +524,14 @@ export function watchBattle(){
 // battleFooter moved verbatim to src/ui/flow.js (11-05).
 // A battle decision that keeps the coins on screen: the scoreboard (o) renders with the
 // prompt buttons tucked beneath it, so nothing about the layout jumps when it's your turn.
-export function battleAsk(p,o,msg,opts,colors){
+export function battleAsk(player,o,msg,opts,colors){
   // same record/replay contract as ask(): log the chosen index, replay it through fresh opts
   if(appState.replaying){
     if(appState.dlogIdx<appState.dlog.length){appState.dlogN++;return Promise.resolve(resolveOpt(opts,appState.dlog[appState.dlogIdx++],opts.length-1).opt.value);}
     endReplay();
   }
-  setActor(p.idx);
-  const seat=p.idx;
+  applyActiveSeat(player.idx);
+  const seat=player.idx;
   const isFlip=opts.length===1&&!!opts[0].flip;
   // spectators (and, crucially, the OTHER combatant) get a battle-aware nudge that names who's
   // attacking whom instead of a bare "…is deciding" — so when a bot attacks a human on the bot's
@@ -643,10 +643,10 @@ async function asyncBattleRun(att,def){
   const beat=Math.max(300,Math.min(900,bd*0.9));  // suspense pause before the defender answers
   const hold=Math.max(500,Math.min(1500,bd*1.1)); // pause to read the round result
   const base=o=>Object.assign({att,def,a,d,round,need},o);
-  const hFlip=async(side,p,label,extra)=>{
+  const hFlip=async(side,player,label,extra)=>{
     extra=extra||{};
     const key=side==="a"?"atState":"dfState";
-    await battleAsk(p,base(Object.assign({live:side,[key]:"wait"},extra)),
+    await battleAsk(player,base(Object.assign({live:side,[key]:"wait"},extra)),
       label,[{label:"🌕 FLIP!",value:1,flip:true}]);
     broadcastFlip("spin");
     // playtest 11: the battle card's own coin spins through the beat — before this, only the
@@ -654,9 +654,9 @@ async function asyncBattleRun(att,def){
     // wait -> face with no motion at all
     battlePublish(base(Object.assign({live:side,[key]:"spin"},extra)));
     await sleep(flipSpinLeftMs());
-    const h=appState.game.flip(p);
+    const h=appState.game.flip(player);
     broadcastFlip(h?"H":"T");
-    netBroadcast(`${pn(p.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`);
+    netBroadcast(`${pn(player.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`);
     battlePublish(base(Object.assign({live:side,[key]:h?"H":"T"},extra)));
     // playtest 13 (Wyatt: "hold the finished coin heads/tails for longer — .8 seconds maybe").
     // T-34: the number is FLIP_LAND_HOLD_MS now, shared with the other flips (board.js).
@@ -664,14 +664,14 @@ async function asyncBattleRun(att,def){
     broadcastFlip("wait");
     return h;
   };
-  const bFlip=async(side,p,extra)=>{
+  const bFlip=async(side,player,extra)=>{
     extra=extra||{};
     const key=side==="a"?"atState":"dfState";
     battlePublish(base(Object.assign({live:side,[key]:"wait"},extra)));
     broadcastFlip("spin");
     battlePublish(base(Object.assign({live:side,[key]:"spin"},extra)));   // playtest 11: see hFlip
     await sleep(flipSpinLeftMs());
-    const h=appState.game.flip(p);
+    const h=appState.game.flip(player);
     broadcastFlip(h?"H":"T");
     battlePublish(base(Object.assign({live:side,[key]:h?"H":"T"},extra)));   // land ON the face
     await sleep(FLIP_LAND_HOLD_MS);   // playtest 13 / T-34: the landed face holds, same as every other flip
@@ -720,7 +720,7 @@ async function asyncBattleRun(att,def){
       if(cells.length){
         let flee;
         // @copy prompt.battle.flee
-        if(hD){setActor(def.idx);flee=await ask(`${nm(def.idx)}: both shots missed wildly! Slip away?`,
+        if(hD){applyActiveSeat(def.idx);flee=await ask(`${nm(def.idx)}: both shots missed wildly! Slip away?`,
           [{label:"🏃 Flee!",value:true},{label:"⚔️ Stand yer ground",value:false}]);}
         // a bot slips away when the wind is against it (it loses the next both-heads) or when it is
         // carrying a crate it cannot afford to lose — the same test the headless battle() applies
@@ -729,10 +729,33 @@ async function asyncBattleRun(att,def){
         else flee=(downwind==="a")||def.ing.some(i=>def.recipe&&def.recipe.includes(i)&&appState.game.cnt(def.ing,i)<=1);
         if(flee){
           const dest=hD?await pickCell(def,cells):cells.reduce((best,cc)=>man(cc,att.pos)>man(best,att.pos)?cc:best,cells[0]);
-          if(dest){def.pos=dest;appState.game.tradewind(def);await animateRimSweepIfAny();}
+          /* A FLEE IS VERY NEARLY A FULL SAIL, and it was the one move the route fix never reached.
+             Measured over 600 posed flees on 25 seeded boards: mean 3.93 squares, max 4, every
+             single one further than one square, and 13.3% of them drawn along a straight line that
+             crosses an island — the same picture playtest 21 item 6 was raised about. It now asks
+             the same sailPath the chosen sail asks, puts the squares on the SAME presentation lane
+             (o.route -> Game.bakeDraw -> o.draw), and the ONE walker walks them on every tier.
+             THE EVENT ALSO NEEDS A SEAT. Game.ev bakes the drawn route against o.state[o.p], so a
+             route on an event that names only `a` and `d` bakes to null however carefully it was
+             computed. `player` is the captain the move belongs to — the one who fled.
+             AND IT IS RECORDED AT THE DESTINATION, BEFORE THE TRADE WINDS TAKE IT. The flee used to
+             be recorded after the sweep, so the last snapshot before the sweep still held the
+             PRE-BATTLE square, onRim(from) was false, and a ship that fled into the channel got no
+             ride ON EITHER TIER — it simply appeared at the whirlpool. The emit and the sweep sit
+             on one line because that order is the whole point of them: record where the ship
+             actually got to, THEN let the current carry it on. */
+          const fleeFrom=[...def.pos],fleeRoute=dest?[fleeFrom,...appState.game.sailPath(def,dest,{throughRim:true})]:null;
+          if(dest)def.pos=dest;
           fled=true;
           appState.game.recordSkirmish(att,def,null);
-          appState.game.ev({t:"battleflee",a:att.idx,d:def.idx,rounds,downwind});
+          const evFlee=appState.game.ev({t:"battleflee",p:def.idx,a:att.idx,d:def.idx,rounds,downwind,route:fleeRoute}),evWind=dest?appState.game.tradewind(def):null;
+          /* W9: same shape, same fix as the storm sweep (src/ui/flow.js runStormLive). Both events
+             exist by now; the two rides below are this tier's own drawing and used to run BEFORE
+             the liveRender() underneath them, which is the only publisher — so the flee held every
+             other browser still for a full sail plus a rim ride. Publish, then ride. */
+          publishNow();
+          await animateSailRoute(evFlee);
+          if(evWind)await animateRimSweepIfAny(evWind);
           liveRender();
         }
       }
@@ -744,7 +767,7 @@ async function asyncBattleRun(att,def){
         let again=false;
         if(refire&&att.coins>=refire){
           if(hA){
-            setActor(att.idx);
+            applyActiveSeat(att.idx);
             // @copy prompt.battle.refire
             again=await ask(`${nm(att.idx)}: load another broadside <span class="nobrk">(−${refire}🌕)</span>? ⚪ HEADS and the shot lands.`,
               // ITEM 1 (Wyatt, 2026-08-20): brackets off the money buttons. Found by the rule-8 consistency
@@ -796,7 +819,7 @@ async function asyncBattleRun(att,def){
   // picking which crate to take.
   let pick;
   const uniq=[...new Set(lose.ing)];
-  if(win.strategy==="human"&&uniq.length>1){setActor(win.idx);
+  if(win.strategy==="human"&&uniq.length>1){applyActiveSeat(win.idx);
     // @copy prompt.battle.winnerplunder
     pick=await ask(`${pn(win.idx)}, choose yer plunder!`,uniq.map(i=>({label:ilabelImg(i),value:i})));}
   else{const w2=lose.ing.filter(i=>appState.game.needs(win).includes(i));pick=w2[0]||lose.ing[0];}
@@ -831,7 +854,7 @@ export function writeMeta(){
   return netSetMeta(appState.db,appState.room,{
     round:appState.game.round,battles:appState.game.battles,trades:appState.game.trades,attWins:appState.game.attWins,
     finishOrder:appState.game.finishOrder,winner:appState.game.winner,
-    flips:appState.game.players.map(p=>p.flips),heads:appState.game.players.map(p=>p.heads)},netFail("game meta"));
+    flips:appState.game.players.map(player=>player.flips),heads:appState.game.players.map(player=>player.heads)},netFail("game meta"));
 }
 // Every finished game (solo or multiplayer) writes its full move-by-move transcript to a
 // permanent, room-independent path — rooms/{room}/ev is cleared on the next game in that room,
@@ -852,7 +875,7 @@ export function writeGameLog(){
     // attributable — events reference players by seat index, so this is the key to reading them back.
     // Consistent with the lobby's data-collection notice ("nothing beyond the name you type").
     names:appState.game.players.map((_,i)=>rawName(i)),
-    bots:appState.game.players.map(p=>p.strategy!=="human"),
+    bots:appState.game.players.map(player=>player.strategy!=="human"),
     events:JSON.parse(JSON.stringify(appState.game.events))
   },netFail("game log"));
 }
@@ -899,23 +922,23 @@ export async function applyEndMeta(){
 // finishes first, so a host-reload replay can deterministically reconstruct the same picks.
 export async function recipeDraftNet(){
   const picks=[];
-  const humans=appState.game.players.filter(p=>p.recipeChoices&&p.strategy==="human");
-  const bots=appState.game.players.filter(p=>p.recipeChoices&&p.strategy!=="human");
-  for(const p of bots)picks[p.idx]=appState.game.r()<.5?0:1;
+  const humans=appState.game.players.filter(player=>player.recipeChoices&&player.strategy==="human");
+  const bots=appState.game.players.filter(player=>player.recipeChoices&&player.strategy!=="human");
+  for(const player of bots)picks[player.idx]=appState.game.r()<.5?0:1;
   const pending=[];
-  for(const p of humans){
+  for(const player of humans){
     if(appState.replaying){
-      if(appState.dlogIdx<appState.dlog.length){appState.dlogN++;picks[p.idx]=appState.dlog[appState.dlogIdx++];continue;}
+      if(appState.dlogIdx<appState.dlog.length){appState.dlogN++;picks[player.idx]=appState.dlog[appState.dlogIdx++];continue;}
       endReplay();
     }
-    pending.push(p);
+    pending.push(player);
   }
   if(pending.length){
     // G4 (Wyatt-approved 2026-07-30): one short line — the prompt's job is to ask, not re-teach.
     // Not an extracted @copy site: the message reaches the dispatcher via a variable. D-29 (`yer`).
-    const msgFor=p=>`${pn(p.idx)}, choose yer recipe:`;
-    const optsFor=p=>[{label:recipeCardHTML(p.recipeChoices[0]),value:0,cls:"recipeCard"},
-                       {label:recipeCardHTML(p.recipeChoices[1]),value:1,cls:"recipeCard"}];
+    const msgFor=player=>`${pn(player.idx)}, choose yer recipe:`;
+    const optsFor=player=>[{label:recipeCardHTML(player.recipeChoices[0]),value:0,cls:"recipeCard"},
+                       {label:recipeCardHTML(player.recipeChoices[1]),value:1,cls:"recipeCard"}];
     /* FORK 4 CONVERGED (W1, 2026-08-28): the pass-and-play/networked branch pair that stood here
        — with its 17b one-moment-one-sentence lesson, the solo third-person regression and its
        variants fix, and the draftWait argument a guest once never received — lives in
@@ -924,18 +947,18 @@ export async function recipeDraftNet(){
        the pass gate, serially. The announce line and its variants ride in unchanged; decisions
        are logged below in seat-index order exactly as before, whichever mode ran, so a reload-
        replay reconstructs the identical stream. */
-    const byIdx={};pending.forEach(p=>{byIdx[p.idx]=p;});
+    const byIdx={};pending.forEach(player=>{byIdx[player.idx]=player;});
     // @copy misc.draftwait.recipechoosing
     const announce={html:pending.length>1?"⚓ Everyone's choosing their recipe…":`${pn(pending[0].idx)} is choosing a recipe…`,
       variants:pending.map(q=>({seat:q.idx,html:""}))};
     // @copy misc.draftwait.recipechosen
     // a wait line: it holds until the crew actually finishes, not for 2.5 seconds (item 19)
     const draftWait=pending.length>1?"⚓ Recipe chosen! Waiting for the rest of the crew…":null;
-    const results=await draftDispatch({seats:pending.map(p=>p.idx),isPublic:false,
+    const results=await draftDispatch({seats:pending.map(player=>player.idx),isPublic:false,
       msgFor:i=>msgFor(byIdx[i]),optsFor:i=>optsFor(byIdx[i]),waitMsg:draftWait,announce});
-    for(const p of pending){picks[p.idx]=results[p.idx];logDecision(results[p.idx]);}
+    for(const player of pending){picks[player.idx]=results[player.idx];logDecision(results[player.idx]);}
   }
-  appState.game.players.forEach(p=>{if(p.recipeChoices)p.recipe=p.recipeChoices[picks[p.idx]];});
+  appState.game.players.forEach(player=>{if(player.recipeChoices)player.recipe=player.recipeChoices[picks[player.idx]];});
   if(appState.db&&appState.room&&!appState.replaying)await netSetRecipes(appState.db,appState.room,picks,netFail("recipe picks"));
   if(!appState.replaying)updateRecipeBanner();
   liveRender();
@@ -945,10 +968,10 @@ export async function recipeDraftNet(){
    The only edit is the ending: what was `ended=…;break;` inside the while-loop is now a return. */
 async function runLiveDayClassic(order){
     for(const i of order){
-      const p=appState.game.players[i];
-      if(p.done)continue;
-      await (p.strategy==="human"?humanTurn(p):botTurn(p));
-      if(appState.game.checkFinish(p)){
+      const player=appState.game.players[i];
+      if(player.done)continue;
+      await (player.strategy==="human"?humanTurn(player):botTurn(player));
+      if(appState.game.checkFinish(player)){
         liveRender();
         if(appState.game.finishOrder.length===1){
           // FINAL ROUND (#19): the first ship reached Tortuga and fired up the bakery. Alert the
@@ -1001,26 +1024,26 @@ async function runLiveDayClassic(order){
 async function runLiveDayBakeoff(order){
   const g=appState.game;
   for(const i of order){
-    const p=g.players[i];
-    if(p.done)continue;
+    const player=g.players[i];
+    if(player.done)continue;
     /* A-1: one phase — the attempt rides the captain's own turn slot, byte-for-byte the same
        order as the engine's playBakeoff (live and headless must consume identical randomness).
        endBakeDay still closes the day at the end, so same-day arrivals keep their fair race. */
-    if(p.baking){await bakeTurnLive(p);continue;}
-    await (p.strategy==="human"?humanTurn(p):botTurn(p));
-    if(g.lightOvens(p)){liveRender();await narrateLastEvent();await bakeTurnLive(p);}
+    if(player.baking){await bakeTurnLive(player);continue;}
+    await (player.strategy==="human"?humanTurn(player):botTurn(player));
+    if(g.lightOvens(player)){liveRender();await narrateLastEvent();await bakeTurnLive(player);}
   }
   liveRender();
   return g.endBakeDay();
 }
 /* One captain's attempt. */
-async function bakeTurnLive(p){
+async function bakeTurnLive(player){
   const g=appState.game;
   /* SETUP FIRST, ALWAYS. The engine shuffles and computes the bot's guess in one call, in that
      fixed order, so the seeded stream is identical whether a human is about to play or not. Only
      then does the human path get to look at the bench. */
-  const {setup,fallback}=g.bakeSetup(p);
-  const human=p.strategy==="human";
+  const {setup,fallback}=g.bakeSetup(player);
+  const human=player.strategy==="human";
   /* A-2 (Wyatt, 2026-08-28: "Yes. Build it. Bakeoff IS the game coming to life."): a bot's bake
      PLAYS on every screen now, where it used to resolve invisibly in one tick. `perform` is when
      any bench is worth drawing at all — never under replay (its sleeps no-op but the watcher's
@@ -1033,8 +1056,8 @@ async function bakeTurnLive(p){
   // player ACTUALLY made rather than re-deriving one from the bot. The bot's guess is the engine's
   // own fallback either way: the performance publishes a decision already made, it never makes one.
   let dec;
-  if(human)dec=await bakeoffPrompt(p,setup,fallback);
-  else{ if(perform)await botBakePerform(p,setup,fallback); dec={g:fallback,w:0}; }
+  if(human)dec=await bakeoffPrompt(player,setup,fallback);
+  else{ if(perform)await botBakePerform(player,setup,fallback); dec={g:fallback,w:0}; }
   /* WHERE A RE-WATCH IS ACTUALLY PAID FOR — three cases, one debit site, and the engine is the
      only thing that ever moves a coin.
        LOCAL, LIVE      already charged, one click at a time, by flow.js's onRewatch — so the purse
@@ -1049,11 +1072,11 @@ async function bakeTurnLive(p){
      bakeRewatch DRAWS NO RANDOM NUMBERS (see its note in the engine), so adding the remote case
      cannot fork the seeded stream; it emits a `rewatch` event, exactly as the other two do, which
      is also what reconciles the buyer's optimistic figure back to the settled one. */
-  if(dec.w&&(appState.replaying||!decisionIsLocal(p.idx)))g.bakeRewatch(p,dec.w);
-  const out=g.bakeResolve(p,dec.g);
+  if(dec.w&&(appState.replaying||!decisionIsLocal(player.idx)))g.bakeRewatch(player,dec.w);
+  const out=g.bakeResolve(player,dec.g);
   // A-2: the verdict reveals for EVERY performed bake, not only a human's — the crates a bot's
   // watchers just studied come off the same way, through the same one publish.
-  if(perform)await benchReveal(p,out.res);
+  if(perform)await benchReveal(player,out.res);
   liveRender();
   // narrateLastEvent() reads events[length-1], NOT appState.evIdx — so it narrates whichever event
   // bakeAttempt emitted last: the `finish` on a perfect bake, otherwise the `bake` verdict. Walking
@@ -1083,23 +1106,23 @@ async function bakeTurnLive(p){
    THE TAP LIST IS THE ENGINE'S OWN DATA: fallback[k] is null exactly at steps already locked
    (botGuess's expansion), so "which crates does the bot tap, in what order" is read straight off
    the guess — no re-derivation that could disagree with what scoreAttempt will be handed. */
-async function botBakePerform(p,setup,fallback){
-  const spec={order:p.bake.order.slice(),
-    before:(setup.before||p.bake.slots).slice(),
+async function botBakePerform(player,setup,fallback){
+  const spec={order:player.bake.order.slice(),
+    before:(setup.before||player.bake.slots).slice(),
     swaps:(setup.swaps||[]).map(sw=>[sw[0],sw[1]]),
-    locked:p.bake.locked.slice(),
-    attempts:p.bake.attempts,
-    baker:pn(p.idx)};
-  benchPublish(spec,p.idx,{phase:"open"});      // the bench appears; the bot "studies"
+    locked:player.bake.locked.slice(),
+    attempts:player.bake.attempts,
+    baker:pn(player.idx)};
+  benchPublish(spec,player.idx,{phase:"open"});      // the bench appears; the bot "studies"
   await sleep(BENCH_STUDY_MS);
-  benchPublish(spec,p.idx,{phase:"shuffle"});   // Ready — every watcher's crates cover and swap
+  benchPublish(spec,player.idx,{phase:"shuffle"});   // Ready — every watcher's crates cover and swap
   await sleep(benchChoreoMs(spec));
   const picks=[];
   for(let k=0;k<spec.order.length;k++){
     if(fallback[k]==null)continue;              // a locked step is never tapped
     await sleep(BENCH_BEAT_MS);
     picks.push(fallback[k]);
-    benchPublish(spec,p.idx,{phase:"pick",picks:picks.slice()});
+    benchPublish(spec,player.idx,{phase:"pick",picks:picks.slice()});
   }
   await sleep(BENCH_BEAT_MS);                   // the last badge lands before the crates lift
 }
@@ -1113,9 +1136,9 @@ async function botBakePerform(p,setup,fallback){
 
    `slots` is on this snapshot and that is not a leak: it is the arrangement the crates are being
    lifted off, public to everyone the instant the reveal plays. */
-async function benchReveal(p,res){
-  const snap={seat:p.idx,phase:"reveal",
-    order:p.bake.order.slice(),slots:p.bake.slots.slice(),
+async function benchReveal(player,res){
+  const snap={seat:player.idx,phase:"reveal",
+    order:player.bake.order.slice(),slots:player.bake.slots.slice(),
     correct:res.correct.map(Boolean),perfect:!!res.perfect};
   const live=appState.db&&appState.room&&!appState.replaying;
   if(live)netSetBattle(appState.db,appState.room,{title:BENCH_TITLE,bake:snap},netFail("bake bench"));
@@ -1139,7 +1162,7 @@ async function benchReveal(p,res){
    Lighting here removes the dependency on both the turn and the weather: once a captain is baking
    the seat loop skips them and nothing re-checks where they are standing.
 
-   PLACED HERE, after recipeDraftNet, because that is where p.recipe stops being a pair of choices
+   PLACED HERE, after recipeDraftNet, because that is where player.recipe stops being a pair of choices
    and becomes the captain's actual recipe — and it is still before day one's wind and storm, which
    is the window in which everyone is provably still on Tortuga.
 
@@ -1177,16 +1200,16 @@ async function stockHoldsForBakeTest(){
   const bake2=testFlagOn("bake2",bake2Enabled);
   if(!testFlagOn("ovens",ovensNowEnabled)&&!bake2)return;
   const g=appState.game;
-  const humans=g.players.filter(p=>p.strategy==="human");
+  const humans=g.players.filter(player=>player.strategy==="human");
   if(!humans.length)return;
-  for(const p of humans){
-    if(!p.recipe||!p.recipe.length)continue;
-    p.ing=[...p.recipe];
-    g.ev({t:"testhold",p:p.idx});
+  for(const player of humans){
+    if(!player.recipe||!player.recipe.length)continue;
+    player.ing=[...player.recipe];
+    g.ev({t:"testhold",p:player.idx});
     // Straight to the ovens. lightOvens still enforces its own gate (full recipe, at Tortuga), so
     // this cannot conjure a bake out of an ineligible captain — it just satisfies the gate in the
     // one window where everyone provably still meets it.
-    g.lightOvens(p);
+    g.lightOvens(player);
     /* ?bake2=1 — LAND ON THE SECOND ATTEMPT, NOT THE FIRST (W0-1).
        The jitter Wyatt reported (W3-2) is an attempt-TWO fault, and `?ovens=1` lands on attempt
        one, so the shortcut that existed could not reach the bug it was needed for. lightOvens has
@@ -1201,10 +1224,10 @@ async function stockHoldsForBakeTest(){
        THREE bowls open. A recipe length is not a constant — leaving a fixed two locked would solve
        a short recipe outright via the forced-last-bowl rule and hand him a bake with nothing left
        to play. Three open is the smallest bench that still shuffles and still has to be read. */
-    if(bake2&&p.bake&&p.bake.order.length){
-      const n=p.bake.order.length;
+    if(bake2&&player.bake&&player.bake.order.length){
+      const n=player.bake.order.length;
       const solved=Math.max(0,n-3);
-      applyResult(p.bake,{correct:p.bake.order.map((_,k)=>k<solved)});
+      applyResult(player.bake,{correct:player.bake.order.map((_,k)=>k<solved)});
     }
   }
   liveRender();
@@ -1236,12 +1259,12 @@ async function stockHoldsForBakeTest(){
 async function skipToEndCard(){
   if(!testFlagOn("endcard",endCardEnabled))return false;
   const g=appState.game;
-  for(const p of g.players){
-    if(!p.recipe||!p.recipe.length)continue;
-    p.ing=[...p.recipe];
-    g.ev({t:"testhold",p:p.idx});
-    p.done=true;p.baking=false;
-    if(g.finishOrder.indexOf(p.idx)<0)g.finishOrder.push(p.idx);
+  for(const player of g.players){
+    if(!player.recipe||!player.recipe.length)continue;
+    player.ing=[...player.recipe];
+    g.ev({t:"testhold",p:player.idx});
+    player.done=true;player.baking=false;
+    if(g.finishOrder.indexOf(player.idx)<0)g.finishOrder.push(player.idx);
   }
   liveRender();
   await flash(`${iconImg(FLAME_IMG)} <b>TEST GAME</b> — every captain is home with a full recipe. Skipping to the end of the voyage.`,2600);
@@ -1430,6 +1453,15 @@ export function watchRecoveryState(){
 }
 // host: broadcast new events to the shared feed
 export function pushEvents(){
+  /* W9: THE HOST GUARD LIVES HERE, on the publisher itself, not on each caller. It used to sit
+     only in liveRender (src/ui/panel.js), so every future call site had to remember it — and the
+     first new one, publishNow() in src/ui/flow.js, could not carry it without putting a
+     who-is-playing conditional into a file that DRAWS, which mode_fork_check.js failed on sight and
+     was right to. A guest in a live room has both `db` and `room`, so the two lines below are not
+     enough on their own: without this, a guest calling in would broadcast its own mirrored copy of
+     the feed over the authority's. liveRender keeps its own check as well — belt and braces on the
+     one thing that must never happen twice. */
+  if(!appState.isHost)return;
   if(!appState.db||!appState.room)return;
   while(appState.evPushed<appState.game.events.length){
     /* Q-18 — THE SERIAL IS STAMPED ON THE WIRE COPY, NEVER ON THE ENGINE'S OWN EVENT. Adding a
@@ -1497,23 +1529,23 @@ export function remoteDraftPrompt(seat,msg,opts,waitMsg){
 }
 export function watchDraftPrompt(){
   netWatchDraftPrompt(appState.db,appState.room,appState.mySeat,snap=>{
-    const p=snap.val();
-    if(!p){return;}
-    const cls=p.classes||[];
+    const player=snap.val();
+    if(!player){return;}
+    const cls=player.classes||[];
     const grid=cls.some(c=>c)?" recipes":"";
-    if(p.stage)$("actionPanel").dataset.pp4Stage="1";else delete $("actionPanel").dataset.pp4Stage;
+    if(player.stage)$("actionPanel").dataset.pp4Stage="1";else delete $("actionPanel").dataset.pp4Stage;
     // @copy prompt.net.draftrerender
     // 02.1-03: the third copy of this markup is gone too. The draft channel's WIRE payload stays
     // deliberately narrower (no disabled/why/seat/colors — a recipe card is never greyed); only
     // its RENDERING stops duplicating the pattern, so a field it one day needs is already built.
-    panel(`<div class="apMsg">${p.msg}</div><div class="apBtns${grid}">`+
-      optionButtonsHTML((p.labels||[]).map((l,i)=>({i,label:l,cls:cls[i]})))+`</div>`,true);
-    const shorts=p.shorts||[];
+    panel(`<div class="apMsg">${player.msg}</div><div class="apBtns${grid}">`+
+      optionButtonsHTML((player.labels||[]).map((l,i)=>({i,label:l,cls:cls[i]})))+`</div>`,true);
+    const shorts=player.shorts||[];
     $("actionPanel").querySelectorAll(".apBtn").forEach(b=>{
       const i=+b.dataset.i;
       if(shorts[i])b._shortHtml=shorts[i];
       b.onclick=()=>{
-        netSetDraftResponse(appState.db,appState.room,appState.mySeat,{id:p.id,choice:i},netFail("recipe response"));
+        netSetDraftResponse(appState.db,appState.room,appState.mySeat,{id:player.id,choice:i},netFail("recipe response"));
         /* THE CARD WAS NEVER TORN DOWN — Wyatt, 2026-08-19: "the crew draws lots screen doesn't
            disappear". The old line showed the waiting narration and left the panel standing,
            because showNarration paints a floating bubble and does not touch #actionPanel. On the
@@ -1522,7 +1554,7 @@ export function watchDraftPrompt(){
            The teardown runs unconditionally now; the waiting line, if any, comes after it. */
         delete $("actionPanel").dataset.pp4Stage;
         panel("");
-        if(p.waitMsg)showNarration(p.waitMsg,{wait:true}); // item 19: no deadline on a wait line
+        if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line
       };
     });
   });
@@ -1557,9 +1589,9 @@ export async function consumeEvent(e){
     // the guest's mirror of the host-authoritative state — see watchEvents' preserved history
     // below for the day the ribbon said DAY 1 while the board played day 2 (2026-08-19).
     if(e.state)e.state.forEach((s,i)=>{
-      const p=appState.game.players[i];if(!p||!s)return;
-      p.pos=Array.isArray(s.pos)?[...s.pos]:p.pos;
-      p.coins=s.coins;p.ing=Array.isArray(s.ing)?[...s.ing]:[];p.done=s.done;p.baking=!!s.baking;
+      const player=appState.game.players[i];if(!player||!s)return;
+      player.pos=Array.isArray(s.pos)?[...s.pos]:player.pos;
+      player.coins=s.coins;player.ing=Array.isArray(s.ing)?[...s.ing]:[];player.done=s.done;player.baking=!!s.baking;
     });
     if(e.round!=null)appState.game.round=e.round;
     if(e.wind!=null)appState.game.windNow=e.wind;
@@ -1569,7 +1601,9 @@ export async function consumeEvent(e){
   applyActiveSeat(e.p);
   syncLogLines();
   $("scrub").max=Math.max(0,appState.game.events.length-1);
-  await animateRimSweepIfAny();   // idempotent (_lastSweptEvIdx) — a host call site that already awaited the ride makes this a no-op
+  stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
+  await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
+  await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
   render();
   spawnPops(e,boardCell());
   playForEvent(e);                // AUDIO-01/D-07: the per-event sound moment, every tier, no isLocalTo gate
@@ -1598,7 +1632,7 @@ export function watchEvents(){
        the state onto every event (Game.ev already did) and mirror it here — MUTATED IN PLACE,
        never reassigned, because renderBattleFromSnap holds player object references across a
        fight. That mirror now lives in consumeEvent's guest branch, where the host's drain shares
-       every line AFTER it. `p` rides turn/sail/dock/pass/attack for applyActiveSeat (02.15-01
+       every line AFTER it. `player` rides turn/sail/dock/pass/attack for applyActiveSeat (02.15-01
        Stage 2); the rim sweep's known, accepted degradation stands: the guest's coin panels lag
        by the sweep's duration, an event arriving mid-sweep snaps the ship true on the next paint. */
     await consumeEvent(e);
@@ -1606,30 +1640,30 @@ export function watchEvents(){
 }
 export function watchPrompt(){
   netWatchPrompt(appState.db,appState.room,snap=>{
-    const p=snap.val();
+    const prompt=snap.val();
     /* A BAKE BENCH OUTLIVES ITS OWN PROMPT, so this clear must not take one down (04-01 Task 3).
        MEASURED: the remote captain answered, remotePrompt removed the prompt node, this callback
-       fired with p===null and wiped the bench a beat before the verdict arrived on the bench
+       fired with prompt===null and wiped the bench a beat before the verdict arrived on the bench
        channel — so the one captain who had actually played the bake was the only one who never saw
        how it went. The same guard protects a WATCHER, whose bench is not tied to any prompt of
        their own. The card leaves through its one exit, retireBakeCard (item 6 / D-16), never here. */
-    if(!p||p.seat!==appState.mySeat){
+    if(!prompt||prompt.seat!==appState.mySeat){
       if(!document.querySelector("#actionPanel .bko"))panel("");
       setFlipActive(null);appState.inBattlePrompt=false;return;}
-    if(p.kind==="ask"){
-      if(p.battle){
+    if(prompt.kind==="ask"){
+      if(prompt.battle){
         // this seat owns the live battle decision — render the same scoreboard everyone else
         // sees, with the control (flip button or choice buttons) layered on top
         appState.inBattlePrompt=true;
-        if(p.flip){
-          renderBattleFromSnap(p.battle);
+        if(prompt.flip){
+          renderBattleFromSnap(prompt.battle);
           setNeedsAction(true);
-          setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);sendResponse(p.id,0);});
+          setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);sendResponse(prompt.id,0);});
         }else{
           setFlipActive(null);
-          const cols=p.colors||[];
-          renderBattleFromSnap(p.battle,{prompt:{msg:p.msg,opts:(p.labels||[]).map(l=>({label:l})),colors:cols}});
-          $("actionPanel").querySelectorAll(".btlBtn").forEach(b=>{b.onclick=()=>sendResponse(p.id,+b.dataset.i);});
+          const cols=prompt.colors||[];
+          renderBattleFromSnap(prompt.battle,{prompt:{msg:prompt.msg,opts:(prompt.labels||[]).map(l=>({label:l})),colors:cols}});
+          $("actionPanel").querySelectorAll(".btlBtn").forEach(b=>{b.onclick=()=>sendResponse(prompt.id,+b.dataset.i);});
         }
         return;
       }
@@ -1649,19 +1683,19 @@ export function watchPrompt(){
          fixed 2d19a15e) instead of a floating narration bubble the host never drew.
          "" from the wire normalizes to null inside the rebuild (seat 0 is a real captain — the
          !=null tests stay). */
-      const flipIdx=(p.flipIdx!=null&&p.flipIdx>=0)?p.flipIdx:(p.flip?0:-1);
-      const backIdx=(p.back!=null&&p.back>=0)?p.back:-1;
-      const cols=p.colors||[],cls=p.classes||[],labels=p.labels||[],dis=p.disabled||[],why=p.why||[],seats=p.seats||[],shorts=p.shorts||[];
+      const flipIdx=(prompt.flipIdx!=null&&prompt.flipIdx>=0)?prompt.flipIdx:(prompt.flip?0:-1);
+      const backIdx=(prompt.back!=null&&prompt.back>=0)?prompt.back:-1;
+      const cols=prompt.colors||[],cls=prompt.classes||[],labels=prompt.labels||[],dis=prompt.disabled||[],why=prompt.why||[],seats=prompt.seats||[],shorts=prompt.shorts||[];
       const opts=labels.map((l,i)=>({label:l,cls:cls[i]||"",disabled:!!dis[i],why:why[i]||"",
         seat:(seats[i]===""||seats[i]==null)?null:seats[i],
         short:(shorts[i]===""||shorts[i]==null)?null:shorts[i],
-        flip:i===flipIdx,back:i===backIdx,stage:!!p.stage}));
+        flip:i===flipIdx,back:i===backIdx,stage:!!prompt.stage}));
       // belt: a flip prompt whose labels never crossed the wire still arms the coin
-      if(flipIdx>=0&&!opts.length)opts.push({label:"",flip:true,stage:!!p.stage});
-      const sl=p.slider?Object.assign({},p.slider,{ref:{value:p.slider.start}}):null;
-      renderAskPrompt({msg:p.msg,opts,colors:p.colors||null,sub:p.sub||null,slider:sl,battle:false},
-        v=>sendResponse(p.id,v,true));
-        }else if(p.kind==="pick"){
+      if(flipIdx>=0&&!opts.length)opts.push({label:"",flip:true,stage:!!prompt.stage});
+      const sl=prompt.slider?Object.assign({},prompt.slider,{ref:{value:prompt.slider.start}}):null;
+      renderAskPrompt({msg:prompt.msg,opts,colors:prompt.colors||null,sub:prompt.sub||null,slider:sl,battle:false},
+        v=>sendResponse(prompt.id,v,true));
+        }else if(prompt.kind==="pick"){
       appState.inBattlePrompt=false;
       setFlipActive(null);
       // THE TRACER (02.15-02 Task 3, D-25/PAR-14): names the ONE converged renderer DIRECTLY —
@@ -1681,15 +1715,15 @@ export function watchPrompt(){
          converged renderer, starved of an argument.
 
          prompt_field_parity_check's assertion 2 has been RED about exactly this the whole time —
-         "pickCell() SENDS 'pos' and watchPrompt's pick branch never reads p.pos". The gate named
+         "pickCell() SENDS 'pos' and watchPrompt's pick branch never reads prompt.pos". The gate named
          the field, the tier and the consequence, and nobody read it.
 
          And the comment inside renderPickPrompt claimed `pos` is "absent only across a version
          skew (an older host feeding a newer guest)". It was absent on EVERY guest in EVERY game.
          That is rule 6's other half in the wild — a comment making a claim about runtime, rotted,
          and believed. */
-      renderPickPrompt({cells:p.cells||[],msg:p.msg,hint:p.hint||null,pos:p.pos||null},cell=>sendResponse(p.id,cell));
-    }else if(p.kind==="bake"){
+      renderPickPrompt({cells:prompt.cells||[],msg:prompt.msg,hint:prompt.hint||null,pos:prompt.pos||null},cell=>sendResponse(prompt.id,cell));
+    }else if(prompt.kind==="bake"){
       /* MP-04 — THE BAKE, TAKEN BY ITS OWN CAPTAIN (04-01 Task 2, THE TRACER).
          Before this branch existed, a guest's bake was played on the HOST's screen by the host's
          own hands while the guest's screen showed nothing at all — measured 2026-08-23 in a real
@@ -1706,8 +1740,8 @@ export function watchPrompt(){
          also on re-attach, and a bake is a two-minute interaction rather than a re-render — a
          second start would put two benches in one panel and answer twice. Same edge-trigger idiom
          watchBattle uses for spectatingBattle: read before you assign. */
-      if(_liveBakePromptId===p.id)return;
-      _liveBakePromptId=p.id;
+      if(_liveBakePromptId===prompt.id)return;
+      _liveBakePromptId=prompt.id;
       /* MP-06, THE REMOTE PURSE. The engine is the only thing that moves a real coin and it lives
          on the host, so what happens here is DISPLAY: the buyer's own purse drops the moment they
          buy, the count rides home in the single reply, and the host charges it authoritatively
@@ -1717,12 +1751,12 @@ export function watchPrompt(){
          true number instantly, at the price of a round-trip in the middle of a prompt and a second
          way for a purse to be wrong. If the optimistic figure is ever seen to disagree with the
          settled one, report the number — do not paper over it. */
-      const cost=p.cost||1;
-      let purse=(p.coins==null?0:p.coins);
+      const cost=prompt.cost||1;
+      let purse=(prompt.coins==null?0:prompt.coins);
       const spend=(n)=>{
         const want=cost*(n||0);
         if(want<=0||purse<want)return false;
-        purse-=want;showSeatCoins(p.seat,purse);
+        purse-=want;showSeatCoins(prompt.seat,purse);
         return true;
       };
       spend.canAfford=()=>purse>=cost;
@@ -1734,9 +1768,9 @@ export function watchPrompt(){
       // a remote one does not. It caught this exact omission the moment `baker` was added — the
       // local screen would have titled the card "{Captain}'s Bake-Off" while a remote captain's
       // still read "The Bake-Off". A title is not load-bearing; the divergence would have been.
-      const wireSpec={order:p.order||[],before:p.before||[],swaps:p.swaps||[],
-                      locked:p.locked||[],attempts:p.attempts||0,cost,baker:p.baker};
-      const seat=p.seat;
+      const wireSpec={order:prompt.order||[],before:prompt.before||[],swaps:prompt.swaps||[],
+                      locked:prompt.locked||[],attempts:prompt.attempts||0,cost,baker:prompt.baker};
+      const seat=prompt.seat;
       /* MP-13 (04-01 Task 4) — A CAPTAIN WHO DROPS MID-BAKE DOES NOT STALL THE TABLE.
          The bake has no shot clock any more (Wyatt, 2026-08-18: the finish line gets as long as it
          needs), and the clock was the only thing that used to stop an absent captain hanging the
@@ -1749,7 +1783,7 @@ export function watchPrompt(){
          guess, having bought nothing. One entry, both facts.
          CANCELLING IS NOT OPTIONAL — see the writer's own note. It is cancelled on the answer path
          AND on the error path below, which are the only two ways out of this branch. */
-      netForfeitOnDisconnect(appState.db,appState.room,p.id);
+      netForfeitOnDisconnect(appState.db,appState.room,prompt.id);
       playBakeoffLive(wireSpec,{onRewatch:spend,onBench:(patch)=>benchPublish(wireSpec,seat,patch)})
         // The SAME SHAPE playBakeoffLive resolves for a local captain — {guess,rewatches} — so the
         // host's tail in bakeoffPrompt never has to know which tier answered. `null` (the bench
@@ -1762,10 +1796,10 @@ export function watchPrompt(){
         // on THIS bench. The card's exit is retireBakeCard's, at the end of that (item 6 / D-16).
         .then(r=>{_liveBakePromptId=null;
                   netClearForfeitOnDisconnect(appState.db,appState.room);
-                  sendResponse(p.id,r||null,true);},
+                  sendResponse(prompt.id,r||null,true);},
               e=>{_liveBakePromptId=null;console.error("bake prompt",e);
                   netClearForfeitOnDisconnect(appState.db,appState.room);
-                  sendResponse(p.id,null,true);});
+                  sendResponse(prompt.id,null,true);});
     }
   });
 }
@@ -2654,7 +2688,15 @@ export function boot(){
   // (src/net/index.js), so it can never break a boot that previously never called it.
   const fbOk=fbInit();
   if(!fbOk){
-    // v2 always lands here — there is no Firebase SDK on the page at all. The elements these
+    // ⚠ THIS COMMENT WAS FALSE, AND SAYING SO IS THE POINT. It read: "v2 always lands here —
+    // there is no Firebase SDK on the page at all." MEASURED 2026-09-01, from the opposite
+    // direction: a Safari leg logged a live Firebase WebSocket failure, which a page with no SDK
+    // cannot do. index.html:40-41 loads firebase-app-compat and firebase-database-compat, so
+    // fbInit() SUCCEEDS on a normal boot, watchPresence() runs, and a socket opens — in solo too.
+    // The branch below is therefore the RARE path (no config, no SDK, or a thrown init), not the
+    // universal one, and anyone reasoning from the old sentence would have reasoned backwards.
+    // A comment is a statement of intent by somebody who has since left the room; this one had
+    // been overtaken by the SDK being added back and nobody re-read it. The elements these
     // lines marked up no longer exist, so each is guarded; the branch itself is kept because
     // ui_contract_check.js's BOOT-FBINIT-OFFLINE assertion forbids restructuring the path  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
     // between here and resumeSoloGame(), and because an offline refresh mid-solo-game still has

@@ -1,0 +1,48 @@
+# LINE ENDINGS ARE LF IN THE WORKING TREE, ON EVERY MACHINE.
+#
+# WHY THIS FILE EXISTS, measured on the Razer 2026-08-31. This repo was written on a Mac and the
+# Windows checkout arrived i/lf w/crlf -- LF in the index, CRLF on disk, which is git's default
+# there. Every gate that splits a file on "\n" and compares the result to a literal then sees a
+# trailing \r, and reports something false with total confidence:
+#
+#   * org_vendor_check called 20 vendored files "DELETED since vendoring" AND, in the same run,
+#     called those same files unknown to the manifest -- a contradiction only \r can produce.
+#   * scripts/lib/vision.mjs threw outright, because /```accepted\n/ cannot match "```accepted\r\n",
+#     which took the whole `npm test` chain down with it.
+#
+# Neither was a bug in the game or in the gate's reasoning. Both were the file arriving in a shape
+# the author never saw. That is the same family as the em-dash that stopped watchdog.ps1 parsing
+# and the bare "C:\" path the ESM loader rejects -- all found the same day, all invisible on macOS.
+#
+# ONE LINE, not a \r? sprinkled through every parser: a hand-kept list of places to tolerate \r
+# rots exactly like the thing it guards, and the next parser somebody writes will not be on it.
+#
+# NOTE FOR WHOEVER PULLS THIS ONTO A WINDOWS CHECKOUT: this takes effect on CHECKOUT, so an
+# existing tree stays CRLF until it is rewritten. Once you are sure nothing uncommitted is at
+# risk (`git status` clean), run ALL FOUR of these, in order:
+#
+#     git config core.autocrlf false
+#     git ls-files -z | xargs -0 rm -f
+#     git checkout-index -a -f
+#     git add --renormalize .
+#
+# THE FIRST DRAFT OF THIS NOTE SAID ONLY `git checkout-index -a -f`, AND THAT COMMAND DOES
+# NOTHING AT ALL HERE -- it exits 0, prints nothing, and leaves every CRLF file exactly as it
+# was. Measured on the Razer 2026-08-31: 1707 CRLF files before, 1707 after. Three separate
+# reasons, each of which alone is enough to make the one-liner a silent no-op:
+#
+#   1. core.autocrlf=true was set locally and OVERRODE eol=lf on checkout, so even the files
+#      git did rewrite came back CRLF. This is the one that makes the failure total.
+#   2. checkout-index -f will not overwrite a file its stat cache calls clean, so it skipped
+#      nearly everything. Deleting the files first is what forces the rewrite. (`reset --hard`
+#      does not help either, and for a subtler reason: `text=auto` normalises CRLF away when
+#      git hashes the working-tree file, so GIT CANNOT SEE THE DIFFERENCE IT IS MEANT TO FIX
+#      -- every file compares equal to the index and is skipped.)
+#   3. Afterwards the index holds stat data from before the rewrite, so `git status` reports
+#      ~1704 files modified whose content hashes MATCH the index exactly. `update-index
+#      --refresh` will not clear it; `git add --renormalize .` does.
+#
+# THE LESSON IS THE REPO'S OWN, AGAIN: a command written into a doc and never run is a
+# command that does not work. This one had been written, read, and cited in a ledger entry
+# as the remaining step, and no one had executed it.
+* text=auto eol=lf

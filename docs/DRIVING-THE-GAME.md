@@ -165,6 +165,32 @@ bot turns and narration holds dominate the wall clock, so poll rather than block
 while the loop is running wedges it — tried, and it cost a run. If you must shortcut, call the real
 render functions directly (below) instead of editing state the loop is mid-way through reading.
 
+### 5a. `?endcard=1` — the shortcut to the ending, and the trap in it
+
+**A solo voyage takes longer than ten minutes to reach its ending in this container**, so a probe
+about the End of Voyage card should not play its way there. `?endcard=1` poses the state the ending
+reads — every captain home with a full recipe — and then lets the voyage end through
+`liveResolveEndNet()`, **the same and only function that ends every other voyage**
+(`src/orchestrator.js:1259`, called at `:1313`). Nothing about it draws a card, so the card you
+inspect is the card players get. ONE DISPLAY PATH.
+
+**THE TRAP, paid for on 2026-08-31: the flag fires when a VOYAGE STARTS, not when the page loads.**
+It is read inside `runLiveNet()`. A probe that put `?endcard=1` in the URL, waited, and then
+measured got **the title screen** — and reported "7 structural rules ran on the End of Voyage
+screen", which was true of the rules and false of the screen. The screenshot is the only reason
+that was caught, and it is rule 6 exactly: an instrument that never reached its subject tells you
+about itself, not about the world.
+
+```
+load  http://127.0.0.1:PORT/?endcard=1
+then  start a solo (or crew) game normally — click Play Solo, name the captain
+then  the shortcut fires as the voyage begins, before the turn-order intro
+```
+
+**It is placed BEFORE the turn-order intro deliberately, and that was measured**: behind it, the
+shortcut sat waiting for the "🦜 Start" tap, so a URL whose whole purpose is removing taps added
+one. **Always screenshot what you posed before you measure it.**
+
 ## 5b. The autoplay driver — the loop that actually plays
 
 One `setInterval` that answers whatever the game is currently asking. **Priority order matters** —

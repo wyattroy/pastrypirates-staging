@@ -21,10 +21,11 @@
 // (Wave 0 Requirements: "factor the mapping table and dispatch lookup so they are importable
 // without constructing a live AudioContext"), made load-bearing by this harness's own existence.
 
+import fs from "node:fs";
 import {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, STORM_VOLUME, STORM_FADE_SEC,
-  WIN_SOUND_PLACEHOLDER, SHOTCLOCK_SOUND_PLACEHOLDER, BATTLE_ENGAGE_SOUND,
+  WIN_SOUND_PLACEHOLDER, BATTLE_ENGAGE_SOUND,
 } from "../src/ui/audio.js";
 // EVENT_NARRATION import style matches scripts/narration_test.js:24-27 exactly — proof that
 // importing the narration surface headlessly (no DOM, no src/ui/flow.js or src/ui/panel.js)
@@ -208,15 +209,55 @@ check("soundForEvent with an unknown t returns null", unknownResult, null);
 
 checkTrue("WIN_SOUND_PLACEHOLDER is exported", typeof WIN_SOUND_PLACEHOLDER === "string");
 checkTrue("WIN_SOUND_PLACEHOLDER is a member of SFX_FILES", SFX_FILES.includes(WIN_SOUND_PLACEHOLDER));
-checkTrue("SHOTCLOCK_SOUND_PLACEHOLDER is exported", typeof SHOTCLOCK_SOUND_PLACEHOLDER === "string");
-checkTrue("SHOTCLOCK_SOUND_PLACEHOLDER is a member of SFX_FILES", SFX_FILES.includes(SHOTCLOCK_SOUND_PLACEHOLDER));
-check("EVENT_SOUND.shotclock is strictly the SHOTCLOCK_SOUND_PLACEHOLDER constant", EVENT_SOUND.shotclock, SHOTCLOCK_SOUND_PLACEHOLDER);
-check("EVENT_SOUND.shotclockskip is strictly the SHOTCLOCK_SOUND_PLACEHOLDER constant", EVENT_SOUND.shotclockskip, SHOTCLOCK_SOUND_PLACEHOLDER);
+/* THE SHOT CLOCK'S FOUR ASSERTIONS STOOD HERE and were removed 2026-08-31. The shot clock itself
+   left the game on 2026-08-28 at Wyatt's word ("temporarily remove the shot clock"), taking
+   SHOTCLOCK_SOUND_PLACEHOLDER with it — and this file kept importing it, so the WHOLE SUITE has
+   crashed on load ever since. It went unnoticed because this file lives in `test:v1`, PARKED by
+   the cutover: every audio assertion in the project has been unrun for weeks while `npm test`
+   reported green about other things.
+   When the clock comes back, so do these four — its cue is still named in EVENT_SOUND's comments
+   and in git history at this file. */
+checkTrue("no assertion here references a symbol audio.js no longer exports (the crash that hid this whole suite)",
+  typeof EVENT_SOUND === "object" && EVENT_SOUND !== null);
 
 /* ================= STORM_VOLUME / STORM_FADE_SEC: numeric ranges, not exact values (Claude's discretion) ================= */
 
 checkTrue(`STORM_VOLUME (${STORM_VOLUME}) is greater than 0 and less than 1`, STORM_VOLUME > 0 && STORM_VOLUME < 1);
 checkTrue(`STORM_FADE_SEC (${STORM_FADE_SEC}) is greater than 0`, STORM_FADE_SEC > 0);
+
+/* ================= DEFECT-1 / DEFECT-2: the duplicate key that made a sound unplayable =========
+   docs/AUDIO.md described these as live for weeks after they were fixed at the cutover
+   (fb74eedc), and on 2026-08-31 I repeated that description to Wyatt as a bug hurting players.
+   It was not. Two separate faults, and this closes both:
+
+   THE ORIGINAL DEFECT: `EVENT_SOUND` listed `anchorHold` TWICE. In a JS object literal the last
+   wins, so `anchorHold: "fishing"` was silently overwritten by `anchorHold: "storm"` — fishing.mp3
+   became unplayable, and anchoring in a storm played an 8-second storm stem on the MASTER bus,
+   roughly three times louder than the storm is mixed to sit, once per ship.
+
+   WHY IT WENT UNNOTICED: this suite is thorough and green, and it mentioned neither `anchorHold`
+   nor `fishing` ANYWHERE — so its green tick was never evidence about this. The doc said so at the
+   time ("worth adding both assertions with the fix, red first") and nobody did. A duplicate key is
+   invisible to every runtime check that reads the finished object, which is why the second case
+   below reads the SOURCE. */
+
+check("anchorHold plays fishing, not storm — DEFECT-1/2's regression guard", EVENT_SOUND.anchorHold, "fishing");
+checkTrue("fishing is actually reachable — some event maps to it",
+  Object.values(EVENT_SOUND).includes("fishing"));
+check("anchorHold does NOT land on the master bus with a storm stem",
+  (soundForEvent({ t: "anchorHold" }) || {}).name, "fishing");
+
+/* AND THE DUPLICATE KEY ITSELF, read from the SOURCE — the finished object cannot show it, because
+   by then the loser is already gone. This is the only case here that could have caught the
+   original defect at the moment it was written. */
+{
+  const src = fs.readFileSync(new URL("../src/ui/audio.js", import.meta.url), "utf8");
+  const body = (src.match(/const EVENT_SOUND\s*=\s*\{([\s\S]*?)\n\};/) || [, ""])[1];
+  const keys = [...body.matchAll(/(?:^|[,{\n])\s*([A-Za-z_$][\w$]*)\s*:/g)].map(m => m[1]);
+  const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+  checkTrue(`EVENT_SOUND declares every key exactly once${dupes.length ? ` — DUPLICATED: ${[...new Set(dupes)].join(", ")}` : ""}`,
+    dupes.length === 0 && keys.length > 0);
+}
 
 console.log(`\n${failures ? "FAILED" : "PASSED"} — ${failures} failing check(s)`);
 process.exit(failures ? 1 : 0);

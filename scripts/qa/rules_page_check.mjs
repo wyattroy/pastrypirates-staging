@@ -27,7 +27,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 /* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
    first — so a LINE comment containing the characters that open one swallowed 152 lines of
    src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
@@ -39,8 +39,8 @@ let fails = 0;
 const pass = m => console.log("PASS " + m);
 const fail = m => { console.log("FAIL " + m); fails++; };
 
-const { roundCfg } = await import(path.join(REPO, "src/engine/index.js"));
-const shared = await import(path.join(REPO, "src/shared/index.js"));
+const { roundCfg } = await import(pathToFileURL(path.join(REPO, "src/engine/index.js")).href);
+const shared = await import(pathToFileURL(path.join(REPO, "src/shared/index.js")).href);
 if (typeof shared.rulesFacts !== "function") {
   fail("src/shared/index.js does not export rulesFacts() — there is no one source both the page filler and this gate can read");
   console.log(`\nFAILED — ${fails} assertion(s)`);

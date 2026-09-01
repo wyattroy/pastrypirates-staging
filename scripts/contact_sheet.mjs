@@ -18,6 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, execSync } from "node:child_process";
 import { openChrome, sleep } from "./lib/cdp.mjs";
+import { PYTHON } from "./lib/chrome.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const DIR = path.resolve(process.argv[2] || ".");
@@ -58,7 +59,7 @@ fs.writeFileSync(htmlFile, html);
 
 // serve THE FOLDER WE ARE BUILDING FROM — the whole point. A server rooted anywhere else turns
 // every <img> into a 404, which is what produced four identical screenshots of an error page.
-const srv = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: DIR, stdio: "ignore" });
+const srv = spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: DIR, stdio: "ignore" });
 const cleanup = () => { try { srv.kill("SIGKILL"); } catch {}
   try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
   try { execSync(`pkill -f "remote-debugging-port=${DBG}"`, { stdio: "ignore" }); } catch {} };

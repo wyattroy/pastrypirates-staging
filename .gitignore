@@ -73,3 +73,28 @@ narration-timeline/
 *-shots/
 w1-crewphone-recheck/
 # ^ named outside the -shots convention and paid for it immediately: name probe output dirs *-shots so the glob above covers them without this file growing a list again.
+
+# wyclau machine-local files (the Bell and the Glass generator read/write these). Per-machine
+# by nature: each one's answer is only true about itself. The CROSS-MACHINE view is the tracked
+# .planning/wyclau/status/<hostname>.md, published by scripts/wyclau/publish_status.mjs — never
+# these originals. (Several names below belong to the pre-2026-09-01 watchdog and are kept so a
+# straggler machine that still writes them cannot dirty the tree.)
+.planning/wyclau/HEARTBEAT
+.planning/wyclau/glass.html
+.planning/wyclau/restarts.log
+.planning/wyclau/LAST-LAUNCH
+.planning/wyclau/LAST-ACTIVITY
+.planning/wyclau/LAST-PUBLISH
+.planning/wyclau/STOP-HOOK-STATE.json
+# Written by a long job (a sea trial) as it progresses; read by the Glass for the status dot.
+# Per-machine by nature and actively misleading if shared: committed, it would describe a job
+# running on somebody else's computer.
+.planning/wyclau/LONG-RUN
+# Detached-trial stdout/stderr logs (start_trial_detached.mjs) — bulky, machine-local.
+.planning/wyclau/detached/
+
+# Claude Code local settings are MACHINE-LOCAL by design (the file even points at
+# /opt/homebrew). It was tracked once and shipped the Mac's 82-entry approval history
+# to every clone; the deliberate, reviewed allowlist lives in .claude/settings.json.
+.claude/settings.local.json
+.planning/wyclau/LAST-HARVEST

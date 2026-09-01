@@ -41,6 +41,7 @@
 import {
   appState,
 } from "../state/index.js";
+import { normalizeSeat, deriveActiveSeat, isDecisionLocal } from "../shared/storyboard.js";
 import { roundCfg } from "../engine/index.js";
 import {
   // F5 (2026-07-29): dockFlavor -> dockFlavorIcon. EVENT_NARRATION.dock was this file's only
@@ -957,7 +958,7 @@ const FALLBACK_BADGE={img:"anchor",name:"Good Mate",byline:"Pirated for the love
 // still-available badge. A captain who can't claim any stat (all zero) gets a flavor fallback.
 export function assignBadges(){
   const s=computeAwards();
-  const arrs=Object.assign({},s,{tails:appState.game.players.map(p=>(p.flips||0)-(p.heads||0))});
+  const arrs=Object.assign({},s,{tails:appState.game.players.map(player=>(player.flips||0)-(player.heads||0))});
   const n=appState.game.players.length;
   const cands=[];
   for(const def of BADGE_POOL){
@@ -971,7 +972,7 @@ export function assignBadges(){
     bySeat[c.seat]=c;usedCat.add(c.def.key);
   }
   for(let i=0;i<n;i++)if(bySeat[i]===undefined)bySeat[i]={seat:i,def:FALLBACK_BADGE,value:appState.game.players[i].ing.length};
-  return appState.game.players.map((p,i)=>bySeat[i]); // one per captain, in seat order
+  return appState.game.players.map((player,i)=>bySeat[i]); // one per captain, in seat order
 }
 
 // standard subtitle-timing formula: a floor so short messages don't flash away, a per-char
@@ -1431,7 +1432,7 @@ export function apBtnStyle(col){return col?` style="border:2px solid ${col};back
    SHARE THE BUILDER, NOT THE CALLER. This is the sailHighlightRect() shape (flow.js:388-419, G25,
    which fixed the same class of drift for sail squares): one pure function decides what the markup
    IS, and each caller keeps its own click wiring. localAsk resolves its own promise with res(i);
-   watchPrompt writes an answer to Firebase with sendResponse(p.id,i). Those two resolution paths
+   watchPrompt writes an answer to Firebase with sendResponse(prompt.id,i). Those two resolution paths
    are legitimately different — a local promise and a network round trip — and must stay apart.
    Unifying them is NOT what this shares.
 
@@ -1819,7 +1820,12 @@ async function narrateCurrentBody(e){
   // @copy adhoc.turn.boteventpassthrough
   const L=appState.logLines[appState.evIdx];if(L)await netHandlers().onFlash(L.txt);
 }
-export function setActor(s){appState.curSeat=s;}
+/* NOT EXPORTED (2026-08-31). One fact, one writer: the only caller is applyActiveSeat below,
+   which also moves S.activeSeat — the value stage.js:1206 draws FIRST. Sixteen call sites used
+   to import this directly and leave the ribbon pointing at the previous captain; they now call
+   applyActiveSeat. Un-exporting is what stops the seventeenth from being added by hand.
+   scripts/qa/whose_turn_one_fact_check.mjs holds this. */
+function setActor(s){appState.curSeat=s;}
 /* ONE ACTIVE SEAT (02.15-01 Stage 2, D-25). THE fault of D-24 in miniature, and it was measured
    before it was touched: ribbonTick (ui/stage.js) glows the boat at S.activeSeat ?? appState.curSeat;
    curSeat is written only by setActor and S.activeSeat only by __pp4.actor; and every one of those
@@ -1838,11 +1844,15 @@ export function setActor(s){appState.curSeat=s;}
    index (T-02.2-08) — the `ev` node is host-authoritative, which is the same trust already relied
    on for board positions, but a bounded index costs nothing and a trusted one eventually does. */
 export function applyActiveSeat(seat){
-  if(seat==null)return;
+  /* THE ONE WRITER. Both guards now come from src/shared/storyboard.js's normalizeSeat, so the
+     rule for "is this a seat we may point at" has one spelling shared with the event-stream
+     derivation the board reads (2026-08-31). Behaviour is unchanged: null in -> nothing written,
+     out-of-range in -> nothing written. */
   const ps=appState.game&&appState.game.players;
-  if(!ps||!(seat>=0&&seat<ps.length))return;
-  setActor(seat);
-  if(window.__pp4)window.__pp4.actor(seat);
+  const s=normalizeSeat(seat,ps?ps.length:null);
+  if(s==null)return;
+  setActor(s);
+  if(window.__pp4)window.__pp4.actor(s);
 }
 export function seatLocal(s){return s===appState.mySeat;}
 // D-10: a sentinel seat value no real seat index (0..3) can ever equal — passing it as
@@ -1860,7 +1870,15 @@ export function isLocalTo(seat,viewerSeat){
 // pass & play: every human seat shares this one browser, so any human seat resolves locally
 // regardless of mySeat — unlike real online multiplayer, there's no other device to reach over
 // remotePrompt/remoteDraftPrompt (which would throw anyway, since db/room are null here).
-export function decisionIsLocal(s){return (appState.passAndPlay&&appState.game.players[s].strategy==="human")||seatLocal(s);}
+/* THE THIN WRAPPER. The RULE is isDecisionLocal() in src/shared/storyboard.js — pure, so the gate
+   that guards it runs the same function the game runs instead of a typed-out copy of it (which is
+   how CEO review 41 walked past decider_table_check with one appended clause). This half knows
+   only WHERE the facts live; it decides nothing. */
+// ONE LINE ON PURPOSE: mode_fork_check counts LINES carrying a who-is-playing word, so splitting
+// this wrapper across three lines raised the file's fork count by one without adding a fork. The
+// counter is a debt ceiling and it should keep meaning what it says.
+const EMPTY_SEAT=Object.freeze({});   // a missing seat has no strategy; never a fresh object per call
+export function decisionIsLocal(s){const player=((appState.game&&appState.game.players)||[])[s]||EMPTY_SEAT;return isDecisionLocal({sharedDevice:appState.passAndPlay,strategy:player.strategy,isMySeat:seatLocal(s)});}
 
 /* ---------- the clock and pause both stood here ----------
    Removed in two rulings, 2026-08-28: the shot clock ("temporarily remove the shot clock", see
@@ -1872,17 +1890,16 @@ export function decisionIsLocal(s){return (appState.passAndPlay&&appState.game.p
    hidden-tab history) are in git history at this file — read the log before re-deriving any of
    it. sleepMs's sweeper belt above is NOT pause residue: it is the measured defence against a
    browser dropping setTimeout callbacks, and it must stay. */
-// mirrors render()'s "whose turn is it" derivation. CURRENTLY UNCALLED (its last consumer, the
+// CORRECTED 2026-08-31: this comment used to say "mirrors render()'s derivation". IT DOES NOT —
+// render() also stops at `ovens` and `bake`; this walk knows only `turn`. It was true when written
+// and rotted when render()'s copy was widened, which is exactly the rot a behavioural comment
+// carries (rule 6). It is now one walk, shared/storyboard.js, with the difference passed in.
+// CURRENTLY UNCALLED (its last consumer, the
 // pause panel's "waiting" label, left with play/pause at A-10) — kept because the clock's return
 // needs exactly this derivation, and it is pure over the event stream.
 export function currentTurnSeat(){
   if(!appState.game||!appState.game.events)return null;
-  for(let i=appState.evIdx;i>=0&&i>appState.evIdx-80;i--){
-    const t=appState.game.events[i]&&appState.game.events[i].t;
-    if(t==="turn")return appState.game.events[i].p;
-    if(t==="newround")return null;
-  }
-  return null;
+  return deriveActiveSeat(appState.game.events,appState.evIdx);
 }
 /* ---------- board pops (event -> emoji animation) ---------- */
 export function spawnPops(e,cellPx){
@@ -2012,9 +2029,9 @@ export function getSeaBase(){
 // an ABSOLUTE position derived from the game's fixed base plus this captain's look count, not an
 // increment, so a replay that re-runs the same looks rewrites the same number rather than racing
 // the cursor forward a second time.
-export function advanceSeaCursor(p){
+export function advanceSeaCursor(player){
   const base=(appState.game&&appState.game.seaBase)||0;
-  const looks=p.oceanLooks||0;
+  const looks=player.oceanLooks||0;
   try{localStorage.setItem("pp_seaIdx",String((base+looks)%SEA_CREATURES.length));}catch(e){}
 }
 export function genCode(){const A="ABCDEFGHJKMNPQRSTUVWXYZ";let s="";for(let i=0;i<4;i++)s+=A[Math.floor(Math.random()*A.length)];return s;}

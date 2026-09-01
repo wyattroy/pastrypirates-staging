@@ -29,11 +29,16 @@
  * and exits 1. A probe that never reached its subject has told you about itself, not the game.
  */
 import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
+import os from "node:os";
+import path from "node:path";
 
 const PORT = 8518, DBG = 9420;
 const SECONDS = Number(process.argv.find(a => a.startsWith("--seconds="))?.split("=")[1] || 180);
 const url = serve(PORT);
-launch(DBG, "/tmp/chrome-w31");
+// A hardcoded "/tmp/..." profile path is a Linux-container-era assumption: on Windows Chrome gets
+// a bad path (same fault fixed 2026-09-01 in w33_drumroll_order.mjs). os.tmpdir() resolves to the
+// real temp directory on every platform this runs on.
+launch(DBG, path.join(os.tmpdir(), "chrome-w31"));
 const C = await attach(DBG);
 await C.send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 900, deviceScaleFactor: 1, mobile: false });
 
@@ -82,7 +87,43 @@ const WATCH = `(()=>{
       coin?("coin:"+(["heads","tails","spin","wait","active"].filter(c=>coin.classList.contains(c)).join("+")||"none")
             +((coin.style.backgroundImage||"").indexOf("url")>=0?"+face":"+noface")):"-",
       vis,
-      (r&&vis==="SHOWN")?("y"+Math.round(r.top/20)*20):"-"
+      (r&&vis==="SHOWN")?("y"+Math.round(r.top/20)*20):"-",
+      /* WHICH THING MOVES — the card inside its box, or the whole box? Three geometry guesses have
+         died on this codebase in a week, so this asks the question instead of assuming an answer:
+         the card's offset WITHIN #apGridInner, and the panel's own screen position, side by side.
+         If the offset is constant while the panel's top changes, the mover is the PANEL's layout,
+         not the content's. */
+      (r&&vis==="SHOWN")?("off"+Math.round((btl.offsetTop||0)/10)*10):"-",
+      /* THE CLASS I FAILED TO RECORD LAST TIME, and it decides everything: runHeightSequence
+         early-returns on centreStaged(), which tests the pp4Center class on #pp4Prompt -- NOT the
+         ap.dataset.pp4Stage I had been recording. If it is set while the card is up, the panel's
+         own height sequence never runs and the grow is driven by the stage's layout instead: a
+         different file and a different fix.
+         NO BACKTICKS ANYWHERE IN THIS BLOCK. It is a template literal handed to the page, and
+         quoting a selector in backticks ends the literal and throws. That is the THIRD time in one
+         session -- so the rule is now written where the mistake gets made, not in a ledger. */
+      (()=>{const b=document.getElementById("pp4Prompt");
+        return b?("prompt:"+(b.classList.contains("pp4Center")?"CENTER":"-")+(b.classList.contains("radial")?"+radial":"")):"noPrompt";})(),
+      /* THE BOX ITSELF, beside the panel. If #pp4Prompt's rect is the same in both frames while
+         the panel's top moves, the panel is moving INSIDE a static box and the mover is the
+         panel's own layout. If the BOX moves, it is the stage's. Two readings this morning were
+         wrong from reading code; both were settled by adding one line here. */
+      (()=>{const b=document.getElementById("pp4Prompt");
+        if(!b||vis!=="SHOWN")return "-";
+        const q=b.getBoundingClientRect(); const cs=getComputedStyle(b);
+        /* THE FALSIFIER I NAMED IN THE LEDGER, run rather than left standing. The hypothesis is
+           that #pp4Prompt is fixed with top:auto, so it sits at its STATIC position and its top is
+           a layout consequence that resolves a frame late. If cs.top reads auto in BOTH frames the
+           hypothesis holds; if it reads a px value, something is assigning it and I am wrong. */
+        return "box"+Math.round(q.top/20)*20+"h"+Math.round(q.height/20)*20+":"+cs.display+":"+cs.position+":top="+cs.top+":inline="+(b.style.top||"UNSET")+":tr="+(cs.transform==="none"?"none":"yes");})(),
+      (()=>{const ap=document.getElementById("actionPanel");
+        if(!ap||vis!=="SHOWN")return "-";
+        const q=ap.getBoundingClientRect();
+        return "ap"+Math.round(q.top/20)*20+"h"+Math.round(q.height/20)*20;})(),
+      (()=>{const b=document.querySelector(".btl");
+        if(!b)return "-";
+        const f=b.querySelector(".btl-wait,.btl-prompt,.btl-result");
+        return "foot:"+(f?f.className.replace("btl-",""):"none");})()
     ].join(" ");
   };
   window.__w31={log:[],last:null,frames:0};
@@ -150,8 +191,37 @@ if (!cardFrames.length) {
 console.log(`  ${log.length} regime change(s) over the run; ${cardFrames.length} of them with the battle card on screen\n`);
 console.log(`  the sequence, one line per CHANGE (this is the choreography a player sees):`);
 log.forEach(r => console.log(`    ${String(r.t).padStart(7)}ms  ${r.g}`));
-const distinct = [...new Set(cardFrames.map(r => r.g))];
-console.log(`\n  DISTINCT regimes while the battle card was on screen: ${distinct.length}`);
-distinct.forEach(g => console.log(`    ${g}`));
-console.log(`\n  One beat should be one regime. ${distinct.length > 1 ? "It is not." : "It is."}`);
-process.exit(0);
+/* THE VERDICT, NARROWED 2026-09-01 AFTER A REAL FIX CHANGED WHAT THIS NEEDS TO MEASURE.
+   The original verdict below (positions.length > 1) could not tell "still uncentred, about to
+   snap" from "already centred via transform:translate(-50%,-50%), growing in place" — a box
+   anchored by that transform legitimately moves its OWN bounding-rect top as its height changes,
+   because the translate is computed against the box's current height every frame. That is a
+   DIFFERENT, much milder thing than what Wyatt reported ("it appears for an instant... it moves
+   down to centre"), and the position-bucket count alone cannot distinguish them.
+   THE PRECISE SIGNATURE OF WHAT HE DESCRIBED, measured 2026-08-30 and confirmed again here: a
+   SHOWN battle-card frame with `tr=none` — i.e. `.centered` has not been applied yet, so the box
+   is sitting whatever the PREVIOUS prompt left inline (`top=0px inline=0px tr=none`), before a
+   later frame clears it (`inline=UNSET tr=yes`). THAT transition — uncentred while visible, then
+   centred — is what "painted before it is placed" means, and it is what the 2026-09-01 fix
+   (src/ui/stage.js promptTick's `force` parameter) targets. A box that is `tr=yes` on its FIRST
+   visible frame and stays `tr=yes` never showed the uncentred state to a player at all, whatever
+   its height does afterward. */
+const shownFrames = cardFrames.filter(r => / SHOWN /.test(r.g));
+const uncentredWhileShown = shownFrames.some(r => /:tr=none/.test(r.g));
+const shownPos = shownFrames.map(r => (r.g.match(/ y(-?\d+)/) || [, null])[1]).filter(v => v != null);
+const positions = [...new Set(shownPos)];
+console.log(`\n  vertical positions the card occupied WHILE VISIBLE: ${positions.length ? positions.map(p => "y" + p).join(", ") : "(never visible)"}`);
+console.log(`  was the card ever UNCENTRED (tr=none) on a visible frame: ${uncentredWhileShown}`);
+if (!positions.length) {
+  console.log(`\n=== NOT RUN — the card was never visible with area, so nothing about its placement was measured.`);
+  process.exit(1);
+}
+const moved = positions.length > 1;
+if (moved && !uncentredWhileShown) {
+  console.log(`\n=== PASS (with a note) — the card was CENTRED (tr=yes, .centered applied) on every visible frame, never sitting at a stale/uncentred position. Its bounding-rect top still moved (${positions.length} positions) because centring via translate(-50%,-50%) tracks the box's own height, and the height changed while shown — a symmetric grow-in-place, not the "appears elsewhere, then jumps to centre" fault reported. NOT the same defect; if this growth itself looks wrong on screen, that needs a posed screenshot (rule 26), not this gate.`);
+  process.exit(0);
+}
+console.log(moved
+  ? `\n=== FAIL — the battle card was UNCENTRED (tr=none) on at least one visible frame and occupied ${positions.length} different vertical positions. It is painted before it is placed, which is exactly what he reported.`
+  : `\n=== PASS — the battle card was drawn at one position and stayed there.`);
+process.exit(moved ? 1 : 0);

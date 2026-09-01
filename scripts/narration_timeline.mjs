@@ -33,7 +33,7 @@
 import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { REPO, CHROME, LINUX_ARGS, gameURL, GAME_PATH } from "./lib/chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, gameURL, GAME_PATH, PYTHON } from "./lib/chrome.mjs";
 import { driver, driverOff } from "./mp_rig.mjs";
 import { PROBE_SRC, BOARD_SAMPLER_SRC, PILL_PROBE_SRC, RECIPE_PROBE_SRC, HOLD_TEXTS, measureHold, measureHoldTwice } from "./lib/narration_probe.mjs";
 
@@ -52,7 +52,7 @@ const log = (...a) => { const s = `[${new Date().toISOString().slice(11, 19)}] `
 
 /* ---------- process bookkeeping: everything this run started, and nothing else ---------- */
 const procs = [], myDbg = [], myHttp = [];
-const serve = port => { const p = spawn("python3", ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
+const serve = port => { const p = spawn(PYTHON, ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
   procs.push(p); myHttp.push(port); return gameURL(port); };
 const launch = (dbg, profile) => {
   fs.rmSync(profile, { recursive: true, force: true });

@@ -36,26 +36,42 @@ else {
   else {
     const clears = /clearSweep\(\)/.test(guard);
     const forgets = /sweepBtn\s*=\s*null/.test(guard);
-    /* the teardown must not sit behind a further condition — that nesting IS the bug */
-    const nested = /if\s*\([^)]*\)\s*\{[^}]*clearSweep\(\)/.test(guard);
+    /* THE TEARDOWN MUST NOT SIT BEHIND A FURTHER CONDITION — that nesting IS the bug.
+       CEO REVIEW 28 WALKED WYATT'S OWN BUG PAST THIS, in a brace-less spelling:
+         `{ if (!cell) clearSweep(), sweepBtn = null; return; }`
+       The old test required a `{` after the inner `if`, so a one-line `if` sailed through and the
+       gate printed "it is NOT nested inside an `if (!cell)`" about a tree where it was. ANY inner
+       `if` before the teardown now fails it, braces or not — the requirement is that nothing
+       stands between the branch and the clear. */
+    const beforeClear = guard.slice(0, guard.indexOf("clearSweep()"));
+    const nested = /\bif\s*\(/.test(beforeClear.slice(beforeClear.indexOf("{") + 1));
     if (clears && forgets && !nested)
-      pass("a tap that is not on the previewed square tears the preview down and forgets the armed square, unconditionally — so tapping a plain yellow square clears it");
+      pass("found: the `!cell || !cell.classList.contains(\"sailSwept\")` branch calls clearSweep() and sets sweepBtn=null, and it is NOT nested inside an `if (!cell)` — whether that clears the preview on screen is watched by scripts/qa/w35_sweep_preview_live.mjs");
     else
       fail(`the trade-wind preview survives a tap on another sail square (clears:${clears} forgets:${forgets} still-nested-behind-a-condition:${nested}) — that is Wyatt's W3-5: the dashed track, the end circle and the ghost hull stay on the board`);
   }
   /* AND THE SECOND TAP STILL COMMITS. The preview is a two-tap gesture and Wyatt's own pick; a
      "fix" that cleared on every tap would break the commit and pass a naive assertion. */
-  const commits = /sweepBtn\s*===\s*cell/.test(fn) && /return;/.test(fn);
-  if (commits) pass("a second tap on the SAME square still lets the sail through — the two-tap gesture he chose survives");
-  else fail("the second-tap commit is gone — the trade-wind square would no longer be sailable, which is not what this item asked for");
+  /* AND stopPropagation MUST COME AFTER IT, WHICH IS THE HALF THAT WAS MISSING.
+     CEO Review 28 moved `e.stopPropagation()` ABOVE the second-tap branch and every gate stayed
+     green — a capture-phase stop kills the square's own bubble-phase handler (src/ui/flow.js:590),
+     so TRADE-WIND SQUARES BECOME UNSAILABLE. A player who can never ride a trade wind is a worse
+     bug than the one W3-5 filed, and nothing in the repo said a word. The old test was
+     `/sweepBtn === cell/ && /return;/` — a substring, against a `return;` that appears five times
+     in this function. ORDER IS THE REQUIREMENT, so order is what is read. */
+  const commitAt = fn.search(/sweepBtn\s*===\s*cell/);
+  const stopAt = fn.search(/e\.stopPropagation\(\)/);
+  const commits = commitAt >= 0 && stopAt >= 0 && commitAt < stopAt;
+  if (commits) pass(`found: the \`sweepBtn === cell\` branch at offset ${commitAt} comes BEFORE \`e.stopPropagation()\` at ${stopAt}, so a second tap on the same square is not intercepted — whether it actually sails is watched in a browser, not asserted here`);
+  else fail(`the second tap can be intercepted (commit branch at:${commitAt} stopPropagation at:${stopAt}) — a capture-phase stop above the commit branch kills the square's own handler and the trade-wind square becomes UNSAILABLE, which is a worse bug than the one this item filed`);
 }
 /* And the teardown itself must still remove all three drawn parts. */
 {
   const cs = (js.match(/function clearSweep\(\)\s*\{[^}]*\}/) || [""])[0];
   const parts = ["sweepPath", "sweepEnd", "sweepGhost"].filter(p => cs.includes(p));
-  if (parts.length === 3) pass("clearSweep() still removes all three drawn parts — the track, the end circle and the ghost hull");
+  if (parts.length === 3) pass("found: clearSweep()'s selector names all three classes — .sweepPath, .sweepEnd, .sweepGhost");
   else fail(`clearSweep() only removes ${parts.length} of the preview's three drawn parts (${parts.join(", ") || "none"}) — a partial teardown leaves the fault he reported, in pieces`);
 }
 console.log(fails ? `\nFAILED — ${fails} assertion(s)`
-  : "\nPASSED — the preview clears on any tap that is not the previewed square, the second tap still commits, and the teardown removes all three parts");
+  : "\nPASSED — the TEXT found: the teardown branch is unconditional, the second-tap branch does not intercept, and clearSweep names all three parts. WHETHER THE PREVIEW ACTUALLY LEAVES THE SCREEN is measured in a browser with real mouse events by scripts/qa/w35_sweep_preview_live.mjs — run it; this gate reads source and reports no runtime result of its own.");
 process.exit(fails ? 1 : 0);

@@ -19,7 +19,7 @@
 import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { REPO, CHROME, LINUX_ARGS, gameURL } from "./lib/chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
 import { RECIPE_PROBE_SRC } from "./lib/narration_probe.mjs";
 
 const OUT = process.argv[2] || "/tmp/recipe-shots";
@@ -37,7 +37,7 @@ const kill = () => {
 process.on("exit", kill);
 process.on("SIGINT", () => { kill(); process.exit(1); });
 
-procs.push(spawn("python3", ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" }));
+procs.push(spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" }));
 const prof = path.join(OUT, "prof");
 fs.rmSync(prof, { recursive: true, force: true });
 procs.push(spawn(CHROME, [...LINUX_ARGS, "--headless=new", "--mute-audio",

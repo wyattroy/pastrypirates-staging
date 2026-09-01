@@ -65,7 +65,11 @@ const orch = fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8");
 /* 2. the live day mirrors it exactly */
 {
   const body = fnBody(orch, "runLiveDayBakeoff") || "";
-  if (/lightOvens\(p\)/.test(body) && /bakeTurnLive\(p\)/.test(body.slice(body.indexOf("lightOvens"))))
+  /* \w+ , not the literal `p` — THIRD gate in this session pinned to a local variable's NAME, and
+     the third to go red on a rename that changed no behaviour (after w29_coin_question_check and
+     a2_bot_bake_watch_check). A check that asserts about spelling blocks the readability work it
+     should be indifferent to. See HARD-WON-LESSONS §12j. */
+  if (/lightOvens\(\w+\)/.test(body) && /bakeTurnLive\(\w+\)/.test(body.slice(body.indexOf("lightOvens"))))
     pass("live: a newly-lit captain bakes in their own turn slot");
   else fail("live: lightOvens does not lead to bakeTurnLive in the same slot");
   if (/bakersToday/.test(body))
