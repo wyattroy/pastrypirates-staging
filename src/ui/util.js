@@ -731,6 +731,45 @@ const EVENT_NARRATION={
   // still gets a crown pop over the winner; the announcement itself lives in the celebratory box.
   end:(e,at)=>({cls:"roundhdr",txt:"",caps:[],pops:e.winner===null?[]:[[at(e.winner),"👑",true,CROWN_IMG]]}),
   turn:()=>null,
+  // RESTORED VERBATIM 2026-09-01 from 693c2b0b^ — the weather-line commit (693c2b0b, 2026-08-27)
+  // deleted this entry as COLLATERAL in its table edit: its own "cut on purpose" list names the
+  // storm theatre and the wind-streak flavour, never this. Five days of silent Muses later, Wyatt
+  // reported it from the Glass ("the Muse narrations are now missing"). seaLine() above had sat
+  // with zero callers the whole time. Held now by scripts/qa/muse_narration_check.mjs.
+  //
+  // Pass, given something to look at. Every captain who takes the turn off sees a different beast
+  // go by; see Game.nextSeaCreature. The BUTTON reads "🌊 Muse" with the payout stated after it
+  // (Wyatt, 2026-08-05 — it briefly read "Look into the ocean"; the label went back to Pass, the
+  // narration stayed; the amount joined it under RULE-01, built like Attack's cost; the label
+  // became Muse 2026-08-27, W2-7).
+  //
+  // RULE-01/D-06: passing pays a dubloon (Game.doPass), and the line says so. Wyatt's wording, his
+  // pick over two longer drafts of his own — the idea is that the sea creatures are where the recipe
+  // inspiration comes from, and the constraint he named was "short and easy to read".
+  //
+  // IT IS A SUBJECTLESS FRAGMENT AND THAT IS THE WHOLE POINT. About twenty of the fifty sightings
+  // end on the CREATURE as the nearest grammatical subject ("...and a dozen donut shrimp bounce
+  // past."), so any appended clause carrying a verb hands the pen to the shrimp. No subject, no
+  // verb, no agreement to derive: it reads identically after all fifty sentences in both persons,
+  // which is what lets it be appended HERE, once, with all 100 hand-written strings untouched — the
+  // seaLine contract above, which the deleted seaSighting() broke in all three ways at once.
+  //
+  // The coin is a RAW character, resolved to the coin image by emojify() at panel()'s single
+  // chokepoint (D-50), like every other coin-amount line in this table. Hand-rolling the markup here
+  // would duplicate the chokepoint. Wrapped WHOLE rather than just the parenthetical — a unit and
+  // its amount are one readable thing (the sailing-order precedent, G27/P7).
+  //
+  // THE AMOUNT IS READ OFF THE LIVE GAME'S ROUND CONFIG, not written out here — the same unguarded
+  // read the dock: builder below already does for its two flip payouts, from inside this same
+  // table. It is the same field the engine pays from and the same field the Pass button states, so
+  // a line that tells a captain what they were paid cannot drift from what they were actually
+  // paid. The wording is Wyatt's and is fixed; only the number derives.
+  pass:(e,at,cellPx,viewerSeat)=>({
+    txt:`🌊 ${seaLine(e.sea,isLocalTo(e.p,viewerSeat),pn(e.p))} <span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>`,
+    // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
+    // no separately-stored subject to lift out of it, and inventing one by parsing the prose is
+    // exactly the kind of guessing this rewrite removed. (Nothing renders caps in v2 regardless.)
+    caps:[[e.p,"🌊 looks into the ocean"]],pops:[[at(e.p),"🌊",false,WAVE_IMG]]}),
 };
 const NO_AT=()=>[0,0]; // describe()/captions() never need real board coordinates
 // D-10: describeFor is the viewer-aware core; describe() below is now a thin wrapper
