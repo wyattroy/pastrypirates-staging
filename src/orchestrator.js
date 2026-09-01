@@ -107,7 +107,7 @@ import {
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
-  reachable, pickCell, localAsk, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, draftDispatch, wireRestoreFail,
+  reachable, pickCell, localAsk, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
@@ -1649,6 +1649,12 @@ export function watchPrompt(){
        their own. The card leaves through its one exit, retireBakeCard (item 6 / D-16), never here. */
     if(!prompt||prompt.seat!==appState.mySeat){
       if(!document.querySelector("#actionPanel .bko"))panel("");
+      /* A pick prompt cleared REMOTELY (answered elsewhere, superseded, a resync) never runs the
+         renderer's own teardown — this seat's squares would sit in #sailHost until a refresh, and
+         since 2026-09-01 the containment pass would pin the camera at full zoom on them, forever
+         (Wyatt's Glass report, 13:08Z). The bake-bench guard above is untouched: squares are
+         never a bench. One broom, shared with the renderer — see clearSailWindow() in ui/flow.js. */
+      clearSailWindow();
       setFlipActive(null);appState.inBattlePrompt=false;return;}
     if(prompt.kind==="ask"){
       if(prompt.battle){

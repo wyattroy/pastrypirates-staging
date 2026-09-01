@@ -564,7 +564,23 @@ export function sailHighlightRect(c,cellPx,svg){
 // without waiting for or forcing this renderer's own promise. (While the shot clock lived, its
 // expiry was the one registered caller — activePickCleanup, a LOCAL-caller concern; the clock
 // left 2026-08-28 and the teardown return survives it for the clock's return.)
+/* THE ONE BROOM for the one sail window. This renderer is the ONLY thing that draws sail squares
+   (the parity gate insists on exactly one call site of sailHighlightRect), so any .sailCell alive
+   when it is asked to draw — or when a prompt is cleared remotely — is stale by definition and is
+   swept. Why this exists (Wyatt, on the Glass, 2026-09-01: the guest camera "FULLY zoomed out,
+   and stay that way, until the guest refreshes"): teardown only ever removed the squares its own
+   call created, the guest's caller discards the returned teardown, and watchPrompt's clear branch
+   never touched squares at all — so a re-delivered or remotely-cleared prompt orphaned a whole
+   window in #sailHost forever. Harmless-looking until the containment pass (sailContainTick,
+   2026-09-01) started honestly framing every square it could see: orphans pinned the camera at
+   the 640 full-ocean cap, re-fought every glide, every turn. One broom, called by both paths, so
+   the two cannot drift (rule 23). Gate: scripts/qa/sail_window_single_check.mjs, proven RED
+   against the pre-fix build (8 squares after a double render; 4 orphans after answering). */
+export function clearSailWindow(){
+  document.querySelectorAll(".sailCell").forEach(el=>el.remove());
+}
 export function renderPickPrompt(spec,answer){
+  clearSailWindow();
   const svg=$("board"),hs=[];
   appState.currentPrompt=spec;
   const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;};

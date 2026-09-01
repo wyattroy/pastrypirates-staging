@@ -44,7 +44,7 @@ function scratchRun({ restartsContent }) {
 {
   const html = scratchRun({ restartsContent: null });
   const saysAbsent = /No restarts\.log on this machine/.test(html);
-  const namesMachine = /Watchdog restarts \(last 5, on [^)]+\)/.test(html);
+  const namesMachine = /The Bell..?s log \(last 5, on [^)]+\)/.test(html);
   if (!saysAbsent) fail("with restarts.log entirely absent, the page does not say so -- it can still be mistaken for a clean log.");
   else if (!namesMachine) fail("the section heading does not name the machine even when the file is absent.");
   else pass("file absent -> the page says so explicitly and names the machine.");
@@ -64,7 +64,7 @@ function scratchRun({ restartsContent }) {
 {
   const html = scratchRun({ restartsContent: "2026-08-31T14:59:01Z\theartbeat stale (32 min > 5) -- restarting the engine\n" });
   const hasEntry = html.includes("heartbeat stale (32 min");
-  const namesMachine = /Watchdog restarts \(last 5, on [^)]+\)/.test(html);
+  const namesMachine = /The Bell..?s log \(last 5, on [^)]+\)/.test(html);
   if (!hasEntry) fail("a real restart entry does not appear in the rendered output.");
   else if (!namesMachine) fail("the heading drops the machine name even when there is real data to attribute.");
   else pass("real entries render, and the machine that produced them is still named.");

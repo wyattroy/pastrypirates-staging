@@ -96,12 +96,11 @@ const OUT = join(WY, "glass.html");
    real content, then reset to the template -- so the next run does not re-show a stale message,
    and the reset rides along with whatever commit already follows a generation. */
 const GLASS_NOTE = join(ROOT, ".planning", "wyclau", "GLASS-NOTE.md");
-const GLASS_NOTE_TEMPLATE = `<!-- GLASS-NOTE.md -- if you are not the Bosun (the Claude session on the Razer that the
-     watchdog revives), write what you want shown or said on the Glass BELOW the marker line,
-     then commit and push -- do not publish the Glass artifact yourself. The Bosun reads this on
-     its next pulse, folds it into the page, and clears this file back to this template. If the
-     Bosun is not running (check the Glass's own staleness first), that is a different problem;
-     leaving a note here will still reach it the moment it revives. -->
+const GLASS_NOTE_TEMPLATE = `<!-- GLASS-NOTE.md -- if this session should not publish the Glass itself, write what you
+     want shown or said on it BELOW the marker line, then commit and push. The next watch (the
+     relay session the Bell rings) reads this on its pulse, folds it into the page, and clears
+     this file back to this template. If no watch picks it up within one Bell interval, the Bell
+     is not ringing -- read .planning/wyclau/status/ for that machine's own account. -->
 ---
 `;
 
@@ -384,7 +383,7 @@ const restartsRaw = tryRead(RESTARTS);
 const restarts = restartsRaw === null ? [] : restartsRaw.trim().split("\n").filter(Boolean).slice(-5);
 const restartsEmptyMsg = restartsRaw === null
   ? `No restarts.log on this machine (<b>${esc(MACHINE)}</b>) — it is local and gitignored, so this page cannot see another machine's log. This is NOT evidence of zero restarts.`
-  : `None recorded on <b>${esc(MACHINE)}</b> — the watchdog has not needed to restart the Bosun here.`;
+  : `None recorded on <b>${esc(MACHINE)}</b> — the Bell has not needed to ring a watch here.`;
 
 const rows = (list, empty) => list === null
   ? `<p class="bad">unreadable: source file could not be parsed</p>`
@@ -421,6 +420,34 @@ try {
     };
   }
 } catch { longRun = null; }
+
+/* --- the lesson and the Captain's log (the apprenticeship — charter's co-equal goal) --------
+   HIS RULING (2026-09-01, the relay redesign, question round 3): the daily lesson lands ON THE
+   GLASS. Source of truth is .planning/wyclau/LESSONS.md — tracked, appended by the advisor or a
+   watch, at most one entry per day ("## YYYY-MM-DD — Title" then the body). This page only
+   RENDERS it: a lesson typed straight into the page would be the hand-typed-number failure in a
+   gown. Honesty rule: a day with no entry says so and shows the newest anyway — a quiet day is
+   information, not a blank. */
+let lessons = null; // null renders as unreadable, never as empty success (this file's own rule)
+try {
+  lessons = readFileSync(join(ROOT, ".planning", "wyclau", "LESSONS.md"), "utf8")
+    .split(/^(?=## )/m).filter((sec) => sec.startsWith("## ")).map((sec) => {
+      const m = sec.match(/^## (\d{4}-\d{2}-\d{2}) [—-]+ (.+)$/m);
+      if (!m) return null;
+      return { date: m[1], title: m[2].trim(), body: sec.split("\n").slice(1).join("\n").trim() };
+    }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
+} catch { lessons = null; }
+const TODAY = nowIso.slice(0, 10);
+const newestLesson = lessons && lessons.length ? lessons[0] : null;
+
+/* The Captain's log's other half ("Captain", his ruling 2026-09-01 -- "chairman" struck; in-game
+   lowercase captains are the players, capital-C Captain on system surfaces is Wyatt): his newest rulings ON RECORD — the top DECISIONS.md headings,
+   pointed at rather than restated (a pointer cannot go stale; a copy always can). */
+let rulingHeads = null;
+try {
+  rulingHeads = readFileSync(join(ROOT, ".claude", "memory", "DECISIONS.md"), "utf8")
+    .split("\n").filter((l) => /^## /.test(l)).map((l) => unmark(l.slice(3)).trim()).slice(0, 6);
+} catch { rulingHeads = null; }
 
 const state = { v: 2, generatedAt: nowIso, lastProgressAt: lastProgressIso, longRun, ideas: [], rulings: {} };
 
@@ -568,7 +595,7 @@ const PAGE = `<meta charset="utf-8">
   <section class="card accentCard">
     <h2>Your call (${askList.length}${DEMO ? " + 2 demo" : ""})</h2>
     ${askList.length === 0
-      ? `<p class="muted">Nothing waiting — every question you've been asked is ruled, and the Bosun has what it needs.</p>`
+      ? `<p class="muted">Nothing waiting — every question you've been asked is ruled, and the Watch has what it needs.</p>`
       : `<div id="asks">${askList.map((b) => `<div class="ask" data-id="${esc(b.id)}">
       <p class="q">${esc(b.q)}${b.id.startsWith("demo-") ? `<span class="demoTag">example — not real</span>` : ""}</p>
       <p class="rec"><b>My recommendation:</b> ${esc(b.rec)}</p>
@@ -591,6 +618,15 @@ const PAGE = `<meta charset="utf-8">
       <p class="muted" id="ideaStatus"></p>
     </div>
     <div id="ideaList"></div>
+  </section>
+
+  <section class="card">
+    <h2>${newestLesson && newestLesson.date === TODAY ? "Today's lesson" : "The lesson"}</h2>
+    ${lessons === null ? `<p class="bad">unreadable: .planning/wyclau/LESSONS.md missing or unparseable</p>`
+      : !newestLesson ? `<p class="muted">No lessons recorded yet — the day's close owes the first one.</p>`
+      : `${newestLesson.date === TODAY ? "" : `<p class="muted">No lesson yet today — the day's close owes one. The newest, from ${esc(newestLesson.date)}:</p>`}
+      <p style="font-weight:600;margin:.2rem 0 .35rem">${esc(newestLesson.title)}</p>
+      <p style="white-space:pre-line;margin:.2rem 0;font-size:.95rem">${esc(newestLesson.body)}</p>`}
   </section>
 
   <!-- HIS EDIT 1: Tasks moved ABOVE Shipped Today. What is still to do outranks what is done. -->
@@ -618,17 +654,27 @@ const PAGE = `<meta charset="utf-8">
     ${ruled === null ? `<p class="bad">unreadable: CHART.md missing or unparseable</p>`
       : ruled.length === 0 ? `<p class="muted">Nothing ruled yet.</p>`
       : `<table id="ruled">${ruled.map((r) => `<tr><td>${esc(r.item)}</td><td><b>${esc(r.call)}</b><br><span class="muted">${esc(r.now)}</span></td></tr>`).join("")}</table>
-    <p class="muted">Migrated from the Helm and derived from the Chart — the Bosun works to these.</p>`}
+    <p class="muted">Migrated from the Helm and derived from the Chart — the watches work to these.</p>`}
   </section>
   </div>
 
+  <section class="card">
+    <h2>The Captain's log</h2>
+    ${lessons === null ? `<p class="bad">unreadable: .planning/wyclau/LESSONS.md</p>`
+      : lessons.length === 0 ? `<p class="muted">No concepts on record yet.</p>`
+      : `<p class="muted" style="margin:.1rem 0 .4rem">Concepts you own — one per lesson, newest first (${lessons.length}):</p>
+      <ul>${lessons.slice(0, 10).map((l) => `<li><b>${esc(l.title)}</b> <span class="muted">· ${esc(l.date)}</span></li>`).join("")}</ul>`}
+    ${rulingHeads === null ? `<p class="bad">unreadable: .claude/memory/DECISIONS.md</p>`
+      : `<p class="muted" style="margin:.6rem 0 .4rem">Your newest rulings on record — full text in DECISIONS.md:</p>
+      <ul>${rulingHeads.map((h) => `<li style="font-size:.9rem">${esc(h)}</li>`).join("")}</ul>`}
+  </section>
 
   <section class="card">
-    <h2>Watchdog restarts (last 5, on ${esc(MACHINE)})</h2>
+    <h2>The Bell's log (last 5, on ${esc(MACHINE)})</h2>
     ${rows(restarts.map(esc), restartsEmptyMsg)}
   </section>
 
-  <p class="meta">Generated ${esc(nowIso)} on <b>${esc(MACHINE)}</b> by scripts/wyclau/glass.mjs — every number above is derived, none hand-typed. Stale &gt; 45 min = something is wrong; the watchdog should have restarted the Bosun.</p>
+  <p class="meta">Generated ${esc(nowIso)} on <b>${esc(MACHINE)}</b> by scripts/wyclau/glass.mjs — every number above is derived, none hand-typed. The relay regenerates this page at every watch boundary; stale much beyond one watch means the Bell is not ringing — read .planning/wyclau/status/ for the machine's own account.</p>
 </div>
 <script>
   (function(){
