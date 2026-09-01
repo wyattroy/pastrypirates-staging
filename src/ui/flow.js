@@ -2490,7 +2490,16 @@ export async function humanAct(player,sailCtx){
     if(player.coins<appState.game.cfg.powder||!attackable.length){await flash(`${pn(player.idx)} can't attack.`,1400,undefined,[{seat:player.idx,html:`Ye can't attack — no powder, or nothin' in their holds.`}]);await humanAct(player,sailCtx);return;}
     const t=attackable.length===1?attackable[0]:
       // @copy prompt.act.attacktarget
-      await ask("Attack whom?",attackable.map(o=>({label:pn(o.idx),value:o})).concat([{label:"← Back",back:true,value:null}]),
+      // SEAT-ANCHORED, joining the ONE placement rule (Wyatt, 2026-09-01, from the Glass: attack
+      // buttons sat "on top of the wrong captain" — "fix this universally, not through patches").
+      // Without seats this menu ran the ordinary fan around the chooser, where a captain-coloured
+      // circle lands on whichever neighbour's hull the geometry happens to cross — with two
+      // ADJACENT captains, often the wrong one. `seat` puts each circle on the boat it NAMES
+      // (playtest 22's rule, the battle call's exact shape at the sidebet ask below), and Back
+      // carries the CHOOSER's seat because the anchored mode is all-or-nothing — one seatless
+      // button would silently drop the whole menu back into the fan. Held by
+      // scripts/qa/attack_buttons_on_target_check.mjs, proven red on the seatless shape.
+      await ask("Attack whom?",attackable.map(o=>({label:pn(o.idx),value:o,seat:o.idx})).concat([{label:"← Back",back:true,value:null,seat:player.idx}]),
         attackable.map(o=>HEXCOL[o.idx]));
     if(t===null){await humanAct(player,sailCtx);return;}
     await netHandlers().onAsyncBattle(player,t);
