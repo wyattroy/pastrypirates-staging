@@ -40,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.01.6-staging@60f969c4";
+const PP4_STAMP = "2026.09.01.8-staging@b2b4e28f";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -3011,12 +3011,31 @@ function promptTick(force){
       // pill's spot is chosen at the FIRST prompt of the turn and every later prompt in the
       // same turn reuses it — only the width re-clamps so a longer ask stays on screen.
       let cxA, mTop;
+      /* ABOVE THE BOATS WHEN THE BAND HAS ROOM, BELOW THEM WHEN IT DOES NOT — one rule, both
+         branches. `top` is the highest boat the question is about and `bot` the lowest; with a
+         single ship they are the same number, so the ordinary branch below is byte-for-byte what
+         it always was and this is a convergence rather than a second placement path (rule 23).
+
+         WHY IT HAD TO BECOME SHARED. The anchored branch only ever went ABOVE and then clamped at
+         the band's ceiling, so a fight near the top of the board pinned the pill at `tSafe - 34`
+         while the circles beside those same boats were pinned at the band's own floor — and the
+         two landed on each other with nowhere left to move. liftAskClearOfFan() is the net for
+         exactly that and it is CLAMP-BOUND here: it may not rise above the same ceiling the pill
+         is already sitting on, so it asks and is refused, three times, and gives up.
+         MEASURED, posed, 2026-09-02 (scripts/qa/w54_call_clear_of_ask.mjs, 14 posed fights on a
+         390x844 phone and a 768px tablet): 2 fights put a call circle on the question, both with
+         the pill at 84 while the lift wanted 62 and 54. This is the release trial's one
+         player-facing finding — passplay-phone, "Call Flaky Jack" over "Davy Scones - a battle's
+         brewi[ng]". The below-the-boats spot is uncrowded precisely when the above one is not:
+         a fight jammed against the ribbon has the whole sea underneath it. */
+      const pillSpotFor = (top, bot) =>
+        (top - R - 96 >= tSafe - 34) ? top - R - 96 : clampTop(Math.min(bot + R + 34, capT - 44));
       // an ask about other people's ships is centred over THEM, and does not take or reuse the
       // turn's pill lock: that lock exists so a pill does not wander during YOUR turn, and this
       // prompt belongs to a fight in the middle of someone else's
       if (onBoats){
         cxA = anchors.reduce((a, p) => a + p[0], 0) / anchors.length;
-        mTop = Math.max(tSafe - 34, Math.min(...anchors.map(p => p[1])) - R - 96);
+        mTop = pillSpotFor(Math.min(...anchors.map(p => p[1])), Math.max(...anchors.map(p => p[1])));
       }
       /* THE LOCK IS PER TURN *AND* PER SHIP POSITION — playtest 22 item 8 (Wyatt): "'Wyargh whatll
          ye do' is far below my boat instead of above it, which is where it should be, and this
@@ -3034,7 +3053,7 @@ function promptTick(force){
         cxA = sx;
         // above the boat when the band has room, below it when it does not — the same rule the
         // narration bubble now follows (item 4), so one gesture has one behaviour
-        mTop = (sy - R - 96 >= tSafe - 34) ? sy - R - 96 : clampTop(Math.min(sy + R + 34, capT - 44));
+        mTop = pillSpotFor(sy, sy);
         // a sail prompt's pill dodges the whole sail window: above it if there's room under
         // the ribbon, else just below it
         if (cb){ mTop = (cb.t - 42 >= tSafe - 34) ? cb.t - 42 : clampTop(Math.min(cb.b + 8, capT - 44)); }
@@ -3255,6 +3274,71 @@ function promptTick(force){
           return sp;
         });
         if (!shifted) break;
+      }
+      /* …AND OFF THE QUESTION ITSELF, WHICH IS WHAT THE ORDINARY FAN HAS ALWAYS DONE AND THIS
+         BRANCH NEVER DID. The fan runs `formationOK`, which refuses any layout hitting `pillB`;
+         the anchored branch scores its four cardinals on the band, the hulls and the other
+         captains — and has no term for the ask at all. Two paths that must agree about what may be
+         covered, kept in step by nobody (rule 23), which is why the trial caught a call circle on
+         the words that name it.
+
+         WHY THIS IS NEEDED AS WELL AS THE PILL'S OWN NEW BELOW-SPOT ABOVE. On a 390x844 phone the
+         pill has somewhere to go and moving it is the better answer — the circles stay beside the
+         boats they name, which is W5-2's whole point. On a 390x664 phone it does NOT: `capT - 44`
+         sits below `tSafe - 34`, so the below-spot clamps straight back to the ceiling, the pill
+         hangs its 34px of licence into the band, and the circles are already pinned on the band's
+         floor. Measured posed on that exact viewport: pill 84..138, circles at 118, five fights in
+         seven with a circle 20px deep in the question. When the question cannot move, the circle
+         must.
+
+         SAME SHAPE AS THE HULL PUSH ABOVE — out along whichever edge is nearest, re-clamped, and
+         only accepted if it lands clear of the pill AND of every hull, so this cannot buy the
+         question back by re-breaking W5-2. The test is the gate's own circle-versus-box, two
+         pixels tighter than the gate so a fix does not sit exactly on the threshold it satisfies. */
+      if (pillB && pillB.height > 0){
+        const pill = { l: pillB.left, t: pillB.top, r: pillB.right, b: pillB.bottom };
+        /* THE PETAL BREATHES, SO THE CLEARANCE RESERVES THE SWELL — D-44's rule, which every other
+           spacing in this function already obeys and the first version of this one did not. The
+           attention vocabulary grows a circle to --pp4GrowPeak; a 70px petal paints ~80px at the
+           peak, so a margin measured against the resting box very nearly vanishes exactly when the
+           circle is largest. The gate reads the PAINTED rect, so a fix that only clears the resting
+           one would pass here and still be flagged there. `SWELL` is the same expression `HALF` and
+           `SEP` above are built from — never a second number to keep in step. */
+        const SWELL = Math.round(D * S.growPeak);
+        const onPill = (l, t) => {
+          const px2 = Math.max(pill.l, Math.min(l + D / 2, pill.r));
+          const py2 = Math.max(pill.t, Math.min(t + D / 2, pill.b));
+          return Math.hypot(l + D / 2 - px2, t + D / 2 - py2) < SWELL / 2 + 2;
+        };
+        for (let pass = 0; pass < 3; pass++){
+          let shifted = false;
+          spots = spots.map(sp => {
+            if (!onPill(sp[0], sp[1])) return sp;
+            shifted = true;
+            const OUT = (SWELL - D) / 2 + AIR;   // the swell's overhang, plus the file's own air
+            const outs = [[0, pill.b + OUT - sp[1]], [0, pill.t - D - OUT - sp[1]],
+                          [pill.r + OUT - sp[0], 0], [pill.l - D - OUT - sp[0], 0]];
+            outs.sort((a, b2) => (Math.abs(a[0]) + Math.abs(a[1])) - (Math.abs(b2[0]) + Math.abs(b2[1])));
+            /* AND WHEN THE ONLY WAY OFF THE QUESTION IS ONTO A HULL, TAKE IT — that is D-38, not a
+               compromise of it. Wyatt, 2026-08-21: "always keep the prompt and buttons closer to
+               the boat, even if they start to block some of the board elements", with sail squares
+               the one exception because you have to tap those. Covering a hull is sanctioned and
+               costs a player some scenery; covering the question costs them the question. So the
+               clear-of-everything spot is tried first and a hull is accepted only if nothing else
+               clears the ask. Measured: without this the circle stays trapped between the pill and
+               its own boat and the fix reaches 3 of 21 posed fights instead of 0. */
+            for (const strict of [true, false]){
+              for (const [dx, dy] of outs){
+                const c = clampSpot([sp[0] + dx, sp[1] + dy]);
+                if (onPill(c[0], c[1])) continue;
+                if (strict && onHull(c[0], c[1])) continue;
+                return c;
+              }
+            }
+            return sp;
+          });
+          if (!shifted) break;
+        }
       }
       /* D-48 IS DELIBERATELY NOT APPLIED HERE, AND THAT IS THE SECOND HALF OF W5-2. Wyatt: the
          call buttons are "often on the WRONG boat". lastLowest() is a SWAP between two spots, which

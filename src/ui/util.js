@@ -55,7 +55,10 @@ import {
   ING_HOLE_IMG,
   SEA_CREATURES, buildRoster,
 } from "../shared/index.js";
-import { escHtml } from "./recipe.js";
+/* THE WHOLE MODULE, as well as the names above — this is what makes preloadAssets() DERIVED rather
+   than a list somebody maintains. See its note: every hand-kept version of that list has drifted. */
+import * as SHARED from "../shared/index.js";
+import { escHtml, RECIPE_BOOK } from "./recipe.js";
 // 11-07 (bridge deletion fix): util.js is a common dependency of src/ui/board.js, panel.js,
 // lobby.js, and flow.js — it can never import any of THEM back without closing an import cycle
 // module_graph_check.js's "no import cycle" assertion forbids. A handful of functions here
@@ -1974,18 +1977,55 @@ export function updateRecipeBanner(){
    board can arrive a beat late and nobody notices; a flip CANNOT, because it is a timed animation
    that has already started.
 
-   That is the line this list draws, and it is worth stating so the next addition knows which side
-   it is on: preload what a TIMED CEREMONY needs — anything the game animates on a clock, where a
-   late image is a missed beat rather than a slow paint. Not every icon in the game: ~90 images at
-   boot on a phone would trade this bug for a slower start. The flip is the archetype; the coin is
-   also what battles, docks and the bake-off all spend their drama on. */
+   That line — "preload what a TIMED CEREMONY needs, not every icon" — was Wyatt's deliberate
+   trade-off through 2026-08-31. He REVERSED it 2026-09-01 (INBOX-20260901T1335Z): "we need to load
+   all game assets up front; i notice sometimes that the 'fire the ovens' graphic loads dynamically
+   when it is called, which will make it appear blank on slow connections. Bad engineerign! [sic]"
+   The recipe/badge art below is the confirmed, measured mechanism: RECIPE_BOOK's 21 pastry
+   illustrations (recipe.js) and BADGE_POOL's emblems (this file) are plain `<img src>` tags that
+   fetch cold the first time the recipe picker, the recipe modal, or the End-of-Voyage award screen
+   actually renders them — exactly the "loads dynamically when called" complaint, on the two asset
+   families that were never in this list. Safe to add here because every call site of
+   preloadAssets() already fires it WITHOUT awaiting except the mid-voyage-resume path, which caps
+   it at a 6s Promise.race — this was already true before this change, not a new guarantee. */
+/* EVERY ASSET URL THE SHARED MODULE KNOWS ABOUT, READ OFF THE MODULE ITSELF.
+   Rule 9's shape — derived from what the game already computes, never a list somebody types.
+   THE HISTORY IS THE ARGUMENT FOR THIS. The list below was hand-kept for its whole life and it
+   drifted every single time somebody added art: the flip's five faces were missing until a playtest
+   caught them mid-ceremony, ING_HOLE_IMG was missing until a driven run failed on holes/sugar.png,
+   the recipe and badge families were missing until 2026-09-01. Each was fixed by appending one more
+   name, which is the move that guarantees the next omission. CEO Review 80 then found the same
+   fault AGAIN and it was the biggest one yet: the entire `assets/icons/` family — 78 files —
+   including FLAME_IMG, the flame in every "fire the ovens" line, WHICH IS WYATT'S OWN NAMED EXAMPLE
+   of the bug ("i notice sometimes that the 'fire the ovens' graphic loads dynamically when it is
+   called, which will make it appear blank on slow connections. Bad engineerign!").
+   A fifth append would have been the fifth wrong answer, so the list is now the derivation:
+   anything exported as `*_IMG` whose value is an asset path is warmed, and a new icon is covered
+   the moment it is declared. `scripts/qa/preload_recipe_badge_check.mjs` guards the shape. */
+export function sharedAssetUrls(){
+  const out=[];
+  for(const [name,val] of Object.entries(SHARED)){
+    if(!name.endsWith("_IMG"))continue;
+    // scalars, arrays (BOAT_IMG, ISLAND_SHAPE_IMG) and lookup objects (ING_IMG, EMOJI_IMG) all appear
+    // under this suffix, so flatten whatever shape the constant happens to have.
+    const vals=typeof val==="string"?[val]:Array.isArray(val)?val:val&&typeof val==="object"?Object.values(val):[];
+    for(const u of vals)if(typeof u==="string"&&u.startsWith(ASSET_BASE))out.push(u);
+  }
+  return [...new Set(out)];
+}
 export function preloadAssets(){
-  const urls=[BOARD_IMG,DOCK_IMG,WIND_ARROW_IMG,TRADE_SWIRL_IMG,`${ASSET_BASE}logo.jpg`,
-    FLIP_SOCKET_IMG,COIN_SPIN_IMG,FLIP_HEADS_IMG,FLIP_TAILS_IMG,COIN_IMG,
+  const urls=[...new Set([...sharedAssetUrls(),
+    `${ASSET_BASE}logo.jpg`,
     // T-33: ING_HOLE_IMG was the ONE ingredient family never warmed here, so the greyed-crate art
     // was always fetched cold in the middle of a voyage — and both image failures caught in a
     // driven run were in it (holes/sugar.png, twice). Seven files, ~24KB.
-    ...BOAT_IMG,...ISLAND_SHAPE_IMG,...ING_ALL.map(i=>ING_IMG[i]),...ING_ALL.map(i=>ING_HOLE_IMG[i])];
+    ...BOAT_IMG,...ISLAND_SHAPE_IMG,...ING_ALL.map(i=>ING_IMG[i]),...ING_ALL.map(i=>ING_HOLE_IMG[i]),
+    // INBOX-20260901T1335Z: the two asset families a player can reach WITHOUT them ever having
+    // been fetched — recipe art (picker/modal/victory banner) and award emblems (End of Voyage).
+    // These are NOT `*_IMG` constants (they are built per-recipe and per-badge), so they stay
+    // explicit — the derivation above cannot see them.
+    ...RECIPE_BOOK.map(r=>r.img),
+    ...BADGE_POOL.map(b=>`${ASSET_BASE}badges/${b.img}.png`),`${ASSET_BASE}badges/${FALLBACK_BADGE.img}.png`])];
   return Promise.all(urls.map(u=>new Promise(res=>{
     const img=new Image();
     img.onload=img.onerror=()=>res();

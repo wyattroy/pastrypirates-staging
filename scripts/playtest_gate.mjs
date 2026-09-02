@@ -557,6 +557,18 @@ fs.mkdirSync(LEGDIR, { recursive: true });
    2026-09-01). Evidence has to carry its provenance. */
 const RUN_ID = `${STAMP}-${Date.now().toString(36)}`;
 
+/* ONE STAMPED RECORD, WRITTEN TWICE — never two objects built from one fact.
+   ⚠ 2026-09-01, CEO Review 74: the provenance stamp above was attached INLINE, inside the
+   per-leg file's own writeFileSync (`{ ...results[i], __stamp, __runId }`), while `results[i]`
+   itself stayed unstamped — and report.json is built from `results`. So the per-leg file carried
+   the run id and the report did not: `grep -c "__runId" sea-trial-shots/report.json` → 0. That made
+   `sea_trial.mjs`'s `sailedHere()` false for EVERY leg of EVERY run on EVERY machine, and every leg
+   was then filed under NOT RUN using its own verdict text as the reason it did not run. The release
+   trial reported "0 of 10 voyage(s) sailed" above twelve END OF VOYAGE lines in its own log.
+   The fix is not a second assignment — it is that there is only ONE record. Stamp it as it is
+   born; the file and the report then serialize the same object and cannot disagree (rule 23). */
+const stampRun = (r) => ({ ...r, __stamp: STAMP, __runId: RUN_ID });
+
 const legFile = (name) => path.join(LEGDIR, `${name}--${STAMP}.json`);
 const readDone = (name) => {
   try {
@@ -603,10 +615,12 @@ const results = [];
       const i = next++, name = LEGS[i];
       const already = readDone(name);
       if (already) { results[i] = already; resumed++; done++; markProgress(done); log(`[${name}] RESUMED — a complete result for build ${STAMP} is already on record; not re-sailed`); continue; }
-      results[i] = await runLeg(name, i);
+      results[i] = stampRun(await runLeg(name, i));
       /* WRITE IT THE MOMENT IT IS DONE. A result held only in memory until the fleet is home is a
-         result the next recycle destroys — which is the whole failure this guards. */
-      try { fs.writeFileSync(legFile(name), JSON.stringify({ ...results[i], __stamp: STAMP, __runId: RUN_ID })); } catch {}
+         result the next recycle destroys — which is the whole failure this guards.
+         It writes `results[i]` ITSELF, not a fresh spread of it: the file and the report entry are
+         the same object, so the drift that produced "0 of 10 sailed" cannot come back. */
+      try { fs.writeFileSync(legFile(name), JSON.stringify(results[i])); } catch {}
       done++; markProgress(done);
     }
   }));

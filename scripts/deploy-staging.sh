@@ -40,6 +40,58 @@ MSG="${1:-Update staging}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# ---------------------------------------------------------------------------------------------
+# WINDOWS ONLY: hand rsync a path it can actually read. A NO-OP EVERYWHERE ELSE.
+#
+# On 2026-09-02 this script could not run on the Blade at all. It died right here with
+# "The source and destination cannot both be remote", and for four CEO verdicts running the reason
+# staging was stale had been recorded as the PERMISSION layer. That was real, and removing it
+# revealed this underneath.
+#
+# TWO LAYERS, BOTH MEASURED, NEITHER GUESSED (an earlier guess in the same session said "a Windows
+# drive-letter colon in $SRC" -- wrong; `pwd` returns /c/Users/... with no colon anywhere):
+#
+#   1. Git Bash REWRITES any argument beginning with `/` into a Windows path before the exe sees
+#      it. `/c/Users/...` reaches rsync as `C:\Users\...`, and rsync reads `C:` as a HOSTNAME.
+#      With both arguments rewritten it reports both as remote; with only one it names the phantom
+#      host out loud -- "ssh: Could not resolve hostname c:". MSYS_NO_PATHCONV=1 stops the rewrite.
+#   2. The rsync on PATH here is a CYGWIN build (chocolatey 3.4.1). It wants /cygdrive/c/... and
+#      does not resolve Git Bash's /c/.... Its own error resolves a relative path against
+#      /cygdrive/c/, which is how this was identified rather than assumed.
+#
+# Verified at exit 0 with both layers handled, and exit 1 with either one alone.
+#
+# WHY IT IS SAFE ON THE MAC AND IN THE CLOUD, which is the first question asked of it: the branch
+# is gated on `uname -s`, so on Darwin and Linux `rsync_path` returns its argument BYTE-IDENTICAL
+# and MSYS_NO_PATHCONV is a variable nothing reads. `scripts/qa/deploy_rsync_paths_check.mjs`
+# forces the non-Windows branch and asserts the identity, so that claim is TESTED on every machine
+# rather than asserted by this comment (a comment is never evidence of runtime behaviour).
+#
+# THE RSYNC LINE ITSELF IS UNTOUCHED. Only the paths handed to it change. Rule 14: hand-rolling
+# the sync is what took the live game to within one command of going down, twice.
+#
+# SECOND SIGHTING OF THIS SHAPE: openWebKit() handed a raw Windows path to import(), which read
+# `c:` as a protocol and reported "playwright not found" while playwright was installed
+# (2026-09-01). A Windows path read as a protocol. If you meet a third, sweep them together.
+# ---------------------------------------------------------------------------------------------
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*) PP_WIN_SHELL=1 ;;
+  *)                    PP_WIN_SHELL=0 ;;
+esac
+
+rsync_path() {
+  if [ "${PP_WIN_SHELL:-0}" != "1" ]; then printf '%s' "$1"; return; fi
+  # Derive the drive and the rest from cygpath rather than swapping strings by hand (rule 9):
+  # cygpath is the only thing on the machine that actually knows how the mount table maps.
+  local w; w="$(cygpath -w "$1")"          # -> C:\Users\wyatt\...
+  printf '/cygdrive/%s/%s' \
+    "$(printf '%s' "${w%%:*}" | tr '[:upper:]' '[:lower:]')" \
+    "$(printf '%s' "${w#*:\\}" | tr '\\' '/')"
+}
+
+# Deliberately below the definitions: sourcing this file to test rsync_path must not run a deploy.
+[ -n "${PP_DEPLOY_DRYRUN:-}" ] && return 0 2>/dev/null || true
+
 # SITE-IDENTITY FILES. None of these ever leave this repo: each one tells the outside world
 # "this deployment is playpastrypirates.com", which is a lie on the preview and an actively
 # harmful one. rsync protects --exclude'd paths from --delete, so the preview keeps its OWN
@@ -130,7 +182,7 @@ else
   echo "    no gh — cloning over https"
   git clone -q "https://github.com/$STAGING_REPO" "$WORK/staging"
 fi
-rsync -a --delete "${EXCLUDES[@]}" "$SRC/" "$WORK/staging/"
+MSYS_NO_PATHCONV=1 rsync -a --delete "${EXCLUDES[@]}" "$(rsync_path "$SRC")/" "$(rsync_path "$WORK")/staging/"
 
 # --- THE GUARD. Never remove; this is the whole reason the script exists. ---
 #

@@ -91,6 +91,24 @@ passed, the relay's dependability is a design, not a fact — no session may cla
    `scripts/wyclau/bell.ps1`, with `$repo` substituted). Every 10 minutes it asks one question:
    is a door-launched claude.exe alive? No ⇒ it rings a fresh watch and logs the ring to
    `restarts.log`. There is nothing else to configure — the Bell has no thresholds.
+> **⚠ VERIFY THE REGISTRATION BEFORE TRUSTING IT — it can fail silently, and it did.** 2026-09-01:
+> the task was created in a fresh elevated window where `$repo` had never been set. PowerShell
+> expanded it to nothing, so the task's action became `-File \scripts\wyclau\bell.ps1 -Repo` — no
+> repo, no script. `schtasks /Query` reported **Ready**, the task fired every ten minutes for an
+> hour, and every run died before reaching bell.ps1 (`Last Result: -196608`), so the log stayed
+> empty and looked exactly like a Bell that had never ticked. **Always print the action back and
+> read it**, then force one run rather than waiting for the schedule:
+>
+> ```
+> schtasks /Query /TN "wyclau-bell" /V /FO LIST | findstr /C:"Task To Run"
+> schtasks /Run /TN "wyclau-bell"
+> ```
+>
+> Two more fields in that same output are worth acting on: `Logon Mode: Interactive only` (a console
+> flashes on every tick, and nothing runs when logged out — fix in Properties → General) and
+> `Power Management: Stop On Battery Mode, No Start On Batteries` (on a laptop the Bell dies when
+> the charger comes out — Properties → Conditions).
+
 7. **THE RING TEST — the step that makes it real.** Ring a watch by hand first
    (`claude -p` with the exact prompt from bell.ps1) and watch it work ONE item and end. Then
    kill a running watch mid-item on purpose. Within ~10–15 minutes (one tick plus the grace

@@ -1450,23 +1450,56 @@ export async function runStormLive(dirKey){
     const wasDocked=g.adjPort(player)!==null;
     const before=[...player.pos];
     let outcome="moved";
+    /* D-53 (Wyatt, 2026-09-01): "the storm should smoothly move players to their final square in
+       one move" — measured first (scripts/qa/w_storm_step_probe.mjs, a driven live storm, ship
+       transform sampled every ~35ms): his named cause (an indexing bug) is NOT what's happening —
+       a full 3-square push is timed evenly, ~780ms per square, exactly STORM_STEP_MS apart. What
+       IS happening is by design: every ORDINARY square (no event) gets its own renderLiveShips()
+       + a fixed STORM_STEP_MS pause, one square at a time, so a 3-square push reads as three
+       separate hops rather than one glide to wherever the ship ends up.
+       pendingSquares defers that paint: ordinary squares accumulate silently (player.pos already
+       moved in engine state; nothing on screen has caught up yet) and are flushed as ONE
+       renderLiveShips() call, so the ship's own CSS transition (SHIP_GLIDE_MS, same one every
+       other ship move already uses) glides it directly from its pre-push square to wherever it
+       actually stops — 1, 2 or 3 squares away — in one continuous move.
+       NOT touched: the event-driven liveRender() below. That call is the ONE consumer or broadcast
+       path (rule 23, src/ui/panel.js's own liveRender() drains+broadcasts events, it does not
+       merely repaint) — windmove/anchorHold/blocked/swept all still fire it exactly where they did
+       before, at the moment their event lands, for multiplayer correctness. Deferring THAT would
+       delay what a guest receives, which is a sync risk this fix has no reason to take for a purely
+       cosmetic win. Where an event does land, its own render already reflects the current (already
+       mutated) position, so any pending ordinary squares are covered by it for free — flushed
+       without a second paint. */
+    let pendingSquares=false;
     for(let s=0;s<STORM_PUSH;s++){
       const was=[...player.pos];
       const evBefore=g.events.length;
       outcome=g.stormStep(player,dirKey);
       const movedSquare=(player.pos[0]!==was[0]||player.pos[1]!==was[1]);
-      if(movedSquare&&outcome!=="swept"){
-        // D-22, carried into v2: paint THIS square before anything about the next one can narrate.
-        // renderLiveShips(), not liveRender() — an ordinary storm square emits no event, and
-        // render() draws ships from the last emitted event's snapshot, so liveRender() here would
-        // repaint the square the ship has just left and the push would be invisible.
-        // A SWEPT step is excluded: player.pos is already the whirlpool by now, so this paint WAS the
-        // teleport Wyatt recorded ("swept around the rim!" with no ride). The sweep animation
-        // below paints its own arrival at the entry square instead.
-        renderLiveShips();
-        await sleep(STORM_STEP_MS);
-      }
+      if(movedSquare&&outcome!=="swept")pendingSquares=true;
       if(outcome==="swept"){
+        /* CEO REVIEW 72 CAUGHT THIS: stormStep() already wrote player.pos to the RIM-ENTRY square
+           before returning "swept" (tradewind(), src/engine/index.js), so painting from the LIVE
+           position here — as a plain renderLiveShips() does — glides the ship onto the whirlpool
+           itself and holds it there, before animateRimSweepIfAny() snaps it back to ride around.
+           Teleport, pause, snap-back, ride: exactly the bug D-22 excluded a swept step to avoid,
+           reintroduced by reading current state instead of the pre-sweep one.
+           `was`, captured at the top of THIS iteration, is the fix: it is the position as it stood
+           immediately before this (sweeping) stormStep call, which already carries every ordinary
+           square walked in earlier iterations of this same push (each mutated player.pos in turn)
+           and excludes only the sweep itself — precisely the D-22/W9 contract, restored.
+           ONE TICK (RIM_SWEEP_TICK_MS), NOT STORM_STEP_MS — CEO REVIEW 72's follow-up caught a
+           second issue: with no yield at all here, this paint and PART A's own paintShipAt(seat,
+           from) below (animateRimSweepRun) land in the same task, and "a browser paints once per
+           task" is the exact hazard that function's own comment two screens down names for the
+           identical shape — so `was` would never reach the screen. A full STORM_STEP_MS (770ms)
+           wait was tried first and pulled in a SEPARATE, likely pre-existing artifact (a probe
+           caught the ship's transform reverting to its pre-push cell mid-wait — recorded in
+           .planning/CTO-LEDGER.md, not yet root-caused). One tick is the minimum that still forces
+           a real paint (the same unit SAIL_ROUTE_TICK_MS/RIM_SWEEP_TICK_MS both use for exactly
+           this "guarantee at least one frame" purpose elsewhere in this file) without holding the
+           window open long enough, in every probe run since, to reproduce that artifact. */
+        if(pendingSquares){paintShipAt(player.idx,was);await sleep(RIM_SWEEP_TICK_MS);pendingSquares=false;}
         /* THE HOST-ONLY ESCAPE HATCH IS GONE (W9, rule 23). This used to reconstruct the rim-entry
            square by hand — from `was` plus the wind — because the event stream did not contain it,
            and then call animateRimSweepRun directly. runStormLive is host-only, and that was
@@ -1503,9 +1536,12 @@ export async function runStormLive(dirKey){
          the board state, and an ordinary sail's narration all hang off it — only its mid-storm
          bubble is withheld here, and the summary's swept clause reports it once the storm is done
          (noteStormOutcome now notes "swept"). */
-      if(g.events.length>evBefore){liveRender();if(g.events[g.events.length-1].t!=="tradewind")await narrateLastEvent();}
+      if(g.events.length>evBefore){liveRender();pendingSquares=false;if(g.events[g.events.length-1].t!=="tradewind")await narrateLastEvent();}
       if(outcome!=="moved")break;
     }
+    // flush any ordinary squares nothing above already painted — the whole push (however many
+    // squares it actually covered) becomes this ONE glide.
+    if(pendingSquares){renderLiveShips();await sleep(STORM_STEP_MS);}
     const moved=(player.pos[0]!==before[0]||player.pos[1]!==before[1]);
     const evBefore=g.events.length;
     g.noteStormOutcome(player,outcome,moved,wasDocked);

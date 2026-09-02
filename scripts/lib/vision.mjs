@@ -9,6 +9,17 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
+
+/* THE ONE PLACE A SCREENSHOT'S NAME IS DERIVED. Split on BOTH separators, because all three path
+   shapes below are live in this repo at once and the judge has to survive every one of them:
+   path.join gives all backslashes on Windows, playtest_gate.mjs writes `dir + "/" + name` into
+   judge-queue.json (mixed), and a Mac or a container gives plain forward slashes. `path.basename`
+   alone is not enough — the posix build of it treats a backslash as an ordinary character, so a
+   Windows path handed to a container would come back whole.
+   Screenshot names in this project are leg names and digits; a real backslash inside one would
+   confuse this, and there has never been one. */
+const baseName = (p) => String(p).split(/[\\/]/).pop();
 
 /* ⚠ THE ACCEPTED LIST IS NOT WRITTEN HERE. It is read from docs/INTENDED-BEHAVIOUR.md.
  *
@@ -109,13 +120,22 @@ function judgeEnv() {
  *
  * Basenames are kept UNCHANGED because the reply is matched back by basename (see judgeBatch). Two
  * screenshots sharing a basename in one batch would collide — that was already true of the
- * matching before this existed, and is not introduced here. */
-function stageImages(absPaths) {
-  const dir = fs.mkdtempSync(os.tmpdir() + "/ppjudge-");
+ * matching before this existed, and is not introduced here.
+ *
+ * ⚠ AND THIS IS WHERE EVERY SEA TRIAL ON WINDOWS WENT BLIND, 2026-08-30 to 2026-09-02. The name was
+ * worked out with `String(abs).split("/").pop()` — a Mac separator only. Handed the all-backslash
+ * path `path.join` builds on Windows, that "basename" is the WHOLE PATH, so the destination became
+ * `<temp>\ppjudge-x\C:\Users\...\shot.png` and copyFileSync threw ENOENT. judge_can_see_check.mjs
+ * crashed and exited 1, and sea_trial.mjs step 1b reads that as **"THE JUDGE CANNOT SEE"** — so an
+ * instrument's own crash was reported, in the release report itself, as a fact about the judge, and
+ * 343 screens of the release trial were deferred on the strength of it. The judge was never asked.
+ * Derive the name in ONE place (baseName, top of file) and join with `path.join`. */
+export function stageImages(absPaths) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ppjudge-"));
   const names = [];
   for (const abs of absPaths) {
-    const base = String(abs).split("/").pop();
-    fs.copyFileSync(abs, dir + "/" + base);
+    const base = baseName(abs);
+    fs.copyFileSync(abs, path.join(dir, base));
     names.push(base);
   }
   return { dir, names, cleanup() { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} } };
@@ -237,12 +257,18 @@ ${list}`;
         const byName = new Map();
         for (const row of arr) {
           if (!row || !row.verdict) continue;
-          const name = String(row.file || "").split("/").pop();
+          const name = baseName(row.file || "");
           if (name) byName.set(name, row);
         }
         const out = new Map();
         items.forEach((it, i) => {
-          const base = it.path.split("/").pop();
+          /* THE NAME THE JUDGE WAS GIVEN, not a second derivation of it. This used to recompute the
+             basename from it.path with the same Mac-only split as stageImages did, so the two could
+             disagree — and on Windows they would have, silently: every verdict dropped as "never
+             mentioned", which reads exactly like a screen the judge chose not to mention. Two things
+             kept in step by discipline are two things that drift (rule 23); stage.names[i] IS the
+             name in the prompt, so there is only one of them now. */
+          const base = stage.names[i];
           const row = byName.get(base) || (byName.size === 0 && arr[i] && arr[i].verdict ? arr[i] : null);
           if (!row) return;                       // never mentioned -> NOT judged, NOT cleared
           out.set(it.path, { verdict: /fail/i.test(row.verdict) ? "FAIL" : "PASS",

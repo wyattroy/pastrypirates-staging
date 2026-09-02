@@ -269,7 +269,7 @@ row up into the body the moment he rules, with the date and his words.
 
 | Observed | Suspicion | Status |
 |---|---|---|
-| The hint *"Click and hold the sea to reveal the board"* appeared on a guest and not on a host | May be correct (the host had already used the gesture) or may be a divergence | Observed once, 2026-08-30. **Not measured** |
+| ~~The hint *"Click and hold the sea to reveal the board"* appeared on a guest and not on a host~~ | ~~May be correct (the host had already used the gesture) or may be a divergence~~ | **ANSWERED 2026-09-02 — IT IS THE INSTRUMENT, NOT THE GAME, and neither guess above was right.** The verb is `holdVerb()` (`src/ui/stage.js:547-551`), derived from `matchMedia("(pointer: coarse)")` — a DEVICE property, nothing to do with host, guest, or whether the gesture had been used. The crew-phone leg gives its **host** `mobile:true, dsf:2` (`scripts/playtest_gate.mjs:421-422`) and its **guest** neither (`:429`), so `cdp.mjs:34`'s defaults (`mobile=false, dsf=1`) make the guest a small DESKTOP with a fine pointer. Measured in the pictures too: host `crew-phone-host-012-settled.png` 780×1300 reads *"Tap"*, guest `crew-phone-guest-012-settled.png` 390×664 reads *"Click"*. **The harness bug is on the Chart; this row is closed.** |
 | The greyed chip's **red backing** specifically | The rule is cited; the visual treatment is described nowhere | No ruling found |
 | The FORECAST ribbon text clipping mid-word | Triaged as "pre-existing" repeatedly and carried as a known item | **Known is not the same as intended.** No ruling found |
 | Duplicate ingredients sorted together in a rival's hold | `src/ui/board.js:1694` says *"easier to spot a tradeable double"* | **Code intent, not his ruling.** Cite it as such |

@@ -86,10 +86,19 @@ if ($DryRun) {
   Add-Content $log "$now`tDRYRUN would ring a watch"
 } else {
   try {
+    # CAPTURE WHAT THE WATCH SAYS, OR A DEATH AT LAUNCH IS INVISIBLE. Earned 2026-09-01: the Bell
+    # rang from the scheduled task at 16:08:22Z, logged its ring, and NO watch ever appeared in the
+    # process table. Start-Process had not thrown -- so claude was found and started -- and the
+    # child then died with its output going nowhere, leaving exactly one indistinguishable symptom
+    # for "claude cannot start here", "it refused the prompt" and "it worked and ended instantly".
+    # Two files because Start-Process cannot redirect both streams to one.
+    $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    $outFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.out"
+    $errFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.err"
     Start-Process -FilePath "claude" -WorkingDirectory $Repo -ArgumentList @(
       "-p", "`"$doorPrompt`""
-    ) -WindowStyle Hidden
-    Add-Content $log "$now`tring: no watch on deck -- rang the next one"
+    ) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    Add-Content $log "$now`tring: no watch on deck -- rang the next one (output: watch-$stamp.out/.err)"
   } catch {
     # A "ring" line with no launch behind it is a log that lies. Say what failed, in the same
     # file the next reader will open.

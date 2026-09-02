@@ -54,6 +54,7 @@ profile/
 profile-*/
 _sheet-profile/
 chrome-probe*/
+.pw-profile-*/
 
 # Two more scripts still default their --out INSIDE the repo: mouse_qa.mjs
 # (./mouse-qa-shots) and narration_timeline.mjs (./narration-timeline). The profile
@@ -98,3 +99,19 @@ w1-crewphone-recheck/
 # to every clone; the deliberate, reviewed allowlist lives in .claude/settings.json.
 .claude/settings.local.json
 .planning/wyclau/LAST-HARVEST
+
+# A rung watch's stdout/stderr (bell.ps1). Machine-local and often large; the DURABLE record of
+# what a watch did is its own commits and .planning/wyclau/status/<hostname>.md.
+.planning/wyclau/watch-*.out
+.planning/wyclau/watch-*.err
+
+# Scratch from the asset-compression tools (scripts/qa/asset_*.mjs, boot_weight_probe.mjs):
+# candidate art, a copy of assets/ taken while posing a before/after pair, screenshots, and the
+# Chrome profiles those probes launch. All regenerable, all bulky — .tmp-after-assets alone is a
+# second copy of the whole art tree. Shape-based rather than a list, for the same reason the
+# profile globs above are: a hand-kept list rots the moment someone adds a script.
+.tmp-*/
+# ...and the loose FILES those same probes drop beside them — `.tmp-dispsize-modal-phone.png` and
+# friends. The directory glob above did not cover a file, so three screenshots sat untracked at the
+# repo root next to index.html until CEO 83 counted them. Same shape, same reason.
+.tmp-*

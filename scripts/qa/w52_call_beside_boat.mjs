@@ -19,12 +19,20 @@
  * A circle that is beside its boat has covers 0, wrongOn 0, nearest === its own seat, and a small
  * gap to its own boat's edge.
  */
-import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
+import path from "node:path";
+import { serve, launch, attach, killAll, sleep, REPO } from "../mp_rig.mjs";
+import { freshProfileDir } from "../lib/cdp.mjs";
 
 const PORT = 8492, DBG = 9392;
-const SHOTS = process.env.MP_RIG_SHOTS || "/tmp/claude-0/-home-user-pastrypirates/205edaad-bb58-527a-85d4-b887228dafd2/scratchpad";
+/* THIS PROBE HAD NEVER RUN ON WINDOWS, and nothing said so — it died with "no chrome on 9392",
+   which reads as a missing browser rather than a bad argument. `/tmp/chrome-qa-w52` is a POSIX
+   path; on the Razer Chrome never comes up with it, so W5-2's own on-screen measurement (the half
+   its source gate explicitly defers to: "what a player SEES is measured by this file") was
+   unavailable on the one machine the sea trial sails from. Absolute, repo-local and freshened —
+   rule 18, plus cdp.mjs's Windows lesson that a profile a killed run still holds open cannot be
+   unlinked. Found 2026-09-02 while verifying the ask-pill fix did not undo W5-2. */
 const url = serve(PORT);
-launch(DBG, "/tmp/chrome-qa-w52");
+launch(DBG, freshProfileDir(path.join(REPO, ".tmp-chrome-w52")));
 const C = await attach(DBG);
 
 const ADVANCE = `(()=>{

@@ -1,0 +1,27 @@
+SUBJECT REACHED:
+  yes  setActor defined in util.js
+  yes  applyActiveSeat defined in util.js
+  yes  applyActiveSeat calls setActor
+  yes  applyActiveSeat calls __pp4.actor
+  yes  ribbonTick prefers S.activeSeat
+
+DIRECT setActor() CALLS OUTSIDE applyActiveSeat: 16
+  src/orchestrator.js:533: setActor(p.idx);
+  src/orchestrator.js:723: if(hD){setActor(def.idx);flee=await ask(`${nm(def.idx)}: both shots missed wildly! Slip aw
+  src/orchestrator.js:770: setActor(att.idx);
+  src/orchestrator.js:822: if(win.strategy==="human"&&uniq.length>1){setActor(win.idx);
+  src/ui/flow.js:273: setActor(p.idx);
+  src/ui/flow.js:630: setActor(p.idx);
+  src/ui/flow.js:740: setActor(p.idx);
+  src/ui/flow.js:1511: setActor(p.idx);
+  src/ui/flow.js:1873: setActor(p.idx);
+  src/ui/flow.js:1973: setActor(q.idx);
+  src/ui/flow.js:2022: setActor(p.idx);
+  src/ui/flow.js:2123: setActor(p.idx);
+  src/ui/flow.js:2527: setActor(q.idx);
+  src/ui/flow.js:2574: setActor(p.idx);
+  src/ui/flow.js:2811: setActor(seat);
+  src/ui/flow.js:2964: setActor(s.idx);
+
+RED — "whose turn is it" has 17 writers (16 direct + applyActiveSeat).
+Each direct call moves appState.curSeat and leaves S.activeSeat stale; stage.js:1206 draws S.activeSeat first.

@@ -1,0 +1,11 @@
+SUBJECT REACHED:
+  yes  setActor defined in util.js (NOT exported)
+  yes  setActor is not exported
+  yes  applyActiveSeat defined in util.js
+  yes  applyActiveSeat calls setActor
+  yes  applyActiveSeat calls __pp4.actor
+  yes  ribbonTick prefers S.activeSeat
+
+DIRECT setActor() CALLS OUTSIDE applyActiveSeat: 0
+
+GREEN — applyActiveSeat is the only writer of the active seat.
