@@ -54,7 +54,13 @@ if (!ceiling) {
 
 const { total, count, byFamily } = weigh();
 const mb = (n) => (n / 1048576).toFixed(2);
-console.log(`assets: ${mb(total)} MB across ${count} files (ceiling ${mb(ceiling)} MB)`);
+/* THE EXACT BYTE TOTAL IS PRINTED BESIDE THE MB, because `ceilingBytes` is a BYTE figure and this
+   gate is the only thing that knows the current one. Printing MB alone meant that ratcheting the
+   ceiling down after a compression pass — the whole way this gate is supposed to be maintained —
+   required going and counting the tree by hand, so in practice nobody did and the ceiling drifted
+   0.43 MB above the art it guards. An instrument that reports a number you cannot act on is an
+   instrument that stops being used. (2026-09-02, the WebP pass.) */
+console.log(`assets: ${mb(total)} MB across ${count} files (${total} bytes; ceiling ${mb(ceiling)} MB = ${ceiling} bytes)`);
 for (const [f, b] of [...byFamily].sort((a, b) => b[1] - a[1])) {
   console.log(`   ${mb(b).padStart(6)} MB  ${f}`);
 }

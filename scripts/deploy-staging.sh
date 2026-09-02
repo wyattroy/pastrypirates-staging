@@ -64,8 +64,18 @@ trap 'rm -rf "$WORK"' EXIT
 # WHY IT IS SAFE ON THE MAC AND IN THE CLOUD, which is the first question asked of it: the branch
 # is gated on `uname -s`, so on Darwin and Linux `rsync_path` returns its argument BYTE-IDENTICAL
 # and MSYS_NO_PATHCONV is a variable nothing reads. `scripts/qa/deploy_rsync_paths_check.mjs`
-# forces the non-Windows branch and asserts the identity, so that claim is TESTED on every machine
-# rather than asserted by this comment (a comment is never evidence of runtime behaviour).
+# forces the non-Windows branch and asserts that identity, and it runs in `npm test`.
+#
+# ⚠ THAT LAST CLAUSE WAS A LIE FOR ABOUT AN HOUR, AND THE CORRECTION IS WORTH MORE THAN THE FIX.
+# This comment originally ended "...so that claim is TESTED on every machine rather than asserted by
+# this comment (a comment is never evidence of runtime behaviour)." CEO 92 split the test script
+# programmatically and found 93 gates with that check among NONE of them: it existed, it passed when
+# run by hand, and NOTHING RAN IT. So the sentence boasting that it was not a rotting comment was
+# itself a rotting comment, in the repo whose standing rule is exactly that. Wired in the same pass
+# (94 gates).
+# AND THE STRUCTURAL GUARD COULD NOT HAVE CAUGHT IT: `gate_count_check` compares gates DECLARED
+# against gates RUN, and an orphan is in neither list, so it is invisible to that check by
+# construction. If you add a gate, wiring it in is the step nothing will remind you about.
 #
 # THE RSYNC LINE ITSELF IS UNTOUCHED. Only the paths handed to it change. Rule 14: hand-rolling
 # the sync is what took the live game to within one command of going down, twice.

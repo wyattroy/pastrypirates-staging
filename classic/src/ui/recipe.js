@@ -313,8 +313,14 @@ const PASTRY_FILES=["01-spiced-cocoa-shortbread","02-molten-chocolate-lava-cake"
   "12-dark-chocolate-cream-puffs","13-pound-cake","14-french-pots-de-creme","15-chocolate-genoise-sponge-cake",
   "16-cinnamon-dutch-baby","17-mexican-chocolate-pots","18-cocoa-cloud-souffle","19-vanilla-bean-creme-brulee",
   "20-cinnamon-sponge-cake","21-chocolate-fudge-torte"];
+/* WEBP, NOT PNG — and this file is edited deliberately, in a FROZEN game, because classic has no
+   assets/ of its own: its ASSET_BASE is "../assets/", so it reads the very same 21 files the new
+   game does. Converting them without this line would have left the frozen v1 real players are in
+   the middle of showing 21 empty frames, silently, on a page nobody here opens. Wyatt was asked
+   exactly this and ruled that /classic shares the converted files (INBOX-20260902T0048Z).
+   Guarded by `scripts/qa/recipe_art_exists_check.mjs`, which checks BOTH trees. */
 export function attachPastryArt(){
-  RECIPE_BOOK.forEach((r,i)=>r.img=`${ASSET_BASE}pastries/${PASTRY_FILES[i]}.png`);
+  RECIPE_BOOK.forEach((r,i)=>r.img=`${ASSET_BASE}pastries/${PASTRY_FILES[i]}.webp`);
 }
 const RECIPE_LOOKUP={};
 for(const r of RECIPE_BOOK)RECIPE_LOOKUP[r.ings.slice().sort().join("|")]=r;

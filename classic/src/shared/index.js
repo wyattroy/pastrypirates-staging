@@ -20,19 +20,28 @@ const ING_EMOJI={wheat:"🌾",eggs:"🥚",sugar:"🍬",cocoa:"🍫",dairy:"🥛"
 // vector fallback automatically (iconAt() below removes the <image> on load failure, leaving
 // the original emoji/shape visible) — nothing else in the code needs to change.
 const ASSET_BASE="../assets/";
-const ING_IMG={};ING_ALL.forEach(i=>ING_IMG[i]=`${ASSET_BASE}ingredients/${i}.png`);
+/* THE FROZEN v1 SHARES THE ONE assets/ FOLDER, so it shares the format per file too — the same
+   two maps as the live game's src/shared/index.js, and for the same reason: two of the seven are
+   smaller as PNG and stay PNG. If these two files ever disagree, /classic shows a broken-image
+   glyph where a crate belongs; scripts/qa/asset_paths_exist_check.mjs walks BOTH trees. */
+const ING_FMT={wheat:"webp",dairy:"png",sugar:"png",eggs:"webp",cocoa:"webp",spice:"webp",vanilla:"webp"};
+const ING_IMG={};ING_ALL.forEach(i=>ING_IMG[i]=`${ASSET_BASE}ingredients/${i}.${ING_FMT[i]}`);
 // blackened silhouette of each ingredient, same alpha shape as ING_IMG — rendered at 30%
 // opacity to leave a "hole" where a crate used to sit once it's taken
-const ING_HOLE_IMG={};ING_ALL.forEach(i=>ING_HOLE_IMG[i]=`${ASSET_BASE}ingredients/holes/${i}.png`);
-const BOARD_IMG=`${ASSET_BASE}board.png`;
-const DOCK_IMG=`${ASSET_BASE}dock.png`;
-const WIND_ARROW_IMG=`${ASSET_BASE}wind-arrow.png`;
-const TRADE_SWIRL_IMG=`${ASSET_BASE}trade-swirl.png`;
+const ING_HOLE_FMT={wheat:"webp",dairy:"png",sugar:"webp",eggs:"webp",cocoa:"webp",spice:"webp",vanilla:"webp"};
+const ING_HOLE_IMG={};ING_ALL.forEach(i=>ING_HOLE_IMG[i]=`${ASSET_BASE}ingredients/holes/${i}.${ING_HOLE_FMT[i]}`);
+/* WEBP — the frozen v1 shares the one converted file, exactly as Wyatt ruled for the recipe art
+   (INBOX-20260902T0048Z). assets/board.png no longer exists; leaving this pointing at it would
+   blank /classic's board while every gate stayed green. Same 2132x2132 pixels, 4.24 MB -> 0.19 MB. */
+const BOARD_IMG=`${ASSET_BASE}board.webp`;
+const DOCK_IMG=`${ASSET_BASE}dock.webp`;
+const WIND_ARROW_IMG=`${ASSET_BASE}wind-arrow.webp`;
+const TRADE_SWIRL_IMG=`${ASSET_BASE}trade-swirl.webp`;
 const PLAY_IMG=`${ASSET_BASE}icons/play.png`,PAUSE_IMG=`${ASSET_BASE}icons/pause.png`;
 const FLIP_HEADS_IMG=`${ASSET_BASE}icons/flip-heads.png`,FLIP_TAILS_IMG=`${ASSET_BASE}icons/flip-tails.png`;
 const CROWN_IMG=`${ASSET_BASE}icons/crown.png`,CRATE_OVERBOARD_IMG=`${ASSET_BASE}icons/crate-overboard.png`,
   CURRENT_SWIRL_ICON_IMG=`${ASSET_BASE}icons/current-swirl.png`,CUPCAKE_IMG=`${ASSET_BASE}icons/cupcake.png`,
-  WAVE_IMG=`${ASSET_BASE}icons/wave.png`,CHECKMARK_IMG=`${ASSET_BASE}icons/checkmark.png`,
+  WAVE_IMG=`${ASSET_BASE}icons/wave.webp`,CHECKMARK_IMG=`${ASSET_BASE}icons/checkmark.png`,
   DICE_IMG=`${ASSET_BASE}icons/dice.png`,EYES_IMG=`${ASSET_BASE}icons/eyes.png`,
   CANCEL_X_IMG=`${ASSET_BASE}icons/cancel-x.png`;
 const COIN_IMG=`${ASSET_BASE}icons/coin-emoji.png`,FLAME_IMG=`${ASSET_BASE}icons/flame.png`,
@@ -48,7 +57,7 @@ const ANCHOR_IMG=`${ASSET_BASE}icons/anchor.png`,BATTLE_IMG=`${ASSET_BASE}icons/
   ISLAND_SILHOUETTE_IMG=`${ASSET_BASE}icons/island-silhouette.png`,REPAIR_TOOLS_IMG=`${ASSET_BASE}icons/repair-tools.png`,
   TARGET_IMG=`${ASSET_BASE}icons/target.png`,SUGARFISH_IMG=`${ASSET_BASE}icons/sugarfish.png`,
   FISH_IMG=`${ASSET_BASE}icons/fish.png`,BLOCKED_SLASH_IMG=`${ASSET_BASE}icons/blocked-slash.png`;
-const HOURGLASS_IMG=`${ASSET_BASE}icons/hourglass.png`,ALARM_IMG=`${ASSET_BASE}icons/alarm.png`,
+const HOURGLASS_IMG=`${ASSET_BASE}icons/hourglass.webp`,ALARM_IMG=`${ASSET_BASE}icons/alarm.png`,
   STOPWATCH_IMG=`${ASSET_BASE}icons/stopwatch.png`,PAUSE_SYMBOL_IMG=`${ASSET_BASE}icons/pause-symbol.png`;
 // AUDIO-02/D-14 (phase 21): Wyatt's own megaphone pair, replacing the 🔊/🔇 emoji scaffold 21-04
 // shipped. Two drawn states rather than the timer toggle's swap-to-a-bare-blocked-slash — a drawn
@@ -62,7 +71,7 @@ const DAGGER_IMG=`${ASSET_BASE}icons/dagger.png`,SKULL_IMG=`${ASSET_BASE}icons/s
 const SCROLL_IMG=`${ASSET_BASE}icons/scroll.png`,DOOR_IMG=`${ASSET_BASE}icons/door.png`,
   ROBOT_IMG=`${ASSET_BASE}icons/robot.png`,WARNING_IMG=`${ASSET_BASE}icons/warning.png`,
   STORYBOOK_IMG=`${ASSET_BASE}icons/storybook.png`,RIBBON_IMG=`${ASSET_BASE}icons/ribbon.png`,
-  SPEECH_BUBBLE_IMG=`${ASSET_BASE}icons/speech-bubble.png`,KEY_IMG=`${ASSET_BASE}icons/key.png`,
+  SPEECH_BUBBLE_IMG=`${ASSET_BASE}icons/speech-bubble.webp`,KEY_IMG=`${ASSET_BASE}icons/key.png`,
   MAP_IMG=`${ASSET_BASE}icons/map.png`,STOOL_IMG=`${ASSET_BASE}icons/stool.png`,
   DEVICE_IMG=`${ASSET_BASE}icons/device.png`,PARROT_IMG=`${ASSET_BASE}icons/parrot.png`,
   MAGNIFYING_GLASS_IMG=`${ASSET_BASE}icons/magnifying-glass.png`,CLOSE_X_IMG=`${ASSET_BASE}icons/close-x.png`,
@@ -72,9 +81,9 @@ const SCROLL_IMG=`${ASSET_BASE}icons/scroll.png`,DOOR_IMG=`${ASSET_BASE}icons/do
   PLAY_ARROW_IMG=`${ASSET_BASE}icons/play-arrow.png`,SPARKLES_IMG=`${ASSET_BASE}icons/sparkles.png`,
   GLOBE_IMG=`${ASSET_BASE}icons/globe.png`,PIRATE_CHEF_IMG=`${ASSET_BASE}icons/pirate-chef.png`,
   PIRATE_FLAG_IMG=`${ASSET_BASE}icons/pirate-flag.png`;
-const CLOCK_IMG=`${ASSET_BASE}clock/clock.png`;
-const FLIP_SOCKET_IMG=`${ASSET_BASE}icons/flip-socket.png`;
-const COMPASS_DIAL_IMG=`${ASSET_BASE}compass/compass-dial.png`,COMPASS_NEEDLE_IMG=`${ASSET_BASE}compass/compass-needle.png`;
+const CLOCK_IMG=`${ASSET_BASE}clock/clock.webp`;
+const FLIP_SOCKET_IMG=`${ASSET_BASE}icons/flip-socket.webp`;
+const COMPASS_DIAL_IMG=`${ASSET_BASE}compass/compass-dial.webp`,COMPASS_NEEDLE_IMG=`${ASSET_BASE}compass/compass-needle.png`;
 // every emoji in the game that has dedicated custom art — the single source of truth emojify()
 // (below) and popEmoji() both draw from, so a new icon only needs adding here once. Keys are the
 // bare emoji; emojify() also matches an optional trailing variation selector (️) so it
@@ -112,10 +121,10 @@ function emojify(html){
   if(!html)return html;
   return html.replace(EMOJIFY_RE,m=>iconImg(EMOJI_IMG[m.replace(/️$/,"")]));
 }
-const BOAT_IMG=[1,2,3,4].map(i=>`${ASSET_BASE}boats/${i}.png`);
+const BOAT_IMG=[1,2,3,4].map(i=>`${ASSET_BASE}boats/${i}.webp`);
 // 7 base island footprints (see TET below); art is authored once per shape in its canonical
 // orientation — the game applies the same rotate/mirror it used to place the shape on the board.
-const ISLAND_SHAPE_IMG=[1,2,3,4,5,6,7].map(i=>`${ASSET_BASE}islands/${i}.png`);
+const ISLAND_SHAPE_IMG=[1,2,3,4,5,6,7].map(i=>`${ASSET_BASE}islands/${i}.webp`);
 // 3–4 block island shapes: lines, Ls, corner, square, S, T. Shared by board generation
 // (Game constructor, below) and by island art placement (renderBoard) — index into this array
 // is the canonical shape id baked into each islands/N.png filename (1-based) via ISLAND_SHAPE_IMG.

@@ -87,6 +87,14 @@ w1-crewphone-recheck/
 .planning/wyclau/LAST-ACTIVITY
 .planning/wyclau/LAST-PUBLISH
 .planning/wyclau/STOP-HOOK-STATE.json
+# One line per Glass tick: what the change-gate said, and whether the harvest overrode the action
+# (scripts/wyclau/glass_gate_log.mjs — INBOX-20260902T0120Z). Machine-local, and NOT tracked FOR A
+# MEASURED REASON rather than by convention: glass_needs_publish.mjs skips a commit only when its
+# entire diff is GLASS-NOTE.md, so a tracked log line committed beside the note reset would make
+# that commit look like work landing and republish an unchanged page — the echo tick removed on
+# 2026-09-02. Extending that filter means editing a vendored file. The cross-machine view would be
+# publish_status.mjs's job; it is vendored too, and this is filed as a kit patch.
+.planning/wyclau/GATE-LOG
 # Written by a long job (a sea trial) as it progresses; read by the Glass for the status dot.
 # Per-machine by nature and actively misleading if shared: committed, it would describe a job
 # running on somebody else's computer.
@@ -115,3 +123,8 @@ w1-crewphone-recheck/
 # friends. The directory glob above did not cover a file, so three screenshots sat untracked at the
 # repo root next to index.html until CEO 83 counted them. Same shape, same reason.
 .tmp-*
+# The "before" art `art_posed_pair.mjs` recovers out of git to build a comparison sheet. The SHEET
+# is committed — it is the evidence — but its inputs are one `git show` away and would otherwise
+# leave every future watch with a permanently dirty `git status` it cannot clean (this sandbox
+# refuses `rm`). Underscore-prefixed inside .planning/posed/ so it cannot swallow a real pair.
+.planning/posed/_*/

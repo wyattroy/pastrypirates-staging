@@ -10,16 +10,25 @@
 // THE GUARD, and why it is not just "did it get smaller": a file is only replaced when it saves at
 // least MIN_SAVING of its bytes AND its mean error stays under MAX_MEAN_ERR. Small icons already
 // use few colours, so quantizing them buys almost nothing and can only add risk; the guard keeps
-// this off files it cannot actually help. board.png is excluded by name — it is a 2132px painted
-// map with the widest gradients in the game, exactly the worst case for banding, and Wyatt named
-// it the one file that stays as it is.
+// this off files it cannot actually help.
+//
+// ⚠ THE BOARD IS NO LONGER HERE, AND THE EXCLUSION THAT USED TO SIT BELOW COST TWO DAYS. This file
+// carried `EXCLUDE = new Set(['assets/board.png'])`, justified as "Wyatt named it the one file that
+// stays as it is". He did not. His words were "the only one that needs to be as big as it is is the
+// board itself", inside a sentence about resizing to maximum on-screen pixel size — an exemption
+// from RESIZING, not from compression. The exclusion then propagated into every measurement that
+// followed ("excluding board.png, 6.36 MB remains"), so the single largest file in the game — 4.24
+// MB, 43% of all its art — stopped being counted as work at all, while the launch-critical item it
+// belonged to stayed open. It went to WebP on 2026-09-02 at its own 2132x2132: 4.24 MB -> 0.19 MB.
+// THE REUSABLE PART: an exclusion written from a paraphrase of what somebody wanted is invisible
+// once it is in the code, because every later reader inherits the paraphrase and not the sentence.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { quantizeFile } from '../lib/png_quantize.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const EXCLUDE = new Set(['assets/board.png']);
+export const EXCLUDE = new Set();
 export const MIN_SAVING = 0.25;   // below this the colour cost is not worth paying
 export const MAX_MEAN_ERR = 4.0;  // mean per-channel distance, 0-255
 
@@ -71,7 +80,8 @@ for (const f of files) {
 }
 
 rows.sort((a, b) => (b.before - b.after) - (a.before - a.after));
-console.log(`${write ? 'REWROTE' : 'DRY RUN'} — ${changed} of ${files.length} PNGs quantized (board.png excluded by name)`);
+console.log(`${write ? 'REWROTE' : 'DRY RUN'} — ${changed} of ${files.length} PNGs quantized` +
+  (EXCLUDE.size ? ` (${EXCLUDE.size} excluded by name)` : ''));
 console.log(`  before ${(before / 1048576).toFixed(2)} MB   after ${(after / 1048576).toFixed(2)} MB   saved ${((before - after) / 1048576).toFixed(2)} MB (${(100 * (before - after) / before).toFixed(1)}%)`);
 console.log(`  held back: ${held.length}`);
 console.log('\n  saved   before    after  meanErr  maxErr  file');

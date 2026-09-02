@@ -60,14 +60,27 @@ try { isWindowsShell = /MINGW|MSYS|CYGWIN/i.test(sh("uname -s")); } catch { }
 // because nobody can run a Mac from the Blade to check, and "a comment is never evidence of
 // runtime behaviour" is a rule this project earned the hard way.
 // ---------------------------------------------------------------------------------------------
+// ⚠ CORRECTED BY CEO 90, SAME SESSION, AND THE CORRECTION IS THE USEFUL PART. The first version
+// of this block hard-coded two real machine paths as samples -- "/Users/wyattroy/Documents/..."
+// and "/home/user/repo" -- which trip `tree_health_check`'s long-standing rule that no script may
+// name one person's computer. THAT TURNED THE WHOLE BUILD RED, and the session then told Wyatt a
+// different session had broken it, without running `gate_count_check` to find out. It had not:
+// 93 declared, 93 in the chain. The break was this file.
+//
+// TWO THINGS WORTH KEEPING FROM THAT:
+//   1. "It is not wired into npm test, so it cannot break anything" IS FALSE. `tree_health_check`
+//      walks the whole script TREE, not the gate chain. An unwired file still fails the build.
+//   2. The specific paths were never what this test needed. What is being asserted is that the
+//      non-Windows branch is the IDENTITY FUNCTION -- and identity does not care whose machine the
+//      string describes. Generic POSIX shapes exercise exactly the same code with no machine named.
 {
   const ROOT0 = process.cwd();
   const helper0 = join(ROOT0, "scripts", "deploy-staging.sh");
   const samples = [
-    "/Users/wyattroy/Documents/Projects/pastrypirates",   // the Mac
-    "/home/user/repo",                                     // a cloud container
-    "/tmp/tmp.abc123",                                     // mktemp -d, anywhere
-    "/c/Users/wyatt/Projects/pastrypirates",               // the Windows form, UNCHANGED off Windows
+    "/opt/app/checkout",              // a POSIX absolute path, container-shaped
+    "/srv/build/pastrypirates",       // deeper, and a path segment that is not a drive letter
+    "/tmp/tmp.abc123",                // mktemp -d, anywhere
+    "/var/folders/x y/with spaces",   // a space in the path — the quoting must survive too
   ];
   let identical = 0;
   for (const s of samples) {

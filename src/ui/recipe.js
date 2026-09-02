@@ -313,8 +313,17 @@ const PASTRY_FILES=["01-spiced-cocoa-shortbread","02-molten-chocolate-lava-cake"
   "12-dark-chocolate-cream-puffs","13-pound-cake","14-french-pots-de-creme","15-chocolate-genoise-sponge-cake",
   "16-cinnamon-dutch-baby","17-mexican-chocolate-pots","18-cocoa-cloud-souffle","19-vanilla-bean-creme-brulee",
   "20-cinnamon-sponge-cake","21-chocolate-fudge-torte"];
+/* WEBP, NOT PNG — his ruling, INBOX-20260902T0048Z, question UI: "Do it", with /classic sharing
+   the converted files. CONVERT, NEVER RESIZE: `.planning/ASSET-DISPLAY-SIZES.md` measured all 21
+   at the recipe modal and every one is UNDER-resolution on a phone (512px shipped into a slot
+   wanting 692-879 DEVICE pixels), so taking pixels off would visibly soften art he commissioned.
+   The pixels are untouched at 512; only the encoding changed, and the family went 1.71 MB -> 1.18
+   MB. That weight is on the BOOT path, not the modal, since preloadAssets() started warming
+   RECIPE_BOOK's images (src/ui/util.js) -- which is what made half a megabyte worth taking.
+   `scripts/qa/recipe_art_exists_check.mjs` evaluates THIS line against the files on disk, in this
+   tree and classic's, so the extension cannot drift away from the art again. */
 export function attachPastryArt(){
-  RECIPE_BOOK.forEach((r,i)=>r.img=`${ASSET_BASE}pastries/${PASTRY_FILES[i]}.png`);
+  RECIPE_BOOK.forEach((r,i)=>r.img=`${ASSET_BASE}pastries/${PASTRY_FILES[i]}.webp`);
 }
 const RECIPE_LOOKUP={};
 for(const r of RECIPE_BOOK)RECIPE_LOOKUP[r.ings.slice().sort().join("|")]=r;

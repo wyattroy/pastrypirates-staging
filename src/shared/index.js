@@ -29,14 +29,30 @@ const ING_EMOJI={wheat:"🌾",eggs:"🥚",sugar:"🍬",cocoa:"🍫",dairy:"🥛"
 // v2 shares v1's art and sound rather than duplicating 19MB. NEVER copy CNAME/robots.txt/
 // sitemap.xml alongside them — those claim the live domain (see root CLAUDE.md).
 const ASSET_BASE="assets/";
-const ING_IMG={};ING_ALL.forEach(i=>ING_IMG[i]=`${ASSET_BASE}ingredients/${i}.png`);
+/* THE FORMAT IS PER FILE, AND THE TWO MAPS BELOW ARE THE HONEST RECORD OF THE FOLDER — not an
+   oversight and not something to "tidy up" by making them uniform. His ask, INBOX-20260901T1335Z:
+   "compressing the images to make the game load MUCH faster." Each file was offered WebP at q0.92
+   and WebP lossless (scripts/qa/png_family_reexport.mjs) and keeps whichever is smaller — and two
+   of them are SMALLER AS PNG, so they stay PNG. Forcing a uniform extension would mean shipping a
+   heavier file to make a line of code look neater, which is the opposite of what he asked for.
+   The five that converted were the heavy ones: cocoa 72->12 KB, vanilla 90->15, spice 67->12,
+   wheat 70->15. Changing a file's format means changing its entry here, and
+   scripts/qa/asset_paths_exist_check.mjs fails the build if the two ever disagree. */
+const ING_FMT={wheat:"webp",dairy:"png",sugar:"png",eggs:"webp",cocoa:"webp",spice:"webp",vanilla:"webp"};
+const ING_IMG={};ING_ALL.forEach(i=>ING_IMG[i]=`${ASSET_BASE}ingredients/${i}.${ING_FMT[i]}`);
 // blackened silhouette of each ingredient, same alpha shape as ING_IMG — rendered at 30%
-// opacity to leave a "hole" where a crate used to sit once it's taken
-const ING_HOLE_IMG={};ING_ALL.forEach(i=>ING_HOLE_IMG[i]=`${ASSET_BASE}ingredients/holes/${i}.png`);
-const BOARD_IMG=`${ASSET_BASE}board.png`;
-const DOCK_IMG=`${ASSET_BASE}dock.png`;
-const WIND_ARROW_IMG=`${ASSET_BASE}wind-arrow.png`;
-const TRADE_SWIRL_IMG=`${ASSET_BASE}trade-swirl.png`;
+// opacity to leave a "hole" where a crate used to sit once it's taken. Pure silhouettes, so the
+// re-encode moved not one visible pixel: measured mean difference 0.00/255 on every one of them.
+const ING_HOLE_FMT={wheat:"webp",dairy:"png",sugar:"webp",eggs:"webp",cocoa:"webp",spice:"webp",vanilla:"webp"};
+const ING_HOLE_IMG={};ING_ALL.forEach(i=>ING_HOLE_IMG[i]=`${ASSET_BASE}ingredients/holes/${i}.${ING_HOLE_FMT[i]}`);
+/* WEBP, AND EVERY ONE OF ITS 2132x2132 PIXELS IS STILL THERE. His ask, INBOX-20260901T1335Z:
+   "compressing the images to make the game load MUCH faster... the only one that needs to be as big
+   as it is is the board itself" — that exempts the board's SIZE, not its bytes. 4.24 MB -> 0.19 MB,
+   same dimensions, re-encoded by scripts/qa/board_reexport.mjs. /classic reads this same file. */
+const BOARD_IMG=`${ASSET_BASE}board.webp`;
+const DOCK_IMG=`${ASSET_BASE}dock.webp`;
+const WIND_ARROW_IMG=`${ASSET_BASE}wind-arrow.webp`;
+const TRADE_SWIRL_IMG=`${ASSET_BASE}trade-swirl.webp`;
 const PLAY_IMG=`${ASSET_BASE}icons/play.png`,PAUSE_IMG=`${ASSET_BASE}icons/pause.png`;
 /* W5-1, THE ART HALF: TRIED, AND THE REPO'S MASTERS CANNOT BE USED. Wyatt's ruling was "try repo
    assets else park". art-review/ holds 2048x2048 masters of all four flip images and the shipped
@@ -54,7 +70,7 @@ const PLAY_IMG=`${ASSET_BASE}icons/play.png`,PAUSE_IMG=`${ASSET_BASE}icons/pause
 const FLIP_HEADS_IMG=`${ASSET_BASE}icons/flip-heads.png`,FLIP_TAILS_IMG=`${ASSET_BASE}icons/flip-tails.png`;
 const CROWN_IMG=`${ASSET_BASE}icons/crown.png`,CRATE_OVERBOARD_IMG=`${ASSET_BASE}icons/crate-overboard.png`,
   CURRENT_SWIRL_ICON_IMG=`${ASSET_BASE}icons/current-swirl.png`,CUPCAKE_IMG=`${ASSET_BASE}icons/cupcake.png`,
-  WAVE_IMG=`${ASSET_BASE}icons/wave.png`,CHECKMARK_IMG=`${ASSET_BASE}icons/checkmark.png`,
+  WAVE_IMG=`${ASSET_BASE}icons/wave.webp`,CHECKMARK_IMG=`${ASSET_BASE}icons/checkmark.png`,
   DICE_IMG=`${ASSET_BASE}icons/dice.png`,EYES_IMG=`${ASSET_BASE}icons/eyes.png`,
   CANCEL_X_IMG=`${ASSET_BASE}icons/cancel-x.png`;
 const COIN_IMG=`${ASSET_BASE}icons/coin-emoji.png`,FLAME_IMG=`${ASSET_BASE}icons/flame.png`,
@@ -70,7 +86,7 @@ const ANCHOR_IMG=`${ASSET_BASE}icons/anchor.png`,BATTLE_IMG=`${ASSET_BASE}icons/
   ISLAND_SILHOUETTE_IMG=`${ASSET_BASE}icons/island-silhouette.png`,REPAIR_TOOLS_IMG=`${ASSET_BASE}icons/repair-tools.png`,
   TARGET_IMG=`${ASSET_BASE}icons/target.png`,SUGARFISH_IMG=`${ASSET_BASE}icons/sugarfish.png`,
   FISH_IMG=`${ASSET_BASE}icons/fish.png`,BLOCKED_SLASH_IMG=`${ASSET_BASE}icons/blocked-slash.png`;
-const HOURGLASS_IMG=`${ASSET_BASE}icons/hourglass.png`,ALARM_IMG=`${ASSET_BASE}icons/alarm.png`,
+const HOURGLASS_IMG=`${ASSET_BASE}icons/hourglass.webp`,ALARM_IMG=`${ASSET_BASE}icons/alarm.png`,
   STOPWATCH_IMG=`${ASSET_BASE}icons/stopwatch.png`,PAUSE_SYMBOL_IMG=`${ASSET_BASE}icons/pause-symbol.png`;
 // AUDIO-02/D-14 (phase 21): Wyatt's own megaphone pair, replacing the 🔊/🔇 emoji scaffold 21-04
 // shipped. Two drawn states rather than the timer toggle's swap-to-a-bare-blocked-slash — a drawn
@@ -84,7 +100,7 @@ const DAGGER_IMG=`${ASSET_BASE}icons/dagger.png`,SKULL_IMG=`${ASSET_BASE}icons/s
 const SCROLL_IMG=`${ASSET_BASE}icons/scroll.png`,DOOR_IMG=`${ASSET_BASE}icons/door.png`,
   ROBOT_IMG=`${ASSET_BASE}icons/robot.png`,WARNING_IMG=`${ASSET_BASE}icons/warning.png`,
   STORYBOOK_IMG=`${ASSET_BASE}icons/storybook.png`,RIBBON_IMG=`${ASSET_BASE}icons/ribbon.png`,
-  SPEECH_BUBBLE_IMG=`${ASSET_BASE}icons/speech-bubble.png`,KEY_IMG=`${ASSET_BASE}icons/key.png`,
+  SPEECH_BUBBLE_IMG=`${ASSET_BASE}icons/speech-bubble.webp`,KEY_IMG=`${ASSET_BASE}icons/key.png`,
   MAP_IMG=`${ASSET_BASE}icons/map.png`,STOOL_IMG=`${ASSET_BASE}icons/stool.png`,
   DEVICE_IMG=`${ASSET_BASE}icons/device.png`,PARROT_IMG=`${ASSET_BASE}icons/parrot.png`,
   MAGNIFYING_GLASS_IMG=`${ASSET_BASE}icons/magnifying-glass.png`,CLOSE_X_IMG=`${ASSET_BASE}icons/close-x.png`,
@@ -94,7 +110,7 @@ const SCROLL_IMG=`${ASSET_BASE}icons/scroll.png`,DOOR_IMG=`${ASSET_BASE}icons/do
   PLAY_ARROW_IMG=`${ASSET_BASE}icons/play-arrow.png`,SPARKLES_IMG=`${ASSET_BASE}icons/sparkles.png`,
   GLOBE_IMG=`${ASSET_BASE}icons/globe.png`,PIRATE_CHEF_IMG=`${ASSET_BASE}icons/pirate-chef.png`,
   PIRATE_FLAG_IMG=`${ASSET_BASE}icons/pirate-flag.png`;
-const CLOCK_IMG=`${ASSET_BASE}clock/clock.png`;
+const CLOCK_IMG=`${ASSET_BASE}clock/clock.webp`;
 /* WHO A NARRATION LINE IS ABOUT — ONE RULE, CALLED BY BOTH SEATS (Q-18, rule 23).
    An event that names TWO captains is not about either of them: a battle result centred on the
    winner would anchor a fight to one fighter, which is the fault CEO Review 20 found still live on
@@ -109,8 +125,8 @@ function subjectOf(e){
   const twoCaptains = e.d!=null && e.a!=null && e.d!==e.a;
   return twoCaptains ? null : (e.p!=null ? e.p : (e.a!=null ? e.a : null));
 }
-const FLIP_SOCKET_IMG=`${ASSET_BASE}icons/flip-socket.png`;
-const COMPASS_DIAL_IMG=`${ASSET_BASE}compass/compass-dial.png`,COMPASS_NEEDLE_IMG=`${ASSET_BASE}compass/compass-needle.png`;
+const FLIP_SOCKET_IMG=`${ASSET_BASE}icons/flip-socket.webp`;
+const COMPASS_DIAL_IMG=`${ASSET_BASE}compass/compass-dial.webp`,COMPASS_NEEDLE_IMG=`${ASSET_BASE}compass/compass-needle.png`;
 // every emoji in the game that has dedicated custom art — the single source of truth emojify()
 // (below) and popEmoji() both draw from, so a new icon only needs adding here once. Keys are the
 // bare emoji; emojify() also matches an optional trailing variation selector (️) so it
@@ -187,10 +203,10 @@ function emojify(html){
     })
   ).join("");
 }
-const BOAT_IMG=[1,2,3,4].map(i=>`${ASSET_BASE}boats/${i}.png`);
+const BOAT_IMG=[1,2,3,4].map(i=>`${ASSET_BASE}boats/${i}.webp`);
 // 7 base island footprints (see TET below); art is authored once per shape in its canonical
 // orientation — the game applies the same rotate/mirror it used to place the shape on the board.
-const ISLAND_SHAPE_IMG=[1,2,3,4,5,6,7].map(i=>`${ASSET_BASE}islands/${i}.png`);
+const ISLAND_SHAPE_IMG=[1,2,3,4,5,6,7].map(i=>`${ASSET_BASE}islands/${i}.webp`);
 // 3–4 block island shapes: lines, Ls, corner, square, S, T. Shared by board generation
 // (Game constructor, below) and by island art placement (renderBoard) — index into this array
 // is the canonical shape id baked into each islands/N.png filename (1-based) via ISLAND_SHAPE_IMG.

@@ -200,7 +200,7 @@ npm test                                  # 2. the gates — expect 20, exit 0
 node scripts/qa/gear.mjs                  # 3. how deep must this change be tested?
 node scripts/sea_trial.mjs                # 4. sail it, at whatever gear step 3 named
 
-./scripts/deploy-staging.sh "what changed"   # 5. -> staging.playpastrypirates.com
+npm run deploy:staging -- "what changed"   # 5. -> staging.playpastrypirates.com
 ```
 
 **6. Wyatt plays staging.** The build stamp must read `<stamp>-staging@<sha>` — e.g.

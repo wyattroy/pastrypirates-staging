@@ -73,6 +73,30 @@ export const LINUX_ARGS = process.platform === "linux" ? ["--no-sandbox", "--dis
 export const GAME_PATH = "/";
 export const gameURL = (port, host = "127.0.0.1") => `http://${host}:${port}${GAME_PATH}`;
 
+/* ── AND ONE SPELLING FOR THE FROZEN v1, FOR THE SAME REASON ───────────────────────────────────
+   `/classic` is v1, frozen and not developed, and it is a REAL permanent tree — but it is still a
+   tree, and the rule above is not "the root is special", it is *nobody hand-types where a game
+   lives*. A probe that photographs the frozen game has to name it, and the moment it names it as a
+   string literal we are back to call sites that nothing makes agree.
+
+   WHAT MADE THIS CONCRETE, 2026-09-02: `pastry_shipped_art_probe.mjs` was added to photograph the
+   frozen v1's recipe modal (CEO 96 asked for it, correctly), wrote `/classic/src/ui/recipe.js` by
+   hand, and turned the whole suite red — 95 of 96 — for about ninety minutes. The gate was right.
+   The answer is not an exemption; it is to give the second tree the same single spelling the first
+   one has, and then GUARD it twice over: `game_url_check.js` case 1b asserts this path really
+   serves the frozen game, and case 2b fails the build if any script hand-types the address instead
+   of importing it from here.
+
+   ⚠ THE SCOPE, EXACTLY, because the first version of this comment overclaimed and CEO 99 caught it
+   within the hour: these two constants own the URL a browser is NAVIGATED to. Repo-relative file
+   reads of the frozen tree (`classic/src/shared/index.js`) resolve on disk, not over HTTP, and are
+   deliberately outside both. */
+export const CLASSIC_PATH = "/classic/";
+/* No `classicURL()` twin of `gameURL()` here on purpose. The first draft exported one and NOTHING
+   called it (CEO 99) — and an export with no caller has no red-proof and no user, so if it were
+   wrong nothing would say so. Every classic-facing probe already has its own origin and needs only
+   the path. Add it the day something calls it. */
+
 /* ── ONE SPELLING FOR "run python", FOR THE SAME REASON AS CHROME ABOVE ────────────────────────
    Every driver that serves the tree over HTTP hardcoded `spawn("python3", ["-m", "http.server", ...])`
    -- twelve call sites, none of them agreeing with what is actually on the machine running them.

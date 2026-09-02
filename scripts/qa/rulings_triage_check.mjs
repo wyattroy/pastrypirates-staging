@@ -131,7 +131,18 @@ const realChart = readFileSync(join(ROOT, ".planning", "CHART.md"), "utf8");
 
 // 4/5 -- RED-PROOF, DIRECTION TWO: an owing ruling with no checklist row must FAIL.
 {
-  const bad = realChart.replace(/^- \[ \] Your ruling: the cutover moment.*$/m, "");
+  /* ⚠ WENT STALE 2026-09-02 AND SAID SO — which is the whole reason this line is worth reading.
+     The pattern used to be `^- \[ \] Your ruling: the cutover moment`, anchored to the checkbox with
+     nothing allowed between it and the words. The Chartkeeper build then began giving every row a
+     stable id, so CHART.md:431 now reads "- [ ] `T-007` Your ruling: the cutover moment" and this
+     fixture matched nothing.
+     IT FAILED LOUDLY RATHER THAN PASSING, and that is the design working: the message below says
+     "the fixture is stale, so case 4 proves nothing" instead of quietly reporting a green case-4 that
+     had tested nothing at all. The comment at :86 records that an earlier version DID pass silently
+     here, and this is the guard that was added because of it.
+     FIXED THE WAY :91 ALREADY WORKS — match the row by its WORDS, not by an exact prefix, so any
+     future row-head decoration (an id, a star, a size tag) cannot break it again. */
+  const bad = realChart.replace(/^- \[ \] .*Your ruling: the cutover moment.*$/m, "");
   if (bad === realChart) fail("the red-proof could not find the checklist row it meant to delete -- the fixture is stale, so case 4 proves nothing.");
   else if (!violations(bad).length) fail("the gate cannot fail: a ruling that still owes work had its only task row deleted and nothing objected.");
   else pass("red-proof: deleting an owing ruling's checklist row is caught.");

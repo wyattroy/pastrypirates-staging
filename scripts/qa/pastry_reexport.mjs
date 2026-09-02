@@ -1,5 +1,10 @@
 /* THE PASTRIES — SIZED TO THE SLOT THE GAME ACTUALLY DRAWS THEM IN.
  *
+ * ⚑ APPLIED 2026-09-02 on Wyatt's ruling (INBOX-20260902T0048Z, question UI: "Do it"). The 21
+ * shipped files are WebP now, so a plain run of this prints "nothing to do — no PNGs" and that is
+ * the correct, finished state, not a fault. It is kept runnable because it is the record of HOW
+ * the conversion was made and the only way to redo it if art is ever re-commissioned.
+ *
  *   node scripts/qa/pastry_reexport.mjs --dry     measure and report, write nothing
  *   node scripts/qa/pastry_reexport.mjs           rewrite assets/pastries/*.png -> *.webp
  *

@@ -19,7 +19,7 @@ import { boardShipEls } from "./board.js";
 import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, refreshNameMarquees,
   waitLineIsSelfAddressed } from "./util.js";
 import { typewriterReveal } from "./panel.js";
-import { HEXCOL, emojify, DIRS, STORM_PUSH } from "../shared/index.js";
+import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
 import { showsThinkingIndicator } from "../shared/visibility.js";
 
 const $ = id => document.getElementById(id);
@@ -40,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.01.8-staging@b2b4e28f";
+const PP4_STAMP = "2026.09.01.8-staging@1ce21a00";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2068,7 +2068,10 @@ function sweepGuard(){
     // a ghost of YOUR hull waiting at the far end — the clearest possible "this is where you'd be"
     const seat = appState.mySeat ?? 0;
     const gh = document.createElementNS("http://www.w3.org/2000/svg", "image");
-    gh.setAttribute("href", `assets/boats/${seat + 1}.png`);
+    /* BOAT_IMG, not a path typed again here. There used to be two spellings of the hull art in this
+       file and one in shared/index.js, and on 2026-09-02 the format changed underneath all three —
+       exactly the drift rule 23 is about. One list, four hulls, everybody reads it. */
+    gh.setAttribute("href", BOAT_IMG[seat]);
     gh.setAttribute("x", x2 - cp * 0.32); gh.setAttribute("y", y2 - cp * 0.32);
     gh.setAttribute("width", cp * 0.64); gh.setAttribute("height", cp * 0.64);
     gh.classList.add("sweepGhost"); svg.appendChild(gh);
@@ -2083,7 +2086,7 @@ function buildStage(){
   const rib = document.createElement("div"); rib.id = "pp4Ribbon";
   const order = [0, 1, 2, 3];
   rib.innerHTML = `<span id="pp4Round">DAY 1</span>
-    <span class="pp4Boats">${order.map(i => `<img class="pp4Boat" src="assets/boats/${i + 1}.png">`).join("")}</span>
+    <span class="pp4Boats">${order.map(i => `<img class="pp4Boat" src="${BOAT_IMG[i]}">`).join("")}</span>
     <button id="pp4FF" type="button" title="Skip to yer next turn">⏩</button>
     <button id="pp4Chat" type="button" title="Scuttlebutt">💬<span id="pp4ChatDot"></span></button>
     <button id="pp4Menu" type="button">☰</button>`;

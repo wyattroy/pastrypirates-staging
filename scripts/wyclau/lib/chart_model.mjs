@@ -88,6 +88,13 @@ export function chunk(sectionText, marker) {
 
 export const ID_RE = /`(T-\d{3})`/;
 
+/** The one place the row-identity format is written. Every consumer that needs to name a row by its
+ *  position — the Chartkeeper's write pass, its sweep — imports this rather than re-typing
+ *  `${kind}#${i}`. CEO 95 caught three hand-written copies of it and named the failure exactly:
+ *  they would not error, they would silently return nothing, so the tool would stop writing flags
+ *  and stop sweeping with everything still green. Rule 23 in miniature. */
+export const rowKey = (kind, chunkIndex) => `${kind}#${chunkIndex}`;
+
 /** The one-line title a human (and the Glass) sees: the row's first line, markers stripped. */
 export function titleOf(rowLines) {
   return rowLines[0]
@@ -116,13 +123,24 @@ export function parseChart(text) {
   const stepChunks = chunk(stepText, "checklist");
   const inboxChunks = /\(empty/.test(inboxText) ? [] : chunk(inboxText, "inbox");
 
+  /* `key` IS THE ONLY THING IN HERE GUARANTEED UNIQUE, AND THAT IS WHY IT EXISTS. Everything else a
+     caller might reach for as an identity can repeat: two rows may share a title (nothing forbids
+     it), and `id` is null until a write pass allocates one. `new Map(pairs)` keeps the LAST value
+     for a repeated key without a word, so a title-keyed lookup silently hands one row's verdict to
+     another — measured 2026-09-02: REAP's "⚠ STALE-CANDIDATE" flag was written into a row it had
+     never judged, and `score()` gave it the +40 that goes with it.
+     A chunk index is unique within its own chunk list by construction, and `kind` separates the two
+     lists — so this is derived, not a counter somebody has to remember to bump. */
   const mk = (c, kind, i) => ({
     kind,
     chunkIndex: i,
+    key: rowKey(kind, i),
     lines: c.lines,
     raw: bodyOf(c.lines),
     title: titleOf(c.lines),
-    id: (ID_RE.exec(c.lines[0]) || [])[1] ?? null,
+    // The handle is read from the WHOLE row, never just its first line: the first line is what the
+    // Glass renders to Wyatt, so nothing machine-readable is allowed to live there (CEO 91).
+    id: (ID_RE.exec(bodyOf(c.lines)) || [])[1] ?? null,
     done: kind === "checklist" ? /^- \[[xX]\]/.test(c.lines[0]) : hasFate(bodyOf(c.lines)),
   });
 
@@ -145,15 +163,38 @@ export function parseChart(text) {
     doneRows: rows.filter((r) => r.done),
     openIdeas: ideas.filter((r) => !r.done),
     /** The list the Glass's Tasks card actually renders, in its order. */
-    tasks: [...rows.filter((r) => !r.done)], /* RED-PROOF: inbox half removed on purpose */
+    tasks: [...rows.filter((r) => !r.done), ...ideas.filter((r) => !r.done)],
   };
 }
 
 /** Rebuild the file with new section bodies. Splices on the same headings `section()` splits on, so
- *  the two cannot disagree about where a section starts. */
+ *  the two cannot disagree about where a section starts.
+ *
+ *  ⚠ THIS WAS A REGEX AND THE REGEX WAS SILENTLY WRONG. It read
+ *  `(^## <h>[^\n]*$)([\s\S]*?)(?=^## |\Z)` — and **`\Z` IS NOT A JAVASCRIPT ANCHOR.** JavaScript
+ *  has no end-of-input escape; `\Z` is just the literal capital letter Z. So the lazy body stopped
+ *  at the first `^## ` *or the first Z in the text*, and this repo writes UTC timestamps
+ *  constantly ("04:19Z"). A single run on the real Chart spliced the new body in after roughly one
+ *  line, and a second run tripled the file: 3,243 insertions.
+ *
+ *  EVERY GATE WAS HONESTLY GREEN WHILE THIS WAS TRUE, and that is the part worth keeping. The
+ *  idempotence case ran twice and compared the results, exactly as designed — but its fixture
+ *  contained no letter Z, so the wrong branch was never reached. **A check is only as good as the
+ *  one input it was given**, which is rule 6 wearing a different hat: the instrument was fine and
+ *  it was pointed somewhere the bug was not. The fixtures now carry a `Z` on purpose.
+ *
+ *  It is index arithmetic now rather than a cleverer regex. There is no end-of-input escape to get
+ *  wrong, and `indexOf` cannot be misread. */
 export function replaceSection(text, heading, newBody) {
-  const re = new RegExp(`(^## ${heading}[^\\n]*$)([\\s\\S]*?)(?=^## |\\Z)`, "m");
-  return text.replace(re, (_m, head) => `${head}${newBody}`);
+  const headRe = new RegExp(`^## ${heading}[^\\n]*$`, "m");
+  const m = headRe.exec(text);
+  if (!m) return text;
+  const bodyStart = m.index + m[0].length;
+  const nextRe = /^## /m;
+  const rest = text.slice(bodyStart);
+  const nextHit = nextRe.exec(rest);
+  const bodyEnd = nextHit ? bodyStart + nextHit.index : text.length;
+  return text.slice(0, bodyStart) + newBody + text.slice(bodyEnd);
 }
 
 /* TOKENS — the crude, honest way two pieces of prose are compared here. Distinctive words only:
