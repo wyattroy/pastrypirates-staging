@@ -182,6 +182,15 @@ export async function renderRulesPage(repo) {
     h1 { font-size: 23px; }
   }
 </style>
+<!-- Google Analytics, COOKIELESS — his two rulings, 2026-09-03: "The public pages only — the
+     game, About and Rules" and "Cookieless, no banner". ONE module, loaded in one line on each of
+     the three pages, because a snippet pasted three times is three things kept in step by
+     discipline (rule 23). It denies all four storage types BEFORE the tag is fetched — that order
+     is the whole safety property — and it refuses to run anywhere but the live domain, so a sea
+     trial and staging can never inflate his own figures. Gate: analytics_consent_check.mjs.
+     ⚠ THIS PAGE IS GENERATED. It is written HERE and nowhere else — editing rules.html by hand
+     is drift the build catches, which is how this line ended up in the right file. -->
+<script type="module" src="src/analytics.js"></script>
 </head>
 <body>
 <div class="rulesPage">

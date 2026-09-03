@@ -446,12 +446,23 @@ const orderedRows = (p) =>
      * ⚑ WHAT REPLACES THEM IS THE PROPERTY HE ACTUALLY ASKED FOR — every row is moveable — asserted
      * against the RUNNABLE SCRIPT, never the page's prose. The gesture case lives at case 16d below;
      * this one is about the button existing on every row the card draws. */
-    const rows = [...card.matchAll(/<li\b[^>]*data-handle="T-\d{3}"/g)].length;
-    const arrows = [...card.matchAll(/class="totop"/g)].length;
-    if (!rows) fail("the Tasks card draws no rows at all, so nothing can be said about whether they are moveable");
+    /* ⛔ COUNT EVERY `<li>` THE LIST DRAWS, NOT THE TAGGED ONES. The first version of this case
+     * counted rows carrying `data-handle` against buttons — and `glass.mjs:1395-1400` gates BOTH on
+     * the same `t.handle` ternary, so an untagged row subtracts one from each side and the case
+     * passes while the card visibly strands a row. CEO 186 built that fixture: 4 tagged + 1
+     * untagged rendered `rows=4, arrows=4 → PASS`, printing *"every row on his card carries the ▲
+     * top button"* while the list drew five and one could not be moved at all.
+     * **Two numbers from one source are one number wearing a disguise** — the same shape as the
+     * reaper gate two hours earlier, in a different file, on the same day.
+     * The list itself is the only honest denominator. */
+    const list = card.split(/id="taskList"/)[1]?.split("</ol>")[0] ?? "";
+    const rows = [...list.matchAll(/<li\b/g)].length;
+    const arrows = [...list.matchAll(/class="totop"/g)].length;
+    if (!list) fail("the rendered page has no taskList to count — this case cannot see its subject, so it must not report PASS");
+    else if (!rows) fail("the Tasks card draws no rows at all, so nothing can be said about whether they are moveable");
     else if (arrows !== rows)
-      fail(`${rows} row(s) on his card and ${arrows} ▲ top button(s) — every row must be moveable, his instruction 2026-09-03; a row without the arrow cannot be moved by any means now the drag is gone`);
-    else pass(`every row on his card carries the ▲ top button — ${rows} of ${rows}, so none of them is stranded where it sits`);
+      fail(`the list draws ${rows} row(s) and offers ${arrows} ▲ top button(s) — every row must be moveable, his instruction 2026-09-03. A row without the arrow cannot be moved by any means now the drag is gone, and it is the NEW rows that arrive without one.`);
+    else pass(`every row the list draws carries the ▲ top button — ${arrows} of ${rows}, counted against the list and not against the tagged subset`);
     if (!/state\.order\s*=/.test(page))
       fail("the page never records an order onto its state — he could drag all day and nothing would leave the tab");
     else pass("the sequence he drags is written onto the page's own state");

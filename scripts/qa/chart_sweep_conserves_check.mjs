@@ -183,15 +183,22 @@ function missingHandles(inChart, inLog, corpus) {
    *     record was punished for being honest about itself**, which is word for word the fault (a)
    *     exists to prevent, arriving through a door (a) does not cover.
    *
-   *     It is a declaration, not a keyword sweep: the LINE must say out loud that the id was
-   *     spurious, reverted, or never written. A row cannot become exempt by accident, and a real
-   *     lost row cannot hide here unless somebody writes a false sentence about it — at which point
-   *     the record is lying and no structural check can help. */
+   *     ⛔ AND THE FIRST VERSION OF THIS EXCLUSION WAS A LOOSENING, WHICH CEO 186 PROVED RATHER THAN
+   *     ARGUED. It called a line exempt if the line anywhere contained *"spurious"*, *"reverted"* or
+   *     *"never written"*, and swept every id on it. On the live records that already exempted **6
+   *     handles where 2 were intended** — and the CEO then hid a REAL lost row behind it: delete
+   *     `T-207`'s owner line and the gate names it; add eleven ordinary words — *"(the first attempt
+   *     at this was reverted.)"* — to some other line, and the gate prints *"no row has fallen
+   *     between the two files."*
+   *     **A prose keyword is not a declaration. It is prose, which is the exact thing this whole
+   *     function refuses to treat as evidence** — the fault arrived inside the fix for itself.
+   *
+   *     So it is now an EXPLICIT MARKER, symmetrical with (a)'s `RENUMBERED T-nnn →`: a record must
+   *     write `NEVER OWNED A ROW: T-233, T-234` on purpose. Ordinary English cannot trip it, one
+   *     line cannot exempt ids it does not name, and the exemption is as auditable as the accusation. */
   const declaredNeverReal = new Set();
-  for (const line of corpus.split("\n")) {
-    if (!/\b(spurious|reverted|never (?:existed|written|owned|allocated))\b/i.test(line)) continue;
-    for (const m of line.matchAll(/T-\d{3}/g)) declaredNeverReal.add(m[0]);
-  }
+  for (const m of corpus.matchAll(/NEVER OWNED A ROW:?\s*((?:`?T-\d{3}`?[,\s]+)*`?T-\d{3}`?)/g))
+    for (const h of m[1].matchAll(/T-\d{3}/g)) declaredNeverReal.add(h[0]);
 
   const out = [];
   for (const h of seen) {

@@ -29,6 +29,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/* Deliberately NOT imported from scripts/lib/stray_probes.mjs. Case 2b's whole value is that it
+   reaches the OS by a route the reaper does not share; borrowing the library's helpers would put
+   the suspect back inside the instrument (rule 6). */
+const isWin = () => process.platform === "win32";
 let failed = 0;
 const pass = (m) => console.log(`  PASS  ${m}`);
 const fail = (m) => { console.log(`  FAIL  ${m}`); failed++; };
@@ -98,6 +102,70 @@ console.log("stray_probe_reaper_check — abandoned browsers are KILLED, and the
   const why = judge(src);
   if (why) fail(why);
   else pass("it kills orphans only — a probe with a live launcher is in use and is left alone");
+}
+
+/* 2b — ⛔ AND THE SOURCE CHECK ABOVE IS STILL NOT ENOUGH, WHICH IS THE SEVENTH TIME THIS PROJECT HAS
+ *      MET THIS FAULT. CEO 186 broke the same safety through a door case 2 does not open: the word
+ *      `orphan` it anchors on is a FIELD whose meaning lives in `scripts/lib/stray_probes.mjs:50`,
+ *      and case 2 reads only `kill_stray_probes.mjs`. One line changed there — `orphan: true` —
+ *      and, on this machine, at that moment:
+ *
+ *        the reaper:  "WOULD kill 14 orphan(s)"   ← a sea trial that was AT SEA
+ *        this gate:   PASS ×6, exit 0, including "it kills orphans only"
+ *
+ *      **And it was worse than 182's version, because 182's was silently blind and this one
+ *      CERTIFIED ITS OWN SIGHT** — case 2 prints "both mutants go red (2/2)", a confident claim of
+ *      non-vacuity that was false at the level that mattered.
+ *
+ * ⚑ SO THIS CASE DOES NOT READ SOURCE AT ALL. It asks the OS ITSELF, by its own query, how many
+ *   debug browsers have a dead parent — then asks the reaper what it WOULD kill, and requires the
+ *   two numbers to agree. Independent path, independent answer (rule 6: verify against a different
+ *   route, never against the suspect itself). Edit the reaper, edit the shared library, edit
+ *   whatever comes next — if the killer's appetite stops matching the machine's reality, this goes
+ *   red and names both numbers. That is the whole class, closed once.
+ *
+ *   A FAILED LOOK IS NOT A PASS. If the query cannot run, this case says so and stays silent —
+ *   it never prints a green line it did not earn. */
+{
+  const winQ = "$live=@{}; Get-CimInstance Win32_Process | ForEach-Object { $live[[int]$_.ProcessId]=$true }; " +
+    "$p=@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' OR Name='msedge.exe'\" | " +
+    "Where-Object { $_.CommandLine -match 'remote-debugging-port' }); " +
+    "\"$(@($p | Where-Object { -not $live[[int]$_.ParentProcessId] }).Count) $($p.Count)\"";
+  const posixQ =
+    "live=$(ps -eo pid | tail -n +2 | tr -d ' '); n=0; o=0; " +
+    "while read -r pid ppid rest; do n=$((n+1)); " +
+    "  echo \"$live\" | grep -qx \"$ppid\" || o=$((o+1)); " +
+    "done <<EOF\n$(ps -eo pid,ppid,command | grep -- '--remote-debugging-port' | grep -v grep)\nEOF\n" +
+    "echo \"$o $n\"";
+
+  let mine = null;
+  try {
+    const out = isWin()
+      ? execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", winQ], { encoding: "utf8" })
+      : execFileSync("/bin/sh", ["-c", posixQ], { encoding: "utf8" });
+    const m = out.trim().match(/(\d+)\s+(\d+)\s*$/);
+    if (m) mine = { orphans: Number(m[1]), all: Number(m[2]) };
+  } catch { /* named below */ }
+
+  if (!mine) {
+    console.log("  SKIP  this gate could not ask the OS itself, so it will not vouch for the reaper's appetite. Nothing is claimed here.");
+  } else {
+    let out = "";
+    try { out = execFileSync(process.execPath, [join(ROOT, "scripts", "qa", "kill_stray_probes.mjs"), "--dry-run"], { encoding: "utf8", cwd: ROOT }); }
+    catch { /* case 1 already reports a reaper that will not run */ }
+    /* Three shapes the reaper can print, and only one of them names a number. */
+    let wants = null;
+    if (/WOULD kill (\d+) orphan/.test(out)) wants = Number(/WOULD kill (\d+) orphan/.exec(out)[1]);
+    else if (/every one with a live launcher/.test(out) || /: none —/.test(out)) wants = 0;
+
+    if (wants === null) {
+      if (out) fail(`the reaper's dry run said something this gate cannot count: ${JSON.stringify(out.trim().slice(0, 110))} — an appetite nobody can read is an appetite nobody is checking`);
+    } else if (wants !== mine.orphans) {
+      fail(`⛔ THE REAPER WANTS TO KILL ${wants} BROWSER(S) AND THIS MACHINE HAS ${mine.orphans} ABANDONED ONE(S) (of ${mine.all} up). Asked independently of the reaper's own code. A killer whose appetite exceeds the abandoned set takes live work with it — a sea trial at sea, a posed board mid-photograph.`);
+    } else {
+      pass(`the reaper's appetite matches the machine, asked independently: ${wants} abandoned of ${mine.all} debug browser(s) up, and it would kill exactly those`);
+    }
+  }
 }
 
 /* 3 — ONE DEFINITION OF "ORPHANED" (rule 23). The detector and the reaper must not each decide what
