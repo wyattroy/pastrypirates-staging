@@ -176,16 +176,45 @@ const PLAN = {
   NONE:     { first: "nothing to prove — no game code changed",
               sweep: () => "npm test, so the written record stays consistent" },
   COSMETIC: { first: "NOT required — a colour or a word proves itself with a screenshot",
-              sweep: () => "npm test, plus a screenshot of the one screen you changed" },
+              sweep: () => "npm test, plus a screenshot of the one screen you changed:\n           node scripts/sea_trial.mjs --gear=COSMETIC --reason=\"<why this is only words or colours>\"" },
   PLUMBING: { first: "REQUIRED — write the check that FAILS before you touch the code",
               sweep: m => `npm test, plus the robot playing the mode this serving belongs to, at every screen size:\n           node scripts/sea_trial.mjs --gear=PLUMBING   (${m.join(",")}, plus the others once)\n         ...AND the other modes once, to prove the serving change did not leak into the game.` },
   FULL:     { first: "REQUIRED — write the check that FAILS before you touch the code",
               sweep: () => "npm test, plus the robot playing ALL THREE modes at all three sizes,\n           including a real two-browser crew game:\n           node scripts/sea_trial.mjs" },
 };
+
+/* THE DEPTH IS DERIVED BY THIS FILE — AND A PERSON MAY LOWER IT, ON THE RECORD.
+ *
+ * Wyatt, ruling on `qid:t206-ga-turn-on`: "we need a way to bypass sea trial for this -- it clearly
+ * doesn't need a full one given that you're just adding a tag to index; so we need a way to tell
+ * sea trial that and manually choose the depth of the trial."
+ *
+ * THIS PARAGRAPH IS THE POINT OF THAT ASK, AND IT WAS MISSING FOR A DAY. `sea_trial.mjs` has read
+ * `--gear=` since it was written, and nothing anywhere told anyone so: this picker's own sweep line
+ * printed a bare `node scripts/sea_trial.mjs`, and the hook that stops the first edit named only
+ * FULL and PLUMBING. **He asked for a way to TELL the trial, and a flag nobody is told about is a
+ * way of telling it only for whoever already knew.** Found by CEO 180, against this watch's own
+ * written falsifier — "if --gear cannot be reached from the hook that stops the edit in the first
+ * place, the bypass is theatre."
+ *
+ * IT DOES NOT LOOSEN THE RULE ABOVE, and the distinction is the whole of it: the gear is still
+ * DERIVED FROM THE FILES YOU TOUCHED, never from how the change feels. What is new is that lowering
+ * it leaves a mark — the trial prints the depth you chose, the depth this file said, and your typed
+ * reason, in the report Wyatt opens. A depth chosen by mood is exactly the 2026-08-25/26 failure
+ * this file was written against; a depth chosen ON THE RECORD is a different act, and it is his. */
+const overrideNote = gear === "FULL" || gear === "PLUMBING"
+  ? `\n  You may lower this, and it will be ON THE RECORD — the report names both depths and your reason:\n` +
+    `      node scripts/sea_trial.mjs --explain                    what would this run, and why?\n` +
+    `      node scripts/sea_trial.mjs --gear=COSMETIC --reason="<why less is honestly enough>"\n` +
+    `  The gear above is derived from the FILES YOU TOUCHED. Lowering it by MOOD is the failure this\n` +
+    `  picker exists to stop; lowering it with a reason somebody can read afterwards is not.\n`
+  : "";
 const p = PLAN[gear];
 console.log(`\n  GEAR: ${gear}`);
 console.log(`  why:  ${why}`);
 console.log(`\n  Step 1, show it broken first: ${p.first}`);
 console.log(`  Step 4, the sweep:            ${p.sweep(modes)}`);
-console.log(`\n  (Steps 2 and 3 never change: make the change, then show that same check passes.)\n`);
+console.log(`\n  (Steps 2 and 3 never change: make the change, then show that same check passes.)`);
+if (overrideNote) console.log(overrideNote);
+else console.log("");
 process.stdout.write("");

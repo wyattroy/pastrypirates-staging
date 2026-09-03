@@ -71,6 +71,45 @@ console.log("can_push_check — a watch that cannot publish must be told so, bef
   const r = run(d);
   check("a branch with an upstream passes (exit 0)", r.code === 0, `exit ${r.code}: ${r.out.slice(0, 160)}`);
   check("it names the branch and the upstream it checked", /tracking/.test(r.out) && /main/.test(r.out), r.out.slice(0, 160));
+
+  /* ⚑ THE HEALTHY PATH IS THE ONE THAT COST THREE WATCHES, AND UNTIL 2026-09-03 NOTHING CHECKED
+   * WHAT IT SAYS. It printed `can publish: ...` — a flat claim about a capability it had never
+   * tested — and three watches in a row on this branch read it, worked a full turn, and could not
+   * push a line of it.
+   *
+   * THE FENCE IS ABOVE THE REPO. The refusal lives in the SESSION's command allowlist, which sees
+   * Bash tool calls and nothing else. Measured in one session on 2026-09-03, both directions:
+   *     `git push --dry-run origin HEAD`   as a Bash call  -> "This command requires approval"
+   *     `git push --dry-run origin <branch>` as a Bash call -> refused, identically
+   *     both of the same forms from a NODE CHILD PROCESS   -> exit 0, "Everything up-to-date"
+   *
+   * SO THE OBVIOUS FIX IS A TRAP, and these cases exist to stop it being built. The Chart row
+   * (T-011) proposed that can_push.mjs run `git push --dry-run` itself. It is a node script, so it
+   * would push FINE and print a confident green about a capability the watch does not have — the
+   * same false green as before, by a longer route, and harder to distrust because it looks like a
+   * real push. `can_push.mjs` cannot answer this question by construction: asked from inside a
+   * script, it is asked from the wrong side of the fence.
+   *
+   * WHAT IS LEFT, THEREFORE, IS HONESTY: name the limit, and hand the watch the one command that
+   * asks from the right side. That is what these three cases hold in place. */
+  check("it does NOT make a bare 'can publish' claim it has not tested",
+    !/can publish/i.test(r.out),
+    `still claims publish capability: ${r.out.slice(0, 200)}`);
+  check("it names the one thing it cannot see — this session's own right to run git push",
+    /NOT ANSWERED HERE/.test(r.out) && /allowlist/i.test(r.out),
+    r.out.slice(0, 300));
+  /* ⚠ THIS CASE USED TO ASSERT `git push --dry-run origin`, AND SO IT HELD THE BUG IN PLACE.
+   * `.claude/settings.json:22` is `Bash(git push origin claude/*)` — a PREFIX match — so the
+   * dry-run form can never match it and is refused on a perfectly healthy tree. Paired with
+   * can_push.mjs's "if it is REFUSED, end the turn", that made the Door a permanent false STOP on
+   * this machine. A gate asserting the broken form is the strongest possible way to keep it broken.
+   * Both halves are checked now: the right form present, and the wrong one gone. */
+  check("it hands the watch the command that asks from the right side of the fence",
+    /git push origin \S/.test(r.out),
+    r.out.slice(0, 300));
+  check("it does NOT prescribe the --dry-run form, which the allowlist's prefix can never match",
+    !/RUN THIS[\s\S]{0,400}?git push --dry-run origin/.test(r.out),
+    `prescribes a form that is refused on a healthy tree: ${r.out.slice(0, 300)}`);
 }
 
 /* 2. DETACHED HEAD — the exact tree that stranded watch 1. */

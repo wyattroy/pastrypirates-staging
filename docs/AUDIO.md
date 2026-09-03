@@ -277,6 +277,8 @@ sound. The **true** measured loudness is what `SFX_VOLUME` needs (§1, DEFECT-3)
 ### Reproducing the hunt
 
 ```bash
+# `python3` is the Mac / Linux spelling; on Windows the interpreter registers only as `python`
+# (scripts/lib/chrome.mjs:110 resolves both, and records what the wrong spelling cost).
 cd .planning/research/audio-sourcing
 python3 crawl.py libs > sonniss-libs.txt          # 1,816 Sonniss libraries
 python3 crawl.py files < targets.txt              # file lists for chosen libraries

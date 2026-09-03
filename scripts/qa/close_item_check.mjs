@@ -133,6 +133,98 @@ check("the inbox fate line records CEO, commit and solution-first together",
 r = run("--item=INBOX-20260901T0100Z", "--ceo=7", "--commit=" + gameSha, "--solution-commit=" + gameSha);
 check("re-closing a closed item still refuses (the gate has no always-yes state)", r.status === 1 && /already DONE/.test(r.stdout), `exit ${r.status}`);
 
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+   T-097 — HIS WORDS ARE DATA, NEVER A REPLACEMENT PATTERN. And the status block can be MULTI-LINE.
+
+   The gate used to build its rewrite as a replacement STRING, and JavaScript reads `$&`, `` $` ``,
+   `$'` and `$1` in one as commands. Every replacement here is made out of the INBOX or the Chart —
+   the two files holding Wyatt's words verbatim — so a dollar sequence in HIS text ran against HIS
+   file at the moment the item closed. On 2026-09-02 an entry quoted this gate's own regex (a dollar
+   followed by a backtick, "insert everything before the match") and 34 lines of the file's header
+   were spliced into the middle of it. It exited 0 and printed CLOSED.
+
+   A `$5 bug bounty`, a price, a shell snippet, `$foo` in a bug report — any of them would do it.
+   These two cases fail against a string replacement and pass against a function one.
+   ──────────────────────────────────────────────────────────────────────────────────────────── */
+{
+  const HIS_WORDS = "He offered a $5 bounty, and the log printed $`whoami` at $' o'clock.";
+  fs.writeFileSync(INBOX, [
+    "# inbox",
+    "## INBOX-20260903T0500Z — his words carry dollar sequences",
+    "> " + HIS_WORDS,
+    "solution: none stated",
+    "status: OPEN",
+    "  part 1 still pending",
+    "  part 2 still pending",
+    "",
+    "AFTER-THE-BLANK-LINE PROSE THAT MUST SURVIVE.",
+  ].join("\n") + "\n");
+  fs.writeFileSync(REVIEWS, [
+    "## CEO Review 7 — names things",
+    "Verdict on INBOX-20260903T0500Z: YES.",
+  ].join("\n") + "\n");
+
+  const rr = run("--item=INBOX-20260903T0500Z", "--ceo=7", "--commit=" + gameSha);
+  const after = fs.readFileSync(INBOX, "utf8");
+
+  check("closing an item whose text contains `$5`, ``$` `` and `$'` leaves HIS WORDS byte for byte",
+    after.includes(HIS_WORDS),
+    `exit ${rr.status} — his sentence was rewritten by its own dollar sequences:\n${after.slice(0, 400)}`);
+
+  check("…and the file is not spliced into itself (the header appears exactly once)",
+    /* ⚠ COUNT THE SUBSTRING, NOT THE LINE. This read `/^# inbox$/gm` and was therefore
+     * STRUCTURALLY INCAPABLE of failing for the corruption it is named after — CEO 140 found the
+     * reason by mutating the tool and watching this case stay green while case 1 went red.
+     * A `` $` `` splice inserts the header MID-LINE (`> …the log printed # inbox`), so the `^…$`
+     * anchors cannot see the second copy at all. **The check was anchored against a corruption that
+     * is by its nature unanchored.** Un-anchored, it goes red under the string-replacement mutant.
+     * A case that cannot fail is the exact fault this whole item is about, sitting inside its fix. */
+    (after.split("# inbox").length - 1) === 1,
+    `the header was duplicated into the entry — a replacement string was interpreted:\n${after.slice(0, 400)}`);
+
+  /* The multi-line half. The naive repair for this — adding the `s` flag — makes `.*` run to the end
+     of the entry and DELETE the prose below, which is worse than the bug. The match is bounded to
+     stop at a blank line or a heading, so both of these must hold at once. */
+  check("a MULTI-LINE status block is fully replaced, leaving nothing stranded under DONE",
+    !/part 1 still pending/.test(after) && !/part 2 still pending/.test(after),
+    `stale status lines survived under a DONE line:\n${after.slice(0, 400)}`);
+
+  check("…and the bounded match does NOT eat the prose after the blank line",
+    after.includes("AFTER-THE-BLANK-LINE PROSE THAT MUST SURVIVE."),
+    `the status match ran past the blank line and deleted his prose:\n${after.slice(0, 400)}`);
+}
+
+/* ⛔ THE CHART BRANCH — THE SITE THE ROW NEVER KNEW ABOUT, AND THE ONE NOTHING GUARDED.
+ *
+ * `T-097` named two call sites; there were three. The Chart branch built its replacement out of the
+ * row's own text (`src.replace(chartRow, chartRow.replace(…) + pointer)`), so a dollar sequence in a
+ * CHART row spliced the Chart's header into itself exactly as the INBOX bug did.
+ *
+ * CEO 140 caught that fixing it was not the same as guarding it: it reintroduced the string form at
+ * this site alone — its "mutant D" — and **all four of the new cases stayed green.** The gate
+ * reported PASS on the precise fault the item was filed about. *A fix nothing guards is a fix that
+ * comes back.* This case is that guard. */
+{
+  const HIS_ROW = "- [ ] pay the $5 bounty and log $`whoami` at $' o'clock";
+  fs.writeFileSync(CHART, ["# GLASS CHART", "", HIS_ROW, "      ⟨`T-901`⟩", "- [ ] another row"].join("\n") + "\n");
+  fs.writeFileSync(REVIEWS, ["## CEO Review 7 — names things", "Verdict on T-901: YES."].join("\n") + "\n");
+
+  const rr = run("--item=T-901", "--ceo=7", "--reason=measured, no change needed");
+  const after = fs.readFileSync(CHART, "utf8");
+
+  check("closing a CHART row whose text contains `$5`, ``$` `` and `$'` leaves his row intact",
+    after.includes("pay the $5 bounty and log $`whoami` at $' o'clock"),
+    `exit ${rr.status} — the row was rewritten by its own dollar sequences:\n${after}`);
+
+  check("…and the Chart is not spliced into itself (its header appears exactly once)",
+    (after.split("# GLASS CHART").length - 1) === 1,
+    `the Chart header was duplicated into the row — a replacement string was interpreted:\n${after}`);
+
+  check("…and the row is actually ticked, so the guard is not passing by refusing to work",
+    /^- \[x\] pay the \$5 bounty/m.test(after),
+    `the row never closed, so the two checks above prove nothing:\n${after}`);
+}
+
 try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
 
 console.log("");

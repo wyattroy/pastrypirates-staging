@@ -34,6 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openChrome } from '../lib/cdp.mjs';
+import { intrinsicSize } from '../lib/imagesize.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -300,21 +301,14 @@ for (const vp of VIEWPORTS) {
 }
 
 // ---- the report -------------------------------------------------------------------------------
-function intrinsic(file) {
-  const b = fs.readFileSync(file);
-  if (b.slice(1, 4).toString() === 'PNG') return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
-  if (b[0] === 0xff && b[1] === 0xd8) {
-    let i = 2;
-    while (i < b.length) {
-      if (b[i] !== 0xff) { i++; continue; }
-      const m = b[i + 1];
-      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc)
-        return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) };
-      i += 2 + b.readUInt16BE(i + 2);
-    }
-  }
-  return null;
-}
+// THE SIZE READER MOVED OUT TO `scripts/lib/imagesize.mjs` ON 2026-09-02, AND THAT IS THE POINT.
+// It lived here, private, reading PNG and JPEG. Then ~200 files were renamed to `.webp` by the
+// compression pass, `intrinsic()` returned null for every one, and the `if (!nat) continue;` below
+// dropped them out of this report in silence — 53 files, 2.09 MB, more than half the library, the
+// board included. A private helper cannot be gated; a shared one can, and
+// `display_size_reads_every_picture_check.mjs` now fails the build if this report ever goes blind
+// to a format again.
+const intrinsic = (file) => intrinsicSize(fs.readFileSync(file));
 
 const files = [];
 (function walk(d) {
@@ -352,13 +346,40 @@ for (const r of rows.slice(0, 50)) {
 // "Oversized" = the file carries more than 1.3x the device pixels its largest slot can ever use.
 // The 1.3 is headroom, not a target: it keeps a file that is merely a rounding step above its slot
 // out of the candidate list, because shrinking those buys almost nothing and risks real art.
-const over = rows.filter((r) => r.hit && r.nat.w > r.hit.dev * 1.3);
+const oversized = rows.filter((r) => r.hit && r.nat.w > r.hit.dev * 1.3);
+
+// ⚠ AND HIS SENTENCE SAYS "IN THE REAL GAMEPLAY", SO A PEAK FOUND OFF THE GAME IS NOT A PEAK.
+//
+// `welcome` and `about` are not gameplay: the About page and the welcome screen draw GAME ICONS
+// decoratively in prose, at 18x18. So an icon whose LARGEST sighting is one of those has not been
+// measured at its real slot at all — the probe simply never reached the screen it belongs to.
+//
+// MEASURED 2026-09-02, AND THIS IS WHY THE SPLIT EXISTS RATHER THAN A COMMENT. The three biggest
+// ratios in the whole report were `icons/flip-heads.png` (x7.07), `icons/crown.png` (x5.93) and
+// `icons/cupcake.png` (x5.88) — all three peaking at the SAME 18x18 slot in the About page's prose.
+// `flip-heads.png` is the FLIPPENATOR COIN. Its real slot is the flip ceremony, which this probe
+// does not reach, and its two siblings `flip-tails.png` and `flip-socket.webp` come back NOT SEEN
+// for exactly that reason. Cutting it to 54px on this evidence would have destroyed the coin — and
+// it sat at the top of the candidate list, sorted by how attractive it looked.
+//
+// The set is derived from the surface names this probe records, not from a list of filenames.
+const GAMEPLAY = (where) => !/\/(welcome|about)$/.test(where || '');
+const over = oversized.filter((r) => GAMEPLAY(r.hit.where));
+const offGame = oversized.filter((r) => !GAMEPLAY(r.hit.where));
+
 const wouldSave = over.reduce((s, r) => s + r.kb * (1 - Math.min(1, (r.hit.dev / r.nat.w) ** 2)), 0);
-console.log(`\nCANDIDATES (more than 1.3x the device pixels their largest slot can use): ` +
+console.log(`\nCANDIDATES (more than 1.3x the device pixels their largest GAMEPLAY slot can use): ` +
   `${over.length} file(s), ${(over.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB today, ` +
   `~${(wouldSave / 1024).toFixed(2)} MB recoverable if each were cut to its own slot.`);
 for (const r of over.slice(0, 20))
-  console.log(`  x${(r.nat.w / r.hit.dev).toFixed(2)}  ${r.nat.w}px -> ${r.hit.dev}px  ${Math.round(r.kb)}KB  ${r.rel}`);
+  console.log(`  x${(r.nat.w / r.hit.dev).toFixed(2)}  ${r.nat.w}px -> ${r.hit.dev}px  ${Math.round(r.kb)}KB  ${r.rel}  [${r.hit.where}]`);
+
+console.log(`\nNOT CANDIDATES — biggest sighting was OFF the game (the welcome screen or the About ` +
+  `page, where game icons are drawn in prose at 18px): ${offGame.length} file(s), ` +
+  `${(offGame.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB. Their real slots were never ` +
+  `reached. DO NOT SHRINK THESE — one of them is the flippenator coin.`);
+for (const r of offGame.slice(0, 20))
+  console.log(`  x${(r.nat.w / r.hit.dev).toFixed(2)}  ${r.nat.w}px  ${Math.round(r.kb)}KB  ${r.rel}  [only seen at ${r.hit.where}]`);
 const unseen = rows.filter((r) => !r.hit);
 console.log(`\nNOT SEEN on the surfaces this probe reaches: ${unseen.length} file(s), ` +
   `${(unseen.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB. This probe reaches five surfaces, ` +
@@ -386,9 +407,27 @@ const lines = [
   // CEO 83 finding 3: the two lines that turn this table into an ANSWER were printed to the
   // terminal and never written down, so every reader had to re-run the probe to recompute them.
   // A summary nobody can open is a summary nobody checks.
-  `**CANDIDATES** (more than 1.3x the device pixels their largest slot can use): **${over.length} file(s), ` +
-  `${(over.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB today, ~${(wouldSave / 1024).toFixed(2)} MB ` +
-  'recoverable** if each were cut to its own slot. The 1.3 is headroom, not a target.',
+  `**CANDIDATES** (more than 1.3x the device pixels their largest GAMEPLAY slot can use): ` +
+  `**${over.length} file(s), ${(over.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB today, ` +
+  `~${(wouldSave / 1024).toFixed(2)} MB recoverable** if each were cut to its own slot. ` +
+  'The 1.3 is headroom, not a target.',
+  '',
+  ...over.slice(0, 30).map((r) =>
+    `- \`x${(r.nat.w / r.hit.dev).toFixed(2)}\` — \`${r.rel}\`, ${r.nat.w}px carried, ${r.hit.dev}px wanted, ` +
+    `${Math.round(r.kb)} KB, biggest at ${r.hit.where}`),
+  '',
+  `⚠ **NOT CANDIDATES, AND THE MOST DANGEROUS ROWS IN THIS FILE: ${offGame.length} file(s), ` +
+  `${(offGame.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB whose biggest sighting was OFF ` +
+  'THE GAME** — the welcome screen or the About page, which draw game icons decoratively in prose ' +
+  'at 18x18. Their real gameplay slots were never reached, so their ratios are meaningless and they ' +
+  'are excluded above. **`assets/icons/flip-heads.png` is one of them and it is the flippenator ' +
+  'coin** — it reads x7.07 here purely because the About page shows it as an 18px inline icon, and ' +
+  'its siblings `flip-tails.png` and `flip-socket.webp` come back NOT SEEN for the same reason. ' +
+  'Cutting it to 54px would have destroyed the coin.',
+  '',
+  ...offGame.slice(0, 30).map((r) =>
+    `- ~~\`x${(r.nat.w / r.hit.dev).toFixed(2)}\`~~ — \`${r.rel}\`, ${r.nat.w}px, ${Math.round(r.kb)} KB, ` +
+    `only ever seen at ${r.hit.where}`),
   '',
   `**NOT SEEN: ${unseen.length} file(s), ${(unseen.reduce((s, r) => s + r.kb, 0) / 1024).toFixed(2)} MB.** ` +
   'Not measured here, so not safe to shrink.',

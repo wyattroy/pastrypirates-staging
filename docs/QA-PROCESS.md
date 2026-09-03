@@ -383,8 +383,19 @@ fabricated quote, and a cause asserted for three screens that was measurably wro
 ## 8. LEAVE THE MACHINE AS YOU FOUND IT
 
 ```bash
-pkill -f remote-debugging-port; pkill -f http.server
+node scripts/qa/stray_probe_check.mjs     # in npm test — works on every machine, and says what it saw
 ```
+
+**Do not use `pkill`/`pgrep` to CHECK.** Neither is installed in Git Bash on the Blade, which is the
+machine that runs the relay — so `pgrep … || echo "no stray probes"` prints the all-clear on a full
+machine as readily as an empty one. **That is how 183 debug-port browsers holding 15 GB went
+unnoticed for a day on 2026-09-02**, with the session's own tidy-up reporting clean. The gate above
+asks the OS in the OS's own language and **fails rather than guessing when it cannot look.**
+
+**Abandoned means ORPHANED:** a debug-port browser whose launcher is still alive is a probe in use;
+one whose parent has exited is abandoned. So a posed board you are mid-way through photographing
+does not fail the build. The gate prints the correct kill command for the machine you are on —
+on Mac and Linux that is still `pkill -f remote-debugging-port; pkill -f http.server`.
 
 Bound every probe. Kill it when you have the answer, not when the task ends. Never leave one running
 across a reply — he is at the keyboard, on the machine it is heating.

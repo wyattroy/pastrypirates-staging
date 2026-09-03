@@ -40,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.01.8-staging@1ce21a00";
+const PP4_STAMP = "2026.09.03.4-staging@a72f2f12";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1908,7 +1908,18 @@ function flipArmed(el, onClick){
     const btl = document.querySelector("#actionPanel .btl");
     if (!fm && btl){
       const dwTag = btl.querySelector(".windTag.dw");
-      const who = dwTag && dwTag.parentElement ? dwTag.parentElement.querySelector(".who") : null;
+      /* READ THE MARKED COLUMN, NOT THE BADGE'S NEIGHBOURHOOD. This was
+         `dwTag.parentElement.querySelector(".who")`, and `dwTag.parentElement` is `.btl-wind` —
+         a div that holds the badge and nothing else (src/orchestrator.js). `.who` lives two
+         branches away inside `.btl-col`, so this returned null on EVERY downwind battle and the
+         `else` below told the player "Crosswind" over a downwind fight. Measured and photographed:
+         judge-1914Z-shots/solo-tablet-wk-018.png says CROSSWIND, and -018-settled.png, the same
+         leg seconds later, says DAVY SCONES FIRES DOWNWIND.
+         renderBattle now stamps that column `.btl-col.dw` from the same `dw` that writes the
+         badge, so the card and the ceremony read ONE value and cannot disagree — which is what
+         the comment above always claimed and did not have.
+         Gate: scripts/qa/flip_ceremony_names_the_wind_check.mjs (RED before this line changed). */
+      const who = dwTag ? btl.querySelector(".btl-col.dw .who") : null;
       t.textContent = "⚔️ Broadside!";
       st.textContent = "";
       if (who){
@@ -2429,6 +2440,171 @@ function menuButtons(ap){
   if (!btns.every(b => b._shortHtml != null || b.textContent.trim().length <= 16)) return null;
   return btns;
 }
+
+/* SIZE THE LABEL TO THE DISC — one rule, at the one place a petal's label is set (T-017).
+ *
+ * WYATT'S EVIDENCE, three sightings on three configurations: a trade-offer circle cannot hold the
+ * captain's name it names. `solo-tablet-014-settled.png` — *Crustbeard* crossing both rims of its
+ * own disc while "Walk away" in the identical circle beside it fits with room to spare;
+ * `crew-desktop-guest-012-settled.png` — *Flaky Jack* hanging out of both sides;
+ * `solo-desktop-wk-021-settled.png` — WebKit, build 2026.09.01.8, reading `rustbea`. Chromium
+ * tablet, Chromium crew-desktop, WebKit desktop: neither engine-, size- nor mode-specific.
+ * His standing instruction on the call circles: "Fix this universally, not through patches."
+ *
+ * WHY IT IS HERE AND NOT IN THE TRADE CODE. The name is not special — it is simply the longest
+ * thing anyone has put in a petal yet, and a player may type a longer one still. Every radial
+ * label goes through the swap below, so fitting here covers the trade circles, the sail choices,
+ * the dock, the battle calls and anything added later, without any of them knowing this happened.
+ * Fixing `flow.js`'s two trade lines would have fixed two labels and left the rule unwritten.
+ *
+ * WHY IT SHRINKS RATHER THAN CLIPS OR TRUNCATES. `overflow:hidden` would hide the very word the
+ * circle exists to say — it would turn a visible fault into a silent one, which is how "rustbea"
+ * happened in the first place. This repo already rejected truncation for exactly this reason one
+ * scale up: `refreshNameMarquees` (src/ui/util.js:183) scrolls an over-long captain name "instead
+ * of blowing out the layout or truncating unreadably". Same value, smaller box.
+ *
+ * NOTHING IS A CONSTANT (rule 9). The starting size is whatever the stylesheet computed — the
+ * inline size is cleared first, so this reads the CSS rather than a number copied out of it, and a
+ * restyle of `#pp4Prompt.radial .apBtn` carries through with nothing here to update. The floor is
+ * a FRACTION of that same size, not a typed px value, and the boundary is the disc's own painted
+ * box rather than arithmetic about 66px and its border.
+ *
+ * MEASURED, not reasoned: at the shipped 9.5px, "Davy Scones" and "Dough Hook" wrap to two lines
+ * and put ink 5.3-5.6px ABOVE the rim at all three sizes, while "Walk away" — one line, in the
+ * same disc — stays inside at every one. `scripts/qa/trade_circle_name_fits_check.mjs` is that
+ * measurement and it FAILED before this function existed. */
+/* IS EVERY PAINTED LINE OF THIS LABEL INSIDE THE PETAL'S RIM?
+ *
+ * THE BOUNDARY IS THE CIRCLE, NOT THE SQUARE AROUND IT — and getting that wrong once shipped a
+ * green check over a still-broken screen. The petal is `border-radius:50%` (index.html:1892), so its
+ * widest point is its middle and it narrows to nothing at the top. A first cut compared each line
+ * against the button's bounding RECT and every name passed, while the posed picture still showed
+ * them crossing the painted rim: CEO 136, reading that pair — "the check passes while the screen he
+ * photographed is still wrong… this is not a corner case, it is THE case, because that is exactly
+ * where these labels sit."
+ * So each line's four corners must lie inside the inscribed circle. getClientRects() gives one rect
+ * per LINE, so a name that wraps is judged on the lines it really draws — which matters because
+ * "Dough Hook" can wrap and "Crustbeard" is one unbreakable word that cannot.
+ *
+ * IT IS A SEPARATE FUNCTION BECAUSE TWO PASSES NOW ASK IT — the fan grows the disc until this is
+ * true, and a petal that ran out of room then shrinks its type until this is true. Two copies of
+ * this predicate would be two things kept in step by discipline, which is rule 23's own test: what
+ * makes these two agree? There is one of them. */
+function labelInsideDisc(b){
+  const br = b.getBoundingClientRect();
+  const cx = br.left + br.width / 2, cy = br.top + br.height / 2;
+  // the PAINTED rim sits inside the border, so the usable radius is the border-box radius less it
+  const bw = parseFloat(getComputedStyle(b).borderTopWidth) || 0;
+  const r = Math.min(br.width, br.height) / 2 - bw;
+  if (!(r > 0)) return true;                       // not laid out — nothing to judge
+  const r2 = (r + 0.5) * (r + 0.5);                // half a pixel of rounding tolerance
+  for (const n of b.childNodes){
+    if (!n.textContent || !n.textContent.trim()) continue;
+    const rng = document.createRange(); rng.selectNodeContents(n);
+    for (const q of rng.getClientRects()){
+      if (q.width <= 0 && q.height <= 0) continue;
+      for (const [x, y] of [[q.left, q.top], [q.right, q.top], [q.left, q.bottom], [q.right, q.bottom]]){
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy > r2) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function fitLabelToDisc(b){
+  /* Re-fitting every frame would cost a forced layout per petal per frame for a box that has not
+     changed. The key is the content AND the disc's width, so a genuine restyle or a size change
+     re-fits and nothing else does — including the disc the fan just grew. */
+  const key = String(b._shortHtml) + "|" + b.clientWidth + "x" + b.clientHeight;
+  if (b._fitKey === key) return;
+  b.style.fontSize = "";                      // always start from what the stylesheet says
+  const base = parseFloat(getComputedStyle(b).fontSize);
+  if (!(base > 0) || !b.clientWidth){ b._fitKey = null; return; }   // not laid out yet — try again
+  // bounded by construction: half-pixel steps from `base` down to 60% of it, ~8 iterations at 9.5px
+  for (let px = base; !labelInsideDisc(b) && px > base * 0.6; ){
+    px -= 0.5; b.style.fontSize = px + "px";
+  }
+  b._fitKey = key;
+}
+
+/* HOW BIG MAY THE FAN'S DISC GET BEFORE THE FAN STOPS FITTING THE SCREEN?
+ *
+ * NOTHING IS A CONSTANT (rule 9): every term here is either measured off the page this frame or is
+ * the SAME fraction the placement search itself uses thirty lines below, so a restyle moves both
+ * together instead of drifting apart.
+ *   - `sep` is the placement's own separation expressed in D's: `--pp4GrowPeak` (the swell the
+ *     attention vocabulary applies to a petal) plus the quarter-of-a-circle gap Wyatt chose.
+ *   - `room` is the band the circles are actually placed in, read from `boardBand()` and
+ *     `capBandBottom()` — the same two bounds `xMin/xMax/yMin/yMax` are built from.
+ *   - `ring` is how wide a ring has to be to seat n petals at that separation: n·sep/π, in D's.
+ * The fan needs the ring plus one petal's width to fit inside the shorter side of that band, so
+ * D·(ring + 1) ≤ room. That is the whole ceiling.
+ *
+ * IT TIGHTENS AS THE FAN GETS BUSIER, WHICH IS THE POINT. A four-way trade may grow a long way; an
+ * eight-circle sail prompt on a phone may barely grow at all — and in that case the label falls
+ * back to shrinking, which is his OTHER ruling on this same screen, not a failure of this one.
+ * It never returns less than the stylesheet's own disc: this function may enlarge a petal, never
+ * shrink one below what `#pp4Prompt.radial .apBtn` declares. */
+function fanDiscCeiling(base, n){
+  if (!S.growPeak) S.growPeak = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pp4GrowPeak")) || 1.15;
+  const sep = S.growPeak + 0.25;
+  const room = Math.min(vwPx() - 16, capBandBottom() - (boardBand().top + 32) - 8);
+  if (!(room > 0)) return base;                    // nothing laid out yet — do not grow on a guess
+  const ring = (n * sep) / Math.PI;
+  return Math.max(base, room / (ring + 1));
+}
+
+/* GROW THE CIRCLE BEFORE SHRINKING THE NAME.
+ *
+ * WYATT'S RULING, 2026-09-03, on the build that shrank instead: "Do bigger circles, not smaller
+ * text." He had been shown a trade circle whose captain's name only fitted by dropping from the
+ * stylesheet's 9.5px to a 5.5px floor, and he rejected the trade. Measured on that build by
+ * `scripts/qa/trade_circle_type_size_check.mjs`: all four shipped captain names drawn at 5.5–6px at
+ * phone, tablet and desktop, while "Walk away" in the identical disc kept its full 9.5px.
+ *
+ * AND HIS OTHER RULING IS THE FALLBACK, NOT A CONTRADICTION: "Only shrink the long words/phrases/
+ * names." When the ceiling above binds — a busy fan on a small screen — the disc stops growing and
+ * `fitLabelToDisc` shrinks whatever is still too long, which by construction is only the long ones.
+ *
+ * ONE DIAMETER FOR THE WHOLE FAN, not one per petal. Consistency is a core value (rule 8) and a ring
+ * of circles at four different sizes reads as a mistake; the placement search below also takes its
+ * D, GAP, SEP and band bounds from `menu[0].offsetWidth`, so petals of differing widths would be
+ * spaced against whichever one happened to be first.
+ *
+ * COST: this forces layout, so it is keyed on the labels AND the viewport and runs only when one of
+ * those actually changes — not per frame. The key is cleared on the way out of radial mode, because
+ * the widths are cleared there too and a stale key would leave a returning fan at the base size. */
+function fitFanToLabels(menu){
+  if (!menu.length) return;
+  const key = menu.map(b => String(b._shortHtml)).join("") + "|" +
+              Math.round(vwPx()) + "x" + Math.round(vhPx());
+  /* ⛔ THE KEY LIVES ON THE BUTTONS, NOT IN MODULE STATE, AND THAT IS THE WHOLE POINT OF IT.
+     The first cut kept ONE `S.fanKey` for the module and returned early when it matched. CEO 184
+     found the hole and it is real: `panel()` builds FRESH `.apBtns` for every ask (src/ui/flow.js),
+     and `menuButtons()` admits a fan whose buttons carry no `_shortHtml` at all provided every
+     label is 16 characters or less — for such a fan the short-swap never runs, so nothing cleared
+     the key. Two radial prompts in a row with the same labels at the same viewport would then share
+     one key and THE SECOND FAN'S BRAND-NEW BUTTONS WOULD BE SKIPPED ENTIRELY: base disc, base type,
+     and a label like "Call Crustbeard" back outside its rim — the original T-017 bug, restored by
+     its own fix. The module key described work done to elements that no longer existed.
+     Keying each BUTTON means an element that has never been fitted cannot inherit another
+     element's verdict. It is the shape `_fitKey` already uses one function up, and it makes a stale
+     key impossible to hold, because the thing holding it is the thing that was sized. */
+  if (menu.every(b => b._fanKey === key)) return;
+  // always start from what the stylesheet says — this reads the CSS, never its own last answer
+  for (const b of menu){ b.style.width = ""; b.style.height = ""; b.style.fontSize = ""; b._fitKey = null; b._fanKey = null; }
+  const base = parseFloat(getComputedStyle(menu[0]).width);
+  if (!(base > 0) || !menu[0].clientWidth) return;   // not laid out yet — no key written, so retry
+  const ceil = fanDiscCeiling(base, menu.length);
+  // bounded by construction: 2px steps from the declared disc up to the ceiling, and a hard guard
+  for (let d = base, guard = 0; d < ceil && guard < 64 && !menu.every(labelInsideDisc); guard++){
+    d = Math.min(ceil, d + 2);
+    for (const b of menu){ b.style.width = d + "px"; b.style.height = d + "px"; }
+  }
+  // whatever room was left, the long ones still shrink — his other ruling, as the fallback
+  for (const b of menu){ fitLabelToDisc(b); b._fanKey = key; }
+}
 // enterCenterStage() — flip the prompt box to centre-stage mode NOW, synchronously. promptTick
 // calls it on its own beat; the bake-off (via __pp4.stageCenterNow) calls it BEFORE building its
 // panel, because panel() measures its height at build time and a measurement taken under the
@@ -2770,8 +2946,13 @@ function promptTick(force){
     // playtest 10: circles carry the SHORT form of a long action (Wyatt's pick: "short verbs,
     // details in the pill") — the full label is kept for the card fallback and restored there
     menu.forEach(b => {
-      if (b._shortHtml != null && !b._radSwapped){ b._fullHtml = b.innerHTML; b.innerHTML = emojify(String(b._shortHtml)); b._radSwapped = true; }
+      if (b._shortHtml != null && !b._radSwapped){ b._fullHtml = b.innerHTML; b.innerHTML = emojify(String(b._shortHtml)); b._radSwapped = true; b._fitKey = null; b._fanKey = null; }
     });
+    /* T-017: whatever labels this fan ended up with, make the CIRCLES fit them — Wyatt's ruling,
+       "Do bigger circles, not smaller text." It runs over the whole menu at once because one fan
+       gets one diameter; see fitFanToLabels. Shrinking is still in there, as the fallback for when
+       the screen has no more room to give. */
+    fitFanToLabels(menu);
     const [sx, sy] = toScreen(uu[0], uu[1]);
     /* A CHOICE ABOUT SOMEONE ELSE'S SHIP SITS ON THAT SHIP — Wyatt's pick, playtest 22. The battle
        call is the case that needs it: "Call Dough Hook" belongs over Dough Hook's boat, not fanned
@@ -2820,8 +3001,9 @@ function promptTick(force){
        #boardwrap started clipping (see index.html): what used to paint over the ribbon would now
        be cut off entirely, and a boat you cannot see is worse than a boat in the wrong place.
 
-       Fires ONCE per prompt — S.frameKey is the turn serial plus the ask itself, so a re-place
-       during the glide cannot re-aim the camera at every frame and chase itself. Only when the boat
+       Fires ONCE per prompt — S.frameKey is the turn serial, the ask itself, and the captains it
+       names (T-211), so a re-place during the glide cannot re-aim the camera at every frame and
+       chase itself: nothing in that key moves while a boat glides. Only when the boat
        is genuinely outside the band the circles have to live in; a boat merely near the edge is
        left alone, because the director moving on its own is startling when it was not needed. */
     /* FRAME WHAT THE QUESTION IS ABOUT, NOT WHOEVER IS ANSWERING IT — playtest 22 item 6 (Wyatt):
@@ -2836,8 +3018,24 @@ function promptTick(force){
        displaying the action buttons"). The buttons were placed correctly around the wrong shot.
        `camFitSeats` already exists and is what __pp4.battle uses — the fight simply was not asking
        for it here. */
+    /* THE KEY CARRIES *WHERE* THE CAPTAINS ARE, NOT JUST WHO THEY ARE — T-211, 2026-09-03.
+       It used to be `turnSerial + the ask's TEXT` alone, and `turnSerial` moves only when the wheel
+       passes to another captain (see `actor:` at the foot of this file). So TWO PROMPTS INSIDE ONE
+       CAPTAIN'S TURN THAT SHARE A SENTENCE SHARED A KEY, and the director was told the shot was
+       already right while what it had to frame had moved. `flow.js:2538` asks **"Attack whom?"** —
+       a fixed sentence, asked again after a Back and a move, with the boats somewhere else.
+       Rule 23's question one scale down: what made the shot and its subject agree? Nothing.
+       ⚠ SEATS ALONE ARE NOT ENOUGH, AND THAT WAS THIS WATCH'S FIRST, WRONG FIX — it added
+       `anchorSeats` to the key, which is CONSTANT whenever the same captains are asked about twice,
+       and the gate below went 18/30 to 21/30. The quantity that actually moves is the SQUARE.
+       IT IS THE LOGICAL SQUARE (`players[i].pos`), NOT the rendered transform, on purpose: `pos`
+       changes once per move and is still during a glide, so the "cannot re-aim at every frame and
+       chase itself" property the note above depends on is preserved exactly. */
     if (!S.lock && sx != null){
-      const key = S.turnSerial + "|" + (ap.querySelector(".apMsg") || {}).textContent;
+      const gp = appState.game && appState.game.players;
+      const where = gp ? anchorSeats.map(s => (gp[s] && gp[s].pos ? gp[s].pos.join(".") : "?")).join(",") : "";
+      const key = S.turnSerial + "|" + (ap.querySelector(".apMsg") || {}).textContent
+                + "|" + anchorSeats.join(",") + "|" + where;
       if (S.frameKey !== key){
         S.frameKey = key;
         const inBand = (px, py) => px >= 8 && px <= vwPx() - 8 && py >= tSafe && py <= capT - 8;
@@ -2913,6 +3111,18 @@ function promptTick(force){
     if (!S.growPeak) S.growPeak = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pp4GrowPeak")) || 1.15;
     const SEP = Math.round(D * S.growPeak) + GAP;
     const R = D + 4;
+    /* ⛔ THE BAND AND THE BOATS ARE READ ONCE, HERE, BECAUSE THE PILL AND THE CIRCLES BOTH NEED THEM.
+       These four bounds used to be declared beside the circles, 130 lines below, and the boat's own
+       rendered radius 30 lines below that — so the ask pill, which is placed FIRST, had no way to ask
+       where the circles were going to end up. It guessed with a constant, and `T-013` is what the
+       guess cost. Pure hoist: the expressions are unchanged and every consumer below reads these.
+       It sits after D, growPeak and R because it is built from them. */
+    const xMin = 8, xMax = vwPx() - D - 8, yMin = tSafe, yMax = capT - D - 8;
+    const shipsNow = boardShipEls() || [];
+    // the boat's own rendered size. A translate cannot change a box's WIDTH, so this is the one
+    // number that is safe to read off a ship mid-glide; its position comes from the anchors.
+    const boatRad = i => { const el = shipsNow[i]; if (!el) return D / 2;
+      const r = fixedRect(el); return Math.max(r.width, r.height) / 2 || D / 2; };
     const placed = [];
     // playtest 10 item 3: the sail prompt is radial too — its legal squares are the answer space,
     // so every sail highlight is an obstacle nothing of ours may cover
@@ -3031,14 +3241,61 @@ function promptTick(force){
          player-facing finding — passplay-phone, "Call Flaky Jack" over "Davy Scones - a battle's
          brewi[ng]". The below-the-boats spot is uncrowded precisely when the above one is not:
          a fight jammed against the ribbon has the whole sea underneath it. */
-      const pillSpotFor = (top, bot) =>
-        (top - R - 96 >= tSafe - 34) ? top - R - 96 : clampTop(Math.min(bot + R + 34, capT - 44));
+      /* `below` IS WHERE THE PILL MAY SIT WHEN IT GOES UNDER THE SHIPS, AND THE ANCHORED BRANCH IS
+         THE ONLY CALLER THAT PASSES ONE. Omitted, this is byte-for-byte the rule it has always
+         been — see the anchored call below for what `bot + R + 34` could not know. */
+      const pillSpotFor = (top, bot, below) =>
+        (top - R - 96 >= tSafe - 34) ? top - R - 96
+                                     : clampTop(Math.min(below != null ? below : bot + R + 34, capT - 44));
       // an ask about other people's ships is centred over THEM, and does not take or reuse the
       // turn's pill lock: that lock exists so a pill does not wander during YOUR turn, and this
       // prompt belongs to a fight in the middle of someone else's
       if (onBoats){
         cxA = anchors.reduce((a, p) => a + p[0], 0) / anchors.length;
-        mTop = pillSpotFor(Math.min(...anchors.map(p => p[1])), Math.max(...anchors.map(p => p[1])));
+        /* ⛔ T-013 — THE PILL GOES BELOW THE CIRCLES, NOT BELOW THE BOATS, AND THOSE ARE DIFFERENT
+           LINES. `bot + R + 34` is a CONSTANT STANDING IN FOR A BOAT PLUS A PETAL (rule 9), and it
+           was sized on a phone. It is wrong in two ways that only ever showed up as "the call button
+           is next to the wrong captain":
+
+             - A BIGGER BOARD HAS BIGGER BOATS. The circle sits `rad + HALF + AIR` out from the hull
+               it names, so its bottom edge is `rad + HALF + AIR + D/2` below the boat's centre —
+               96px past a 35px phone boat, 114px past a 74px tablet one. The pill's 104 clears the
+               first by 8px and lands ON the second.
+             - A BOAT ABOVE THE BAND DRAGS ITS CIRCLE DOWN TO THE CEILING. When the fight is at the
+               top of the board the circle clamps to `yMin` — and the pill's below-spot, measured
+               from a boat that is higher still, clamps to the very same ceiling. Both land on
+               `tSafe` and the pill is drawn on top of the answer.
+
+           Either way the pill push (see the `onPill` note below) then throws the circle clear of a
+           whole pill, which is 100px+ in one jump — and it lands beside whichever captain happens to
+           be there. THAT is Wyatt's report, twice: W5-2, "directly beside the boats", and
+           INBOX-20260901T1332Z, "not on top of, or next to, someone else".
+
+           MEASURED, posed, 2026-09-03 (`scripts/qa/t013_call_circle_beside_check.mjs`): 8 of 23
+           judged circles were not beside their own captain, and in EVERY failing pose the circle's
+           top was the pill's bottom plus the swell's overhang, to the pixel.
+
+           So the drop is DERIVED from where each circle will actually be — its own boat's rendered
+           radius, the petal at the top of its pulse, the file's AIR, and the SAME band clamp the
+           circles are about to get — rather than from a number that assumed a phone. The `max` over
+           the anchors is because the pill must clear the LOWEST circle, not the lowest boat.
+
+           ⚠ AND THE CLEARANCE IS THE EVICTION TEST'S OWN, NOT THE BOX'S — this cost a whole extra
+           measured pass. The first version cleared the circle's BOTTOM EDGE plus the file's 6px of
+           air (`t + D + 6`). But `onPill` below does not ask about the box: it treats the petal as a
+           DISC of radius `SWELL/2 + 2` around its centre, because that is what a swollen circle
+           actually paints. On a 390x664 phone that is 40px against the box's 33 — so the pill landed
+           ONE PIXEL inside the disc, `onPill` fired, and the circle was evicted 165px anyway with
+           every number in this block otherwise correct. Two things asking "is the circle on the
+           pill?" and answering differently is rule 23 at one-pixel scale, and one pixel is all it
+           takes. The clearance is now built from the same `SWELL/2 + 2` the push uses, plus the
+           file's air on top so a fix does not sit exactly on the threshold it satisfies. */
+        const SWELL0 = Math.round(D * S.growPeak), HALF0 = SWELL0 / 2, AIR0 = 6;
+        const belowCircles = Math.max(...anchors.map(([, ay], k) => {
+          const t = Math.min(Math.max(ay + (boatRad(anchorSeats[k]) + HALF0 + AIR0) - D / 2, yMin), yMax);
+          return t + D / 2 + HALF0 + 2 + AIR0;
+        }));
+        mTop = pillSpotFor(Math.min(...anchors.map(p => p[1])), Math.max(...anchors.map(p => p[1])), belowCircles);
       }
       /* THE LOCK IS PER TURN *AND* PER SHIP POSITION — playtest 22 item 8 (Wyatt): "'Wyargh whatll
          ye do' is far below my boat instead of above it, which is where it should be, and this
@@ -3147,7 +3404,8 @@ function promptTick(force){
     // pill and every sail square), then lay ALL the buttons along snug arc rows centred on it —
     // circles nearly touching, wrapping to a second row past four. A cornered boat fans toward
     // whatever water is open; the group stays together instead of scattering.
-    const xMin = 8, xMax = vwPx() - D - 8, yMin = tSafe, yMax = capT - D - 8;
+    // the band (xMin/xMax/yMin/yMax) is declared once, up beside `SEP` — the ask pill needs it to
+    // know where these circles will land, and it is placed long before they are (T-013).
     // ---- each circle on the boat it names (see `onBoats` above) ----
     if (onBoats){
       /* SEPARATE, THEN CLAMP, THEN SEPARATE AGAIN — and the ORDER is the whole bug. This used to
@@ -3177,11 +3435,9 @@ function promptTick(force){
          The SIDE is chosen rather than assumed — the four cardinals scored on staying inside the
          band, clearing every hull, and pointing AWAY from the other captains in the fight, so two
          circles open outward instead of colliding over the water between the boats. */
-      const ships = boardShipEls() || [];
-      // the boat's own rendered size. A translate cannot change a box's WIDTH, so this is the one
-      // number that is safe to read off a ship mid-glide; its position comes from the anchors.
-      const boatRad = i => { const el = ships[i]; if (!el) return D / 2;
-        const r = fixedRect(el); return Math.max(r.width, r.height) / 2 || D / 2; };
+      // `shipsNow` and `boatRad` are declared once, up beside `SEP`, because the ask pill needs the
+      // boat's size to know where these circles will end up (T-013). Same expressions.
+      const ships = shipsNow;
       // every hull, projected through the SAME camera the anchors used — a rect read straight off
       // a gliding ship would disagree with a target-transform anchor by however far it has left to go
       const hulls = ships.map((_, i) => { const u = boatUXY(i); if (!u) return null;
@@ -3585,6 +3841,11 @@ function promptTick(force){
   S.radKey = null;
   [...ap.querySelectorAll(".apBtn")].forEach(b => {
     b.style.position = ""; b.style.left = ""; b.style.top = "";
+    // T-017: the fit is a RADIAL affordance — a card has room, so hand BOTH sizes back to the
+    // stylesheet on the way out, or a petal that once held a long name keeps a grown disc and a
+    // shrunken label as a card. Each button's own fan key goes with them, because the key means
+    // "THIS element already carries that fit" and the fit is exactly what this line just undid.
+    b.style.fontSize = ""; b.style.width = ""; b.style.height = ""; b._fitKey = null; b._fanKey = null;
     if (b._radSwapped){ b.innerHTML = b._fullHtml; b._radSwapped = false; }   // card shows the full label
   });
   /* W3-1 (Wyatt, 2026-08-27): "the battle box choreography is glitchy... it appears for an

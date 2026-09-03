@@ -127,6 +127,24 @@ edge as ingredients arrive.
 **Citations:** `.planning/CTO-LEDGER.md:119`, `:135`, `:140` — settled by opening it and looking,
 after two instruments lied.  **Standing rule, a known false-positive family.**
 
+### `WIND NOW: ? · FORECAST: ?` on day one is HIS OWN PLACEHOLDER, asked for by name
+
+**What it looks like:** the wind pill showing two question marks on the first screen of a voyage —
+read by a session on 2026-09-03 as "unverified either way, and nobody asked."
+
+**What is actually true:** he asked for it, in those exact characters. `src/ui/stage.js:1227-1234`:
+
+> *"THE PILL IS ALWAYS ON SCREEN (**Wyatt's afternoon list, item 5:** 'Wind pill from frame one —
+> `WIND NOW: ? · FORECAST: ?` placeholder so the board never jumps when the pill appears')."*
+
+Before the first wind is rolled there is nothing to report. It used to return empty, and the whole
+board jumped once every voyage.
+
+**Why this is here:** the entry below already records the judge hallucinating wind direction, and
+this is the second wind misreading from the same instrument. **One grep of a string already typed
+into the row would have settled it** — the session typed `WIND NOW: ? · FORECAST: ?` into a Chart row
+and did not search for it. Found by CEO 158.  **Standing rule.**
+
 ### The wind FORECAST is the pill, not the hidden chip
 
 **What it looks like:** a `.fcChip` element exists in the CSS and is never visible — "a forecast

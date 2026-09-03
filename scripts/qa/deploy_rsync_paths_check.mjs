@@ -46,6 +46,32 @@ console.log("deploy_rsync_paths_check — can the local rsync take the deploy's 
 // Not every machine deploys through a Windows shell. On a Mac or in the cloud container there is
 // no path rewriting and no Cygwin rsync, so there is nothing here to check -- SKIP LOUDLY rather
 // than pass silently, because a gate that quietly returns 0 everywhere is not a gate.
+/* ⛔ THIS GATE IS WRITTEN IN BASH AND CANNOT RUN WITHOUT IT — SAY SO INSTEAD OF INVENTING A FINDING.
+   `bash` is NOT on PATH from PowerShell on this machine (measured: ENOENT). Every `sh()` below then
+   threw, the `catch` set the result to `null`, and the gate reported:
+
+     FAIL  non-Windows branch altered a path: /opt/app/checkout -> null (it must be identity)
+
+   **Nothing altered anything.** The helper was never invoked. So `npm test` was exit 0 from Git
+   Bash and exit 1 from PowerShell, on the same tree, with four failures describing a corruption
+   that had not happened — and the four are the first thing a reader sees, so the natural conclusion
+   is that the deploy path rewriting is broken.
+
+   That is the day's own lesson landing on a fourth instrument: **an instrument reporting a failure
+   it could not have observed is telling you about ITSELF.** A gate that cannot reach its subject
+   must SKIP LOUDLY, never fail — a false red is as expensive as a false green, and worse when it
+   points at the deploy. Found via CEO 176 (which reported this gate as passing when run directly;
+   it does not — it fails in PowerShell either way). */
+let bashOk = true;
+try { sh("true"); } catch { bashOk = false; }
+if (!bashOk) {
+  console.log("  SKIP  bash is not on PATH in this shell, and every check here runs the deploy helper through it.");
+  console.log("        NOT a pass and NOT a failure: this gate could not reach its subject. Run it from Git Bash");
+  console.log("        (or any shell with bash on PATH) to actually exercise the rsync path rewriting.");
+  console.log("\n0 failure(s) — but 0 checks ran. See the SKIP above.");
+  process.exit(0);
+}
+
 let isWindowsShell = false;
 try { isWindowsShell = /MINGW|MSYS|CYGWIN/i.test(sh("uname -s")); } catch { }
 

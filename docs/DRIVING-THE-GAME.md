@@ -18,8 +18,15 @@ results). This says **how** to drive it. Read both before a browser pass.
 ## 1. Serve it, and use a port you have never loaded
 
 ```bash
-python3 -m http.server 8421     # any port NOT used earlier in this session
+# `python3` on Mac / Linux; on WINDOWS the interpreter registers only as `python`.
+python -m http.server 8421      # any port NOT used earlier in this session
 ```
+
+**The spelling is not pedantry, and the code already knows it.** `scripts/lib/chrome.mjs:110`
+resolves `PYTHON` by trying `python3` then `python`, and its comment records why: on 2026-08-31 the
+Razer's interpreter registered only as `python`, so **twelve spawns failed with ENOENT** the first
+time anything tried to serve a leg here. **That fix reached the code and never reached this page** —
+which is the whole reason `doc_command_check.js` now checks shell commands too.
 
 **Chrome caches ES modules per URL.** Reusing a port that has already served an older build will
 hand you the old `src/**/*.js` even after a hard reload, and you will "verify" code that is not on

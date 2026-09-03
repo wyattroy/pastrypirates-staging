@@ -55,6 +55,12 @@ process.on("exit", () => { try { rmSync(tmp, { recursive: true, force: true }); 
 mkdirSync(join(tmp, "scripts", "wyclau"), { recursive: true });
 mkdirSync(join(tmp, ".planning", "wyclau", "status"), { recursive: true });
 copyFileSync(GLASS, join(tmp, "scripts", "wyclau", "glass.mjs"));
+/* ⚑ glass.mjs now IMPORTS ./lib/chart_model.mjs (converged 2026-09-02), so a fixture tree that
+   copies only glass.mjs cannot run it — ERR_MODULE_NOT_FOUND. Copy its dependency too. This is the
+   honest cost of convergence and it is cheaper than the divergence it replaced: before the import,
+   the model saw 3 open ideas while the page rendered 14. */
+mkdirSync(join(tmp, "scripts", "wyclau", "lib"), { recursive: true });
+copyFileSync(join(ROOT, "scripts", "wyclau", "lib", "chart_model.mjs"), join(tmp, "scripts", "wyclau", "lib", "chart_model.mjs"));
 
 /* The fixture deliberately puts BOTH halves of the count in play: three open checklist rows and
    two IDEA INBOX entries, one of which has declared a fate and one of which has not. A model that

@@ -31,6 +31,9 @@ function scratchRun({ restartsContent }) {
   mkdirSync(join(dir, "scripts", "wyclau"), { recursive: true });
   mkdirSync(join(dir, ".planning", "wyclau"), { recursive: true });
   writeFileSync(join(dir, "scripts", "wyclau", "glass.mjs"), readFileSync(GLASS));
+  /* glass.mjs IMPORTS ./lib/chart_model.mjs since the 2026-09-02 convergence — a staged copy without its dependency dies with ERR_MODULE_NOT_FOUND. */
+  mkdirSync(join(dir, "scripts", "wyclau", "lib"), { recursive: true });
+  writeFileSync(join(dir, "scripts", "wyclau", "lib", "chart_model.mjs"), readFileSync(join(ROOT, "scripts", "wyclau", "lib", "chart_model.mjs")));
   writeFileSync(join(dir, ".planning", "CHART.md"), "# Chart\n\n## STEP 1 CHECKLIST\n\n## BLOCKED ON WYATT\n\n## THE IDEA INBOX\n\n*(empty)*\n\n## RULED\n\n| item | HIS RULING | now |\n|---|---|---|\n");
   if (restartsContent !== null) writeFileSync(join(dir, ".planning", "wyclau", "restarts.log"), restartsContent);
   execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--note", "honesty gate"], { stdio: "pipe" });

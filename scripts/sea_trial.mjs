@@ -7,7 +7,13 @@
  * cannot, because a sea trial leaves a REPORT with a build stamp in it, and he can open the report.
  *
  *   node scripts/sea_trial.mjs                 work out the gear from what changed, run that
- *   node scripts/sea_trial.mjs --gear=FULL     force the whole thing
+ *   node scripts/sea_trial.mjs --explain       what depth would this run at, and what would it sail?
+ *                                                — decides, prints, sails NOTHING, touches no report
+ *   node scripts/sea_trial.mjs --gear=FULL     choose the depth yourself: NONE, COSMETIC, PLUMBING, FULL
+ *   node scripts/sea_trial.mjs --gear=COSMETIC --reason="just a script tag in index.html"
+ *                                                — the reason is printed in the report, verbatim.
+ *                                                  Choosing a depth below the picker's without one is
+ *                                                  allowed, and is said out loud in the report.
  *   node scripts/sea_trial.mjs --judge=off     skip the vision judge (faster; less honest)
  *
  * WHAT IT IS MADE OF — assembled, not written. Every piece already existed and was being ignored:
@@ -28,6 +34,11 @@ import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { judgeModeFor } from "./lib/judge_mode.mjs";
+/* WHY EVERY CHILD BELOW CARRIES THIS. When this trial is started by start_trial_detached.mjs it
+   has no console of its own, and on Windows a console-less parent makes Windows hand each console
+   child a BRAND-NEW console — a visible black window on Wyatt's screen, whose ✕ kills the run.
+   One flag at this boundary covers the whole subtree; see scripts/lib/child_window.mjs. */
+import { NO_CONSOLE_WINDOW } from "./lib/child_window.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -78,14 +89,68 @@ const started = new Date();
  */
 const TRIAL_VERSION = "v2";
 
-/* ---- which gear? ---------------------------------------------------------- */
-let gear = arg("gear");
-let gearWhy = "**FORCED ON THE COMMAND LINE — this overrode the mechanical picker.** Treat this report as weaker evidence than one whose gear was derived.";
-if (!gear) {
-  const r = spawnSync("node", [path.join(REPO, "scripts/qa/gear.mjs")], { encoding: "utf8" });
-  gear = ((r.stdout || "").match(/GEAR:\s*(\w+)/) || [])[1] || "FULL";
-  gearWhy = ((r.stdout || "").match(/why:\s*(.+)/) || [])[1] || "could not be determined — defaulting to FULL";
+/* ---- which gear, and WHO CHOSE IT ------------------------------------------
+ *
+ * Wyatt, ruling on `qid:t206-ga-turn-on`: "we need a way to bypass sea trial for this -- it clearly
+ * doesn't need a full one given that you're just adding a tag to index; so we need a way to tell
+ * sea trial that and manually choose the depth of the trial."
+ *
+ * HALF OF THAT WAS ALREADY HERE — `--gear=` has been read since this file was written, and
+ * gear.mjs has been printing `--gear=PLUMBING` in its own sweep line the whole time. What was
+ * missing is the half that lets the resulting report be BELIEVED, and both gaps were measured:
+ *
+ *   THE FLAG WAS UNVALIDATED. `LEGS[gear] || LEGS.FULL` had no membership test, so `--gear=cosmetic`
+ *   was not the COSMETIC key: it sailed the ten-leg fleet while the report header printed the typo.
+ *   The fleet direction was fail-safe; the REPORT was not, and the report is the artifact rule 24
+ *   tells him to open. So an unknown gear is now REFUSED rather than quietly upgraded — a person
+ *   choosing a depth should be told they misspelled it, not handed 75 minutes and a wrong header.
+ *
+ *   AND A FORCED GEAR ERASED THE PICKER'S OPINION, because the picker was spawned only inside
+ *   `if (!gear)`. That deleted the one number the trial would be judged against afterwards. The
+ *   failure this whole gear rule was written against (2026-08-25/26: 22 fixes shipped, 4 verified,
+ *   depth chosen by mood) is INDISTINGUISHABLE, after the fact, from an honest shallow trial —
+ *   unless the report says what the depth should have been. So the picker now runs every time and
+ *   both numbers reach the report.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO: refuse. Choosing a shallower depth than the picker's without
+ * typing a reason is allowed and merely SAID OUT LOUD, in the console and in the report. Whether it
+ * should be refused is Wyatt's call, not this file's — it is `qid:t220-reason-required` in
+ * CHART.md's BLOCKED ON WYATT. His ask was to be able to go shallow; a guard that blocks him is a
+ * different feature wearing his ask's clothes.
+ *
+ * Gated by scripts/qa/sea_trial_chosen_depth_check.mjs, which carries the full derivation.
+ */
+const GEARS = ["NONE", "COSMETIC", "PLUMBING", "FULL"];   // shallowest first — the ORDER is the depth
+
+/* ALWAYS ASK THE PICKER, even when a depth has been chosen. It costs one git diff and it is the
+   only thing that makes a chosen depth auditable rather than merely asserted. */
+const pickerRun = spawnSync("node", [path.join(REPO, "scripts/qa/gear.mjs")], { ...NO_CONSOLE_WINDOW, encoding: "utf8" });
+const pickerGear = ((pickerRun.stdout || "").match(/GEAR:\s*(\w+)/) || [])[1] || "FULL";
+const pickerWhy = ((pickerRun.stdout || "").match(/why:\s*(.+)/) || [])[1] || "could not be determined — defaulting to FULL";
+
+const chosenRaw = arg("gear");
+const chosen = chosenRaw ? String(chosenRaw).trim().toUpperCase() : null;
+if (chosen && !GEARS.includes(chosen)) {
+  console.error(`\n  NO SUCH GEAR: "${chosenRaw}"\n`);
+  console.error(`  The depths this trial can be run at, shallowest first: ${GEARS.join(", ")}.`);
+  console.error(`  Case does not matter. Nothing was sailed and no report was touched.\n`);
+  console.error(`  Refusing rather than sailing the full fleet under your spelling is deliberate:`);
+  console.error(`  the old behaviour ran all ten legs and headed the report with the typo.\n`);
+  process.exit(2);
 }
+const gear = chosen || pickerGear;
+const reason = arg("reason", "").trim();
+const lowered = GEARS.indexOf(gear) < GEARS.indexOf(pickerGear);
+const reasonLine = !chosen
+  ? `The depth was DERIVED from the files that changed. Nothing was overridden.`
+  : reason
+    ? `A person chose this depth. Their reason, verbatim: **${reason}**`
+    : lowered
+      ? `**A person chose a depth SHALLOWER than the picker's, and there is NO REASON ON RECORD.** Read every verdict below as covering less of the game than a derived trial would have.`
+      : `A person chose this depth. No reason was typed, and none is owed — it is not shallower than the picker's **${pickerGear}**.`;
+const gearWhy = chosen
+  ? `**CHOSEN ON THE COMMAND LINE**, overriding the mechanical picker, which said **${pickerGear}** (${pickerWhy})`
+  : pickerWhy;
 
 /* WHICH LEGS EACH GEAR SAILS.
    FULL is the default and it is the whole matrix: three modes, two screen sizes, BOTH ENGINES.
@@ -104,6 +169,27 @@ const LEGS = {
   NONE: [],
 };
 const legs = LEGS[gear] || LEGS.FULL;
+
+/* ---- --explain: decide the depth, say it, sail nothing ----------------------
+ *
+ * "What would this actually run?" used to be unanswerable without starting a 75-minute voyage — so
+ * the honest way to find out cost more than the thing you were deciding about. Wyatt's ask is a
+ * person choosing the depth, and a person cannot choose what they cannot see beforehand.
+ *
+ * IT MUST STAY ABOVE archivePrevious(). Everything below this line has side effects: the previous
+ * report is renamed, a placeholder is written, npm test runs, browsers open. `--explain` is a
+ * question, and a question must not move his report. `sea_trial_chosen_depth_check.mjs` asserts
+ * this ordering statically and REFUSES TO SPAWN AT ALL if it ever stops holding — because the
+ * check itself runs inside npm test, and a check that archives his report every run would be worse
+ * than the fault it guards. */
+if (process.argv.includes("--explain")) {
+  say(`\n⚓ SEA TRIAL ${TRIAL_VERSION} — EXPLAIN ONLY. Nothing was sailed and no report was touched.\n`);
+  say(`   CHOSEN GEAR: ${gear}   (${chosen ? "chosen on the command line" : "derived by the picker"})`);
+  say(`   PICKER SAID: ${pickerGear}   why: ${pickerWhy}`);
+  say(`   LEGS: ${legs.length}   ${legs.length ? legs.join(", ") : "none — this gear needs no voyage"}`);
+  say(`\n   ${reasonLine.replace(/\*\*/g, "")}\n`);
+  process.exit(0);
+}
 
 /* WRITE THE REPORT BEFORE SAILING, NOT AFTER.
    A killed run used to leave the PREVIOUS run's verdict on disk, and rule 24 tells Wyatt to answer
@@ -168,7 +254,7 @@ say(`   legs: ${legs.length ? legs.join(", ") : "none — this gear needs no voy
 say("── 1/2  the checks that need no browser (npm test) ──");
 let unitOk = false, unitTail = "";
 try {
-  const out = execSync("npm test", { cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const out = execSync("npm test", { ...NO_CONSOLE_WINDOW, cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   unitOk = true; unitTail = out.trim().split("\n").slice(-3).join("\n");
 } catch (e) {
   unitTail = ((e.stdout || "") + (e.stderr || "")).trim().split("\n").slice(-14).join("\n");
@@ -190,7 +276,7 @@ say(unitOk ? "   PASS — all of them\n" : "   FAIL\n" + unitTail + "\n");
 let eyesOk = null, eyesWhy = "not asked for (--judge=off)";
 if (arg("judge", "on") !== "off") {
   say("── 1b/2  can the judge open a screenshot? ──");
-  const r = spawnSync("node", ["scripts/qa/judge_can_see_check.mjs"], { cwd: REPO, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+  const r = spawnSync("node", ["scripts/qa/judge_can_see_check.mjs"], { ...NO_CONSOLE_WINDOW, cwd: REPO, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
   const tail = ((r.stdout || "") + (r.stderr || "")).trim().split("\n").slice(-3).join(" · ");
   if (r.status === 0)      { eyesOk = true;  eyesWhy = "checked just before sailing — the judge opened a real screenshot and described it"; }
   else if (r.status === 2) { eyesOk = null;  eyesWhy = `**COULD NOT BE ASKED** — ${tail}`; }
@@ -215,7 +301,7 @@ const OUT = path.join(REPO, "sea-trial-shots");
 if (legs.length) {
   say(`── 2/2  playing ${legs.length} voyage(s) with a real mouse ──`);
   const a = ["scripts/playtest_gate.mjs", `--legs=${legs.join(",")}`, `--out=${OUT}`, `--judge=${judgeMode}`, `--parallel=${arg("parallel","2")}`];
-  const r = spawnSync("node", a, { cwd: REPO, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
+  const r = spawnSync("node", a, { ...NO_CONSOLE_WINDOW, cwd: REPO, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
   gateOut = ((r.stdout || "") + (r.stderr || ""));
   gateOk = r.status === 0;
   say(gateOut.trim().split("\n").slice(-25).join("\n"));
@@ -259,7 +345,18 @@ try {
   let thisRunId = null;
   try { thisRunId = JSON.parse(fs.readFileSync(path.join(OUT, "runid.json"), "utf8")).runId; } catch { thisRunId = null; }
   for (const leg of rj) {
-    const n = (leg.screens || []).length;
+    /* A LEG THIS GEAR NEVER PROMISED CANNOT BE A LEG THAT FAILED TO RUN — and until 2026-09-03 it
+       could be. `report.json` is whatever the LAST run left in sea-trial-shots/, and that file is
+       almost always a ten-leg FULL run. Nothing here compared it against the fleet THIS run set
+       out to sail, so every gear below FULL inherited the missing legs as failures.
+       MEASURED, not reasoned: `--gear=COSMETIC` on a tree carrying a FULL run's report.json came
+       back **INCOMPLETE — 10 leg(s) did NOT run**, having correctly sailed the zero voyages that
+       gear asks for. That is Wyatt's own bypass (`qid:t206-ga-turn-on`) producing the most alarming
+       artifact in the repo for doing exactly what he asked, and PLUMBING had the same fault: three
+       legs promised, seven phantom failures inherited.
+       This does not weaken the NOT-RUN column by one inch — it is still pessimistic about every leg
+       the run actually promised. It stops the column reporting on a fleet that was never launched. */
+    if (!legs.includes(leg.name)) continue;
     if (sailedHere(leg, thisRunId)) continue;                // it captured something IN THIS RUN: it sailed
     if (notRun.some(x => x.leg === leg.name)) continue;      // already named, keep its reason
     notRun.push({ leg: leg.name, why: (leg.verdict || ["produced no screens at all"]).join("\n") });
@@ -305,6 +402,8 @@ const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\`
 **${verdict}** — ${ranLegs.length} of ${legs.length} voyage(s) sailed${notRun.length ? `, ${notRun.length} NOT RUN` : ""}  ·  ${started.toISOString()}  ·  ${mins} min  ·  gear **${gear}**  ·  sailed on **${WHERE}**
 
 > Gear chosen because: ${gearWhy}
+>
+> **Depth: ${gear}. The mechanical picker said ${pickerGear}.** ${reasonLine}
 >
 > Sailed by **sea trial ${TRIAL_VERSION}** — the eyes see EVERY distinct screen (no judge
 > cap), five to a call, and each leg says how many of its screens were actually looked at. A report

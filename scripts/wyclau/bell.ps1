@@ -81,9 +81,33 @@ if (Test-Path $lastLaunch) {
 # cannot survive one. The working directory is pinned rather than inherited: nothing here may
 # depend on the caller's state.
 Set-Location $Repo
+
+# LET THE WATCH SEE THE KIT -- WYATT'S RULING, ruled on the Glass 2026-09-02T12:39:56.363Z, "yes",
+# to the question "May an unattended watch READ the claude-kit folder?"
+#
+# WHY THE FENCE EXISTED AND WHY IT WAS NEVER A DECISION: a `claude -p` child sees only its working
+# directory, so every watch reported the kit as "physically unreachable" and five patches sat in
+# PENDING-KIT-PATCHES.md waiting for a human. Nobody chose that; it fell out of the launch line
+# below carrying no --add-dir. He was asked and said yes, and THIRTY-ONE MINUTES LATER a watch
+# closing the very ruling that depended on it wrote "THE HALF OF HIS SENTENCE THAT CANNOT BE BUILT
+# HERE" into a gate -- from a stale memory of two earlier refusals, not from his answer. That is
+# HARD-WON-LESSONS section 12k exactly: a ruling he made that nobody harvested. Found by CEO 106.
+#
+# DERIVED, NEVER TYPED: the kit is a sibling of this repo on every machine that has both, so the
+# path comes from $Repo rather than from one machine's layout. AND IT IS FAIL-SAFE -- the flag is
+# added ONLY if the directory is really there, because passing --add-dir at a path that does not
+# exist would turn "this machine has no kit" (fine, and true of every cloud container) into a
+# launch failure, which is the one thing this file spent 2026-09-01 learning to never do silently.
+$kitDir = Join-Path (Split-Path -Parent $Repo) "claude-kit"
+$kitArgs = @()
+if (Test-Path -LiteralPath $kitDir -PathType Container) { $kitArgs = @("--add-dir", "`"$kitDir`"") }
+
 $doorPrompt = "/door - the Bell rings you as a WATCH. Sync, orient, then work exactly ONE item through the full Proof - Wyatt's inbox first, then the top unblocked Chart item - close it through the gate, republish the Glass, and END YOUR TURN. Ending is correct: the Bell rings the next watch. Never take a second item."
 if ($DryRun) {
-  Add-Content $log "$now`tDRYRUN would ring a watch"
+  # The dry run must print the REAL argument list, not a description of it. A gate that reads a
+  # paraphrase is testing the paraphrase (HARD-WON-LESSONS section 12i), and this line is the only way a
+  # check can see whether the kit fence is actually down.
+  Add-Content $log "$now`tDRYRUN would ring a watch (kit: $(if ($kitArgs.Count) { $kitArgs -join ' ' } else { 'NOT PRESENT, no --add-dir' }))"
 } else {
   try {
     # CAPTURE WHAT THE WATCH SAYS, OR A DEATH AT LAUNCH IS INVISIBLE. Earned 2026-09-01: the Bell
@@ -95,10 +119,10 @@ if ($DryRun) {
     $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
     $outFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.out"
     $errFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.err"
-    Start-Process -FilePath "claude" -WorkingDirectory $Repo -ArgumentList @(
-      "-p", "`"$doorPrompt`""
+    Start-Process -FilePath "claude" -WorkingDirectory $Repo -ArgumentList (
+      @("-p", "`"$doorPrompt`"") + $kitArgs
     ) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-    Add-Content $log "$now`tring: no watch on deck -- rang the next one (output: watch-$stamp.out/.err)"
+    Add-Content $log "$now`tring: no watch on deck -- rang the next one (output: watch-$stamp.out/.err, kit: $(if ($kitArgs.Count) { 'readable' } else { 'not present' }))"
   } catch {
     # A "ring" line with no launch behind it is a log that lies. Say what failed, in the same
     # file the next reader will open.

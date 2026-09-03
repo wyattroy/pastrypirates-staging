@@ -28,14 +28,23 @@ let failed = false;
 const fail = (m) => { console.error(`FAIL -- ${m}`); failed = true; };
 const pass = (m) => console.log(`PASS -- ${m}`);
 
-function scratchRun({ noteContent }) {
+function scratchRun({ noteContent, consume = false }) {
   const dir = mkdtempSync(join(tmpdir(), "glass-relay-"));
   mkdirSync(join(dir, "scripts", "wyclau"), { recursive: true });
   mkdirSync(join(dir, ".planning", "wyclau"), { recursive: true });
   writeFileSync(join(dir, "scripts", "wyclau", "glass.mjs"), readFileSync(GLASS));
+  /* glass.mjs IMPORTS ./lib/chart_model.mjs since the 2026-09-02 convergence, so a staged copy
+     without its dependency dies with ERR_MODULE_NOT_FOUND. */
+  mkdirSync(join(dir, "scripts", "wyclau", "lib"), { recursive: true });
+  writeFileSync(join(dir, "scripts", "wyclau", "lib", "chart_model.mjs"), readFileSync(join(ROOT, "scripts", "wyclau", "lib", "chart_model.mjs")));
   writeFileSync(join(dir, ".planning", "CHART.md"), "# Chart\n\n## STEP 1 CHECKLIST\n\n## BLOCKED ON WYATT\n\n## THE IDEA INBOX\n\n*(empty)*\n\n## RULED\n\n| item | HIS RULING | now |\n|---|---|---|\n");
   if (noteContent !== null) writeFileSync(join(dir, ".planning", "wyclau", "GLASS-NOTE.md"), noteContent);
-  const out = execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--note", "relay gate"], { encoding: "utf8" });
+    /* ⛔ CONSUMING HIS NOTE IS OPT-IN SINCE 2026-09-02 (his words: "make sure nothing can destroy my
+     writing"). The harness defaults to NOT consuming, because that is what every caller except the
+     tick's publish step now does, and case 5 below is the guarantee that matters most. */
+  const argv = [join(dir, "scripts", "wyclau", "glass.mjs"), "--note", "relay gate"];
+  if (consume) argv.splice(1, 0, "--consume-note");
+  const out = execFileSync(process.execPath, argv, { encoding: "utf8" });
   const html = readFileSync(join(dir, ".planning", "wyclau", "glass.html"), "utf8");
   const noteAfter = existsSync(join(dir, ".planning", "wyclau", "GLASS-NOTE.md"))
     ? readFileSync(join(dir, ".planning", "wyclau", "GLASS-NOTE.md"), "utf8") : null;
@@ -60,10 +69,11 @@ function scratchRun({ noteContent }) {
   else pass("bare template -> no message rendered, file left as-is.");
 }
 
-// 3/4 -- REAL CONTENT below the marker. Must render it AND reset the file.
+// 3/5 -- REAL CONTENT below the marker, WITH `--consume-note`. Must render it AND reset the file.
+//        The flag is what the tick's publish step passes; nothing else may.
 {
   const template = readFileSync(GLASS, "utf8").match(/const GLASS_NOTE_TEMPLATE = `([\s\S]*?)`;/)[1];
-  const { html, noteAfter, out } = scratchRun({ noteContent: template + "Please check the exit test.\n" });
+  const { html, noteAfter, out } = scratchRun({ noteContent: template + "Please check the exit test.\n", consume: true });
   const rendered = /<p class="relayNote">From another session, folded in on this pulse: Please check the exit test\.<\/p>/.test(html);
   const wasReset = noteAfter === template;
   const said = /relayed note picked up/.test(out);
@@ -73,22 +83,46 @@ function scratchRun({ noteContent }) {
   else pass("real note -> rendered on the page, file reset, console said so.");
 }
 
-// 4/4 -- A SECOND RUN AFTER PICKUP must NOT re-show the same message (proves the reset actually
+// 4/5 -- A SECOND RUN AFTER PICKUP must NOT re-show the same message (proves the reset actually
 //        prevents repetition, not just that the file changed).
 {
   const dir = mkdtempSync(join(tmpdir(), "glass-relay-repeat-"));
   mkdirSync(join(dir, "scripts", "wyclau"), { recursive: true });
   mkdirSync(join(dir, ".planning", "wyclau"), { recursive: true });
   writeFileSync(join(dir, "scripts", "wyclau", "glass.mjs"), readFileSync(GLASS));
+  /* glass.mjs IMPORTS ./lib/chart_model.mjs since the 2026-09-02 convergence, so a staged copy
+     without its dependency dies with ERR_MODULE_NOT_FOUND. */
+  mkdirSync(join(dir, "scripts", "wyclau", "lib"), { recursive: true });
+  writeFileSync(join(dir, "scripts", "wyclau", "lib", "chart_model.mjs"), readFileSync(join(ROOT, "scripts", "wyclau", "lib", "chart_model.mjs")));
   writeFileSync(join(dir, ".planning", "CHART.md"), "# Chart\n\n## STEP 1 CHECKLIST\n\n## BLOCKED ON WYATT\n\n## THE IDEA INBOX\n\n*(empty)*\n\n## RULED\n\n| item | HIS RULING | now |\n|---|---|---|\n");
   const template = readFileSync(GLASS, "utf8").match(/const GLASS_NOTE_TEMPLATE = `([\s\S]*?)`;/)[1];
   writeFileSync(join(dir, ".planning", "wyclau", "GLASS-NOTE.md"), template + "One-time message.\n");
-  execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--note", "first run"], { stdio: "pipe" });
-  execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--note", "second run"], { stdio: "pipe" });
+  execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--consume-note", "--note", "first run"], { stdio: "pipe" });
+  execFileSync(process.execPath, [join(dir, "scripts", "wyclau", "glass.mjs"), "--consume-note", "--note", "second run"], { stdio: "pipe" });
   const html2 = readFileSync(join(dir, ".planning", "wyclau", "glass.html"), "utf8");
   rmSync(dir, { recursive: true, force: true });
   if (/<p class="relayNote">/.test(html2)) fail("a message picked up on run 1 still rendered on run 2 -- the reset did not stop repetition.");
   else pass("picked up once, gone by the second run -- no repetition.");
+}
+
+
+// 5/5 -- ⛔ HIS GUARANTEE, AND THE REASON THIS FILE MATTERS: WITHOUT `--consume-note`, HIS WRITING
+//        SURVIVES. His instruction, 2026-09-02 10:45 PM ET: "okay make sure nothing can destroy my
+//        writing -- that is an important task."
+//        Until that night, generating the page and destroying his queued note were ONE act, so any
+//        run consumed it. Measured with a sentinel through `npm test`: it was eaten, and bisecting
+//        named five gates. They were not careless -- glass.mjs resolves its paths from its own
+//        location, so a gate CANNOT sandbox it by changing directory. The fix was to make the
+//        destructive half opt-in, and THIS CASE IS THE PROOF THAT IT STAYED THAT WAY.
+{
+  const template = readFileSync(GLASS, "utf8").match(/const GLASS_NOTE_TEMPLATE = `([\s\S]*?)`;/)[1];
+  const his = template + "Words of his that must not be destroyed.\n";
+  const { html, noteAfter } = scratchRun({ noteContent: his });
+  const rendered = /<p class="relayNote">/.test(html);
+  const survived = noteAfter === his;
+  if (!survived) fail("HIS WRITING WAS DESTROYED BY A RUN THAT DID NOT ASK. Without --consume-note the note file must be left exactly as it was; a gate, a probe, or a session merely rendering the page would now eat his words.");
+  else if (!rendered) fail("his note survived but did not reach the page -- surviving unread is not the goal.");
+  else pass("without --consume-note his words are rendered AND left in the file, byte for byte.");
 }
 
 process.exit(failed ? 1 : 0);

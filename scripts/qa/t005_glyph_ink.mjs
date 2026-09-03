@@ -18,7 +18,6 @@
  * so the tool never needs to be told what the background is.
  */
 import fs from "node:fs";
-import path from "node:path";
 import { decode, encode, COLOUR } from "../lib/png.mjs";
 
 const arg = (k, d) => {
@@ -79,10 +78,14 @@ if (process.argv[1] && process.argv[1].endsWith("t005_glyph_ink.mjs")) {
   if (!png) { console.error("need --png="); process.exit(2); }
   const img = decode(fs.readFileSync(png));
   const boxArg = arg("box");
-  if (!boxArg) { console.log(`${path.basename(png)} is ${img.w}x${img.h}`); process.exit(0); }
+  if (!boxArg) { console.log(`${png} is ${img.w}x${img.h}`); process.exit(0); }
   const [x, y, w, h] = boxArg.split(",").map(Number);
   const r = inkInBox(img, { x, y, w, h });
-  console.log(`${path.basename(png)} ${img.w}x${img.h}`);
+  /* PRINT THE PATH AS GIVEN, NEVER THE BARE FILENAME. CEO 101 caught this on the first use: the two
+     screenshots this tool was built to compare are BOTH called solo-tablet-wk-026-settled.png, in
+     judge-1914Z-shots/ and sea-trial-shots/, because every trial writes the same names. A tool whose
+     whole subject is instrument trust must not print two runs under one heading. */
+  console.log(`${png} ${img.w}x${img.h}`);
   console.log(`  box ${x},${y} ${w}x${h} · paper rgb(${r.bg.join(",")})`);
   console.log(`  INK ${r.ink} / ${r.total} px = ${(r.fraction * 100).toFixed(2)}%`);
   /* --cols prints the ink COLUMN PROFILE across the box, collapsed to runs of "has ink" /

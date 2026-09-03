@@ -43,6 +43,12 @@ const host = os.hostname();
 const heartbeat = read(path.join(WY, "HEARTBEAT"));
 const restarts = read(path.join(WY, "restarts.log"));
 const longRun = read(path.join(WY, "LONG-RUN"));
+/* WHAT THIS MACHINE'S WATCH HAS IN HAND — his ask, 2026-09-02: "what is being worked on RIGHT NOW?"
+ * Written by scripts/wyclau/claim_item.mjs, read by glass.mjs the same way it already reads the
+ * long-run block. Deliberately the SAME SHAPE as that block rather than a new one: the reader is
+ * then a copy of one already hardened by a real incident (the false red of 2026-08-31), and every
+ * doubt in it resolves to NOT LIVE. */
+const inHand = read(path.join(WY, "IN-HAND"));
 
 const RESTART_TAIL = 40; // enough to cover a bad day; the full log stays on the machine that wrote it
 const lines = [];
@@ -55,6 +61,11 @@ lines.push("## Last pulse (HEARTBEAT)");
 lines.push(heartbeat === null
   ? "No HEARTBEAT file — this machine has never pulsed (or the file was cleaned)."
   : "```\n" + heartbeat.trim() + "\n```");
+lines.push("");
+lines.push("## In hand (IN-HAND)");
+lines.push(inHand === null
+  ? "None recorded."
+  : "```\n" + inHand.trim() + "\n```");
 lines.push("");
 lines.push("## Long run in flight (LONG-RUN)");
 lines.push(longRun === null
@@ -83,4 +94,13 @@ if (existing === body) {
 fs.mkdirSync(statusDir, { recursive: true });
 fs.writeFileSync(outPath, body);
 console.log(`published ${path.relative(repo, outPath)} — commit it so other machines can read this one's instruments`);
+/* THE ONE PLACE A WATCH CAN BE TOLD, and it is here because the Door could not be edited from the
+ * session that built this. CEO 112: a watch that works without recording a claim leaves his page
+ * saying nothing is in hand while it works — "a false statement of the same family he complained
+ * about, inverted." Every watch runs THIS script (Door steps 4 and 6), so this is the reminder that
+ * actually reaches one. It never fails the publish; it is a sentence, not a gate. */
+if (inHand === null) {
+  console.log("  ⚠ NO CLAIM RECORDED on this machine — his page will read \"Nothing recorded in hand\".");
+  console.log("  -> if you are working an item: node scripts/wyclau/claim_item.mjs --item=\"T-000 — what it is\"");
+}
 process.exit(0);

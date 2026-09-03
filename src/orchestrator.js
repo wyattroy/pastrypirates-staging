@@ -298,6 +298,18 @@ export function renderBattle(o){
   const windTag=dw==null
     ? `<div class="windTag cross">CROSSWIND · ties collide</div>`
     : `<div class="windTag dw">⬇ ${nm(dw==="a"?A.idx:D.idx).toUpperCase()} FIRES DOWNWIND — WINS TIES</div>`;
+  /* …AND THE SAME `dw` MARKS THE COLUMN IT NAMES (`.btl-col.dw`, just below). Purely structural —
+     no CSS reads it — and it exists so the FLIP CEREMONY can find the downwind captain without
+     re-deriving the wind or parsing this badge's prose.
+     Earned 2026-09-03. The ceremony looked for the captain in `dwTag.parentElement`, which is
+     `.btl-wind` — a div holding the badge and nothing else — so the lookup returned null on EVERY
+     downwind battle and fell through to the crosswind sentence. A player was told "Crosswind — two
+     heads and the cannonballs collide" over the coin, then shown a card saying the opposite two
+     seconds later. Both halves are photographed in judge-1914Z-shots/solo-tablet-wk-018*.png.
+     Rule 23's question, asked before the fix: what makes the badge and the ceremony agree? Nothing
+     did. A cleverer selector, or matching on the badge's words, would have worked today and broken
+     at the next rewording — so the answer is one value written in one place and read in both.
+     Gate: scripts/qa/flip_ceremony_names_the_wind_check.mjs. */
   // `Round N · first to K` is gone with it, and it was never load-bearing: asyncBattleRun fixes
   // need=1 and the a/d counters only ever read 0 or 1 (see the note above asyncBattle), so the
   // line counted a race that stopped existing when the battle became a single broadside.
@@ -305,13 +317,13 @@ export function renderBattle(o){
   panel(`<div class="btl">
     <div class="btl-hd"><span>${title}</span></div>
     <div class="btl-body">
-      <div class="btl-col${o.live==="a"?" live":""}">
+      <div class="btl-col${o.live==="a"?" live":""}${dw==="a"?" dw":""}">
         <div class="who" style="color:${col(A.idx)}">${nm(A.idx)}</div>
         <div class="role">${o.roleA||"Attacker"}</div>
         ${coinHTML(o.atState,o.atBs,o.winCoin==="a")}
       </div>
       <div class="btl-mid">VS</div>
-      <div class="btl-col${o.live==="d"?" live":""}">
+      <div class="btl-col${o.live==="d"?" live":""}${dw==="d"?" dw":""}">
         <div class="who" style="color:${col(D.idx)}">${nm(D.idx)}</div>
         <div class="role">${o.roleD||"Defender"}</div>
         ${coinHTML(o.dfState,o.dfBs,o.winCoin==="d")}
@@ -2528,6 +2540,32 @@ export function wireLobby(){
     }
     ov.addEventListener("click",e=>{if(e.target===ov)ov.style.display="none";});
   });
+  /* ⛔ T-142 — ONE PLACE DECIDES WHETHER A MODAL IS OPEN, AND IT DERIVES THE ANSWER FROM THE DOM
+     INSTEAD OF BEING TOLD. `index.html`'s `body.pp4Stage.pp4ModalOpen #pp4Cap` needs to know when
+     any modal is up, so the CAPTAINS bar stops reading through it (the whole story is in the comment
+     beside that rule).
+
+     THE OBVIOUS BUILD IS THE WRONG ONE, and it is rule 23 exactly. Toggling a class inside each
+     opener means EIGHT-PLUS places setting `display="flex"` and as many setting `"none"` all have to
+     remember — two things kept in step by discipline, which is the definition of the fault — and the
+     ninth modal somebody adds next month is missed silently, because a bar that fails to hide looks
+     like nothing at all. Asking the DOM "is any `.modalOverlay` displayed?" has no list to keep
+     current: a modal added tomorrow is covered by this the moment it exists, and one deleted stops
+     counting on its own. The design-time question — WHAT MAKES THESE TWO AGREE? — is answered by
+     there being only one of them.
+
+     It watches `style` because that is the attribute every opener and closer here writes, and
+     `class` so a future modal toggled by class is covered too; the check itself reads COMPUTED
+     display, so it is right either way. */
+  const syncModalOpenClass=()=>{
+    const open=[...document.querySelectorAll(".modalOverlay")]
+      .some(ov=>getComputedStyle(ov).display!=="none");
+    document.body.classList.toggle("pp4ModalOpen",open);
+  };
+  const modalOpenObserver=new MutationObserver(syncModalOpenClass);
+  document.querySelectorAll(".modalOverlay").forEach(ov=>
+    modalOpenObserver.observe(ov,{attributes:true,attributeFilter:["style","class"]}));
+  syncModalOpenClass();
   $("btnSendFeedback").onclick=()=>{
     const text=($("feedbackText").value||"").trim();
     if(!text)return;

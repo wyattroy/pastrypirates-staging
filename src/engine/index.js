@@ -1749,9 +1749,15 @@ class Game{
   }
   // Can this ship legally be attacked? v2 rule 13e: an empty hold is not a target — there is
   // nothing to take, and the option greys out rather than wasting the attacker's powder.
-  // Note there is deliberately no `def.done` check: v2 rule 13c is "nobody is safe" — a captain
-  // who has already fired up the ovens is still a legal target, and always holds a full recipe,
-  // so raiding one is always allowed.
+  /* ⛔ THE PARAGRAPH THAT USED TO SIT HERE STATED THE OPPOSITE OF THE LINE BELOW, AND IT COST
+     SOMETHING. It read: "there is deliberately no `def.done` check: v2 rule 13c is 'nobody is
+     safe' — a captain who has already fired up the ovens is still a legal target". That was true
+     until Wyatt's SANCTUARY ruling of 2026-08-06, four lines down, and nobody deleted it after.
+     On 2026-09-03 the how-to-play modal was found teaching the old rule to real players, and this
+     comment is why the error survived a reading: a session checking the page against the code
+     would have had its mistake CONFIRMED by the commentary sitting above the code.
+     Rule 6, in its exact shape — a comment is not a measurement. If you want to know what this
+     function does, call it: scripts/qa/rules_sanctuary_matches_engine_check.mjs does. */
   canAttack(att,def){
     if(!def||def===att)return false;
     // v2.1 SANCTUARY (Wyatt, 2026-08-06). Once the ovens are lit nobody can touch them. The raid

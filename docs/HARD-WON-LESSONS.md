@@ -162,6 +162,8 @@ The trigger both times was a command beginning `cd /tmp && …` (to write a prob
 every later relative path silently resolved against the wrong tree.
 
 ```bash
+# LINUX cloud container (paths and `python3` are that machine's) — the lesson is the ABSOLUTE
+# path, not the interpreter; on Windows the interpreter is `python`.
 # not this
 python3 - <<'PY'
 p='src/ui/util.js'          # resolves in BOTH trees
@@ -223,6 +225,7 @@ A server started after a cwd reset served from the wrong root. `/v2/index.html` 
 which the probe rendered as *"the welcome screen is missing"* — a convincing phantom boot failure.
 
 ```bash
+# LINUX cloud container — on Windows the interpreter is `python`, not `python3`.
 python3 -m http.server 8493 --directory /home/user/pastrypirates
 ```
 
@@ -701,6 +704,9 @@ Immune to params, bodies, template literals and nesting alike.
   reported as verified by a command that had already been killed.
 
   ```bash
+  # Mac / Linux ONLY — neither `pkill` nor `pgrep` exists in Git Bash on Windows, which is the
+  # machine that runs the relay. Ask `node scripts/qa/stray_probe_check.mjs` instead: it works
+  # everywhere and prints the right kill command for the machine you are on.
   pkill -9 -f "[r]emote-debugging-port"   # the bracket cannot match its own command line
   ```
 
@@ -1758,3 +1764,171 @@ resolves to the HOST's asset — the Helm rebuilt itself around the reset once a
 stylesheet vanished on the first Record tap**, which Wyatt found. Every element a self-saving
 page rebuilds from carries an id: `#helm-style`, `#helm-state`, `#glass-style`, `#glassState`,
 `#asks`. The comment at `helm-main`'s `fullDoc()` records it at the scene.
+
+## 13. 2026-09-03 — ONE INSTRUCTION SPLIT ONE LIST IN TWO, AND SEVEN INSTRUMENTS WENT QUIETLY WRONG
+
+**Wyatt, 2026-09-02:** *"take every Glass-focused task on the Chart, and compile it into a new list…
+YOU will work on the chart -- the Watch will work on the game."* A reasonable instruction, correctly
+carried out: 44 rows moved from `CHART.md` to `GLASS-CHART.md`.
+
+**Every tool with the old path written into it then broke — in a DIFFERENT way each time, and not
+one of them errored.** They all reported confidently about a file they could no longer fully see.
+
+| tool | what it did instead of failing |
+|---|---|
+| `close_item.mjs` | refused to close **any** of the moved rows — "no open Chart row contains…" |
+| `chartkeeper.mjs --rank` | printed a clean report reading **"0 open rows"** on a 27-row file |
+| `tick_rows.mjs` | same blindness, silently |
+| the Door's step 2 | sent every watch to the top of an empty list |
+| `chart_sweep_conserves_check` | called all 27 rows **lost** |
+| `no_ambiguous_handle_check` | accused whichever row sat above his questions table |
+| `glass_his_five_asks_check` | (later) failed on markup a new feature put on his page |
+
+**THE TELL, AND IT IS THE MOST USEFUL SENTENCE HERE: the sweep gate's error count GREW AS WORK WENT
+WELL** — 38 → 112 → 106 across one night — because every row that got CLOSED moved its handle into
+the half the gate could not see. **An instrument that gets louder the more you fix is measuring
+itself.** If a number moves the wrong way when you succeed, stop and audit the instrument.
+
+### THE OTHER HALF: an instrument that asks for an IDENTITY and accepts one spelling of it
+
+Three separate tools demanded a row's handle and then could not match it:
+
+- `close_item.mjs` matched only a row's **first line** — and every handle is written on line two. **The
+  one identifier the gate asked for was the one it could never match.**
+- `chart_sweep_conserves_check` required the handle to be the **entire** bracket contents, so every
+  row carrying `· size: M` or his `· now: yes` pin was invisible **as an owner** and reported LOST. A
+  gate whose whole job is *"the sweep may never lose a row"* was manufacturing losses out of its own
+  strictness.
+- `no_ambiguous_handle_check` read a row's block to the next row, so the last row before a heading
+  swallowed his BLOCKED-ON-WYATT table — which carries a handle per question. **The accused row
+  CHANGED as rows moved**, which is the tell that a finding is about POSITION, not ownership.
+
+**Match the identity; allow what follows it.** And note the third one's shape: *a handle a row
+MENTIONS is a reference; only a row's own handle line is a claim.* Cross-references make text
+matching worse exactly as a record gets better cross-referenced.
+
+### AND THE SAME DAY'S THIRD FACE: a measured refusal is evidence about a moment
+
+Three rows were built on *"a watch cannot do this"*, each measured honestly and each **stale when
+read**:
+
+- `can_push.mjs` prescribed a `git push --dry-run` form the permission list can never match (it is a
+  PREFIX match), then said *"if it is REFUSED, end the turn"* — **a permanent false STOP at the Door,
+  on a healthy tree.**
+- A row said reading `claude-kit` was forbidden. **He had removed that fence 31 minutes earlier**, and
+  nobody had harvested the ruling.
+- `T-027` said the staging deploy is *"the one step a watch cannot take"* and that granting it was
+  his call. **He had already granted it.**
+
+**Re-measure before believing any row that says a thing cannot be done.** A refusal is a fact about
+one moment, not a standing property of the world.
+
+### THE CHEAPEST MISTAKE OF THE NIGHT, AND IT COST 68 GHOSTS
+
+Restoring a swept row, a session minted the handle `T-203` because it looked free. The sweep gate
+takes its ceiling from the highest **owned** handle, so jumping 134 → 203 invented **68 vanished
+rows** in one keystroke, and two sessions then reasoned about them. **Take the next handle at the
+FRONTIER; never a round number that looks unused.**
+
+### THE SAME NIGHT, THE OTHER DIRECTION: I TRUSTED AN INSTRUMENT BECAUSE ITS ANSWER WAS THE ONE I WANTED
+
+Everything above is about instruments that could not see. **This is about believing one that could
+see and could not explain**, and it happened after a whole night of writing the entries above.
+
+The sea trial's vision judge FAILED ten screens. A session read its `issues` strings and filed five
+bugs, marking two as unverified. **A CEO opened the pictures.** Of the ten: *"the Arrgh! bubble has
+no tail"* is **a button** (`panel.js:1156`); *"the FORECAST ribbon is clipped by the sidebar"* is
+refuted by its own screenshot, ~280px of empty board between the text and the sidebar; and
+*"the Play again! button overlaps the award cards"* has a real symptom with **the wrong cause** —
+the cut is ~15px **above** the button, a scroller edge, not an overlap. The judge had also invented
+the award winners' names on that screen, which `INTENDED-BEHAVIOUR.md:123` already records it doing
+with wind direction.
+
+**THE RULE, AND IT IS NARROW ENOUGH TO USE: A JUDGED `FAIL` IS A POINTER TO A SCREEN WORTH OPENING.
+IT IS NEVER A DESCRIPTION OF WHAT IS WRONG WITH IT.** The judge is good at *"look here"* and
+unreliable at *"because of this"*. Quote its verdict, never its reasoning.
+
+**And the tell was in the report before the CEO was:** the two claims that turned out false were
+exactly the two the session had NOT opened. **The ones it looked at survived.**
+
+⚠ **WORSE, AND THE PART WORTH REMEMBERING: the failed claim carried the words "VERIFIED BY EYE".**
+The session did open that screenshot. What it wrote down was not what it saw — it was its
+*explanation* of what it saw, in the same sentence and the same voice. **Looking at a thing licenses
+you to report the thing. It does not license you to report the mechanism.**
+
+### AND A RANGE REPLACEMENT IS A DELETION OF EVERYTHING YOU DID NOT LOOK AT
+
+Correcting that row, the same session rewrote `CHART.md` between two anchors — `s[:start] + new +
+s[end:]` — and **four unrelated rows were living between them**, one of them another session's
+in-flight work. They were gone, silently, in a commit about something else.
+
+**`chart_sweep_conserves_check` caught it** — *"4 allocated handle(s) are owned by NOTHING"* — the
+gate whose ownership regex that same session had fixed six hours earlier. All four were restored
+verbatim from `HEAD`.
+
+**Anchor an edit to the thing you are changing, not to the thing after it.** If you must replace a
+range, print what is inside it first.
+
+---
+
+## 14. 2026-09-03 — FIVE HARNESSES LIED IN ONE NIGHT, AND EVERY ONE WAS BUILT TO CHECK SOMETHING ELSE
+
+**§10 is *"every instrument lied, and each one lied in a way that read as truth."* Those were the
+project's own gates. This is the layer under them: the throwaway scripts a session writes to check
+a gate.** Five of them were wrong in one session. Not one had itself been checked.
+
+**They are all the same fault in different costumes: the harness could not tell SUCCESS from
+NEVER-RAN, and it defaulted to success.**
+
+| the harness | what it reported | what was true |
+|---|---|---|
+| `harvest_glass.mjs`'s own counter | *"3 of 3 new (verified in the file)"* | the write had deleted **61 of 64** existing entries |
+| `red_proof_at_ref.mjs` | *"RED PROOF HELD — the check can see its subject"* | the gate had crashed and judged nothing |
+| a mutant runner | *"all 8 mutants SURVIVED"* | all 8 had died; it read **no output** as **passed** |
+| its own replacement guard | *"all 8 COULD NOT RUN"* | they ran; the guard matched an **em dash** the Windows pipe re-encoded |
+| an `awk` position check | *"the fix did not work"* | it matched the handle in the file's **header prose**, not the row |
+
+**A sixth was found by a REVIEWER rather than the author** — a CEO measured 15 rows moving, traced
+it to running the tool from a copy *outside* the repo where `import.meta.url` could not reach the
+ledger, and reported that instead of quietly re-running.
+
+### THE RULE, AND IT IS ONE SENTENCE
+
+**Before believing a measurement, ask what the instrument would print if the thing WORKED — and
+check that it prints something different.**
+
+Every failure above collapses two outcomes into one symbol. *"No output"* and *"passed"* both look
+like silence. *"Non-zero exit"* covers both *"the check failed"* and *"the check could not start"*.
+*"The id is in the file"* is true whether the file is complete or empty. **A symbol that two
+different worlds produce is not a measurement.**
+
+### THREE THINGS THAT DO NOT WORK, ALL TRIED THE SAME NIGHT
+
+1. **Writing the trap down first.** The prediction for the harvest tool said, in advance, *"the
+   tool must read back what it wrote and count it from the FILE, never from the array it
+   iterated."* That was built — and the gate could not tell whether it was there. **Naming a trap
+   does not test for it.**
+2. **Adding a guard.** The fix for *"no output means passed"* was a guard requiring a verdict line.
+   The guard matched on a character the pipe re-encoded, and reported eight successful runs as
+   *"COULD NOT RUN"* **while printing their real failures directly underneath.** A guard is an
+   instrument too.
+3. **Knowing the lesson.** The same session wrote the reply to a verdict about fixture shape, and
+   then wrote a fixture with the same fault in a different file, an hour later. **A lesson recorded
+   in the morning does not transfer to the afternoon by itself; it has to be a case in a gate.**
+
+### THE POSITIVE FORM — what a trustworthy harness does
+
+- **Require positive evidence that the subject RAN.** `red_proof_at_ref.mjs` now demands the gate's
+  own verdict text, and separately detects a loader error inside the failure lines — because a gate
+  whose *dependency* is missing is fluent, confident, and failing about the wrong thing, which is
+  far better hidden than a crash.
+- **Assert on the WHOLE output, not the one number you set out to fix.** A verdict found a bug
+  sitting in a field the gate already parsed and then discarded, because every case asserted on
+  `score`. One line on data already in hand would have caught it.
+- **Shape the fixture like the real subject.** A gate whose destination was an EMPTY inbox could
+  not see a write that emptied a real one. Count the real file's sections, heading levels and
+  formats before writing a single assertion.
+- **Prefer ASCII in a detector.** Two of the five failures were an em dash and a re-encoded pipe.
+  A detector that depends on typography is a detector with a locale bug waiting in it.
+- **When a check condemns something you have reason to believe works, suspect the check** — §10's
+  rule, and it held five times out of five here.

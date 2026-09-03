@@ -217,6 +217,10 @@
     line-height: 20px; border: 1.5px solid var(--teal); background: #fff;
     color: var(--ink); }
   .footerHow, .footerCredits, .footerLog { border: 1.5px solid #4a7fa6; background: #eaf2f8; color: #355e7e; }
+  /* The share line at the foot of the How-to-play modal (T-100). Quieter than the rules above it —
+     it is the one sentence in there that is not a rule. */
+  .howShare { margin-top: 16px; font-size: 12px; opacity: .7; }
+  .howShare a { color: var(--teal); }
   .footerHow:hover, .footerCredits:hover, .footerLog:hover { background: #dcebf5; }
   .footerFeedback { border: 1.5px solid #3f9d6e; background: #e8f7ee; color: #2c6e4d; }
   .footerFeedback:hover { background: #d9f1e5; }
@@ -1749,6 +1753,47 @@
     border-radius:14px 14px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,.28);
     padding:10px 12px calc(10px + env(safe-area-inset-bottom)); overflow:auto; display:none; }
   body.pp4Stage #pp4Cap { display:block; }
+  /* ⛔ T-142 — THE CAPTAINS BAR READ STRAIGHT THROUGH EVERY OPEN MODAL, AND THE FAULT IS NOT THE ONE
+     THE CHART ROW NAMED. That row said modals are "centred cards at z-index:1000 with no scrim over
+     the fixed bar". There IS a scrim: `.modalOverlay` is `position:fixed; inset:0; z-index:1000`
+     (line 1232), stacked well above this bar's 22. NOTHING IS MISSING AND NOTHING IS MIS-STACKED.
+     The overlay's paint is `radial-gradient(…, rgba(69,223,166,.22), rgba(41,163,178,.40) 68%)` —
+     22% to 40% alpha — and this bar is `rgba(255,253,242,.97)`, a near-opaque cream. A cream bar
+     reads clean through a 30% teal wash.
+
+     THE SCRIM WAS NEVER MEANT TO HIDE ANYTHING: until the stage gained a fixed CAPTAINS bar there
+     was nothing behind it but the board, which is exactly what a translucent wash is FOR. So the
+     bar is hidden while a modal is up rather than the wash being darkened — darkening it would also
+     bury `#welcomeBackdrop` (line 1229) behind the pre-game modals, where showing through is the
+     whole point.
+
+     MEASURED, posed, 2026-09-03 (`scripts/qa/t142_captains_under_modal_check.mjs`), all three seats
+     failing before this rule and passing after: tablet 820×1180 left 340px of the bar exposed with
+     THREE captain rows cut mid-row by the card's edge ("Davy Scones –", "Crustbeard –", "Dough Hook
+     –", each showing 145px of 770px); phone 390×664 left 32px; the 1440 desktop left its whole
+     540px side column. The row called it tablet-only — it is not, the tablet is merely where the
+     card's edge lands ON the rows instead of beside them.
+
+     ⛔ AND THIS RULE DOES NOT FIX THE SCREENS THE CHART ROW WAS WRITTEN FROM. CEO 175 opened them;
+     so did the session that wrote this. `sea-trial-shots/solo-tablet-002-settled.png` (the row's own
+     "VERIFIED BY EYE" screen), `-003`, and `solo-tablet-wk-002/003` are the recipe-CHOICE prompt —
+     the "Davy Scones, choose yer recipe:" card built through the ACTION PANEL
+     (`src/orchestrator.js:951`). It is not a `.modalOverlay`, has no `.modalCard`, and the board
+     behind it is at FULL UNTINTED BRIGHTNESS — there is no wash over that screen at all. It still
+     cuts the top captain row to "Davy". `solo-tablet-029` has no modal open whatever.
+     **So the bar-through-a-modal fault is real and is fixed here; the fault in the row's evidence
+     is a DIFFERENT surface and is still open.** Two bugs wearing one row's title, which is why the
+     row's own count of "five screens" never belonged to this rule.
+
+     ⚠ `visibility`, NOT `display`. This bar's rect is READ at `src/ui/stage.js:1065`
+     (`capTop = cap.getBoundingClientRect().top` — where the End of Voyage card parks) and at
+     `:2296`. `display:none` collapses that box to zero and both reads would quietly change while a
+     modal happens to be open. `visibility:hidden` paints nothing and leaves the box exactly where
+     it was — verified: the bar's box is byte-identical across a whole open/close cycle.
+     *(Corrected by CEO 175: this comment first cited `:1037` and `:2267`, and BOTH ARE COMMENTS
+     rather than code — the very rot rule 6 warns about, committed inside a comment written to
+     prevent it. The reason was sound and two of its three citations were decoration.)* */
+  body.pp4Stage.pp4ModalOpen #pp4Cap { visibility:hidden; }
   body.pp4Stage #captainsPanel { display:block; margin:0; }
   /* THE RESTING PROMPT IS OPAQUE. `.96` was never a look anybody chose — it arrived as a side
      effect of building hold-to-peek (78778e1, 2026-08-11: "Base card opacity drops to .96",
@@ -2829,13 +2874,13 @@
       <h4>⚓ Setting sail</h4>
       <p>Each captain gets a recipe map (<b data-rule="recipeSize"></b> ingredients), <b data-rule="startCoins"></b> gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — and the fewer that are left, the dearer they get.</p>
       <h4>Yer turn: sail → act</h4>
-      <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's — storms and all. That forecast is never wrong, so ye can plan around it.</p>
+      <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's. <span data-engine-rule="forecast">That forecast is never wrong, so ye can plan around it — save for a storm, which the compass warns ye of a day ahead but won't say which way it'll blow.</span></p>
       <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b data-rule="sailRange"></b> squares in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b data-rule="sailUpwind"></b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
       <p><b>⚓ Act</b> — choose one:</p>
       <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads"></b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails"></b>🌕. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
       <p><b>💰 Crate prices rise.</b> A crate costs <b data-rule="crateBase"></b>🌕 <b>minus however many are left on that island</b> — so the first off a full island is <b data-rule="priceFirst"></b>🌕, the next <b data-rule="priceNext"></b>🌕, and the last one <b data-rule="priceLast"></b>🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
       <p><b>🕯️ The black market.</b> A sold-out island always has ONE more crate under the counter — a flat <b data-rule="blackMarket"></b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two crates</b> from yer hold in trade for it — even two of the same.</p>
-      <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody, not even a captain who's already fired up the ovens. Ye can't attack a ship with an empty hold; there's nothing to take.</p>
+      <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody. <span data-engine-rule="sanctuary">But once a captain's ovens are lit they're beyond yer reach — rob 'em on the way home, or not at all.</span> Ye can't attack a ship with an empty hold; there's nothing to take.</p>
       <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b data-rule="callBounty"></b>🌕 from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
       <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — crates, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
       <p><b>Muse</b> — do none of it. Sit back, dream o' pastry, and pocket <b data-rule="passCoin"></b>🌕 for yer patience.</p>
@@ -2849,6 +2894,19 @@
       <h4><img class="narrIcon" src="assets/icons/crown.png" alt=""> Winning</h4>
       <p>First captain to bake their full recipe wins the voyage. Two captains bakin' it on the same day? No contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
       <p><i>May yer flips be heads and yer rivals be broke.</i></p>
+      <!-- T-100 / CEO 171. THE ONLY CRAWLABLE LINK FROM THE GAME TO ITS OWN RULES PAGE, and it was
+           missing: the footer's "How to play" is a <button>, so a search engine following links
+           from the homepage could never reach /rules.html at all — on a page whose entire purpose
+           is that people can FIND it. Wyatt's ruling stands untouched (2026-09-02T22:51:10Z, "Do
+           your recommendation -- full text, modal stays the source"): this navigates nobody, it
+           gives the reader a URL they can send to a shipmate.
+
+           data-page-omit IS LOAD-BEARING. scripts/lib/rules_page.mjs drops any element carrying it
+           before generating /rules.html — otherwise the page would carry a link to itself, and
+           worse, the modal's ONE non-rules sentence would become rules text. It is an explicit
+           marker rather than a position, so adding another line here does not silently change
+           where the extraction stops. -->
+      <p class="howShare" data-page-omit>These rules live at <a href="rules.html">playpastrypirates.com/rules.html</a> — a page ye can send to a shipmate.</p>
     </div>
   </div>
 </div>

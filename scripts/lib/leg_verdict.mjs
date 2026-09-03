@@ -117,7 +117,52 @@ export function legVerdict(rec) {
   const judged = (rec.judged || []).filter(j => j && j.r);
   const judgeHoles = (rec.judged || []).length - judged.length;
   const judgeFails = judged.filter(j => j.r.verdict === "FAIL");
-  if (judgeFails.length) v.push(`vision judge FAILED ${judgeFails.length} of ${judged.length} screen(s) it looked at`);
+  /* ⛔ NAME THE SCREEN AND SAY WHAT IT SAW — `T-215`. This filtered the objects and then printed
+   * only HOW MANY, while each one already carried the filename (`playtest_gate.mjs:505`) and the
+   * judge's own sentence (`vision.mjs:144`). **Rule 19's live detector — the half that FINDS things
+   * nobody asked about — reported a count.**
+   *
+   * WHAT THAT COST, measured 2026-09-03 while trying to act on `T-136`'s note that nobody had
+   * opened these: the 89-minute report says *"vision judge FAILED 1 of 30 screen(s)"* six times and
+   * names exactly ONE `.png` in the whole file. The sentences were going to
+   * `sea-trial-shots/log.txt`, which is APPENDED by every run — **261 of them** — beside
+   * screenshots that later runs OVERWRITE (one shot was dated two days before its own verdict).
+   * **So the trial has been finding real, plainly-described, player-visible faults for months and
+   * handing the reader a number.** Two of the recovered sentences match rows a human filed
+   * independently (`T-142`, `T-143`).
+   *
+   * ⛔ AND THE SENTENCE IS A POINTER, NOT A DIAGNOSIS — SAY SO IN THE OUTPUT, BECAUSE THE READER
+   * WILL NOT REMEMBER IT. This is `T-019`'s finding (CEO 158), and it is the exact hazard this fix
+   * creates: a human opened all TEN FAIL verdicts of the 0624Z run and **two were false positives
+   * and one had the wrong mechanism attached** — the *"'Arrgh!' bubble with no tail"* is a BUTTON
+   * (`panel.js:1156`), the *"FORECAST ribbon clipped"* pill reads complete with ~280px of clear
+   * board beside it, and the judge invented award names on `solo-phone-021` the way
+   * `INTENDED-BEHAVIOUR.md:123` records it inventing wind directions.
+   *
+   * **So printing the sentence makes an unreliable narrator LOUDER unless it is labelled.** The
+   * value is the FILENAME — a screen worth opening, which a bare count could not give anyone. The
+   * words beside it are the judge's guess at why. `T-019` says it in bold and the report never did:
+   * *"A judged FAIL is a POINTER TO A SCREEN WORTH OPENING, never a description of what is wrong
+   * with it."* Caught by CEO 170, one day after CEO 158 filed it, on the watch whose whole item was
+   * this judge — which is why the caveat now ships in the OUTPUT and not only in a row nobody reads
+   * at the moment they are reading a verdict.
+   *
+   * ONE multi-line entry rather than one entry per screen, deliberately: `r.verdict.length` is what
+   * `playtest_gate.mjs:653` reads as pass/fail and what other readers count, and a count that moves
+   * when the judge finds a second issue would be a new lie in place of an old one.
+   * The BASENAME only — the full path is `${OUT}/…` and adds sixty useless characters per line. */
+  if (judgeFails.length) {
+    const named = judgeFails.map(j => {
+      const shot = String(j.shot || "?").split(/[\\/]/).pop();
+      /* `issues` is normally one clean sentence, but `vision.mjs:196` can put raw text there when a
+         reply will not parse — so truncate rather than let 200 characters of JSON into his report. */
+      const why = (Array.isArray(j.r.issues) ? j.r.issues.join("; ") : String(j.r.issues ?? "")).trim();
+      return `       · ${shot} — ${why ? why.slice(0, 200) : "(the judge failed it and gave no reason)"}`;
+    });
+    v.push(`vision judge FAILED ${judgeFails.length} of ${judged.length} screen(s) it looked at`
+      + ` — OPEN THESE; the judge's words are its guess at why, and it is wrong often enough that`
+      + ` they are not quotable (T-019)\n${named.join("\n")}`);
+  }
   /* THE DENOMINATOR, WITHOUT WHICH A HALF-SEEN LEG READS AS A CLEAN ONE.
      Wyatt, 2026-08-30: "everything must be seen visually, or else you don't catch your own code
      errors." JUDGE_CAP capped the eyes at the first 30 distinct screens of a leg while the

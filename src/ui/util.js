@@ -2013,8 +2013,35 @@ export function sharedAssetUrls(){
   }
   return [...new Set(out)];
 }
+/* THE ART A JAVASCRIPT CONSTANT CANNOT SEE — read off the page's own stylesheets.
+   `sharedAssetUrls()` above derives from `*_IMG` constants, so it is structurally blind to a picture
+   that exists only inside CSS, and one does: the storm's rain texture (`#stormOverlay .rlayer`,
+   index.html). Measured 2026-09-02 against INBOX-20260901T1335Z — of the 144 pictures the game
+   names, `assets/rain-streaks.png` was the ONE that boot never asked for, so the first storm of a
+   voyage fetched its own rain mid-storm. That is Wyatt's complaint word for word: "loads dynamically
+   when it is called, which will make it appear blank on slow connections."
+   THIS IS A DERIVATION AND NOT A FIFTH NAME ON THE LIST, deliberately. The comment above records
+   that the hand-kept list drifted four times and that "a fifth append would have been the fifth
+   wrong answer"; appending `rain-streaks.png` would have been exactly that. Any picture a future
+   stylesheet names is covered the moment the rule is written.
+   A sheet we are not allowed to read (a cross-origin stylesheet) is skipped rather than thrown on —
+   warming is best-effort by construction, and no caller awaits it. */
+function cssAssetUrls(){
+  const out=[];
+  for(const sheet of document.styleSheets||[]){
+    let rules; try{ rules=sheet.cssRules; }catch{ continue; }
+    if(!rules)continue;
+    for(const rule of rules){
+      const text=rule.cssText||"";               // a media rule's cssText contains its inner rules
+      for(const m of text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)){
+        if(m[1]&&m[1].startsWith(ASSET_BASE))out.push(m[1]);
+      }
+    }
+  }
+  return out;
+}
 export function preloadAssets(){
-  const urls=[...new Set([...sharedAssetUrls(),
+  const urls=[...new Set([...sharedAssetUrls(),...cssAssetUrls(),
     `${ASSET_BASE}logo.jpg`,
     // T-33: ING_HOLE_IMG was the ONE ingredient family never warmed here, so the greyed-crate art
     // was always fetched cold in the middle of a voyage — and both image failures caught in a

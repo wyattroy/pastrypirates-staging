@@ -63,6 +63,13 @@ try {
   }
 } catch { /* no marker or unreadable — proceed */ }
 
+/* THE BLACK WINDOW WYATT SAW IS NOT MADE HERE — measured 2026-09-02, INBOX-20260901T1440Z, and
+   recorded at the scene because this is the first place the next reader will look. `detached: true`
+   is DETACHED_PROCESS on Windows, which gives the child NO CONSOLE AT ALL (AttachConsole against a
+   real spawn fails for it and succeeds for a non-detached one). `windowsHide` below is therefore a
+   no-op here — harmless, and NOT the bug. The window is made one level down: a console-less process
+   that spawns a console child makes Windows hand that child a brand-new console, which is a visible
+   window. The fix lives at those spawn sites; see scripts/lib/child_window.mjs. */
 const child = spawn(process.execPath, [trial, `--report=${reportPath}`, ...passthrough], {
   cwd: repo,
   detached: true,

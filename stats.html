@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Wyatt's private usage console. HIS RULING, on the Glass, answering his own ask "create a
+     firebase admin console so I can see how many people are playing":
+         "put it at /stats.html behind a simple curtain and block it from robots.txt"
+     All three clauses are held by scripts/qa/stats_console_check.mjs, red-proofed four ways.
+     robots.txt disallows this path AND this tag instructs crawlers directly, the same
+     belt-and-braces classic/stats.html has used since 2026-08-10. Not linked from the game. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Pastry Pirates — usage</title>
+<!--
+  WHY THIS PAGE EXISTS AT THE ROOT, given classic/stats.html already did the job.
+  The game moved to the repo root at the 2026-08-26 cutover and its reader did not come with it.
+  src/ui/usage.js has said in its own header since 2026-08-10 that its three records are "read
+  back by /stats.html" — and /stats.html was a 404 on the live domain for the whole of that time
+  while the writers kept writing. Measured 2026-09-03: 237 page boots from 123 distinct browsers
+  in fourteen days, 44 voyages started, 8 finished, 289 finished-game logs — all of it live, all
+  of it unreadable by the person it was collected for.
+
+  READS FIVE NODES THE GAME WRITES. Four are history (src/ui/usage.js, src/net/writers.js):
+    visits/<ts>-<pid> = build            one per page boot
+    starts/<ts>-<pid> = {b,h,m}          one per new voyage; key doubles as the gid
+    fins/<gid>        = {t,b}            one per completed voyage
+    gamelogs/<ts>     = {...names,bots}  the long-standing completed-voyage log (captain names)
+  The fifth answers his question in its own present tense — "how many people are PLAYING":
+    presence/<pid>    = true             written by netMarkPresence on connect, and armed with
+                                         onDisconnect().remove() — so it empties itself when a
+                                         browser closes and counts live players, not history.
+
+  ⚠ PRESENCE COUNTS BROWSERS WITH A LIVE SOCKET, NOT VOYAGES IN PROGRESS. A player who opened the
+  game and walked away still counts; a player on a build with no Firebase SDK does not. It is the
+  game's own busy indicator (orchestrator.js watchPresence), reused — not a new measurement.
+
+  "YOU" IS AUTOMATIC: this page is served from the same origin as the game, so it reads this
+  device's own pp_id from localStorage and splits you out. Tap any id chip in the footer to mark
+  another device (your laptop, say) as also-you; the choice is stored locally (pp_stats_me).
+
+  IF EVERY PANEL SHOWS A READ ERROR the database rules don't allow public reads. Firebase
+  console -> Realtime Database -> Rules; the nodes this page needs are:
+      "visits":   { ".read": true, ".write": true },
+      "starts":   { ".read": true, ".write": true },
+      "fins":     { ".read": true, ".write": true },
+      "gamelogs": { ".read": true, ".write": true },
+      "presence": { ".read": true, ".write": true }
+-->
+<style>
+  :root{--teal:#0e7a86;--ink:#233;--sub:#6b7b80;--line:#dbe7e9;--me:#d6337f;--bg:#f4f9f9;--live:#1a8f3c;}
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px;font:15px/1.45 -apple-system,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+  h1{font-size:19px;margin:0 0 2px;color:var(--teal)}
+  .sub{color:var(--sub);font-size:12.5px;margin-bottom:12px}
+  .range button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;margin-right:6px;font-size:14px;color:var(--ink)}
+  .range button.on{background:var(--teal);border-color:var(--teal);color:#fff}
+  .cards{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+  /* 1 1 44% and not 30%: at 390px four cards laid out as 30% put three on the first row and
+     stranded the fourth as a full-width slab with one number floating in it — seen in
+     .planning/posed/stats-open-390w.png before this line existed. 44% gives a 2x2 block on a
+     phone and a single row on a laptop. */
+  .card{flex:1 1 44%;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+  .card b{display:block;font-size:22px}
+  .card span{font-size:11.5px;color:var(--sub)}
+  .card.now{border-color:var(--live);background:#f2fbf4}
+  .card.now b{color:var(--live)}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+  th,td{padding:7px 8px;text-align:right;border-top:1px solid var(--line)}
+  th{background:#eef6f7;color:var(--sub);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+  th:first-child,td:first-child{text-align:left}
+  .day-wrap{overflow-x:auto;margin-bottom:14px}
+  .muted{color:var(--sub)}
+  .warn{background:#fff3f6;border:1px solid #f2c2d4;border-radius:10px;padding:10px;font-size:13px;margin:10px 0}
+  .chip{display:inline-block;border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;margin:3px 4px 0 0;font-size:12px;cursor:pointer}
+  .chip.me{background:var(--me);border-color:var(--me);color:#fff}
+  h2{font-size:14px;margin:18px 0 6px}
+  .cap{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  /* the curtain */
+  #curtain{max-width:360px;margin:14vh auto 0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+  #curtain h1{margin-bottom:6px}
+  #curtain input{width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--line);border-radius:8px;margin:10px 0 8px}
+  #curtain button{width:100%;padding:10px;font-size:15px;border:0;border-radius:8px;background:var(--teal);color:#fff}
+  #curtainMsg{color:var(--me);font-size:13px;min-height:18px;margin-top:6px}
+</style>
+</head>
+<body>
+
+<!-- THE CURTAIN. His word: "behind a simple curtain" — and simple is the whole specification.
+     It keeps a stranger who guesses the URL off this page. IT IS NOT A LOCK AND MUST NOT BE
+     DESCRIBED AS ONE: the database nodes below are world-readable by design (the game writes them
+     with an unauthenticated REST PUT from every player's browser), so anyone determined can read
+     the same numbers with one curl. What the curtain buys is that the dashboard is not sitting
+     open at a guessable path — which is exactly what he asked for and no more.
+     The word is stored here as a SHA-256, never in the clear. Change it with
+     `scripts/qa/curtain_hash.mjs`, which takes the word as an argument and HAS NO DEFAULT —
+     because the first version of that helper defaulted to the live word, which put the password
+     in the repo the page was pointing at (CEO 159 found it in one grep). The word itself lives
+     with Wyatt and appears nowhere in this repository.
+
+     ⚠ AND THE HALF THAT GETTING THAT RIGHT MADE EASY TO MISS: on 2026-09-03 the word was changed
+     to get it out of the repo, correctly — and NOBODY TOLD WYATT. He is the only person this
+     page is for, and for a day the curtain's only measurable effect was to lock him out, with
+     every gate green. A curtain that excludes its owner is worse than no curtain.
+     The word is delivered to him by a channel that is NOT this repo (his Glass), and the SHA-256
+     that was handed over is recorded in `.planning/wyclau/CURTAIN-DELIVERED.md` — the hash, never
+     the word. `stats_console_check.mjs` clause E fails the build the day those two disagree. -->
+<form id="curtain" data-curtain onsubmit="return openCurtain(event)">
+  <h1>Pastry Pirates — usage</h1>
+  <div class="sub">Private. Type the word.</div>
+  <input id="curtainWord" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="the word">
+  <button type="submit">Open</button>
+  <div id="curtainMsg"></div>
+</form>
+
+<div id="console" hidden>
+  <h1>Pastry Pirates — usage</h1>
+  <div class="sub">Finished + unfinished voyages and page visits, by day (your timezone). This device is excluded from "others" automatically.</div>
+  <div class="range" id="range"></div>
+  <div id="out"><p class="muted">Loading…</p></div>
+</div>
+
+<script>
+"use strict";
+const DB="https://pastry-pirates-default-rtdb.firebaseio.com";
+const CURTAIN_SHA256="de8a675a4faf42302eb7979e3f7907c54b6473068c95e6100182b321384bfd29";
+const $=(s)=>document.querySelector(s);
+let DAYS=14;
+
+/* ---- local storage, guarded everywhere ---------------------------------------------------------
+   In a private tab the ACCESSOR THROWS rather than returning null, and an unguarded read at the
+   top of a script takes the whole page down and shows a blank screen instead of the thing he
+   asked for. Every touch below is wrapped; none of them is load-bearing. */
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+
+/* ---- the curtain ------------------------------------------------------------------------------- */
+async function sha256(text){
+  // crypto.subtle needs a secure context. https://playpastrypirates.com and localhost both are;
+  // opening this file over file:// is not, and it says so rather than silently refusing the word.
+  if(!(window.crypto&&window.crypto.subtle))throw new Error("needs https (or localhost)");
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function openCurtain(ev){
+  if(ev)ev.preventDefault();
+  const msg=$("#curtainMsg");
+  try{
+    if(await sha256($("#curtainWord").value.trim().toLowerCase())!==CURTAIN_SHA256){
+      msg.textContent="Not the word.";
+      return false;
+    }
+  }catch(e){
+    msg.textContent="Can't check the word here: "+e.message;
+    return false;
+  }
+  lsSet("pp_stats_open","1");
+  reveal();
+  return false;
+}
+function reveal(){
+  $("#curtain").hidden=true;
+  $("#console").hidden=false;
+  drawRange();
+  load();
+}
+
+/* ---- reading the database ----------------------------------------------------------------------
+   Nothing here runs until the curtain opens: reveal() is the only caller, so a stranger at this
+   URL costs the database nothing and sees nothing. */
+function myIds(){
+  const ids=new Set();
+  const id=lsGet("pp_id");if(id)ids.add(id);
+  try{JSON.parse(lsGet("pp_stats_me")||"[]").forEach(i=>ids.add(i));}catch(e){}
+  return ids;
+}
+function toggleMe(pid){
+  let extra=[];try{extra=JSON.parse(lsGet("pp_stats_me")||"[]");}catch(e){}
+  const i=extra.indexOf(pid);
+  if(i>=0)extra.splice(i,1);else extra.push(pid);
+  lsSet("pp_stats_me",JSON.stringify(extra));
+  load();
+}
+async function get(node,since){
+  const r=await fetch(`${DB}/${node}.json?orderBy="$key"&startAt="${since}"`);
+  const j=await r.json();
+  if(j&&j.error)throw new Error(node+": "+j.error);
+  return j||{};
+}
+// presence has no timestamped keys to range over — it is a live set, so it is read whole and
+// shallow (keys only, no values), which is one small response however many players are on.
+async function getPresence(){
+  try{
+    const r=await fetch(`${DB}/presence.json?shallow=true`);
+    const j=await r.json();
+    if(j&&j.error)return null;
+    return j?Object.keys(j):[];
+  }catch(e){return null;}
+}
+const day=(ts)=>{const d=new Date(+ts);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+const pidOf=(key)=>key.slice(key.indexOf("-")+1);
+const tsOf=(key)=>+key.slice(0,key.indexOf("-"));
+/* visits/<key> IS NORMALLY THE BUILD STRING, AND ONCE IN 237 ROWS IT IS NOT. Measured on the live
+   database 2026-09-03: 192 rows "v4", 44 rows "main", and ONE row holding a nested Firebase push
+   key — {"-P0FDHq7K_o_fGoQljZd":"v4"} — which a plain string concat renders as the literal text
+   "[object Object]" in the builds column. That is what the first screenshot of this page showed.
+   Unwrap rather than drop it: it is still a real visit and its build is still readable. */
+const buildOf=(v)=>typeof v==="string"?v:(v&&typeof v==="object"?(Object.values(v)[0]||"?"):"?");
+
+async function load(){
+  const out=$("#out");
+  out.innerHTML='<p class="muted">Loading…</p>';
+  const since=String(Date.now()-DAYS*86400e3);
+  let visits,starts,fins,logs,live,err=null;
+  try{
+    [visits,starts,fins,logs,live]=await Promise.all([
+      get("visits",since),get("starts",since),get("fins",since),get("gamelogs",since),getPresence()]);
+  }catch(e){err=e.message;}
+  if(err){
+    out.innerHTML=`<div class="warn"><b>Can't read the database:</b> ${err}.<br><br>
+      If this says <i>Permission denied</i>, the data is being written but the rules don't allow
+      public reads. Firebase console &rarr; Realtime Database &rarr; Rules, and give
+      <code>visits</code>, <code>starts</code>, <code>fins</code>, <code>gamelogs</code> and
+      <code>presence</code> <code>".read": true</code> (details in this page's source comment).</div>`;
+    return;
+  }
+  const me=myIds();
+  const days={};
+  const D=(d)=>days[d]=days[d]||{visits:0,uniq:new Set(),uniqOthers:new Set(),starts:0,startsOthers:0,fins:0,finsOthers:0,builds:{},caps:new Set()};
+  for(const k in visits){const d=D(day(tsOf(k))),p=pidOf(k);d.visits++;d.uniq.add(p);if(!me.has(p))d.uniqOthers.add(p);const b=buildOf(visits[k]);d.builds[b]=(d.builds[b]||0)+1;}
+  const finSet=new Set(Object.keys(fins));
+  let unfinished=0,unfinishedOthers=0;
+  for(const k in starts){
+    const d=D(day(tsOf(k))),p=pidOf(k),other=!me.has(p);
+    d.starts++;if(other)d.startsOthers++;
+    const done=finSet.has(k);
+    if(done){d.fins++;if(other)d.finsOthers++;}
+    else if(tsOf(k)<Date.now()-3*3600e3){unfinished++;if(other)unfinishedOthers++;} // a voyage <3h old may simply still be running
+  }
+  // fins whose start-gid we never saw (mid-game refresh lost the gid): still finished voyages
+  for(const k in fins){if(!starts[k]){const d=D(day(tsOf(k)));d.fins++;if(!me.has(pidOf(k)))d.finsOthers++;}}
+  for(const k in logs){
+    const g=logs[k];if(!g||!g.names)continue;
+    const d=D(day(+(g.ts||k)));
+    g.names.forEach((n,i)=>{if(n&&!(g.bots&&g.bots[i]))d.caps.add(n);});
+  }
+  const keys=Object.keys(days).sort().reverse();
+  const tot=(f)=>keys.reduce((a,k)=>a+f(days[k]),0);
+  const allOthers=new Set();keys.forEach(k=>days[k].uniqOthers.forEach(p=>allOthers.add(p)));
+
+  // HIS SENTENCE WAS PRESENT TENSE — "so I can see how many people are playing" — so the live
+  // count leads, and the fourteen-day history follows it. `null` means the read failed, which is
+  // a different thing from nobody playing and must never be drawn as 0.
+  const liveOthers=live===null?null:live.filter(p=>!me.has(p)).length;
+  let html=`<div class="cards">
+    <div class="card now"><b>${liveOthers===null?"—":liveOthers}</b><span>playing right now${liveOthers===null?" (can't read presence)":""}</span></div>
+    <div class="card"><b>${allOthers.size}</b><span>unique players besides you (${DAYS}d)</span></div>
+    <div class="card"><b>${tot(d=>d.startsOthers)}</b><span>voyages started by others</span></div>
+    <div class="card"><b>${tot(d=>d.finsOthers)}</b><span>finished by others</span></div>
+  </div><div class="day-wrap"><table><tr>
+    <th>day</th><th>visitors<br>(others)</th><th>boots</th><th>started<br>(others)</th><th>finished<br>(others)</th><th>builds</th></tr>`;
+  for(const k of keys){
+    const d=days[k];
+    const b=Object.entries(d.builds).map(([n,c])=>`${n}:${c}`).join(" ");
+    html+=`<tr><td>${k}</td><td>${d.uniq.size} (${d.uniqOthers.size})</td><td>${d.visits}</td>
+      <td>${d.starts} (${d.startsOthers})</td><td>${d.fins} (${d.finsOthers})</td><td class="muted">${b}</td></tr>`;
+  }
+  html+=`</table></div>
+  <div class="muted" style="font-size:12px">Unfinished voyages older than 3h: <b>${unfinished}</b> (${unfinishedOthers} by others).
+  Visit/start pings began 2026-08-10 — days before that show only finished games from the long-standing log.
+  "Playing right now" counts browsers holding a live connection to the game, so someone who opened it and walked away still counts.</div>`;
+  const capsAll=new Set();keys.forEach(k=>days[k].caps.forEach(c=>capsAll.add(c)));
+  if(capsAll.size)html+=`<h2>Captains seen (from finished-game logs)</h2><div class="cap">${[...capsAll].join(", ")}</div>`;
+  // id chips: tap to mark a device as "also me"
+  const pids=new Map();
+  for(const k in visits){const p=pidOf(k);pids.set(p,(pids.get(p)||0)+1);}
+  html+=`<h2>Devices (tap to toggle "this is me")</h2><div>`;
+  [...pids.entries()].sort((a,b)=>b[1]-a[1]).slice(0,30).forEach(([p,n])=>{
+    html+=`<span class="chip ${me.has(p)?"me":""}" onclick="toggleMe('${p}')">${p} · ${n}</span>`;
+  });
+  html+=`</div>`;
+  out.innerHTML=html;
+}
+function drawRange(){
+  $("#range").innerHTML=[7,14,30].map(n=>`<button class="${n===DAYS?"on":""}" onclick="DAYS=${n};drawRange();load()">${n}d</button>`).join("");
+}
+// He types the word once per browser, not once per visit.
+if(lsGet("pp_stats_open")==="1")reveal();else $("#curtainWord").focus();
+</script>
+</body>
+</html>

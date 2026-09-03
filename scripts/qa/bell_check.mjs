@@ -63,6 +63,22 @@ const assertions = [
     (s) => /ONE item/.test(s) && /END YOUR TURN/.test(s)],
   ["DryRun exists so a gate can exercise the real file",
     (s) => /\[switch\]\$DryRun/.test(s)],
+  /* ⚑ HIS RULING, 2026-09-02T12:39:56.363Z — "May an unattended watch READ the claude-kit folder?"
+   * "yes". The fence was this launch line carrying no --add-dir, and nobody ever chose it: it fell
+   * out of the argument list. Five patches sat in PENDING-KIT-PATCHES.md behind it, and a watch
+   * closing the ruling that depended on it still wrote "cannot be built here" half an hour after he
+   * said yes, because the ruling had not been harvested anywhere a session looks (CEO 106).
+   * GATED because today's other lesson is the same shape one floor up: a capability nothing
+   * invokes is a capability that never runs, and `chartkeeper --rank` proved it by sitting green
+   * and uncalled while he asked four times. An argument nothing checks un-wires the same way. */
+  ["the watch is launched able to READ claude-kit (his ruling 2026-09-02T12:39:56Z)",
+    (s) => /--add-dir/.test(s) && /\$kitArgs/.test(s)],
+  /* ...and FAIL-SAFE, which is the half that protects every machine without a kit — a cloud
+   * container, or a fresh clone. --add-dir at a path that does not exist turns "no kit here"
+   * (true, and fine) into a launch failure, and a Bell that cannot launch stops the relay dead.
+   * The flag must be guarded by a real existence test, not added unconditionally. */
+  ["...and only when the kit is really there — no --add-dir at a path that does not exist",
+    (s) => /Test-Path[^\n]*\$kitDir/.test(s)],
   ["ASCII only (PowerShell 5.1 reads BOM-less UTF-8 as cp1252)",
     (s) => [...(s === src ? raw : s)].every((ch) => ch.charCodeAt(0) < 128)],
   /* The graveyard fence: the deleted judgement must not creep back in. Each of these names a

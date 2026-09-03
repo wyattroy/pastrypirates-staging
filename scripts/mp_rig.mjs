@@ -24,6 +24,7 @@
  */
 import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
@@ -43,7 +44,32 @@ export function serve(port) {
   return gameURL(port);
 }
 
+/* A `/tmp/...` PROFILE IS A MAC PATH, AND ON WINDOWS IT KILLS THE BROWSER SILENTLY.
+ *
+ * MEASURED 2026-09-03 on the Blade, same argv twice, only this path differing:
+ *   --user-data-dir=/tmp/chrome-t017diag                     -> no stderr at all, never binds the
+ *                                                               debug port, and `attach()` dies
+ *                                                               ~20s later with "no chrome on 9437"
+ *   --user-data-dir=C:\Users\...\AppData\Local\Temp\chrome-…  -> "DevTools listening on ws://…",
+ *                                                               up in 500ms
+ *
+ * Chrome prints NOTHING on the failing path, and `launch()` spawns with stdio:"ignore", so the only
+ * symptom a probe ever sees is `attach()` timing out on a port — which reads as "Chrome is broken
+ * on this machine", not "that profile path does not exist here". Twenty-odd `scripts/qa/*` probes
+ * pass a literal `/tmp/chrome-*`, so ALL of them were dead on Windows and none of them said why.
+ *
+ * The rest of this repo already had the answer: `bakeoff_shots.mjs`, `crew_bake_probe.mjs`,
+ * `crew_trade_probe.mjs`, `local_trade_probe.mjs` and `lib/wk.mjs` all build profiles under
+ * `os.tmpdir()`, and all of them run here. This maps the POSIX spelling onto that same house
+ * convention rather than editing twenty call sites — one place, derived from the OS, so a probe
+ * added tomorrow is right without knowing this happened. Non-Windows behaviour is byte-identical:
+ * `os.tmpdir()` IS `/tmp` there. */
+const profilePath = p => (process.platform === "win32" && /^\/tmp\//.test(p))
+  ? path.join(os.tmpdir(), p.slice(5))
+  : p;
+
 export function launch(dbgPort, profile, { headless = true, url = "about:blank" } = {}) {
+  profile = profilePath(profile);
   fs.rmSync(profile, { recursive: true, force: true });
   const args = [
     ...LINUX_ARGS,

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="favicon.png">
+<title>How to play — Pastry Pirates</title>
+<meta name="description" content="The full rules of Pastry Pirates: the wind and the ghost needle, crate prices, broadsides, the trade winds, storms, and the bake-off that decides the voyage.">
+<link rel="canonical" href="https://playpastrypirates.com/rules.html">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta property="og:type" content="website">
+<meta property="og:title" content="How to play — Pastry Pirates">
+<meta property="og:description" content="The full rules of Pastry Pirates: the wind and the ghost needle, crate prices, broadsides, the trade winds, storms, and the bake-off that decides the voyage.">
+<meta property="og:url" content="https://playpastrypirates.com/rules.html">
+<meta property="og:image" content="https://playpastrypirates.com/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="663">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How to play — Pastry Pirates">
+<meta name="twitter:description" content="The full rules of Pastry Pirates: the wind and the ghost needle, crate prices, broadsides, the trade winds, storms, and the bake-off that decides the voyage.">
+<meta name="twitter:image" content="https://playpastrypirates.com/og-image.jpg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No Firebase SDK and no game logic — same as about.html (D-07). -->
+<!-- THIS FILE IS GENERATED. DO NOT EDIT IT.
+     Every word below is the in-game How-to-play modal in index.html, and every number is
+     rulesFacts(cfg) — the same function the engine plays by. Change the RULES by changing the
+     modal, then run:
+         node scripts/build_rules_page.mjs
+     scripts/qa/rules_page_check.mjs re-runs the generator on every npm test and fails the build if
+     this file differs from it by one byte, so a hand-edit here does not drift quietly: it goes RED. -->
+<style>
+  /* Own stylesheet, same rule about.html follows (D-07): this page never links or @imports
+     index.html's inline <style> block, and index.html is not touched by this file. The colours are
+     index.html's own --teal / --ink / --parch2, re-declared. */
+  :root { --teal: #29a3b2; --ink: #1f4249; --accent: #fdb63d; --parch2: #fff6c0; --line: #cfe7eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif;
+    background: linear-gradient(160deg, #dcece9 0%, #e6efe1 45%, #f5f0dd 100%); background-attachment: fixed;
+    color: var(--ink); }
+  .rulesPage { max-width: 720px; margin: 40px auto; padding: 0 20px 56px; }
+  .rulesTopCta { text-align: center; margin-bottom: 28px; }
+  .rulesPlayBtn { display: inline-block; font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 16px 32px; border-radius: 12px; border: 1.5px solid #e89827; cursor: pointer;
+    background: #fdf3e3; color: #8a5a12; text-decoration: none; box-shadow: 0 8px 24px rgba(253,182,61,.18); }
+  .rulesPlayBtn:hover { background: #fae7cb; }
+  h1 { font-size: 28px; font-weight: 700; line-height: 1.2; margin: 0 0 8px; text-align: center; }
+  .rulesLede { font-size: 14px; line-height: 1.5; text-align: center; margin: 0 0 28px; opacity: .85; }
+  .rulesBody { background: #fffdf4; border: 1px solid var(--line); border-radius: 16px;
+    padding: 8px 24px 24px; box-shadow: 0 12px 30px rgba(10,35,40,.10); }
+  .rulesBody h4 { font-size: 17px; color: var(--teal); margin: 24px 0 6px; }
+  .rulesBody h4:first-child { margin-top: 12px; }
+  .rulesBody p { font-size: 14.5px; line-height: 1.55; margin: 0 0 10px; }
+  /* Matches index.html's .narrIcon so the inline art sits on the text baseline exactly as it does
+     inside the game's own modal. */
+  .narrIcon { height: 1.05em; width: auto; vertical-align: -0.16em; }
+  .rulesFoot { margin-top: 28px; font-size: 12.5px; line-height: 1.5; text-align: center; opacity: .75; }
+  .rulesFoot a { color: var(--teal); }
+  @media (max-width: 560px) {
+    .rulesPage { margin: 24px auto; padding: 0 14px 40px; }
+    .rulesBody { padding: 4px 16px 18px; border-radius: 12px; }
+    h1 { font-size: 23px; }
+  }
+</style>
+</head>
+<body>
+<div class="rulesPage">
+
+  <div class="rulesTopCta">
+    <a class="rulesPlayBtn" href="index.html"><img class="narrIcon" src="assets/icons/anchor.png" alt=""> Play Pastry Pirates</a>
+  </div>
+
+  <h1>📖 How to play Pastry Pirates</h1>
+  <p class="rulesLede">Everything ye need to sail, trade, fight and bake. These are the same rules the game shows ye at the table.</p>
+
+  <div class="rulesBody">
+<h4>🎯 The goal</h4>
+  <p>Collect every ingredient on yer recipe map, then sail home and dock at the Isle of Tortuga. That fires up yer ovens — and the bake-off begins!</p>
+  <h4>⚓ Setting sail</h4>
+  <p>Each captain gets a recipe map (<b data-rule="recipeSize">5</b> ingredients), <b data-rule="startCoins">3</b> gold coins, and a ship docked at the Isle of Tortuga. Each island holds only a few crates — and the fewer that are left, the dearer they get.</p>
+  <h4>Yer turn: sail → act</h4>
+  <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's. <span data-engine-rule="forecast">That forecast is never wrong, so ye can plan around it — save for a storm, which the compass warns ye of a day ahead but won't say which way it'll blow.</span></p>
+  <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b data-rule="sailRange">4</b> squares in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b data-rule="sailUpwind">2</b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
+  <p><b>⚓ Act</b> — choose one:</p>
+  <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads">3</b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails">1</b>🌕. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
+  <p><b>💰 Crate prices rise.</b> A crate costs <b data-rule="crateBase">6</b>🌕 <b>minus however many are left on that island</b> — so the first off a full island is <b data-rule="priceFirst">3</b>🌕, the next <b data-rule="priceNext">4</b>🌕, and the last one <b data-rule="priceLast">5</b>🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
+  <p><b>🕯️ The black market.</b> A sold-out island always has ONE more crate under the counter — a flat <b data-rule="blackMarket">10</b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two crates</b> from yer hold in trade for it — even two of the same.</p>
+  <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder">2</b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire">2</b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody. <span data-engine-rule="sanctuary">But once a captain's ovens are lit they're beyond yer reach — rob 'em on the way home, or not at all.</span> Ye can't attack a ship with an empty hold; there's nothing to take.</p>
+  <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b data-rule="callBounty">2</b>🌕 from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
+  <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — crates, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
+  <p><b>Muse</b> — do none of it. Sit back, dream o' pastry, and pocket <b data-rule="passCoin">1</b>🌕 for yer patience.</p>
+  <h4><img class="narrIcon" src="assets/icons/current-swirl.png" alt=""> The trade winds</h4>
+  <p>The sea around the rim of the world flows in a mighty clockwise current, in arcs of varying length each game. Sail (or get blown) into it and yer instantly swept to the far corner of that stretch — a daring shortcut for captains in a hurry!</p>
+  <h4>⛈️ Storms</h4>
+  <p>The compass warns ye a full day ahead, so a storm is never a surprise. At the top of the day it blows <b>every ship at once</b>, <b data-rule="stormPush">3</b> squares, all the <b>same direction</b>, before anyone acts. <b>Land and other ships stop ye short</b> — that's the whole of it. Nobody loses a turn, and a dock is just water the storm can push ye onto or off. Mind the rim, though: blown into the trade winds and yer swept clean across the sea.</p>
+  <h4><img class="narrIcon" src="assets/icons/cupcake.png" alt=""> The bake-off</h4>
+  <p>Dock at Tortuga holdin' yer whole recipe and yer ovens light <b>that very turn</b>. Yer recipe's revealed, yer ingredient crates get shuffled before yer eyes — and ye must name them back <b>in the recipe's own order</b>, from memory. Pay <b data-rule="bakeRewatch">1</b>🌕 to watch the shuffle again, as often as yer purse allows.</p>
+  <p>Crates ye place right <b>lock in</b>; the rest get shuffled again tomorrow, and ye bake again — yer attempt IS yer turn. The whole table watches every bake, so make it a show. Get every crate in its place and ye've baked it!</p>
+  <h4><img class="narrIcon" src="assets/icons/crown.png" alt=""> Winning</h4>
+  <p>First captain to bake their full recipe wins the voyage. Two captains bakin' it on the same day? No contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
+  <p><i>May yer flips be heads and yer rivals be broke.</i></p>
+  </div>
+
+  <p class="rulesFoot">
+    The amounts on this page are a standard four-captain voyage. At the table the game fills them in
+    for yer own crew — a two-captain voyage prices its crates differently — so the
+    <b>📖 How to play</b> button in the game always shows the numbers ye are actually playing by.<br>
+    <a href="index.html">Play Pastry Pirates</a> · <a href="about.html">About</a>
+  </p>
+
+</div>
+</body>
+</html>

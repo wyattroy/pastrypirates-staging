@@ -11,15 +11,17 @@ file under `src/`.
 Module scripts (`<script type="module">`) only load over an HTTP(S) origin. The
 canonical local dev server is:
 
-```
-python3 -m http.server 8000
+```bash
+# `python3` on Mac / Linux; on WINDOWS the interpreter registers only as `python`.
+python -m http.server 8000
 ```
 
 Chosen because it ships with macOS and needs no install — this is the
 no-dependency path and works even for a reader without npm. A convenience alias
 is also available:
 
-```
+```bash
+# BROKEN ON WINDOWS: `npm start` runs `python3` (package.json:21) — use the `python` line above.
 npm start
 ```
 

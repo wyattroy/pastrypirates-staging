@@ -441,6 +441,7 @@ routes HTTPS through Anthropic's TLS-inspecting egress proxy; `curl` works out o
 `sql:$HOME/.pki/nssdb` — the load-bearing certs are the Anthropic egress-gateway CAs:
 
 ```bash
+# CLOUD CONTAINER (Debian LINUX) ONLY — none of this block runs on the Mac or the Windows laptop.
 apt-get update && apt-get install -y libnss3-tools
 mkdir -p "$HOME/.pki/nssdb"
 csplit -s -z -f /tmp/ccr-ca- /root/.ccr/ca-bundle.crt '/-----BEGIN CERTIFICATE-----/' '{*}'

@@ -73,6 +73,26 @@ console.log("\nThe battle ceremony still borrows no words");
 /if\s*\(\s*!fm\s*&&\s*btl\s*\)/.test(stage) ? ok("stage.js still has the `!fm && btl` fallback the battle title depends on")
                                             : bad("the `!fm && btl` fallback is gone — the battle ceremony title will be blank");
 
+/* …AND IT MUST NAME THE RIGHT WIND. Added 2026-09-03, in THIS gate rather than a new one, because
+   this gate was already reading these exact lines and stayed green for the whole life of the bug:
+   it asserted the `!fm && btl` fallback EXISTS and never that the branch inside it can be reached.
+   The ceremony looked the captain up in `dwTag.parentElement` — `.btl-wind`, which holds the badge
+   and nothing else — so the lookup returned null on EVERY downwind battle and fell through to the
+   crosswind sentence. A player was told "Crosswind — two heads and the cannonballs collide" over
+   the coin and shown "⬇ DAVY SCONES FIRES DOWNWIND — WINS TIES" on the card seconds later. Both
+   halves are photographed: judge-1914Z-shots/solo-tablet-wk-018.png and -018-settled.png.
+   ⚠ THESE TWO ARE A REVERT ALARM, NOT THE PROOF. They are string tests, so a rewrite that broke
+   the behaviour differently would slip past them. The behavioural proof is a browser probe that
+   poses a downwind card, raises the real ceremony and reads the line —
+   `node scripts/qa/flip_ceremony_names_the_wind_check.mjs` (and `--before`, which strips the
+   marker and must go RED). It is deliberately NOT in `npm test`: it launches Chrome for ~40s. */
+console.log("\nThe battle ceremony names the DOWNWIND captain, not a crosswind");
+/\.btl-col\.dw\s+\.who/.test(stage) ? ok("stage.js reads the marked column (.btl-col.dw .who) for the downwind captain")
+                                    : bad("stage.js no longer reads .btl-col.dw .who — the ceremony will call every downwind battle a crosswind");
+/dw===\s*"a"\s*\?\s*" dw"/.test(orch) && /dw===\s*"d"\s*\?\s*" dw"/.test(orch)
+  ? ok("renderBattle marks the downwind column, from the same `dw` that writes the badge")
+  : bad("renderBattle no longer marks the downwind column — the ceremony has nothing to read");
+
 console.log("\nThe renderer stamps both flip shapes");
 ((fnBody(flow, "renderAskPrompt").match(/flipMsg/g) || []).length >= 2) ? ok("flipMsg is stamped on both the pure-flip and flip-with-options paths")
                                            : bad("one of the renderer's two flip paths lost its flipMsg stamp");

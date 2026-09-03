@@ -46,8 +46,18 @@ const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g,
 
 /* Anchor on the branch itself rather than on line numbers: `if (onBoats){` inside the radial
    placement, up to the `menu.forEach` that writes the spots out. */
+/* ⚠ ANCHOR ON THE SEED AND WALK BACK — there is MORE THAN ONE `if (onBoats){` in this function now.
+   `T-013` added a second one up in the ask-pill block (the pill has to know where these circles will
+   land), and it sits EARLIER in the file — so `indexOf("if (onBoats){")` silently began returning
+   the pill's branch, and this "branch" swelled to span both. Caught by red-proofing: a tamper
+   planted in the placement seed was answered by a `boatRad(` call in the PILL block, and the gate
+   reported PASS. A gate whose anchor can drift onto a different block is a gate that answers about
+   code nobody asked it about. So the seed is found first and the opening brace is the nearest one
+   ABOVE it. */
 const branch = (() => {
-  const i = code.indexOf("if (onBoats){");
+  const s = code.indexOf("let spots = anchors.map(");
+  if (s < 0) return "";
+  const i = code.lastIndexOf("if (onBoats){", s);
   if (i < 0) return "";
   const j = code.indexOf("menu.forEach((b, i) =>", i);
   return j < 0 ? "" : code.slice(i, j);
@@ -73,8 +83,23 @@ else {
   const whole = offset.find(o => /\brad\b/.test(o) && /\bHALF\b/.test(o) && /\bAIR\b/.test(o));
   const halfDef = (branch.match(/const HALF\s*=\s*([^;]+);/) || [, ""])[1];
   const airDef  = (branch.match(/const AIR\s*=\s*([^;]+);/) || [, ""])[1];
-  const radDef  = (branch.match(/const boatRad\s*=\s*([^;]*?)fixedRect[^;]*;/) || [, ""])[1] !== "" ||
-                  /const boatRad\s*=[\s\S]{0,180}fixedRect\(/.test(branch);
+  /* ⚠ THE DEFINITION IS LOOKED FOR IN THE WHOLE FILE, THE CALL IN THE BRANCH — and that split is the
+     point, not a loosening. `T-013` hoisted `boatRad` out of this branch because the ASK PILL is
+     placed first and has to know how big the boats are to know where these circles will land; with
+     the definition scoped to the branch it could only guess, and it guessed with a constant. Scoping
+     the search to the branch would therefore fail a tree in which the derivation is MORE shared, not
+     less — a gate punishing the fix for rule 23.
+     What it still cannot be walked past: the definition must measure a real rect (`fixedRect`), and
+     THE SEED ITSELF must call it.
+
+     ⛔ "THE BRANCH MUST CALL IT" WAS NOT ENOUGH, AND CEO 167 WALKED PAST IT WHILE THE COMMIT CLAIMED
+     OTHERWISE. Replacing the seed's `const rad = boatRad(anchorSeats[k])` with a literal `26` — the
+     ORIGINAL W5-2 defect, restored exactly — passed all five clauses, because `hulls` a few lines
+     down still calls `boatRad(i)` and satisfied a branch-wide search. The `rad` in `(rad + HALF +
+     AIR)` would have been a constant while this gate reported the offset "derived". Pre-existing,
+     and the previous commit said it was closed when it was not. The call has to be in the SEED,
+     which is the expression the offset is actually built from. */
+  const radDef  = /const boatRad\s*=[\s\S]{0,180}fixedRect\(/.test(code) && /\bboatRad\s*\(/.test(seed || "");
   const live = t => t && !/^\s*0\s*$/.test(t) && !/\*\s*0\b/.test(t) && !/\b0\s*\*/.test(t);
   const derived = !!whole && live(halfDef) && live(airDef) && radDef && /growPeak/.test(halfDef);
   const constantStern = !!seed && /ay\s*[+-]\s*\d+(?!\s*\*)/.test(seed);

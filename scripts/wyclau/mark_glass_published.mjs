@@ -40,9 +40,10 @@
 // exists in neither repo nor in settings.json. It is kept because SESSIONS read it and act on it,
 // which is precisely why it must not be able to lie to them.
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clockRefusal, unrecognisedNote } from "./lib/artifact_version.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WY = join(ROOT, ".planning", "wyclau");
@@ -60,7 +61,7 @@ current when it may not be, and nothing downstream can tell the difference.
 
 Pass the version the Artifact publish call returned:
 
-  node scripts/wyclau/mark_glass_published.mjs --version=<id>
+  node scripts/wyclau/mark_glass_published.mjs --version=<id> --harvested=<the page file your read saved>
 
 If you have no version id, you have not published. Publish first:
   1. READ the live page and harvest any ideas/rulings into .planning/CHART.md
@@ -72,6 +73,125 @@ If you have no Artifact tool at all -- a 'claude -p' watch on some machines does
 then you cannot publish and must not stamp. Write what you wanted shown into
 .planning/wyclau/GLASS-NOTE.md and commit it; the next session that CAN publish folds it in.`);
   process.exit(1);
+}
+
+/* ⚑ AND IT MUST BE AN IDENTITY, NOT A CLOCK — `T-111`. Refusing an EMPTY value is not checking its
+   KIND: on 2026-09-02 this file recorded `version=2026-09-02T22:06:23.279Z`, eleven minutes after
+   holding a real id, and nothing objected. That also broke a detector that was working — the
+   cheapest way to tell HIS save from a session's publish was whether this line named the version the
+   notification announced, and two different KINDS of value cannot be compared at all. The rule is
+   shared with the harvest stamp; one copy, or they drift. */
+const clockProblem = clockRefusal(version, "scripts/wyclau/mark_glass_published.mjs");
+if (clockProblem) {
+  console.error(clockProblem);
+  process.exit(1);
+}
+const oddVersion = unrecognisedNote(version, "scripts/wyclau/mark_glass_published.mjs");
+if (oddVersion) console.error(oddVersion);
+
+/* ⛔ THE PUBLISHER MUST HAVE LOOKED AT HIS PAGE — `T-210`, filed off the live receipts, not reasoned.
+ *
+ *   LAST-HARVEST  11:22:00.631Z  version 1788433599-0141  stamped by ONE session
+ *   LAST-PUBLISH  11:22:29.562Z  version 1788434543-bb7a  by a DIFFERENT one
+ *
+ * Twenty-nine seconds apart, and the publisher never stamped a harvest of its own. The publish hook
+ * allowed it because `LAST-HARVEST`'s MTIME was fresh — **and that file is machine-local, so every
+ * session on this machine shares one.** ONE SESSION'S LOOK LICENSED ANOTHER SESSION'S OVERWRITE, and
+ * the session doing the overwriting had no idea when the page was last read or what was on it.
+ *
+ * So `--harvested=` is REQUIRED here, exactly as it is on `mark_glass_harvest.mjs` (`T-140`): name
+ * the page file YOU read, and the harvest receipt must name the same one. A session that never read
+ * the page has no such file to name.
+ *
+ * ⛔ AND THE FIRST VERSION OF THIS COMPARED THE BASENAME, WHICH IS NOT AN IDENTITY — CEO 168, and
+ * the claim was written into four files before it was checked. It said: the Artifact tool saves each
+ * read under the READING SESSION's own directory
+ * (`…/projects/<project>/<SESSION-ID>/tool-results/artifact-<id>-<version>.html`), so the session id
+ * is already in the path. **The path is real. `basename()` threw it away** — one character before it
+ * would have been used — so the check asked *"did anyone on this machine read this page version?"*
+ * and never *"did YOU?"*. Measured: session directories routinely hold byte-identical basenames for
+ * the same version — one version in three of them, eleven more in two.
+ *
+ * ⛔ AND THE INCIDENT THIS ROW WAS FILED OFF WOULD HAVE PASSED. CEO 168 read the mtimes: the peer
+ * had that page on disk at 11:22:15Z, **fourteen seconds before it stamped**. Naming its own copy
+ * would have matched a basename harvested by a different session, and it would have been waved
+ * through. **The fix would not have refused the event it is named for.**
+ *
+ * ✅ SO THE COMPARISON IS THE FULL RESOLVED PATH, and the claim above is now true rather than
+ * comforting. A publisher must have read the page ITSELF: another session's copy lives under another
+ * session's id and cannot match. Case-insensitive because Windows paths are, and a session that
+ * retypes a path in a different case is doing nothing wrong (CEO 168 found that refusal).
+ *
+ * ⚠ WHAT THIS DOES **NOT** DO, and the first version of this note overstated it in four places
+ * (CEO 168). **IT DOES NOT PREVENT THE DELETION.** The destructive act is the Artifact republish,
+ * and the only thing in front of that is `.claude/hooks/glass-harvest-first.cjs`, a `PreToolUse`
+ * deny keyed on `LAST-HARVEST`'s MTIME — machine-local, shared, and untouched by this. A session
+ * that never looked can still publish and still delete his words. **What it can no longer do is
+ * file a clean receipt afterwards** — which matters, because this file's own header records that
+ * sessions read `LAST-PUBLISH` and act on it, but it is a smaller thing than "his words are safe".
+ * **Nor does it close the race:** he can write between a read and a publish, and
+ * `mark_glass_harvest.mjs`'s header records a 7-second instance. Closing that needs the hook, and
+ * the hook lives under `.claude/`, which needs Wyatt's own hands. */
+const harvestedArg = (process.argv.slice(2).find((a) => a.startsWith("--harvested=")) ?? "").slice("--harvested=".length).trim();
+if (!harvestedArg) {
+  console.error(`REFUSING TO STAMP — this publish did not say WHICH PAGE it read.
+
+Republishing regenerates his page from disk, so it DELETES every idea, comment and ruling nobody
+carried off first. A publish stamped by a session that never read the live page is that deletion
+with a clean receipt over it.
+
+  --harvested=<the html file the Artifact read saved for THIS session>
+
+Read the page, carry it, then stamp:
+
+  node scripts/wyclau/harvest_glass.mjs --html=<that file>
+  node scripts/wyclau/mark_glass_harvest.mjs --version=<id> --rulings=<...> --harvested=<that file>
+
+Nothing was written.`);
+  process.exit(1);
+}
+{
+  const mine = resolve(harvestedArg);
+  let receipt = "";
+  try { receipt = readFileSync(join(WY, "LAST-HARVEST"), "utf8"); } catch { /* none yet */ }
+  /* ⚠ TWO BLANKS MUST NOT AGREE — the trap this session fell into five times tonight, where a check
+     passes because an empty value matched an empty field: `"".includes("")` is true, and a missing
+     receipt reads as `""`.
+     ⛔ THE EXPLICIT `!want` GUARD IS GONE, AND ITS HISTORY IS THE POINT. It compared a BASENAME, and
+     `basename(resolve("C:\\"))` is `""` — so the guard was load-bearing, while I had labelled it
+     "UNREACHABLE, MEASURED" from the wrong input (`resolve("")`, the current directory). CEO 168
+     disproved that. Comparing the FULL RESOLVED PATH removes the emptiness entirely: `resolve()` of
+     any non-empty argument is never `""`, and the flag is required and trimmed above. **The needle
+     also can no longer be empty**, because it is a quoted JSON field name plus a value. Deleting
+     the value that could be blank beats guarding it and beats defending a guard nobody can reach.
+     Case 7 keeps a drive root in the suite so this stays true rather than becoming true by luck. */
+  /* ⛔ ANCHORED, because the loose form let eight characters through — CEO 168 measured
+     `--harvested=artifact` (a prefix), `--harvested=harvestedFile` (a JSON KEY in the receipt) and a
+     truncated filename ALL accepted. `mark_glass_harvest.mjs` had this right one file away
+     (`from=${want}`) and this half was the sloppy one. Now it must match the whole quoted value. */
+  /* ⛔ PARSED, NOT STRING-MATCHED. CEO 168 was right that the loose `includes()` let eight
+     characters through (`--harvested=artifact`, and even `harvestedFile`, a KEY in the receipt) —
+     and the first anchored version traded that for a worse dependency: it matched
+     `"harvestedPath": "…"` **with the space that `JSON.stringify(obj, null, 2)` happens to emit**,
+     so a receipt written compactly stopped matching and every publish was refused again. A needle
+     that depends on someone else's whitespace is not an anchor. Read the field. */
+  let recordedPath = null;
+  try { recordedPath = JSON.parse(receipt).harvestedPath ?? null; } catch { recordedPath = null; }
+  const same = typeof recordedPath === "string" && recordedPath.length > 0
+    && resolve(recordedPath).toLowerCase() === mine.toLowerCase();
+  if (!same) {
+    console.error(`REFUSING TO STAMP — no harvest receipt for ${mine}.
+
+.planning/wyclau/LAST-HARVEST ${receipt ? "names a different page" : "does not exist"}, so THIS
+session has not read and carried the page it is about to replace. Another session's harvest is not
+yours: the receipt is machine-local and shared, which is exactly how a publisher that never looked
+gets waved through.
+
+  node scripts/wyclau/harvest_glass.mjs --html=${harvestedArg || "<the file your read saved>"}
+
+Nothing was written.`);
+    process.exit(1);
+  }
 }
 
 /* RECORD WHAT WAS PUBLISHED, not merely that something was. Without this the receipt says a publish

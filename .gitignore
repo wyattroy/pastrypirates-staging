@@ -101,12 +101,18 @@ w1-crewphone-recheck/
 .planning/wyclau/LONG-RUN
 # Detached-trial stdout/stderr logs (start_trial_detached.mjs) — bulky, machine-local.
 .planning/wyclau/detached/
+# What THIS machine's watch has in hand (scripts/wyclau/claim_item.mjs). Exactly the same nature as
+# LONG-RUN above and ignored for exactly the same reason: committed, it would tell every other
+# machine that IT is working on something. It reaches the branch the one way a machine-local
+# instrument is allowed to — summarized into .planning/wyclau/status/<hostname>.md.
+.planning/wyclau/IN-HAND
 
 # Claude Code local settings are MACHINE-LOCAL by design (the file even points at
 # /opt/homebrew). It was tracked once and shipped the Mac's 82-entry approval history
 # to every clone; the deliberate, reviewed allowlist lives in .claude/settings.json.
 .claude/settings.local.json
 .planning/wyclau/LAST-HARVEST
+.planning/wyclau/LAST-CARRY
 
 # A rung watch's stdout/stderr (bell.ps1). Machine-local and often large; the DURABLE record of
 # what a watch did is its own commits and .planning/wyclau/status/<hostname>.md.
@@ -128,3 +134,11 @@ w1-crewphone-recheck/
 # leave every future watch with a permanently dirty `git status` it cannot clean (this sandbox
 # refuses `rm`). Underscore-prefixed inside .planning/posed/ so it cannot swallow a real pair.
 .planning/posed/_*/
+
+# Throwaway probes a watch writes while MEASURING something (rule 6) and then cannot delete —
+# this sandbox refuses `rm`, `git clean` and `Remove-Item` alike, so an unattended watch that
+# measures anything would otherwise leave the tree permanently dirty for the next one. Same
+# reason as .planning/posed/_*/ above, same underscore convention: every real gate in scripts/qa/
+# is named <thing>_check.mjs, so `_scratch*` cannot swallow one.
+_scratch*
+_scratch*/

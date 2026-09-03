@@ -58,8 +58,20 @@ const chartFile = (name, body) => {
    ids doing it. **A test that writes into the tree it measures is the same fault as an instrument
    that writes into the thing it measures**, which is the bug this gate caught in the tool itself an
    hour earlier. Pinning it in the helper means a future case cannot forget. */
+/* ⚠ AND THE PIN IS PER-CHART, NOT ONE SHARED DEFAULT — the second half of the same lesson, learned
+   when SWEEP started READING the archive as well as writing it. `chartkeeper.mjs` now merges the
+   log's `## SETTLED RULINGS` into his rulings, because that table moved house and every signal
+   reading it had to follow (see `derive`). The moment it did, one shared fixture archive became a
+   channel between cases: case 7 swept MIXED's settled table — which names `T-902` — into the common
+   log, and case 12c, whose whole point is that exactly ONE of its twins has a live ruling, found
+   BOTH of them named and went red. Nothing was wrong with the tool.
+   **A shared scratch file is fine while it is only ever written and never read back.** The day
+   anything reads it, it is shared state between tests, and shared state between tests is how a
+   green suite starts describing a system nobody has. Derive the log from the chart it belongs to. */
 const run = (args) => {
-  const pinned = args.some((a) => a.startsWith("--log=")) ? args : [...args, `--log=${join(tmp, "default-CHART-LOG.md")}`];
+  const chartArg = args.find((a) => a.startsWith("--chart="))?.slice(8) ?? "default";
+  const own = `${chartArg.split(/[\\/]/).pop().replace(/\.md$/, "")}-LOG.md`;
+  const pinned = args.some((a) => a.startsWith("--log=")) ? args : [...args, `--log=${join(tmp, own)}`];
   try {
     return { code: 0, out: execFileSync(process.execPath, [KEEPER, ...pinned], { encoding: "utf8", cwd: ROOT }) };
   } catch (e) {
@@ -79,8 +91,10 @@ const MIXED = `# THE CHART — fixture
 ## STEP 1 CHECKLIST — the reboot
 
 - [ ] **A LIVE ROW WITH A LIVE POINTER — See BLOCKED ON WYATT** for the taste call on the
+      ⟨\`T-901\`⟩
       lantern colour. Nothing about this row is finished.
 - [ ] **A DEAD POINTER — See BLOCKED ON WYATT** for the deploy permission. He answered this
+      ⟨\`T-902\`⟩
       hours ago and nothing moved it.
 - [ ] **A ROW CITING A TRIAL REPORT THAT DOES NOT EXIST** — see
       \`.planning/SEA-TRIAL-fixture-never-written.md\`, verdict pending.
@@ -101,7 +115,13 @@ The fixture now carries a Z the way the real file does.
 
 | Question | Recommendation | since |
 |---|---|---|
-| **What colour should the lantern be?** the taste call on the lantern colour | Recommended: brass | 2026-09-02 |
+| **What colour should the lantern be?** the taste call on the lantern colour — holds up \`T-901\` | Recommended: brass | 2026-09-02 |
+
+## SETTLED RULINGS — triaged, and kept on the record forever
+
+| item | HIS RULING | now |
+|---|---|---|
+| The deploy permission, which \`T-902\` is still waiting on | **"we fixed it"** | CLOSED, already done. |
 
 ## THE IDEA INBOX
 
@@ -237,38 +257,168 @@ The fixture now carries a Z the way the real file does.
   }
 }
 
-/* 5. SWEEP MUST GIVE DONE ROWS AN EXIT, AND MUST NOT ARCHIVE THIS WEEK'S. "27 done" is not a fact
-      about this week; it is a number that grows forever and therefore says nothing.
+/* 5. SWEEP TAKES EVERY COMPLETED ROW, IMMEDIATELY, AND LEAVES NO STUB — HIS RULING, and it
+      OVERRULES the design the first version of this case defended.
 
-      ⚠ THE SECOND OVER-SPECIFIED ASSERTION, AND THE SAME CORRECTION. It first demanded the swept
-      row's TITLE be absent from the Chart — but the spec asks for a one-line stub carrying exactly
-      that title, so a reader following an old reference lands somewhere instead of nowhere. What
-      must actually be true: the checkbox goes (so the `done` count starts meaning "done this
-      week"), the essay goes, the archive has all of it, and a non-checkbox stub stays. */
+      Wyatt, 2026-09-02, `SPEC-CHARTKEEPER.md`'s 🛑 banner: *"SWEEP takes EVERY completed row,
+      immediately, and leaves NO stub. Not 'older than 7 days'."* And the sentence the spec says
+      outranks the rest of that document: *"The chart should therefore only show WHERE WE ARE
+      GOING — accurately, constantly updating."*
+
+      ⚠ THIS CASE USED TO ASSERT THE OPPOSITE, IN BOTH HALVES, AND WAS GREEN. It demanded that a
+      row finished today STAY ("the 7-day window is the whole point") and that a one-line stub
+      REMAIN ("an old reference to that row now lands nowhere"). Both are the draft he read and
+      changed. **Three green cases were holding the overruled design in place**, which is why this
+      had to go red before it went green — the age threshold is a constant nobody could defend
+      (rule 9), and a stub is still the past sitting in a document about the future.
+
+      THE THREE THINGS THIS NOW PROVES, and the third is the one the old filter silently dropped:
+      every done row leaves whatever its age · nothing is left behind pointing at the archive ·
+      **a done row carrying NO readable date leaves too.** `sweepable`'s old `x.when && …` meant a
+      row nobody had dated could never be archived at all, so "sweep every completed row" would
+      still have quietly kept some — a second, invisible reason a finished row stays on his list. */
+const SWEEP_ALL = `# THE CHART — fixture
+
+## STEP 1 CHECKLIST — the reboot
+
+- [ ] **SOMETHING STILL OPEN** so the section is not all-done. Filed 2026-09-02T04:19Z.
+- [x] **A DONE ROW FROM LONG AGO** — SHIPPED 2001-02-03.
+- [x] **A DONE ROW FROM TODAY** — SHIPPED ${TODAY}.
+      This row has a second line, and the essay must reach the archive verbatim: PRESERVE-ME.
+- [x] **A DONE ROW CARRYING NO DATE AT ALL** — finished, and nobody ever wrote down when.
+
+## BLOCKED ON WYATT
+
+| Question | Recommendation | since |
+|---|---|---|
+
+## SETTLED RULINGS — triaged, and kept on the record forever
+
+| item | HIS RULING | now |
+|---|---|---|
+| The deploy permission, long since dealt with | **"we fixed it"** | CLOSED, already done. |
+
+## THE IDEA INBOX
+
+- **A fated idea** — handled → **SHIPPED** 2026-09-01.
+`;
 {
-  const p = chartFile("sweep", MIXED);
+  const p = chartFile("sweep", SWEEP_ALL);
   const log = join(tmp, "CHART-LOG.md");
   const doneBefore = (readFileSync(p, "utf8").match(/^- \[x\]/gm) || []).length;
   run([`--chart=${p}`, `--log=${log}`, "--sweep", "--write"]);
   const after = readFileSync(p, "utf8");
   const doneAfter = (after.match(/^- \[x\]/gm) || []).length;
-  if (doneAfter !== doneBefore - 1)
-    fail(`the done-checkbox count went ${doneBefore} → ${doneAfter}; exactly one row was old enough to archive. Done rows never leaving is why most of the Chart is history`);
-  else pass("the archived row's checkbox left the Chart — 'done' can start meaning 'done this week'");
-  if (/^- \[x\][^\n]*A DONE ROW FROM LONG AGO/m.test(after))
-    fail("the row from 2001 is still an open checkbox row on the Chart");
-  else if (!/↳[^\n]*A DONE ROW FROM LONG AGO/.test(after))
-    fail("no stub left behind — an old reference to that row now lands nowhere");
-  else pass("a one-line stub stays behind, pointing at the archive");
+  if (doneBefore !== 3) fail(`the fixture no longer has the three done rows this case is about (found ${doneBefore}) — it proves nothing`);
+  else if (doneAfter !== 0)
+    fail(`${doneAfter} of ${doneBefore} finished rows are still on the Chart after a sweep — his ruling is EVERY completed row, immediately, and "MANY completed tasks still stale on it" was the complaint that started this`);
+  else pass("every finished row left the Chart — none survived on age or on a missing date");
+
+  if (/↳/.test(after))
+    fail("a stub was left behind — he overruled the stub: a pointer to the past is still the past sitting in a document about the future");
+  else if (/A DONE ROW FROM LONG AGO|A DONE ROW FROM TODAY|A DONE ROW CARRYING NO DATE/.test(after))
+    fail("a swept row's title is still somewhere in CHART.md — the row is meant to leave completely");
+  else pass("nothing was left behind pointing at the archive — no stub, no title");
+
+  if (!/SOMETHING STILL OPEN/.test(after))
+    fail("the sweep took an OPEN row with it — a sweep that eats unfinished work is worse than a long Chart");
+  else pass("the open row is untouched");
+
   if (!existsSync(log)) fail("wrote no archive file — a sweep that deletes instead of archiving loses the record");
   else {
     const archived = readFileSync(log, "utf8");
-    if (!/A DONE ROW FROM LONG AGO/.test(archived)) fail("the archived row is not in the archive — the sweep dropped it on the floor");
-    else pass("the archived row's full text is in the archive");
+    for (const t of ["A DONE ROW FROM LONG AGO", "A DONE ROW FROM TODAY", "A DONE ROW CARRYING NO DATE AT ALL"]) {
+      if (!archived.includes(t)) fail(`"${t}" is on neither the Chart nor the log — the sweep dropped it on the floor`);
+    }
+    if (!archived.includes("PRESERVE-ME"))
+      fail("a swept row's body did not reach the archive — the essays are the graveyard (rule 10) and nothing may be summarised on the way out");
+    else pass("all three rows, bodies included, are in the archive verbatim");
   }
-  if (!/^- \[x\][^\n]*A DONE ROW FROM TODAY/m.test(after))
-    fail("archived a row finished today — the 7-day window is the whole point");
-  else pass("left this week's done row in place");
+}
+
+/* 5b. THE SETTLED RULINGS TABLE GOES TOO — his ruling, question UI, 2026-09-02, made against a
+       recommendation to KEEP it. The strict reading of his own sentence wins: nothing
+       backward-looking survives in CHART.md, including a lookup table of decisions already made. */
+{
+  const p = chartFile("sweep-rulings", SWEEP_ALL);
+  const log = join(tmp, "CHART-LOG-rulings.md");
+  run([`--chart=${p}`, `--log=${log}`, "--sweep", "--write"]);
+  const after = readFileSync(p, "utf8");
+  const archived = existsSync(log) ? readFileSync(log, "utf8") : "";
+  if (/^## SETTLED RULINGS/m.test(after))
+    fail("the SETTLED RULINGS table is still in CHART.md — he was offered KEEP with a recommendation and overruled it");
+  else if (!/The deploy permission, long since dealt with/.test(archived))
+    fail("the SETTLED RULINGS table left CHART.md and did not arrive in the log — that is a deletion, not a sweep");
+  else pass("the SETTLED RULINGS table moved to the log with everything else");
+}
+
+/* 5d. THE ARCHIVE'S OWN PREAMBLE MUST NOT GO STALE — and it did, within four minutes, in the change
+       whose entire purpose is killing stale records. CEO 107, 2026-09-02: the log holding 36 rows
+       opened with *"swept off CHART.md after seven days done"* (the design Wyatt overruled) and
+       *"Empty as of 2026-09-02, and correctly so"*. Cause was one ternary: the header was written
+       only when the file did not exist, so it froze at whatever the first sweep on that machine
+       said. **A header written once is a comment that can rot**, in the one file he would open to
+       check nothing was lost.
+       This case plants the exact overruled wording and requires a sweep to remove it WITHOUT
+       touching the entries underneath — the second half matters, because "delete the whole file and
+       start again" would pass the first half and lose the record. */
+{
+  const p = chartFile("sweep-preamble", SWEEP_ALL);
+  const log = join(tmp, "CHART-LOG-preamble.md");
+  writeFileSync(log, `# THE CHART LOG — closed rows, kept forever
+
+*Rows the Chartkeeper swept off CHART.md after seven days done. Empty as of 2026-09-02, and
+correctly so.*
+
+## T-800 — 2026-08-30 — **AN ENTRY ARCHIVED BEFORE ALL THIS**
+
+- [x] **AN ENTRY ARCHIVED BEFORE ALL THIS** — its text must survive a preamble rewrite. KEEP-ME.
+`);
+  run([`--chart=${p}`, `--log=${log}`, "--sweep", "--write"]);
+  const after = readFileSync(log, "utf8");
+  if (/seven days done|Empty as of/.test(after))
+    fail("the archive still describes itself as the seven-day design he overruled — the preamble is written once and frozen, so it says whatever the FIRST sweep on this machine said");
+  else pass("the stale preamble was re-emitted from the tool, not inherited from the file");
+  if (!/KEEP-ME/.test(after) || !/^## T-800 /m.test(after))
+    fail("rewriting the preamble destroyed an entry that was already in the archive — a header repair must never cost a row");
+  else pass("the entries already in the archive survived the preamble rewrite");
+  /* AND IT MUST BE IDEMPOTENT: two sweeps in a row cannot keep appending preambles or re-stacking
+     entries. Two sessions share this branch and a rewrite that differs every run conflicts on every
+     push — the same reason the whole write pass is idempotent by construction. */
+  run([`--chart=${p}`, `--log=${log}`, "--sweep", "--write"]);
+  const twice = readFileSync(log, "utf8");
+  if ((twice.match(/^# THE CHART LOG/gm) || []).length !== 1 || (twice.match(/^## T-800 /gm) || []).length !== 1)
+    fail(`a second sweep duplicated the header or an entry:\n${twice.slice(0, 400)}`);
+  else pass("a second sweep leaves one header and one copy of each entry");
+}
+
+/* 5c. THE GUARDRAIL THE SPEC ASKS FOR BY NAME: every closed handle appears in EXACTLY ONE of the
+       two files — never both, never neither. This is the check that makes a destructive rewrite of
+       the file he reads safe to run unattended, and it is the reason the spec chose a dedicated
+       CHART-LOG.md over the ledger: against a 1,700-line file carrying six other kinds of entry,
+       this assertion cannot be written at all. */
+{
+  const p = chartFile("sweep-conserve", SWEEP_ALL);
+  const log = join(tmp, "CHART-LOG-conserve.md");
+  /* ⚠ `--write` ON ITS OWN RUNS EVERY PASS, SWEEP INCLUDED (`anyPass` is false, so all four are
+     on). The first version of this case used it to "just allocate handles" and then had nothing
+     left to follow — the rows it meant to track had already been archived by the setup step. Name
+     the pass you want. */
+  run([`--chart=${p}`, "--rank", "--write"]);           // allocate handles WITHOUT sweeping
+  const before = readFileSync(p, "utf8");
+  const doneHandles = before.split(/^- \[[xX]\] /m).slice(1)
+    .map((b) => (/T-\d{3}/.exec(b.split(/^- \[/m)[0]) || [])[0]).filter(Boolean);
+  run([`--chart=${p}`, `--log=${log}`, "--sweep", "--write"]);
+  const after = readFileSync(p, "utf8");
+  const archived = existsSync(log) ? readFileSync(log, "utf8") : "";
+  if (doneHandles.length !== 3) fail(`expected three finished handles to follow, found ${doneHandles.length} — this case cannot see its own subject`);
+  else {
+    const both = doneHandles.filter((h) => after.includes(h) && archived.includes(h));
+    const neither = doneHandles.filter((h) => !after.includes(h) && !archived.includes(h));
+    if (neither.length) fail(`${neither.join(", ")} is in NEITHER file — a swept row was lost, which is the one failure that cannot be undone`);
+    else if (both.length) fail(`${both.join(", ")} is in BOTH files — the Chart still carries what the log now owns, so the two records can disagree`);
+    else pass("every finished handle is in exactly one of the two files — never both, never neither");
+  }
 }
 
 /* 6. IT MUST COVER THE UNFATED IDEA INBOX ENTRIES. Caught by CEO 89 before a line was built, and it
@@ -298,14 +448,21 @@ The fixture now carries a Z the way the real file does.
   const p = chartFile("ids", MIXED);
   run([`--chart=${p}`, "--write"]);
   const once = readFileSync(p, "utf8");
-  const ids = once.match(/\bT-\d{3}\b/g) || [];
+  /* HANDLES ALLOCATED TO ROWS, NOT REFERENCES TO THEM. His BLOCKED ON WYATT and SETTLED RULINGS
+     tables NAME rows by handle — that link is the whole of how "waiting on your answer" is derived
+     — so a whole-file grep counts one row's id three times and calls it a duplicate allocation.
+     Table lines are his; row lines are the tool's. */
+  const rowsOnly = (s) => s.split("\n").filter((l) => !l.trim().startsWith("|")).join("\n");
+  const ids = rowsOnly(once).match(/\bT-\d{3}\b/g) || [];
   if (ids.length === 0) fail("allocated no T-nnn ids — every reference to a row stays a line number, and line numbers go stale in the commit that writes them");
   else pass(`allocated ${ids.length} stable row ids`);
   if (new Set(ids).size !== ids.length) fail(`allocated a duplicate id (${ids.length} ids, ${new Set(ids).size} distinct) — two rows sharing a handle is worse than neither having one`);
   else pass("every allocated id is distinct");
   run([`--chart=${p}`, "--write"]);
-  const ids2 = (readFileSync(p, "utf8").match(/\bT-\d{3}\b/g) || []);
-  if (ids2.join(",") !== ids.join(",")) fail(`a second run changed the ids (${ids.length} → ${ids2.length}) — ids must be allocated once and never reused`);
+  const ids2 = (rowsOnly(readFileSync(p, "utf8")).match(/\bT-\d{3}\b/g) || []);
+  /* THE COUNTS WERE THE ONLY THING THIS MESSAGE PRINTED, AND THEY MATCHED WHILE THE IDS DIFFERED —
+     "7 → 7" told a reader nothing about a case that had genuinely failed. Print the lists. */
+  if (ids2.join(",") !== ids.join(",")) fail(`a second run changed the ids — ids must be allocated once and never reused\n        run 1: ${ids.join(" ")}\n        run 2: ${ids2.join(" ")}`);
   else pass("a second run allocates nothing new — ids are stable across runs");
 }
 
@@ -412,7 +569,8 @@ const BUNDLED = `# THE CHART — fixture
 ## STEP 1 CHECKLIST — the reboot
 
 - [ ] **THE BLADE HOUR — three jobs under one checkbox**
-      part 1: register the Bell — See BLOCKED ON WYATT, and he answered that one hours ago.
+      part 1: register the Bell — measured on build \`2000.01.01.1\`, which is not the stamp in
+      the tree, so that part's evidence is retired.
       part 2: ring-test the Bell in both directions — nobody has done this and there is no
       pointer of any kind in it.
       part 3: the O2 publish test — nobody has done this either, and it has no pointer either.
@@ -423,7 +581,7 @@ const BUNDLED = `# THE CHART — fixture
       not on disk.
       part 2: the second trial — measured on build \`2000.01.01.1\`, which is not the stamp in
       the tree.
-- [ ] **BUNDLED ON THE FIRST LINE AND NOWHERE ELSE** · register the thing · ring-test it · publish from O2, and See BLOCKED ON WYATT about that, which he answered hours ago.
+- [ ] **BUNDLED ON THE FIRST LINE AND NOWHERE ELSE** · register the thing · ring-test it · publish from O2, measured on build \`2000.01.01.1\` which is not the stamp in the tree.
 
 ## BLOCKED ON WYATT
 
@@ -635,7 +793,13 @@ const settleOf = (json, match) => (json?.settle || []).find((s) => new RegExp(ma
   if (!dead) fail("the row with the dead pointer vanished from the ranking");
   else if (/finish/i.test(dead.whyNow || ""))
     fail(`told him an unstarted row is finished on the strength of a dead pointer: ${JSON.stringify(dead.whyNow)} — REAP measures the pointer, never the work`);
-  else if (!/waiting on|landed|resolved/i.test(dead.whyNow || ""))
+  /* ⚠ THE VOCABULARY WIDENED ON 2026-09-02 AND THE ASSERTION DID NOT WEAKEN. `T-090` made this
+     sentence PER-KIND — one phrase for five different faults was the same bug one layer up, and on
+     the real Chart it produced "something it was waiting on has landed · evidence retired" about
+     one row, two clauses that contradict each other. The property under test is unchanged: the
+     phrase must say what actually CHANGED, so the +40 is explained. Only the list of ways it may
+     say it grew, and it is closed — these are `FAULT_WHY`'s five and nothing else. */
+  else if (!/waiting on|landed|resolved|already answered|freed it|points at|older build|replaces this/i.test(dead.whyNow || ""))
     fail(`the dead-pointer row's why-now says ${JSON.stringify(dead.whyNow)} — it must say what actually changed, or the +40 that lifted it is unexplained`);
   else pass("a dead pointer is described as something that has LANDED, never as work that is finished");
   // Red-proofed the other way in the same breath: a row with no dead pointer must not get the
@@ -867,18 +1031,51 @@ const GROUNDED = `# THE CHART — fixture
   else pass("the printed report names them too");
 }
 
-/* 11e. THE SPEC'S ACCEPTANCE TEST, ON THE REAL CHART, AFTER THE GROUNDING. His four-times-asked
-        Chartkeeper row must still come first — that is the whole reason this tool exists, and a
-        grounding that buries it has traded one wrong order for another. It qualifies honestly:
-        its row cites `INBOX-20260902T04xxZ`, a live entry of his own Inbox, rather than calling
-        itself the next item. */
+/* 11e. THE SPEC'S ACCEPTANCE TEST — AS A PROPERTY, ON A FIXTURE, NOT A ROW ON THE LIVE CHART.
+ *
+ * ⚠ REWRITTEN 2026-09-02, AND THE REASON IS THE WHOLE POINT OF THE REWRITE. This case used to
+ * assert that the REAL Chart's top row matched /CHARTKEEPER/i — "his four-times-asked request must
+ * rank first". That was right the day it was written and it EXPIRED the day the thing was built:
+ * RANK now runs in every watch, the Lesson moved below the Chart, the card is renamed, and only
+ * SWEEP remains, blocked behind re-sourcing the done count. A player-facing bug then legitimately
+ * outranked it — which is exactly what Wyatt asked for that morning ("stop building process, drain
+ * player-facing bugs") — and this gate went RED for the tool behaving correctly.
+ *
+ * A CHECK PINNED TO ONE ROW'S CONTENT FAILS THE DAY THAT ROW IS DELIVERED, and it fails in the
+ * worst direction: it trains the next reader to edit the check rather than believe the tool.
+ * Same fault as two others fixed hours earlier in this repo — rulings_triage_check anchored to the
+ * literal card heading, and case 4's red-proof anchored to a row prefix that a `T-nnn` id broke.
+ * Third time in one day that a check located its subject by words somebody was free to change.
+ *
+ * SO THE PROPERTY IS TESTED INSTEAD, on a fixture where it can never expire: a row he has asked for
+ * REPEATEDLY must outrank an equivalent row nobody asked for. That is the thing RANK exists to do,
+ * it is what the spec's acceptance test was really about, and it stays true forever. */
 {
-  const r = runJson(["--rank"]);
-  const top = (r.json?.rank || [])[0];
-  if (!top) fail("ranking the real Chart produced nothing");
-  else if (!/CHARTKEEPER/i.test(top.title || ""))
-    fail(`the real Chart's top row is ${JSON.stringify(top.title)} — his four-times-asked request must rank first, and the spec says so in its own words`);
-  else pass(`the acceptance test holds on the real Chart: "${top.title.slice(0, 50)}" ranks first`);
+  const HIS_VS_THEIRS = [
+    "## STEP 1 CHECKLIST",
+    "",
+    "- [ ] A DEFECT A WATCH FOUND ON ITS OWN - filed by the 09:00Z watch from a trial screenshot.",
+    "      Nobody asked for it. It is real work and it is not his request.",
+    "",
+    "- [ ] A THING HE HAS ASKED FOR REPEATEDLY - see INBOX-20260902T04xxZ, and he raised it again.",
+    "      His words, twice on the Glass.",
+    "",
+    "## THE IDEA INBOX",
+    "",
+    "## BLOCKED ON WYATT",
+    "",
+  ].join("\n");
+  const pProp = chartFile("his-outranks-theirs", HIS_VS_THEIRS);
+  const rProp = runJson([`--chart=${pProp}`, "--rank"]);
+  const titlesProp = (rProp.json?.rank || []).map((x) => x.title || "");
+  const hisAt = titlesProp.findIndex((t) => /ASKED FOR REPEATEDLY/i.test(t));
+  const theirsAt = titlesProp.findIndex((t) => /A WATCH FOUND ON ITS OWN/i.test(t));
+  if (hisAt === -1 || theirsAt === -1)
+    fail("the fixture rows did not both survive ranking — this case proves nothing as written");
+  else if (hisAt > theirsAt)
+    fail(`a row nobody asked for outranked one he has asked for repeatedly (his at ${hisAt}, theirs at ${theirsAt}) — that inversion is the entire thing RANK exists to prevent`);
+  else
+    pass("a row he has asked for repeatedly outranks an equivalent row nobody asked for");
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────
@@ -1031,7 +1228,7 @@ const TWINS = `# THE CHART — fixture
 
 - [ ] ${TWIN_TITLE}
       ⟨\`T-901\`⟩
-      This one points at BLOCKED ON WYATT, which is empty, so REAP judges its pointer dead.
+      A settled ruling of his names this one, so REAP judges its blocker lifted and unacted on.
       Filed 2026-09-02T04:19Z.
 - [ ] ${TWIN_TITLE}
       ⟨\`T-902\`⟩
@@ -1041,6 +1238,12 @@ const TWINS = `# THE CHART — fixture
 
 | Question | Recommendation | since |
 |---|---|---|
+
+## SETTLED RULINGS — triaged, and kept on the record forever
+
+| item | HIS RULING | now |
+|---|---|---|
+| The deploy permission, which \`T-901\` is still waiting on | **"we fixed it"** | CLOSED, already done. |
 
 ## THE IDEA INBOX
 
@@ -1098,30 +1301,407 @@ const SWEEP_TWINS = `# THE CHART — fixture
 
 - **A fated idea** — handled → **SHIPPED** 2026-09-01.
 `;
+/* ⚠ REWRITTEN 2026-09-02 WHEN SWEEP BECAME HIS VERSION, AND THE REASON IS WORTH THE PARAGRAPH.
+       This case used to lean on the age filter to make its point: two same-titled done rows, only
+       the 2001 one old enough, so archiving the young one proved the sweep was matching by TITLE.
+       **Take the age filter away and that leverage is gone** — under his ruling both twins leave,
+       so "the young one stayed" can no longer be the tell.
+       The fault it guards has not gone anywhere, so the case is re-pointed rather than deleted:
+       two finished rows sharing one first line must arrive in the log as TWO DISTINCT ENTRIES, and
+       an OPEN row sharing that same first line must survive untouched. A title-keyed sweep fails
+       both halves — it files one entry and it cannot tell the open twin from the finished ones. */
 {
   const p = chartFile("sweep-twins", SWEEP_TWINS);
   const logPath = join(tmp, "sweep-twins-LOG.md");
-  const r = runJson([`--chart=${p}`, `--log=${logPath}`, "--sweep"]);
-  const sweep = r.json?.sweep || [];
-  if (sweep.length !== 1)
-    fail(`SWEEP offered ${sweep.length} of the two same-titled done rows for archiving — only the 2001 one is old enough, so this case only means something at exactly 1`);
-  else pass("only the old one of two same-titled finished rows is offered for archiving");
   run([`--chart=${p}`, `--log=${logPath}`, "--sweep", "--write"]);
   const after = readFileSync(p, "utf8");
-  /* ⚠ "T-912 is still in the file" IS THE WRONG QUESTION and the first version of this case asked
-     it: an archived row leaves a stub behind that still names its handle, so that assertion is
-     true whether or not the row was swept. Ask whether it is still a TICKED ROW on his Chart. */
-  const youngStillOnChart = after.split(/^- \[[xX]\] /m).slice(1).some((b) => b.includes("T-912"));
-  if (!youngStillOnChart)
-    fail(`the write archived the row finished TODAY — it shares a first line with the 2001 one, and matching by title cannot tell them apart:\n${after}`);
-  else pass("the row finished today survives the sweep of its same-titled twin");
-  /* RED-PROOF: the case above is worthless unless the sweep actually ran. The archived row leaves a
-     one-line stub behind that still names its handle, so "T-911 is gone from the file" is the wrong
-     question — ask whether it is still a CHECKBOX row, and whether the log has it. */
-  const stillTicked = after.split(/^- \[[xX]\] /m).slice(1).some((b) => b.includes("T-911"));
-  if (stillTicked || !existsSync(logPath) || !readFileSync(logPath, "utf8").includes("T-911"))
-    fail("the 2001 row was not archived into the log, so the case above passed for the wrong reason — the sweep did nothing at all");
-  else pass("…and the old twin really was archived, so the case above could have failed");
+  const archived = existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+  for (const h of ["T-911", "T-912"]) {
+    if (after.split(/^- \[[xX]\] /m).slice(1).some((b) => b.includes(h)))
+      fail(`${h} is still a ticked row on the Chart — every completed row leaves, and a twin is not an exception`);
+    if (!archived.includes(h))
+      fail(`${h} never reached the log — two rows sharing one first line were keyed by title, so one silently overwrote the other`);
+  }
+  const entries = (archived.match(/^## T-91[12] /gm) || []).length;
+  if (entries !== 2)
+    fail(`the log holds ${entries} entries for the two same-titled finished rows — it must hold both, separately, or a title-keyed sweep has eaten one`);
+  else pass("two finished rows sharing one first line arrive in the log as two distinct entries");
+  if (!/^- \[ \][^\n]*SOMETHING STILL OPEN/m.test(after))
+    fail("the OPEN row was swept — matching by anything other than the row's own slot cannot tell an open row from a finished one");
+  else pass("the open row sharing the section survives the sweep of both twins");
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+   13. "WAITING ON YOUR ANSWER" MUST BE A FACT ABOUT THE ROW, NOT THE FIVE WORDS IT HAPPENS TO SAY.
+
+   Measured on the real Chart 2026-09-02T12:2xZ, and it is the reason `npm test` went red. The
+   signal was `/BLOCKED ON WYATT/i.test(row.raw)` — a prose-grep for a SECTION HEADING inside a
+   row's own body — held off only by REAP happening to flag the row stale. So:
+
+     · his four-times-asked Chartkeeper row sank to 31 of 39, because its spec text describes the
+       SETTLE pass writing "one question into BLOCKED ON WYATT with the measurement attached";
+     · the row filed to describe THIS defect sank with it, on the words "adding an unrelated
+       BLOCKED ON WYATT row";
+     · a one-sentence wording fix sank too, for quoting the heading it is about.
+
+   Three of the four rows the tool was hiding from him were waiting on nothing. And nothing about
+   any of them changed — another session added two good, unrelated questions to a table that had
+   been empty, and 1024 points moved.
+
+   THE PROPERTY THESE CASES DEFEND: **adding a question that names no row must not move the
+   ranking at all.** A signal derived from the ABSENCE of a match is a signal any unrelated edit
+   can flip; a signal derived from a question NAMING a row cannot be.
+   ──────────────────────────────────────────────────────────────────────────────────────────── */
+const ATTACHED = (extraQuestion = "") => `# THE CHART — fixture
+
+## STEP 1 CHECKLIST — the reboot
+
+- [ ] \`T-101\` **A ROW ONE OF HIS QUESTIONS NAMES** — he really is being asked about this one,
+      and the question says so from his side of the link.
+- [ ] \`T-102\` **A ROW THAT ONLY DESCRIBES THE SECTION** — its spec says the tool writes one
+      question into BLOCKED ON WYATT with the measurement attached. Nothing here waits on him.
+- [ ] \`T-103\` **A ROW WHOSE QUESTION HE HAS ALREADY ANSWERED** — his ruling is in SETTLED
+      RULINGS and nobody moved this row afterwards.
+
+## BLOCKED ON WYATT
+
+| Question | Recommendation | since |
+|---|---|---|
+| **What colour should the lantern be?** Holds up \`T-101\`. | Recommended: brass | 2026-09-02 |${extraQuestion}
+
+## SETTLED RULINGS — triaged, and kept on the record forever
+
+| item | HIS RULING | now |
+|---|---|---|
+| The bilge pump, which holds up \`T-103\` | **"leave it alone"** | CLOSED, nothing to build. |
+
+## THE IDEA INBOX
+
+(empty)
+`;
+
+/* 13a. THE ROW A QUESTION NAMES REALLY IS SUNK. Red-proofs 13b: a tool that simply stopped sinking
+        anything would pass 13b and fail here. */
+{
+  const p = chartFile("attached", ATTACHED());
+  const r = runJson([`--chart=${p}`, "--rank"]);
+  const named = (r.json?.rank || []).find((x) => /A ROW ONE OF HIS QUESTIONS NAMES/.test(x.title || ""));
+  if (!named) fail("the row his question names vanished from the ranking");
+  else if (named.score > 0 || !/waiting on your answer/i.test(named.whyNow || ""))
+    fail(`a row a live question NAMES scored ${named.score} (${JSON.stringify(named.whyNow)}) — a question of his that names a row is the one thing that must sink it`);
+  else pass("a row one of his live questions names is sunk, and told him why");
+}
+
+/* 13b. THE ROW THAT ONLY MENTIONS THE HEADING IS LEFT ALONE — both ways. It must not be sunk as
+        blocked, and it must not be handed the +40 "something it was waiting on has landed" either:
+        nothing of his was ever waiting on it, so both verdicts are inventions. */
+{
+  const p = chartFile("attached-mention", ATTACHED());
+  const r = runJson([`--chart=${p}`, "--rank"]);
+  const mention = (r.json?.rank || []).find((x) => /ONLY DESCRIBES THE SECTION/.test(x.title || ""));
+  if (!mention) fail("the descriptive row vanished from the ranking");
+  else {
+    if (/waiting on your answer/i.test(mention.whyNow || "") || mention.score < 0)
+      fail(`a row that merely SAYS "BLOCKED ON WYATT" while describing the section scored ${mention.score} (${JSON.stringify(mention.whyNow)}) — this is the fault that sank his own top task to 31 of 39`);
+    else pass("a row that only describes the section is not read as waiting on him");
+    if (/landed|resolved/i.test(mention.whyNow || ""))
+      fail(`told him something had landed for a row no question of his has ever named: ${JSON.stringify(mention.whyNow)}`);
+    else pass("…and is not told a blocker lifted that never existed");
+  }
+  const flagged = (runJson([`--chart=${p}`, "--reap"]).json?.reap || []).map((x) => x.title || "").join(" | ");
+  if (/ONLY DESCRIBES THE SECTION/.test(flagged))
+    fail("REAP flagged the descriptive row as stale — mentioning a heading is not pointing at a question");
+  else pass("REAP leaves the descriptive row alone too");
+}
+
+/* 13c. HIS ANSWER LANDED AND NOBODY MOVED THE ROW — the signal REAP is genuinely for, now derived
+        from a POSITIVE fact (his settled ruling names the row) instead of from an absence. */
+{
+  const p = chartFile("attached-settled", ATTACHED());
+  const r = runJson([`--chart=${p}`, "--reap"]);
+  const hit = (r.json?.reap || []).find((x) => /QUESTION HE HAS ALREADY ANSWERED/.test(x.title || ""));
+  if (!hit) fail("did not flag the row whose question he has already settled — that is the stale row he reads five of every day");
+  else if (!/answer/i.test(hit.reason || ""))
+    fail(`flagged it with a reason that does not say his answer landed: ${JSON.stringify(hit.reason)}`);
+  else pass("a row his SETTLED ruling names is flagged: his answer landed and nothing moved it");
+}
+
+/* 13d. THE ACCEPTANCE PROPERTY, AND THE ONE THE SPEC ASKED FOR BY NAME: adding an unrelated
+        question must not move the ranking. The extra question below is deliberately built to share
+        four distinctive words with `T-102` — "measurement", "attached", "question", "writes" — so
+        an overlap-based signal is guaranteed to flip on it. Under the old code the ranking changed;
+        under a signal derived from naming, it cannot. */
+{
+  const EXTRA = `\n| **Should the measurement be attached to every question the tool writes?** | Recommended: yes | 2026-09-02 |`;
+  const before = runJson([`--chart=${chartFile("stable-before", ATTACHED())}`, "--rank"]);
+  const after = runJson([`--chart=${chartFile("stable-after", ATTACHED(EXTRA))}`, "--rank"]);
+  const shape = (j) => (j?.rank || []).map((x) => `${x.score} ${x.title}`).join("\n");
+  if (!before.json || !after.json) fail("ranking one of the two fixtures produced no JSON");
+  else if (shape(before.json) !== shape(after.json))
+    fail(`adding a question that names no row changed the ranking:\n--- before ---\n${shape(before.json)}\n--- after ---\n${shape(after.json)}`);
+  else pass("adding a question that names no row moves nothing — his order is his, not the last editor's");
+}
+
+/* 13e. AND THE LINKS THAT ARE MISSING MUST BE NAMED, never silently dropped. This is 11d's rule
+        turned on the new signal: a row demoted — or a question ignored — in silence is one nobody
+        can repair. The tool must say which rows talk about his table without naming a question,
+        and which of his questions name no row at all. */
+{
+  const EXTRA = `\n| **Should the measurement be attached to every question the tool writes?** | Recommended: yes | 2026-09-02 |`;
+  const p = chartFile("attached-report", ATTACHED(EXTRA));
+  const r = runJson([`--chart=${p}`, "--rank"]);
+  const mentions = r.json?.unattachedMentions;
+  const questions = r.json?.unattachedQuestions;
+  if (!Array.isArray(mentions) || !mentions.some((t) => /ONLY DESCRIBES THE SECTION/.test(t)))
+    fail(`did not name the row that talks about his table without naming a question (got ${JSON.stringify(mentions)})`);
+  else if (mentions.some((t) => /QUESTIONS NAMES|ALREADY ANSWERED/.test(t)))
+    fail(`named a properly-linked row as unattached (${JSON.stringify(mentions)})`);
+  else pass("rows that mention his table without naming a question are named, so the link can be added");
+  if (!Array.isArray(questions) || !questions.some((q) => /every question the tool writes/i.test(q)))
+    fail(`did not name the question of his that holds up no row (got ${JSON.stringify(questions)})`);
+  else if (questions.some((q) => /lantern/i.test(q)))
+    fail(`named a question that DOES hold up a row (${JSON.stringify(questions)}) — the report must point only at the broken links`);
+  else pass("questions of his that hold up no row are named too");
+  const text = run([`--chart=${p}`, "--rank"]).out;
+  if (!/name no task|names no question/i.test(text))
+    fail("the human-readable report is silent about broken links between his questions and the list");
+  else pass("the printed report names them too");
+}
+
+/* ⚑ THE WIRING CASE — added 2026-09-02 with the Door line it guards.
+ *
+ * A TOOL NOBODY INVOKES IS A TOOL THAT NEVER RUNS, and this project has now paid for that twice in
+ * one file: `chartkeeper.mjs --rank` was built, gated and green for hours while Wyatt asked FOUR
+ * TIMES why his Chart would not re-prioritise itself. Nothing was broken. The Door — the file that
+ * tells a watch what to do each run — simply never named it, so it ran only when a human typed it,
+ * and his top ask sank to 31 of 39.
+ *
+ * The old blocker was that the Door was VENDORED and no watch could add the line. His ruling
+ * inverted that (the project owns its copy). This case is what stops the line being lost again to
+ * a careless edit or a re-vendor, and it is deliberately about the DOOR rather than the tool:
+ * the tool passing its own tests proves nothing about whether anything calls it. */
+{
+  const doorPath = join(ROOT, ".claude", "skills", "door", "SKILL.md");
+  const door = existsSync(doorPath) ? readFileSync(doorPath, "utf8") : "";
+  const watchSection = door.split(/^## THE WATCH/m)[1]?.split(/^## /m)[0] ?? "";
+  if (!watchSection) {
+    fail("could not find the Door's THE WATCH section — this case cannot check anything, which is worse than failing");
+  } else if (!/chartkeeper\.mjs[^\n]*--rank[^\n]*--write/.test(watchSection)) {
+    fail("the Door's watch routine does not run `chartkeeper.mjs … --rank … --write` — RANK exists and nothing calls it, so his Chart will not re-prioritise itself (he asked four times)");
+  } else {
+    pass("the Door's watch routine runs `chartkeeper.mjs --rank --write`");
+  }
+  /* ⚑ AND THE STALE HALF OF THAT SAME LINE IS NAMED HERE RATHER THAN LEFT UNGUARDED — CEO 107's
+     finding, and it was right: the branch that used to watch this was DELETED when sweep changed
+     hands, so a live false instruction in the file that tells every watch what to do survived,
+     recorded only in a commit-message body. *"Nobody filed it where a session would look"* is the
+     previous verdict's fault, recurring.
+     It REPORTS rather than fails for the same reason as the duplicate handles: two attempts to edit
+     `.claude/skills/door/SKILL.md` were refused by session permissions, and a gate that fails on
+     something no watch can repair blocks the relay. **The refusal is a permission setting, not a
+     fact** (CEO 106) — a session that CAN write there should delete the sentence, and then this
+     becomes a `fail()`. */
+  if (/NOT `--sweep`|NOT --sweep/.test(watchSection)) {
+    console.log("  REPORT  the Door's step 6a still says NOT --sweep, for a reason that expired 2026-09-02: sweep is now his design and the done count reads from CHART-LOG.md. The sweep runs from close_item.mjs regardless, so nothing is broken — but the Door is teaching the opposite of what the system does. Editing that file is refused to an unattended watch; a session with permission should delete the sentence and turn this into a fail().");
+  }
+}
+
+/* ⚑ THE SWEEP'S OWN WIRING CASE, AND ITS INVOKER IS DELIBERATELY NOT THE DOOR.
+ *
+ * The Door is a step somebody performs at the END of a watch. SWEEP is his ruling that a completed
+ * row leaves **immediately** — and "immediately" and "next time a watch reaches step 6a" are not the
+ * same promise. The moment a row becomes finished is the moment `close_item.mjs` ticks it, so that
+ * is where the sweep is wired: the tick and the departure are one act, and no window exists in
+ * which the Chart says a thing is done.
+ *
+ * `SPEC-CHARTKEEPER.md` names this hook point itself — SWEEP belongs to the Watch because it
+ * "already has write authority, a CEO gate, and `close_item.mjs` as a natural hook point."
+ *
+ * ⚠ AND THE HONEST PART: the Door's step 6a still says `NOT --sweep`, with a reason that expired
+ * when sweep became his design. **That line was not corrected because this session was refused
+ * write access to `.claude/skills/door/SKILL.md`** — two attempts, both denied, and routing around
+ * a refusal with a shell command is not a repair. The sweep runs regardless, from the close gate,
+ * which is why the build is green rather than blocked; the Door's stale sentence is filed as its
+ * own row. This case guards the invoker that EXISTS. */
+{
+  const closer = join(ROOT, "scripts", "wyclau", "close_item.mjs");
+  const src = existsSync(closer) ? readFileSync(closer, "utf8") : "";
+  if (!src) {
+    fail("scripts/wyclau/close_item.mjs is missing — this case cannot check anything, which is worse than failing");
+  } else if (!/chartkeeper\.mjs[\s\S]{0,400}?--sweep/.test(src)) {
+    fail("closing an item does not sweep — a row he has finished stays on his Chart until somebody types the command, and 'MANY completed tasks still stale on it' is the complaint that started this");
+  } else if (!/no-sweep/.test(src)) {
+    fail("the sweep in close_item.mjs cannot be turned off, so nothing can test the tick on its own");
+  } else pass("closing an item sweeps it off the Chart in the same act — 'immediately' means immediately");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ⚑ 14. ONE LABEL MUST NOT DO DUTY FOR THREE UNRELATED FAULTS — `T-090`, his own idea, and the
+   thing he could SEE on his page: "N tasks on your list look already finished."
+
+   Measured 2026-09-02T20:0xZ against the real Chart before a line was written: ten rows carried
+   that one label and **not one of them was flagged "finished"**. Six said *the evidence went stale
+   when the build moved on* (needs RE-MEASURING — he cannot know from a phone whether a trade circle
+   still clips a name), three said *his ruling landed and nothing moved the row*, one said *a pid is
+   dead*. **A flag that means three things cannot be acted on by anybody**, and every reader of his
+   page drew the wrong conclusion from it, including the Advisor to his face.
+
+   The four cases below are the split, and they were RED on the code that shipped this morning.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* ⚠ THE FIXTURE PUTS THE HANDLE WHERE THE REAL CHART PUTS IT — in the ruling's THIRD cell, the
+   commentary a session wrote about other rows, never in the question cell. That is the whole fault:
+   `settled.raw.includes(id)` searched the entire table row, so a handle mentioned in passing was
+   read as "he answered THIS". On the live Chart one ruling's commentary named three handles and all
+   three rows were flagged as answered; one of them (`T-078`) he has never been asked about at all. */
+const KINDS = `# THE CHART — fixture
+
+## STEP 1 CHECKLIST — the reboot
+
+- [ ] \`T-201\` **A ROW HIS RULING ACTUALLY ANSWERED** — the question cell of his settled table
+      names this row, which is the only link he writes himself.
+- [ ] \`T-202\` **A ROW HIS RULING MERELY FREED** — named in the commentary of a ruling that was
+      about something else. The work is untouched.
+- [ ] \`T-203\` **A ROW MEASURED ON A BUILD NOBODY IS RUNNING** — its evidence cites 2001.01.01.1
+      while the tree is somewhere else entirely.
+- [ ] \`T-204\` **A ROW WHOSE HANDLE WAS REUSED** — a closed row in the archive carries this same
+      handle, so a mention of it names two different things.
+- [ ] **A ROW THAT TALKS ABOUT ANOTHER ROW — the half of \`T-201\` nobody built**, warns readers
+      ⟨\`T-205\`⟩
+      off on account of pid 999999, which is not running.
+- [ ] **ONE OF TWO OPEN ROWS SHARING A HANDLE** — nothing forbids this and it happens; the ruling
+      ⟨\`T-206\`⟩
+      below names the handle, so without a guard BOTH of these inherit the same answer.
+- [ ] **THE OTHER OF TWO OPEN ROWS SHARING A HANDLE** — an entirely unrelated job.
+      ⟨\`T-206\`⟩
+
+## BLOCKED ON WYATT
+
+| Question | Recommendation | since |
+|---|---|---|
+
+## SETTLED RULINGS — triaged, and kept on the record forever
+
+| item | HIS RULING | now |
+|---|---|---|
+| The bilge pump, which holds up \`T-201\` | **"leave it alone"** | CLOSED. Still to do: the pump housing (\`T-202\`), the old bilge item (\`T-204\`) and the twins (\`T-206\`). |
+
+## THE IDEA INBOX
+
+(empty)
+`;
+
+/* The archive that makes `T-204` ambiguous: the handle names a row that CLOSED, so the ruling's
+   mention of it cannot be pinned to the live row now carrying the same number. */
+const KINDS_LOG = `# THE CHART LOG — fixture
+
+## T-204 — 2026-01-01 — an entirely different job that finished long ago (closed 2026-01-01 · CEO 1 · no game diff)
+
+- [x] an entirely different job that finished long ago
+      ⟨\`T-204\`⟩
+`;
+
+{
+  const p = chartFile("kinds", KINDS);
+  const logPath = join(tmp, "kinds-LOG.md");
+  writeFileSync(logPath, KINDS_LOG);
+  const r = runJson([`--chart=${p}`, `--log=${logPath}`, "--reap"]);
+  const rows = r.json?.reap || [];
+  const find = (re) => rows.find((x) => re.test(x.title || ""));
+
+  /* 14a. THE LINK HE WRITES HIMSELF STILL WORKS. Red-proofs every case below: a tool that simply
+          stopped claiming anything would pass 14b/14c/14d and fail here. */
+  const answered = find(/HIS RULING ACTUALLY ANSWERED/);
+  if (!answered) fail("the row his settled question NAMES is no longer flagged at all — the signal REAP exists for was thrown out with the fault");
+  else if (answered.fault !== "answered")
+    fail(`the row his ruling answered came back as kind ${JSON.stringify(answered.fault)} — it must be "answered", the one kind whose owner is a close`);
+  else pass("a handle in his question cell still reads as: you answered this, and nothing moved the row");
+
+  /* 14b. AND A HANDLE IN THE COMMENTARY IS NOT AN ANSWER. This is the T-078 fault in miniature. */
+  const freed = find(/HIS RULING MERELY FREED/);
+  if (freed && freed.fault === "answered")
+    fail("a row named only in a ruling's COMMENTARY is reported as one he answered — that is the mis-attribution that would put a question he never saw back in front of him");
+  else if (!freed) fail("the row his ruling freed vanished from REAP — his ruling really did unblock it and that is the cheapest row on the list to pick up");
+  else if (freed.fault !== "unblocked")
+    fail(`the freed row came back as kind ${JSON.stringify(freed.fault)} — "your ruling freed this, the work is still to do" is a different fact from "you answered this"`);
+  else pass("a handle in a ruling's commentary reads as: your ruling freed this row, and the work is still to do");
+
+  /* 14c. AN AMBIGUOUS HANDLE CLAIMS NOTHING. Handles are reused in practice — `T-078` is closed in
+          CHART-LOG.md and live again on the Chart — so a mention of one names two rows and can
+          honestly be attached to neither. Failing toward NO CLAIM is the only safe direction. */
+  /* ⚠ AND IT ASSERTS ON THE REASON TEXT, NOT ONLY ON THE KIND — because a kind nobody sets yet is
+     `undefined`, and a case that reads only the kind PASSES on the broken code it was written to
+     catch. It did exactly that on the first run of this file. */
+  const reused = find(/HANDLE WAS REUSED/);
+  if (reused && (/answered|unblocked/.test(reused.fault || "") || /answer landed|ruling freed|your answer/i.test(reused.reason || "")))
+    fail(`a row whose handle is ALSO a closed row in the archive was linked to his ruling anyway (${JSON.stringify(reused.fault || reused.reason)}) — an ambiguous handle must claim nothing`);
+  else pass("a reused handle links to no ruling at all — it names two rows, so it may speak for neither");
+
+  /* 14c-bis. ⚑ A ROW IS IDENTIFIED BY ITS OWN HANDLE LINE, NOT BY THE FIRST HANDLE ANYWHERE IN ITS
+        PROSE — and until 2026-09-02 it was the latter, which is how the mis-attribution actually
+        happened. `ID_RE` took the first `T-nnn` in the whole row, so the live row **"BUILD THE
+        KIT-BEHIND DETECTOR — the half of `T-078` he asked for"** answered to `T-078`, a handle
+        belonging to a row that closed hours earlier. Every signal keyed on a row's id — his
+        questions, his rulings, how often he has raised it — was reading that row as a different
+        row. Nothing reported it, because a wrong identity produces confident, well-formed
+        nonsense. The fixture row below carries `⟨T-205⟩` and mentions `T-201` in its first line. */
+  const talksAbout = find(/TALKS ABOUT ANOTHER ROW/);
+  if (!talksAbout) fail("the row with the dead pid vanished — this case cannot check identity if the row is never flagged");
+  else if (talksAbout.id !== "T-205")
+    fail(`a row whose head line says T-205 was identified as ${JSON.stringify(talksAbout.id)} — it merely MENTIONS that handle in its prose, and every signal keyed on a row's id was reading it as another row`);
+  else if (talksAbout.fault === "answered")
+    fail("a row that only talks about another row inherited that row's settled ruling");
+  else pass("a row is identified by its own handle line, not by a handle it mentions in passing");
+
+  /* 14c-ter. ⚑ AND A HANDLE TWO OPEN ROWS SHARE IS AMBIGUOUS TOO — CEO 119 found this on the LIVE
+        Chart, in the handle of the very row this whole change was filed under: `T-090` sits on
+        `CHART.md:95` and again on `:320`, two unrelated rows, and the guard shipped an hour earlier
+        saw nothing because it only knew about handles closed in the archive. **The tool must say so
+        out loud**, not quietly cope: a duplicate can only be repaired in `CHART.md`, and while it
+        stands every signal keyed on that handle attaches to both rows. On the live Chart there are
+        FIVE of them, not one. */
+  const twinA = find(/ONE OF TWO OPEN ROWS SHARING A HANDLE/);
+  const twinB = find(/THE OTHER OF TWO OPEN ROWS SHARING A HANDLE/);
+  if (twinA || twinB)
+    fail(`a row sharing its handle with another open row still inherited a ruling (${JSON.stringify((twinA || twinB).reason)}) — one mention names two jobs, so it may speak for neither`);
+  else pass("a handle two open rows share claims nothing for either of them");
+  if (!/handle\(s\) are carried by MORE THAN ONE open row/.test(run([`--chart=${p}`, `--log=${logPath}`, "--reap"]).out))
+    fail("the duplicate handle is silently worked around — it can only be repaired in CHART.md, and closing by that handle is a coin flip between the two rows");
+  else pass("…and the duplicate is named out loud so somebody can repair it");
+
+  /* 14d. AND THE REPORT MUST SAY WHICH IS WHICH, IN A SENTENCE HE COULD READ. The runbook told the
+          Glass session to write one line — "N tasks on your list look already finished" — for
+          whatever this pass found. That sentence is composed by a human from a lumped list, which
+          is exactly how it went wrong. The tool now emits the sentences itself, one per kind. */
+  const text = run([`--chart=${p}`, `--log=${logPath}`, "--reap"]).out;
+  if (/look already finished/.test(text))
+    fail("the reap report still offers the one-label sentence he complained about");
+  else if (!/FOR THE NOTE/.test(text))
+    fail("the reap report prints no FOR THE NOTE block — the Glass session is still left to compose the sentence itself, which is how one label came to mean three things");
+  else if (!/re-measure/i.test(text) || !/freed/i.test(text))
+    fail(`the FOR THE NOTE block does not name each kind and its owner: ${JSON.stringify(text.slice(text.indexOf("FOR THE NOTE"), text.indexOf("FOR THE NOTE") + 400))}`);
+  else pass("the reap report writes his note itself, one sentence per kind, each naming whose job it is");
+}
+
+/* 14e. AND THE RUNBOOK MUST STOP TELLING THE SESSION TO COMPOSE THAT LINE. A tool that emits the
+        right sentence while the runbook still asks for the wrong one is a fix nobody applies. */
+{
+  const runbook = join(ROOT, ".planning", "wyclau", "GLASS-UPDATE-SESSION.md");
+  const src = existsSync(runbook) ? readFileSync(runbook, "utf8") : "";
+  /* ⚠ IT CHECKS THE ORDER, NOT THE ABSENCE, AND THE FIRST VERSION CHECKED THE ABSENCE — which went
+     red on this file's own war story. The old sentence has to survive somewhere: this repo's
+     comments are the graveyard (rule 10), and a correction that deletes the wrong wording teaches
+     nobody why the right one exists. What must not survive is the wrong sentence as the LIVE
+     INSTRUCTION. So: the instruction (`FOR THE NOTE`) comes first, and any mention of the old
+     wording sits after it, as history. */
+  const note = src.indexOf("FOR THE NOTE");
+  const old = src.indexOf("look already finished");
+  if (!src) fail(".planning/wyclau/GLASS-UPDATE-SESSION.md is missing — the Glass tick has no runbook");
+  else if (note < 0)
+    fail("the Glass runbook does not tell the tick to copy the tool's FOR THE NOTE block, so the sentence is still composed by hand");
+  else if (old >= 0 && old < note)
+    fail("the Glass runbook still instructs the tick to write \"N tasks on your list look already finished\" before it mentions FOR THE NOTE — the one label he complained about, still live in the file that causes it");
+  else pass("the Glass runbook hands the sentence to the tool instead of composing it");
 }
 
 console.log(failures === 0 ? "\nPASS" : `\nFAIL (${failures})`);
