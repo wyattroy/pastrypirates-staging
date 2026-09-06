@@ -65,17 +65,59 @@ const COMMITTED = wordRe(COMMITTED_WORDS);
 const PARKED = wordRe(PARKED_WORDS);
 export const STILL_OPEN = /\bSTILL OPEN\b|\bNOT (?:SHIPPED|DONE|BUILT|FIXED)\b|\bUNCONFIRMED\b/;
 
-/* The one state function. A sentence saying it is still open beats any word-match — that override
-   is the lesson two earlier versions of this test were corrected for, and it survives here. */
-export function stateOf(block) {
-  const m = DECLARED.exec(block);
-  if (!m) return "open";
-  const v = m[1];
+function classify(v) {
   if (STILL_OPEN.test(v)) return "open";
   if (FINISHED.test(v)) return "finished";
   if (COMMITTED.test(v)) return "committed";
   if (PARKED.test(v)) return "parked";
   return "open";
+}
+
+/* ⚑ T-264 — A ROW MAY DECLARE ITSELF FINISHED WITH A BARE ✅, NOT ONLY WITH AN ARROW. Found on the
+ * live Chart: `T-243` closed "through the gate" and wrote `✅ **CLOSED PROPERLY...**`, which
+ * `DECLARED` (arrow-only) never saw — so a genuinely finished row stayed on Wyatt's Tasks list.
+ * A scan of every live IDEA INBOX row found exactly one row shaped this way, so this widens the set
+ * of recognized markers rather than adding a whole second, competing rule.
+ *
+ * ⛔ THE ONE THING A CHECKMARK MUST NOT BE ALLOWED TO DO: close a row by MENTIONING some other
+ * ticket's closure. `T-073`'s own sub-note reads `✅ **THE GATE IS CLEAR — `T-261` CLOSED...**` —
+ * about a DIFFERENT handle, inside a row that is very much still open. So a checkmark is only a
+ * candidate verdict when its captured text does not quote a `T-nnn` handle other than the row's own.
+ *
+ * ⚠ "AN ARROW ANYWHERE BEATS ANY CHECKMARK" WAS THE FIRST DESIGN HERE, AND MEASURING THE REAL ROW
+ * PROVED IT WRONG. `T-243`'s block is not single-threaded: its own final close sits at the TOP
+ * (`✅ **CLOSED PROPERLY...**`, right under the handle) while a stale, superseded `→ **NOT YET
+ * FATED...**` from an earlier pass sits further down, still in the block. Treating "any arrow, at
+ * any position" as automatically senior to every checkmark picked the stale note over the real
+ * close. **The candidates are pooled — arrow and checkmark together — and whichever sits EARLIEST
+ * in the text wins**, which is what both `DECLARED`'s own pre-existing first-match rule and the
+ * real T-243 row need: see `chart_own_verdict_check.mjs` cases 3 and 4, and case 6 for this exact
+ * stale-arrow-vs-earlier-checkmark shape. */
+const DECLARED_G = new RegExp(DECLARED.source, "g");
+const CHECKMARK = /✅\s*\*\*([^*]{0,160})/g;
+function ownVerdictCandidates(block) {
+  const ownId = idOfRow(block.split("\n"));
+  const otherTicket = ownId
+    ? new RegExp("`T-(?!" + ownId.replace(/^T-/, "") + "\\b)\\d{3}`")
+    : /`T-\d{3}`/;
+  const out = [];
+  DECLARED_G.lastIndex = 0;
+  let m;
+  while ((m = DECLARED_G.exec(block))) out.push({ at: m.index, text: m[1] });
+  CHECKMARK.lastIndex = 0;
+  while ((m = CHECKMARK.exec(block))) {
+    if (!otherTicket.test(m[1])) out.push({ at: m.index, text: m[1] });
+  }
+  out.sort((a, b) => a.at - b.at);
+  return out;
+}
+
+/* The one state function. A sentence saying it is still open beats any word-match — that override
+   is the lesson two earlier versions of this test were corrected for, and it survives here. */
+export function stateOf(block) {
+  const cands = ownVerdictCandidates(block);
+  if (!cands.length) return "open";
+  return classify(cands[0].text);
 }
 
 /* ⚑ THE THIRD CLAUSE OF HIS RULING, AND IT WENT UNBUILT FOR A DAY — "PARKED shows DIMMED WITH ITS

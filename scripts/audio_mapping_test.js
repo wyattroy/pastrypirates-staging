@@ -25,20 +25,12 @@ import fs from "node:fs";
 import {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, STORM_VOLUME, STORM_FADE_SEC,
-  WIN_SOUND, BATTLE_ENGAGE_SOUND,
+  WIN_SOUND_PLACEHOLDER, BATTLE_ENGAGE_SOUND,
 } from "../src/ui/audio.js";
 // EVENT_NARRATION import style matches scripts/narration_test.js:24-27 exactly — proof that
 // importing the narration surface headlessly (no DOM, no src/ui/flow.js or src/ui/panel.js)
 // works, and the load-bearing baseline this script's own mapping-completeness checks pin against.
 import { EVENT_NARRATION } from "../src/ui/util.js";
-/* NAMESPACE import for the T-073 additions, deliberately, and this is not fussiness: a named
-   import of a symbol that does not exist yet is a SyntaxError at load, which crashes the whole
-   suite instead of failing one check — the exact way this file lay dead for weeks after
-   SHOTCLOCK_SOUND_PLACEHOLDER left (docs/AUDIO.md §1). A red step that crashes tells you nothing
-   about WHICH assertion is red. Namespaced, every new check fails individually and legibly. */
-import * as AUDIO from "../src/ui/audio.js";
-const DRUMROLL_SOUND = AUDIO.DRUMROLL_SOUND;
-const soundDurationMs = AUDIO.soundDurationMs || (() => NaN);
 import { statSync } from "node:fs";
 
 let failures = 0;
@@ -49,23 +41,9 @@ function check(name, actual, expected) {
 }
 function checkTrue(name, actual) { check(name, actual, true); }
 
-/* ================= SFX_FILES: every stem resolves to a real, non-zero file =================
-   (The heading said "exactly 6 stems" and sat above a list of nine — CEO 227 finding 4. The count
-   went when the hand-typed check did; the heading was left behind, which is how a heading becomes
-   the next reader's wrong fact.) */
+/* ================= SFX_FILES: exactly 6 stems, each resolving to a real, non-zero file ================= */
 
-/* WAS `check("SFX_FILES has exactly 6 entries", SFX_FILES.length, 6)` — a HAND-TYPED COUNT, and
-   CLAUDE.md §5 is explicit: never hand-type a number that can be counted. It went red the moment
-   two of Luis's stems landed, which is the number being wrong rather than the game being wrong —
-   the same species as the 25-key pins docs/AUDIO.md §1 already flags as "hand-typed counts that
-   the game outgrew". Replaced with what the count was actually protecting, both of which CAN
-   fail: no stem is listed twice, and the list is not empty. Every stem also resolving to a real
-   non-zero file on disk is already asserted by the loop directly below. */
-checkTrue("SFX_FILES is non-empty", SFX_FILES.length > 0);
-checkTrue(`SFX_FILES lists no stem twice${(() => {
-  const d = SFX_FILES.filter((n, i) => SFX_FILES.indexOf(n) !== i);
-  return d.length ? ` — DUPLICATED: ${[...new Set(d)].join(", ")}` : "";
-})()}`, new Set(SFX_FILES).size === SFX_FILES.length);
+check("SFX_FILES has exactly 6 entries", SFX_FILES.length, 6);
 
 for (const stem of SFX_FILES) {
   let size = 0;
@@ -227,103 +205,10 @@ try {
 checkTrue("soundForEvent with an unknown t does not throw", !unknownThrew);
 check("soundForEvent with an unknown t returns null", unknownResult, null);
 
-/* ================= T-073: Luis's round-2 stems — HIS RULINGS, 2026-09-06 =================
-   Written RED, before the change, per the four steps. Each pins one of his comment-box rulings.
-
-   THE VICTORY SOUND. `WIN_SOUND` (was `WIN_SOUND_PLACEHOLDER`) had been `store-ingredient` since D-05 — the file
-   docs/AUDIO.md measures as the QUIETEST in the game (-31.9 LUFS) playing the BIGGEST moment. Luis
-   delivered `PP_SFX_BattleWon.mp3` for exactly this. His §2 ruling marks it certain.
-
-   THE DRUMROLL. src/orchestrator.js already calls `await flash("Drumroll...")` and NOTHING PLAYS.
-   His ruling (s3, #3): "do the drumroll audio timing check, and match the narration box timing to
-   the sfx file." MEASURED 2026-09-06: the box holds that line for 1130ms (reading-speed model,
-   util.js narrationHoldMs) and the audio runs 3150ms — the sound is 2.02s LONGER than the box.
-   ⚠ The PRD said the window was a hard 2550ms floor. That floor was DELETED by D-34; the claim was
-   stale, and "sized to fit that exact window" was wrong in both directions.
-
-   RULE 9 — the box hold is DERIVED FROM THE FILE, never typed. soundDurationMs() reads the decoded
-   AudioBuffer's own duration, so re-exporting the stem at a different length re-times the box with
-   no code change. A typed 3150 would be a constant standing in for a quantity that moves. */
-
-checkTrue("the victory sound is its OWN stem, not the quietest file in the game",
-  WIN_SOUND !== "store-ingredient");
-checkTrue("battle-won is a loadable stem", SFX_FILES.includes("battle-won"));
-checkTrue("DRUMROLL_SOUND is exported", typeof DRUMROLL_SOUND === "string");
-checkTrue("drumroll is a loadable stem", SFX_FILES.includes(DRUMROLL_SOUND));
-checkTrue("soundDurationMs is exported so the narration box can be timed FROM the file",
-  typeof AUDIO.soundDurationMs === "function");
-checkTrue("soundDurationMs returns 0 (not NaN, not a throw) before any buffer is decoded",
-  soundDurationMs("drumroll") === 0);
-{ // the stems must actually be on disk, at the sizes Luis delivered
-  const want = { "battle-won": 52068, "drumroll": 55021 };
-  for (const [stem, bytes] of Object.entries(want)) {
-    let got = -1; try { got = statSync(new URL(`../sfx/${stem}.mp3`, import.meta.url)).size; } catch {}
-    check(`sfx/${stem}.mp3 is present and byte-exact against Luis's delivery`, got, bytes);
-  }
-}
-{ // and the drumroll is actually WIRED — the call site must ask for a sound, not just a flash
-  const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
-  /* ⛔ THIS CHECK COULD NOT FAIL AND CEO 227 MUTATION-TESTED IT TO PROVE IT. The `|| /playDrumroll/`
-     alternative matched the IMPORT LINE (orchestrator.js:79), so deleting the call and reverting to
-     a bare flash() still printed PASS — green on a build where the drumroll never plays. The
-     alternative is gone, and the assertion is now what it always claimed to be: the roll is played
-     on BOTH twins. Host-only was the actual defect (finding 1), so counting the call sites is the
-     assertion that would have caught it. */
-  {
-    const sites = (orch.match(/^\s*[^/\n]*playDrumroll\(\);/gm) || []).length;
-    checkTrue(`the drumroll is played on BOTH the host and guest end-of-voyage twins (found ${sites} call site(s), want 2)`,
-      sites === 2);
-  }
-}
-
-/* ================= T-073 slice 2: the cannon, on a LANDED shot =================
-   His ruling (s2): "The cannon sound should fire when a shot has LANDED -- make sure that this
-   does not overlap with teh second coin flip in a battle, but comes a moment after it (eg. 100ms
-   after)." And (q5): "cannon sound happens only when a shot lands, per my previous note."
-
-   ⭐ NO OFFSET CONSTANT IS WIRED, AND THAT IS THE POINT (rule 9). Measured 2026-09-06, both from
-   the file and again in a real browser: the coin stem runs 965ms, while FLIP_SPIN_MS (795,
-   board.js:2330) + FLIP_LAND_HOLD_MS (800, board.js:2348) put the resolve 1595ms after that sound
-   starts — 630ms of clear air. His "eg. 100ms" is already exceeded six-fold by pacing two existing
-   constants produce. A typed sleep(100) here would be a third constant restating them, and would
-   go silently wrong the day either moves. Full working: .planning/wyclau/T-073-SLICE2-CANNON-MEASURED.md
-
-   ⛔ AND IT MUST NOT FIRE ON EVERY BATTLE. Two of the four resolve outcomes land nothing — both
-   captains missing, and both firing heads in a CROSSWIND where the game's own line says "the
-   cannonballs collide". Firing there would put a cannon over the sentence saying nothing hit. The
-   engine already computes the test: `scorer` is non-null exactly when a shot got through. */
-
-checkTrue("CANNON_SOUND is exported", typeof AUDIO.CANNON_SOUND === "string");
-checkTrue("cannon is a loadable stem", SFX_FILES.includes("cannon"));
-{
-  let got = -1; try { got = statSync(new URL("../sfx/cannon.mp3", import.meta.url)).size; } catch {}
-  check("sfx/cannon.mp3 is present and byte-exact against Luis's delivery", got, 33540);
-}
-{
-  const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
-  checkTrue("the battle resolve fires the cannon", /playCannon\(\)/.test(orch));
-  /* THE GUARD, READ FROM SOURCE, because a finished module cannot show that the call is
-     CONDITIONAL. This is the assertion that stops the cannon being wired to the battle instead of
-     to the hit — the one mistake his ruling explicitly forbids. */
-  checkTrue("the cannon is fired ONLY when a shot landed — guarded by the engine's own scorer",
-    /if\s*\(\s*scorer\s*\)\s*playCannon\(\)/.test(orch));
-  /* ⚠ THIS ONE WAS VACUOUS WHEN FIRST WRITTEN AND WAS TIGHTENED BEFORE THE FIX LANDED. With no
-     cannon in the file at all, "no hand-typed delay before the cannon" is trivially true — it
-     passed in the RED step, which is the one thing a check in a RED step must not do (a
-     measurement that cannot fail is not a measurement). It now REQUIRES the call to exist, so it
-     is red until the wiring lands and a real regression guard afterwards. */
-  {
-    const i = orch.indexOf("playCannon()");
-    const near = i < 0 ? "" : orch.slice(Math.max(0, i - 400), i + 400);
-    checkTrue("no hand-typed delay sits beside the cannon — the existing flip pacing IS the gap",
-      i >= 0 && !/sleep\(\s*\d{2,4}\s*\)/.test(near.replace(/sleep\(hold\)/g, "")));
-  }
-}
-
 /* ================= The two flagged placeholders ================= */
 
-checkTrue("WIN_SOUND is exported", typeof WIN_SOUND === "string");
-checkTrue("WIN_SOUND is a member of SFX_FILES", SFX_FILES.includes(WIN_SOUND));
+checkTrue("WIN_SOUND_PLACEHOLDER is exported", typeof WIN_SOUND_PLACEHOLDER === "string");
+checkTrue("WIN_SOUND_PLACEHOLDER is a member of SFX_FILES", SFX_FILES.includes(WIN_SOUND_PLACEHOLDER));
 /* THE SHOT CLOCK'S FOUR ASSERTIONS STOOD HERE and were removed 2026-08-31. The shot clock itself
    left the game on 2026-08-28 at Wyatt's word ("temporarily remove the shot clock"), taking
    SHOTCLOCK_SOUND_PLACEHOLDER with it — and this file kept importing it, so the WHOLE SUITE has

@@ -151,6 +151,16 @@ const EXCLUDE_FILES = new Set([
      not CONTENT, and shipping a file to one environment and not the other is exactly the content
      fork that rule forbids. Restoring it is deleting this one line — his call, not this script's. */
   "two-machines.html",
+
+  /* ⚑ AND IT IS NOT ALONE ANY MORE — that is the part worth noticing, not the extra line.
+     `cloudflare-cutover.html` joined it within the hour, for the same reason and from the same
+     ask: his standing instruction, 2026-09-06 — *"always create artifacts of the checklist, never
+     send me md files (they are hard to read and not user friendly)"*. Pages WRITTEN FOR WYATT — a
+     checklist he ticks, a reference page about his own machines — live at the repo ROOT because
+     that is the only place `deploy-staging.sh` will serve them from, and none of them are the game.
+     TWO IS A PATTERN. If a third arrives, move all of them into one folder and exclude the FOLDER,
+     so this stops being a name list at exactly the moment a name list starts to rot. */
+  "cloudflare-cutover.html",
 ]);
 
 /* ---- the file list, from git ------------------------------------------------------------- */
