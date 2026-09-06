@@ -196,12 +196,30 @@ shipped.
 ```bash
 git checkout -b aug28-whatever            # 1. a dated branch (monthDD-topic)
 
-npm test                                  # 2. the gates — expect 20, exit 0
-node scripts/qa/gear.mjs                  # 3. how deep must this change be tested?
-node scripts/sea_trial.mjs                # 4. sail it, at whatever gear step 3 named
+npm run bump                              # 2. BUMP THE BUILD — see the box below
+npm test                                  # 3. the gates — exit 0
+node scripts/qa/gear.mjs                  # 4. how deep must this change be tested?
+node scripts/sea_trial.mjs                # 5. sail it, at whatever gear step 4 named
 
-npm run deploy:staging -- "what changed"   # 5. -> staging.playpastrypirates.com
+npm run deploy:staging -- "what changed"   # 6. -> staging.playpastrypirates.com
 ```
+
+> ### ⚠ STEP 2 WAS MISSING FROM THIS LIST UNTIL 2026-09-06, AND `bump-build.mjs` SAID IT WAS HERE
+>
+> That script's header reads *"the release loop in `docs/GIT-AND-DEPLOY.md` names the step"*.
+> **It did not.** `grep -c bump docs/GIT-AND-DEPLOY.md` returned **0** — the tool pointed at a
+> documented step that had never been written down, so a session following this loop exactly did
+> everything right and still shipped a stale date.
+>
+> **What it cost, the day it was found:** two staging publishes on 2026-09-06 went out stamped
+> `2026.09.04.2` — the date a DIFFERENT session last bumped, two days earlier. Wyatt caught it
+> himself: *"why did you push it to staging with the wrong date name?"* The `@sha` was unique, so
+> the build was never ambiguous — but **the date is the half he reads at a glance**, and a stamp
+> carrying somebody else's date is the stamp failing at its one job.
+>
+> **`deploy-staging.sh` deliberately does NOT auto-bump** (its own comment says so, and it is right:
+> a deploy that silently renamed the build would break *"the stamp names the exact build he
+> played"*). Nothing catches this but the person running the loop. **Run step 2.**
 
 **6. Wyatt plays staging.** The build stamp must read `<stamp>-staging@<sha>` — e.g.
 `Build 2026.08.27.3-staging@a24c675`. If it reads a bare stamp he is looking at production and the
