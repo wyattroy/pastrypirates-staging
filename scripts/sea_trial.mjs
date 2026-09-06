@@ -35,6 +35,7 @@ import { execSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { judgeModeFor } from "./lib/judge_mode.mjs";
 import { gameTreeHash } from "./lib/game_tree_hash.mjs";
+import { findCulprit, renderCulprit } from "./lib/npm_test_culprit.mjs";
 /* WHY EVERY CHILD BELOW CARRIES THIS. When this trial is started by start_trial_detached.mjs it
    has no console of its own, and on Windows a console-less parent makes Windows hand each console
    child a BRAND-NEW console — a visible black window on Wyatt's screen, whose ✕ kills the run.
@@ -262,12 +263,22 @@ say(`   legs: ${legs.length ? legs.join(", ") : "none — this gear needs no voy
 
 /* ---- 1. the checks that never open a browser ------------------------------- */
 say("── 1/2  the checks that need no browser (npm test) ──");
-let unitOk = false, unitTail = "";
+let unitOk = false, unitTail = "", unitCulpritBlock = "";
 try {
   const out = execSync("npm test", { ...NO_CONSOLE_WINDOW, cwd: REPO, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   unitOk = true; unitTail = out.trim().split("\n").slice(-3).join("\n");
 } catch (e) {
-  unitTail = ((e.stdout || "") + (e.stderr || "")).trim().split("\n").slice(-14).join("\n");
+  /* `npm test` failed. DO NOT guess the culprit from a tail-slice of the whole run's output — CEO
+     Review 185 caught that approach naming two PASSING gates while the real failure went unnamed.
+     Re-run package.json's own chain, one entry at a time, and report whichever one actually exits
+     non-zero (scripts/lib/npm_test_culprit.mjs). Slower than a tail-slice, but this path is only
+     ever taken when the suite is already red. */
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
+  const result = findCulprit(pkg.scripts && pkg.scripts.test, { cwd: REPO });
+  unitCulpritBlock = renderCulprit(result);
+  unitTail = result.failed === true
+    ? `FAILING GATE: ${result.entry}\n\n${[result.stdout, result.stderr].filter(Boolean).join("\n")}`
+    : `could not identify which gate — ${result.reason}`;
 }
 say(unitOk ? "   PASS — all of them\n" : "   FAIL\n" + unitTail + "\n");
 
@@ -429,7 +440,7 @@ const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\` (tree \`${SH
 | **voyages that did NOT run** | ${notRun.length ? "**" + notRun.map(n => n.leg).join(", ") + "**" : "none"} |${rescueRow}
 
 ${notRun.length ? "## What did NOT run, and why\n\n" + notRun.map(n => `**${n.leg}**\n\n\`\`\`\n${n.why}\n\`\`\`\n`).join("\n") + "\nA leg that did not run is **not** a leg that passed. This section exists so that distinction cannot be lost.\n" : ""}
-${unitOk ? "" : "## The browser-free checks failed\n\n```\n" + unitTail + "\n```\n"}
+${unitOk ? "" : unitCulpritBlock}
 ## The voyages, in full
 ${voyagesMissing.length ? `\n> ⚠ **${voyagesMissing.length} leg(s) sailed but have NO verdict printed below: ${voyagesMissing.join(", ")}.**\n> Their result exists in \`sea-trial-shots/log.txt\` and did not reach this file. Do not read their\n> absence as a pass — go and read the log.\n` : ""}
 \`\`\`

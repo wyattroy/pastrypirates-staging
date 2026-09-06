@@ -282,9 +282,10 @@ const NUMBERED = /^\s*\d+\s/;
 //   what he sees" this project already owns a rule about.
 //   IT IS HERE ANYWAY BECAUSE THE RULE IS IN THE WRONG HOME AND EVERYONE SHOULD KNOW IT. The
 //   canonical place is `.claude/CLAUDE.md` §1 and `.claude/memory/DECISIONS.md`; a watch is fenced
-//   out of `.claude/` (measured 2026-09-03 — both edits refused as protected files), so the rule
-//   lives in the wyclau CHARTER, which is the most-read file this watch could write. A rule in an
-//   unusual home is a rule somebody tidies away, so it is pinned.
+//   out of `.claude/` (measured 2026-09-03, AND RE-MEASURED 2026-09-06T21xxZ, both edits still
+//   refused as protected files — this is not a one-off, it is a standing fence on this tool), so
+//   the rule lives in the wyclau CHARTER, which is the most-read file this watch could write. A
+//   rule in an unusual home is a rule somebody tidies away, so it is pinned.
 {
   const charter = readFileSync(join(ROOT, ".planning", "wyclau", "CHARTER.md"), "utf8");
   if (!/number or letter/i.test(charter)) fail("his 2026-09-03 rule — number or letter every option you put in front of him — is no longer written in .planning/wyclau/CHARTER.md, and it is not in .claude/ either, so nothing a session reads carries it");
