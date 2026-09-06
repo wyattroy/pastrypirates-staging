@@ -79,6 +79,16 @@ fs.writeFileSync(REVIEWS, [
   `Verdict on "repair the dock ramp" and INBOX-20260901T0100Z and commit ${gameSha.slice(0, 7)}: YES.`,
   `## CEO Review 8 — names nothing`,
   `A verdict about something else entirely.`,
+  /* TWO DIFFERENT VERDICTS SHARING ONE NUMBER — the real record has EIGHT such collisions (31, 38,
+     73, 82, 83, 107, 135, 182), because the next number is chosen by reading the file and adding
+     one, and two sessions do that at the same time. The closer used `.find()`, which returns the
+     first and never mentions the second, so `--ceo=82` resolved BY POSITION IN THE FILE. Both of
+     these name the item and the commit, so a positional resolve would sail straight through the
+     traceability check below with a verdict nobody chose. */
+  `## CEO Review 9 — the first verdict to claim this number`,
+  `Verdict on "repair the dock ramp" and commit ${gameSha.slice(0, 7)}: YES.`,
+  `## CEO Review 9 — a DIFFERENT review that also claims it`,
+  `Verdict on "repair the dock ramp" and commit ${gameSha.slice(0, 7)}: NO, and for other reasons.`,
 ].join("\n") + "\n");
 fs.writeFileSync(LEDGER, "# ledger\n");
 
@@ -91,7 +101,26 @@ let r = run("--item=repair the dock ramp", "--commit=" + gameSha);
 check("no --ceo is a usage error", r.status === 2, `exit ${r.status}`);
 
 r = run("--item=repair the dock ramp", "--ceo=99", "--commit=" + gameSha);
-check("a CEO review that does not exist refuses", r.status === 1 && /not in CEO-REVIEWS/.test(r.stdout), `exit ${r.status}: ${r.stdout.slice(0, 120)}`);
+/* This used to assert the refusal said "not in CEO-REVIEWS.md" — and THAT SENTENCE WAS THE BUG
+   (2026-09-04): a claim about the FILE made on the strength of one regex, which was false for every
+   verdict headed `## CEO 189 —` instead of `## CEO Review 189 —`. The assertion is now STRICTER,
+   not looser: the refusal must still fire, AND it must name what was actually searched for, so a
+   future reader cannot quietly go back to blaming the record for what the reader could not see. */
+check("a CEO review that does not exist refuses — and says what it SEARCHED FOR, not what the file lacks",
+  r.status === 1 && /no section headed/.test(r.stdout) && /verdict heading\(s\) searched/.test(r.stdout),
+  `exit ${r.status}: ${r.stdout.slice(0, 160)}`);
+
+/* AN AMBIGUOUS NUMBER MUST REFUSE, AND MUST SHOW BOTH — not resolve by position. Note this case is
+   deliberately built so BOTH verdicts pass traceability (each names the item and the commit): the
+   old `.find()` would therefore have closed cleanly against whichever came first, which is exactly
+   how a wrong verdict gets certified as the right one. */
+r = run("--item=repair the dock ramp", "--ceo=9", "--commit=" + gameSha);
+check("a CEO number naming TWO different verdicts refuses instead of picking one by position",
+  r.status === 1 && /names 2 DIFFERENT verdicts/.test(r.stdout),
+  `exit ${r.status}: ${r.stdout.slice(0, 160)}`);
+check("...and the refusal SHOWS both headings, so a human can tell them apart",
+  /the first verdict to claim this number/.test(r.stdout) && /a DIFFERENT review that also claims it/.test(r.stdout),
+  r.stdout.slice(0, 200));
 
 r = run("--item=repair the dock ramp", "--ceo=8", "--commit=" + gameSha);
 check("a CEO review that never mentions the item refuses (traceability)", r.status === 1 && /never mentions/.test(r.stdout), `exit ${r.status}: ${r.stdout.slice(0, 120)}`);

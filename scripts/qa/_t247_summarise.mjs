@@ -1,8 +1,16 @@
 // T-247 — group the parity gate's failures so the real ones are visible among the noise.
 import { execFileSync } from "node:child_process";
-const out = execFileSync(process.execPath, ["scripts/qa/_t247_staging_parity.mjs", "--json", ...process.argv.slice(2)], {
-  encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
-});
+// The gate exits 1 when it finds anything, which is the point of it — so a non-zero exit is a
+// RESULT here, not a crash. execFileSync throws on it and puts the stdout in e.stdout.
+let out;
+try {
+  out = execFileSync(process.execPath, ["scripts/qa/_t247_staging_parity.mjs", "--json", ...process.argv.slice(2)], {
+    encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+  });
+} catch (e) {
+  out = e.stdout;
+  if (!out) throw e;
+}
 const j = JSON.parse(out);
 console.log(`stamp=${j.stamp}  head=${j.headSha}  dirty=${j.dirty}  compared=${j.compared}  failing=${j.bad.length}`);
 const kind = {};

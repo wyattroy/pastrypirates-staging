@@ -40,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.03.4-staging@401674f8";
+const PP4_STAMP = "2026.09.04.2-staging@0fdbe853";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -843,9 +843,25 @@ function camFrame(){
      bottom:auto (not pinned), so shrinking ITS reservation pushed the card past the window bottom:
      bottom=1109 of 1080, caught by stage_layout_check before it shipped, twice (the first scoping,
      portrait-vs-landscape, still let an 800×1080 stacked window through). */
-  const squareRoom = (vwPx() <= 600) ? Math.max(64, vhPx() - ribH - vwPx()) : Infinity;
+  /* T-256 — ONLY true phone width pins #pp4Cap's OWN `bottom:0` to the literal viewport edge
+     (index.html's base #pp4Cap rule; the desktop/tablet @media(min-width:601px) override sets
+     `bottom:auto`, so the card there simply ends where its content ends — never reaching the
+     footer, confirmed measured). So only there can the card's last row land under `#legalFooter`
+     (index.html:1241, z-index 1002, ALWAYS on top of this card's 22 — his `T-206` ruling, kept
+     intact: the links stay exactly as reachable as before, this only stops the card's OWN text
+     disappearing under them). Read the footer's REAL rendered height rather than a typed number
+     (rule 9) — it is cheap (one more element already on the geometry clock, ~900ms) and correct
+     if a future link is added and the bar grows a line. */
+  const phoneFootReserve = (!side && vwPx() <= 600) ? (() => {
+    const foot = document.getElementById("legalFooter");
+    if (!foot) return 0;
+    const fs = getComputedStyle(foot);
+    if (fs.display === "none" || fs.visibility === "hidden") return 0;
+    return Math.ceil(foot.getBoundingClientRect().height);
+  })() : 0;
+  const squareRoom = (vwPx() <= 600) ? Math.max(64, vhPx() - ribH - vwPx() - phoneFootReserve) : Infinity;
   const CAP_BASE = side ? 0 : Math.min(250, S.capNeed || Math.round(vhPx() * 0.30), squareRoom);
-  const availH = Math.max(200, vhPx() - ribH - CAP_BASE);
+  const availH = Math.max(200, vhPx() - ribH - CAP_BASE - phoneFootReserve);
   if (wrap){
     if (Math.abs((parseFloat(wrap.style.top) || 0) - ribH) > 1) wrap.style.top = ribH + "px";
     if (Math.abs((parseFloat(wrap.style.height) || 0) - availH) > 2) wrap.style.height = availH + "px";
@@ -862,11 +878,21 @@ function camFrame(){
   // and a stale inline `top` from a window that was resized DOWN then UP must be cleared, not left.
   if (cap && side){
     if (cap.style.top) cap.style.removeProperty("top");
+    if (cap.style.bottom) cap.style.removeProperty("bottom");
   } else if (cap){
     const scale = vwPx() / c.w;
     const boardBottom = ribH + Math.min(availH, h * scale);
     const top = Math.round(Math.min(ribH + availH, boardBottom));
     if (Math.abs((parseFloat(cap.style.top) || 0) - top) > 1) cap.style.top = top + "px";
+    // TRUE PHONE ONLY: pull the card's own bottom edge up off the true viewport edge by the
+    // footer's reserved height, so its last row ends where the reservation says, not wherever
+    // the base CSS rule's `bottom:0` happens to land it. STACKED (>600px) must NOT get an inline
+    // `bottom` at all — its own @media override sets `bottom:auto` and an inline style always
+    // beats it, which would re-pin the tablet/desktop card to the viewport edge it was fixed to
+    // never touch (T-142's own regression risk, one line over).
+    if (vwPx() <= 600) {
+      if (Math.abs((parseFloat(cap.style.bottom) || 0) - phoneFootReserve) > 1) cap.style.bottom = phoneFootReserve + "px";
+    } else if (cap.style.bottom) cap.style.removeProperty("bottom");
   }
   const vb = `${c.x} ${vy} ${c.w} ${h}`;
   if (vb !== lastVB){

@@ -103,11 +103,46 @@ $kitArgs = @()
 if (Test-Path -LiteralPath $kitDir -PathType Container) { $kitArgs = @("--add-dir", "`"$kitDir`"") }
 
 $doorPrompt = "/door - the Bell rings you as a WATCH. Sync, orient, then work exactly ONE item through the full Proof - Wyatt's inbox first, then the top unblocked Chart item - close it through the gate, republish the Glass, and END YOUR TURN. Ending is correct: the Bell rings the next watch. Never take a second item."
+
+# NAME THE MODEL. A LAUNCH LINE THAT CARRIES NO --model IS A LAUNCH LINE THAT PICKS ONE ANYWAY.
+#
+# Wyatt, 2026-09-03: "we're running out of usage... we also need to start having the Watch use a
+# different model setting -- what is it currently using?" It was Opus, and NOBODY CHOSE THAT. With
+# no flag here, every watch inherited the CLI default from his own global settings.json -- the same
+# file that governs HIS interactive sessions -- so an unattended relay ran the most expensive model
+# around the clock, on every ring, because of a flag that was never here. That is the same shape as
+# the --add-dir fence two paragraphs up: a capability, or a cost, falling out of an argument list
+# nobody read.
+#
+# DO NOT "FIX" THIS IN ~/.claude/settings.json. That would quietly downgrade Wyatt while he works.
+# The Watch is what should be cheap, not Wyatt -- so the flag belongs HERE, where it applies to the
+# relay and to nothing else.
+#
+# SONNET IS HIS RULING, NOT A RECOMMENDATION: "Change the watch to use sonnet 5" (2026-09-03,
+# .claude/memory/DECISIONS.md). It agrees with the reasoning that was on the record before he
+# answered -- a watch works ONE small item through a written loop with a fresh-context CEO checking
+# it afterwards, and every other unattended claude call in this repo already pins itself to
+# claude-sonnet-5 (scripts/lib/vision.mjs in four places, scripts/playtest_gate.mjs), so the house
+# default for machine work was already Sonnet everywhere except the highest-volume caller of all.
+#
+# CHANGING THIS STRING ALONE WILL FAIL THE BUILD, ON PURPOSE. bell_check.mjs asserts this exact
+# model, because CEO 192 put the Watch back on claude-opus-5 and the first version of that gate
+# printed PASS -- it held the SHAPE of the launch line and not the thing he actually ruled. A
+# ruling worth making is a ruling that cannot be reversed by editing one line and saying nothing.
+# To change it: edit here AND in bell_check.mjs, and record his new ruling in DECISIONS.md.
+$watchModel = "claude-sonnet-5"
+
+# ONE ARGUMENT ARRAY, BUILT ONCE, USED BY BOTH BRANCHES -- rule 23 in a shell script. The dry run
+# used to log a DESCRIPTION of the launch while Start-Process built its own separate array inline,
+# so the two could drift and a gate reading either one proved nothing about the other. They are one
+# object now, which is what makes scripts/qa/bell_check.mjs able to read the real thing.
+$claudeArgs = @("-p", "`"$doorPrompt`"", "--model", $watchModel) + $kitArgs
+
 if ($DryRun) {
   # The dry run must print the REAL argument list, not a description of it. A gate that reads a
   # paraphrase is testing the paraphrase (HARD-WON-LESSONS section 12i), and this line is the only way a
-  # check can see whether the kit fence is actually down.
-  Add-Content $log "$now`tDRYRUN would ring a watch (kit: $(if ($kitArgs.Count) { $kitArgs -join ' ' } else { 'NOT PRESENT, no --add-dir' }))"
+  # check can see whether the kit fence is down and which model a watch will actually run on.
+  Add-Content $log "$now`tDRYRUN would ring a watch: claude $($claudeArgs -join ' ')"
 } else {
   try {
     # CAPTURE WHAT THE WATCH SAYS, OR A DEATH AT LAUNCH IS INVISIBLE. Earned 2026-09-01: the Bell
@@ -119,10 +154,11 @@ if ($DryRun) {
     $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
     $outFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.out"
     $errFile = Join-Path $Repo ".planning\wyclau\watch-$stamp.err"
-    Start-Process -FilePath "claude" -WorkingDirectory $Repo -ArgumentList (
-      @("-p", "`"$doorPrompt`"") + $kitArgs
-    ) -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-    Add-Content $log "$now`tring: no watch on deck -- rang the next one (output: watch-$stamp.out/.err, kit: $(if ($kitArgs.Count) { 'readable' } else { 'not present' }))"
+    # ONE LINE ON PURPOSE. A backtick continuation dies on one trailing space, and this file cannot
+    # afford a launch that fails to parse -- that is precisely the silent death it learned about on
+    # 2026-09-01. Long is safe; clever is not.
+    Start-Process -FilePath "claude" -WorkingDirectory $Repo -ArgumentList $claudeArgs -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    Add-Content $log "$now`tring: no watch on deck -- rang the next one on $watchModel (output: watch-$stamp.out/.err, kit: $(if ($kitArgs.Count) { 'readable' } else { 'not present' }))"
   } catch {
     # A "ring" line with no launch behind it is a log that lies. Say what failed, in the same
     # file the next reader will open.

@@ -57,9 +57,23 @@ if (explicit.length < 5) {
   console.error("it is the exact fault that put 7.7 GB of screenshots one command from the staging repo.");
   process.exit(2);
 }
+// ⚠ AND ONE RULE THAT BELONGS TO THE SERVER, NOT TO THIS REPO. GitHub Pages runs Jekyll, and
+// Jekyll will not serve ANY path whose segment begins with "_" or "." — so `scripts/qa/_probe.mjs`
+// and `.claude-team/…` are rsynced into the staging repo and then 404 on request. That is the
+// server working, not a stale deploy.
+// MEASURED BEFORE BEING BELIEVED, not assumed: `scripts/qa/_t247_why404.mjs` states the hypothesis,
+// names its own falsifier ("a 404 with no underscore/dot segment, or a served file that has one"),
+// and tested it against a fresh publish — 84 of 84 failures explained, 0 unexplained, and every
+// verdict MISSING-404 rather than DIFFERS. Without this line the gate can never print PASS, which
+// would make it exactly the sort of permanently-red check nobody reads.
+// `--test-jekyll-rule` turns the rule OFF so the claim behind it can still be re-measured.
+// Without this flag the rule is unfalsifiable from outside: it strips the files before they are
+// compared, so nothing it hides can ever appear in the failures. Found by CEO 188.
+const TEST_JEKYLL = process.argv.includes("--test-jekyll-rule");
+const jekyllHidden = (f) => f.split("/").some((seg) => seg.startsWith("_") || seg.startsWith("."));
 const excluded = (f) =>
   explicit.some((p) => (p.endsWith("/") ? f.startsWith(p) : f === p)) ||
-  /^\.[^/]*$/.test(f);            // GitHub Pages serves no root dot-file; a 404 there is the server working
+  (!TEST_JEKYLL && jekyllHidden(f));
 
 // ── The candidate set: exactly what rsync would send ────────────────────────────────────────
 const tracked = git("ls-files", "-z").split("\0").filter(Boolean);

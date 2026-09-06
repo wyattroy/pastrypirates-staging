@@ -40,13 +40,22 @@
    gate compares is the honest second best when neither file may import the other. */
 export const MEASUREMENT_ID = "G-2KK6EZDZSP";
 
-/* The live game, and nothing else. `staging.playpastrypirates.com` is a DIFFERENT hostname and is
-   deliberately excluded by the equality — a substring test would have caught it, which is the bug
-   this comparison is written to avoid. */
-export const LIVE_HOST = "playpastrypirates.com";
+/* WHICH HOSTS ARE THE LIVE GAME IS NOT DECIDED HERE ANY MORE — CEO 189 finding 6, fixed 2026-09-04.
+   This file used to carry its own `LIVE_HOST = "playpastrypirates.com"`, a SECOND hostname policy
+   beside `devHost()`; `src/ui/usage.js` quietly carried a THIRD, and it disagreed — it counted
+   `www.` and this did not. Nothing made the three agree, and nothing would have said so. The list
+   now lives once, in `src/shared/host.js`, and this imports it.
+   `staging.playpastrypirates.com` is still excluded, which is what keeps a sea trial from ever
+   being counted as real players — it is a DEV host over there, by the same one list. */
+import { LIVE_HOSTS, isLiveHost } from "./shared/host.js";
+
+/* Kept as a named export because `analytics_consent_check.mjs` reads it. It is now DERIVED from the
+   one list rather than typed a second time — the same move `MEASUREMENT_ID` could not make, which
+   is why that one is still two places a gate compares. */
+export const LIVE_HOST = LIVE_HOSTS[0];
 
 export function analyticsShouldRun(hostname) {
-  return String(hostname) === LIVE_HOST;
+  return isLiveHost(hostname);
 }
 
 export function installAnalytics(win = typeof window !== "undefined" ? window : null) {

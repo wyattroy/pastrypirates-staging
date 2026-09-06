@@ -1,0 +1,12 @@
+import { gameTreeHash } from "../scripts/lib/game_tree_hash.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const t0 = Date.now();
+const h1 = gameTreeHash(repo);
+const t1 = Date.now();
+const h2 = gameTreeHash(repo);
+console.log("hash1:", h1);
+console.log("hash2:", h2);
+console.log("deterministic:", h1 === h2);
+console.log("elapsed ms first call:", t1 - t0);

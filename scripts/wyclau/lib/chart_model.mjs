@@ -377,9 +377,26 @@ export function questionId(cell) {
  *  Nothing had written one yet, so nothing had failed — which is the only reason this was still
  *  here to find when his DO NOW pin became the first field to be written. */
 const HEAD_ID_RE = /⟨\s*`(T-\d{3})`\s*(?:·[^⟩]*)?⟩/;
+/* ⚠ A LINE THAT *IS* THE HANDLE, NOT A LINE THAT *MENTIONS* ONE. Added 2026-09-04, the same day it
+ * mislabeled an archived row: a row's OPENING line can quote another item's handle inline, in
+ * prose — `"Your ruling: ⟨`T-206`⟩ There is probably already..."` — while the row's own identity
+ * sits alone on its dedicated head line two rows down, `⟨`T-240`⟩`. `HEAD_ID_RE.exec(l)` matches
+ * BOTH lines, and the old loop returned whichever came first — the prose mention, not the identity
+ * — because it never distinguished a line that IS the bracket from a line that merely CONTAINS
+ * one. The sweep then archived the row under `## T-206`, a heading already spoken for, and
+ * `T-240` came back "owned by nothing in either file" (`chart_sweep_conserves_check.mjs`).
+ * `close_item.mjs` already draws exactly this distinction for its own row-lookup (`ownedBy`, this
+ * file's neighbour concern) — this mirrors it: a line matches only if the WHOLE trimmed line is
+ * the bracket, nothing else on it. Two passes, not one regex, because the whole-line check must
+ * run to completion before any inline-mention fallback is allowed to win. */
+const OWN_LINE_ID_RE = /^⟨\s*`(T-\d{3})`\s*(?:·[^⟩]*)?⟩$/;
 const LEAD_ID_RE = /^(?:- \[[ xX]\]\s+|[-*]\s+)`(T-\d{3})`/;
 export function idOfRow(rowLines) {
   const lines = Array.isArray(rowLines) ? rowLines : String(rowLines ?? "").split("\n");
+  for (const l of lines) {
+    const m = OWN_LINE_ID_RE.exec(l.trim());
+    if (m) return m[1];
+  }
   for (const l of lines) {
     const m = HEAD_ID_RE.exec(l);
     if (m) return m[1];

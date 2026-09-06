@@ -38,6 +38,8 @@ import { makePlayer, sideQuests, GATE_SRC } from "./lib/player.mjs";
    comparison away — each was judged against the universal rules ALONE, which cannot see "both
    screens are individually fine and they disagree". That is seven of Wyatt's 35 findings. */
 import { legVerdictLine, legVerdict } from "./lib/leg_verdict.mjs";
+import { gameTreeHash } from "./lib/game_tree_hash.mjs";
+import { legIsFresh } from "./lib/leg_cache_key.mjs";
 import { compareWhenSettled } from "./lib/seat_parity.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -426,7 +428,7 @@ async function runLeg(name, idx) {
       // gamelog rows are filterable. Two separate Chromes = separate localStorage/pp_id (§5c).
       const code = await bootHost(host, "test1");
       log(`[${name}] room ${code} created by test1`);
-      guest = await openEngine(def, { W: def.guestW, H: def.guestH, dbgPort: dbg + 1, httpPort: null, serveRoot: REPO, profileDir: path.join(OUT, `prof-${name}-b`) });
+      guest = await openEngine(def, { W: def.guestW, H: def.guestH, dbgPort: dbg + 1, httpPort: null, serveRoot: REPO, profileDir: path.join(OUT, `prof-${name}-b`), mobile: !!def.mobile, dsf: def.dsf || 1 });
       guest.httpPort = PORT0;
       await bootJoin(guest, "test2", code);
       log(`[${name}] test2 joined ${code}`);
@@ -537,9 +539,16 @@ async function runLeg(name, idx) {
    a result file for THIS BUILD is skipped and its recorded result reused. So a recycle costs the
    one leg that was mid-voyage, and any number of recycles still converges on a complete fleet.
 
-   KEYED ON THE BUILD STAMP, which is the part that makes it safe. A result from a different build
-   is a result about different code, and reusing one would be exactly the lie rule 24 exists to
-   prevent — so the key includes the stamp and a stale file is ignored rather than trusted.
+   KEYED ON THE GAME TREE'S OWN CONTENT, not on the build stamp alone — that is the part that
+   makes it safe. A result from a different build is a result about different code, and reusing
+   one would be exactly the lie rule 24 exists to prevent.
+   ⚠ 2026-09-04, T-009/T-219: keying on the STAMP ALONE failed exactly this way, twice in one
+   day. `PP4_STAMP` is bumped BY HAND (scripts/bump-build.mjs); a real game-code commit landing
+   without that bump left every leg's cache silently valid for code that had already changed
+   underneath it. Fixed by folding in `gameTreeHash()` (scripts/lib/game_tree_hash.mjs) — a
+   content hash of every git-tracked file this project calls "the game" (CLAUDE.md rule 9:
+   derive it, never hand-type it). The stamp stays, for the human-readable build identity
+   Wyatt reads off the report; the hash is what actually gates reuse.
    Delete `sea-trial-shots/legs/` to force a clean fleet. */
 /* THE BUILD THIS FLEET IS SAILING. Read the same way sea_trial.mjs and ceo_brief.mjs read it —
    one spelling of "which build is this", from the file the game itself ships. */
@@ -547,6 +556,10 @@ const STAMP = (() => {
   try { return (fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8").match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown"; }
   catch { return "unknown"; }
 })();
+/* THE GAME TREE'S OWN IDENTITY — see the comment above. Computed once, at startup: a `git
+   ls-files` plus a few hundred file reads, milliseconds against a trial that runs for over an
+   hour. */
+const TREE_HASH = gameTreeHash(REPO);
 const LEGDIR = path.join(OUT, "legs");
 fs.mkdirSync(LEGDIR, { recursive: true });
 /* THIS RUN'S OWN ID. A leg record used to carry only the BUILD STAMP, which says which GAME
@@ -567,13 +580,13 @@ const RUN_ID = `${STAMP}-${Date.now().toString(36)}`;
    trial reported "0 of 10 voyage(s) sailed" above twelve END OF VOYAGE lines in its own log.
    The fix is not a second assignment — it is that there is only ONE record. Stamp it as it is
    born; the file and the report then serialize the same object and cannot disagree (rule 23). */
-const stampRun = (r) => ({ ...r, __stamp: STAMP, __runId: RUN_ID });
+const stampRun = (r) => ({ ...r, __stamp: STAMP, __runId: RUN_ID, __treeHash: TREE_HASH });
 
-const legFile = (name) => path.join(LEGDIR, `${name}--${STAMP}.json`);
+const legFile = (name) => path.join(LEGDIR, `${name}--${STAMP}--${TREE_HASH.slice(0, 12)}.json`);
 const readDone = (name) => {
   try {
     const r = JSON.parse(fs.readFileSync(legFile(name), "utf8"));
-    return (r && r.__stamp === STAMP) ? r : null;
+    return legIsFresh(r, TREE_HASH) ? r : null;
   } catch { return null; }
 };
 

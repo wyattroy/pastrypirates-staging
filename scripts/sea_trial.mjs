@@ -34,6 +34,7 @@ import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { judgeModeFor } from "./lib/judge_mode.mjs";
+import { gameTreeHash } from "./lib/game_tree_hash.mjs";
 /* WHY EVERY CHILD BELOW CARRIES THIS. When this trial is started by start_trial_detached.mjs it
    has no console of its own, and on Windows a console-less parent makes Windows hand each console
    child a BRAND-NEW console — a visible black window on Wyatt's screen, whose ✕ kills the run.
@@ -66,6 +67,15 @@ const say = (...a) => console.log(...a);
 /* ---- what build is this? -------------------------------------------------- */
 const stampSrc = fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8");   // NOT src — the cutover moved the game to the root
 const STAMP = (stampSrc.match(/PP4_STAMP\s*=\s*"([^"]+)"/) || [])[1] || "unknown";
+/* T-009: PP4_STAMP is bumped BY HAND, so a game-code commit landing on an unmoved stamp used to
+   be invisible to the report — the leg-resume cache fix (scripts/lib/leg_cache_key.mjs) stops it
+   from being silently RESUMED as stale evidence, but the report itself still named the build
+   purely from that hand-typed string. TREE_HASH is the tree's own content identity (same
+   definition playtest_gate.mjs's cache key now uses — one derivation, not a second copy of the
+   rule), printed alongside STAMP so a mismatch between "what the stamp says" and "what the code
+   actually is" is visible on the page itself. */
+const TREE_HASH = gameTreeHash(REPO);
+const SHORT_TREE_HASH = TREE_HASH.slice(0, 12);
 const started = new Date();
 
 /* WHICH SEA TRIAL THIS IS. Wyatt, 2026-08-30: "Call it sea trial v2 so we can increment it."
@@ -238,15 +248,15 @@ archivePrevious(REPORT);
 
 fs.mkdirSync(path.dirname(REPORT), { recursive: true });
 fs.writeFileSync(REPORT,
-`# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\`
+`# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\` (tree \`${SHORT_TREE_HASH}\`)
 
 **IN PROGRESS — no verdict yet.**  ·  started ${started.toISOString()}  ·  gear **${gear}**  ·  sailed on **${WHERE}**
 
 If this is still what the file says, the trial did not finish. **A trial that did not finish is not
-a trial that passed.** Nothing here has been proven about build \`${STAMP}\`.
+a trial that passed.** Nothing here has been proven about build \`${STAMP}\` (tree \`${SHORT_TREE_HASH}\`).
 `);
 
-say(`\n⚓ SEA TRIAL ${TRIAL_VERSION} — build ${STAMP}`);
+say(`\n⚓ SEA TRIAL ${TRIAL_VERSION} — build ${STAMP} (tree ${SHORT_TREE_HASH})`);
 say(`   gear: ${gear}  (${gearWhy})`);
 say(`   legs: ${legs.length ? legs.join(", ") : "none — this gear needs no voyage"}\n`);
 
@@ -397,7 +407,7 @@ const verdict = !unitOk ? "FAILED"
   : legs.length ? "PASSED"
   : "NOTHING SAILED";
 
-const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\`
+const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\` (tree \`${SHORT_TREE_HASH}\`)
 
 **${verdict}** — ${ranLegs.length} of ${legs.length} voyage(s) sailed${notRun.length ? `, ${notRun.length} NOT RUN` : ""}  ·  ${started.toISOString()}  ·  ${mins} min  ·  gear **${gear}**  ·  sailed on **${WHERE}**
 
@@ -430,11 +440,19 @@ Screenshots and contact sheets: \`sea-trial-shots/\` (not committed — 100MB+ p
 
 ---
 *Written by \`scripts/sea_trial.mjs\`. To check whether a sea trial was actually run for what is
-live, compare the build stamp above with the one in the game's ☰ menu.*
+live, compare the build stamp above with the one in the game's ☰ menu. The tree hash beside it is
+the game files' own content identity (T-009) — a repo-side cross-check, not something the menu
+shows; two reports with the same stamp but a different tree hash sailed different code.*
 `;
 fs.writeFileSync(REPORT, report);
-say(`\n⚓ ${verdict}  —  report: ${path.relative(REPO, REPORT)}  (sea trial ${TRIAL_VERSION}, build ${STAMP}, ${mins} min, ${WHERE})`);
+say(`\n⚓ ${verdict}  —  report: ${path.relative(REPO, REPORT)}  (sea trial ${TRIAL_VERSION}, build ${STAMP}, tree ${SHORT_TREE_HASH}, ${mins} min, ${WHERE})`);
 if (notRun.length) say(`   ${notRun.length} leg(s) did NOT run — read the report, they are not passes.`);
-/* INCOMPLETE and NOTHING SAILED both exit non-zero. Only a trial that actually sailed every leg
-   it promised, and passed, is allowed to be green. */
-process.exit(verdict === "PASSED" ? 0 : 1);
+/* INCOMPLETE exits non-zero always — a leg that was promised and did not run is never a pass.
+   NOTHING SAILED exits GREEN, per Wyatt's ruling 2026-09-03 (qid:t220-shallow-green): "Let a depth
+   you chose come back green when its own checks pass." The verdict ternary above (unitOk, gateOk,
+   notRun) can only REACH "NOTHING SAILED" after every check the chosen gear actually owes has
+   already passed — legs.length is 0, so the not-run loop adds nothing, and neither of the two
+   FAILED branches fired. So a red exit there was never guarding against an untested build; it was
+   penalising a shallow run for correctly promising nothing. PASSED and NOTHING SAILED are the only
+   two verdicts this line can ever see with every owed check green. */
+process.exit(verdict === "PASSED" || verdict === "NOTHING SAILED" ? 0 : 1);

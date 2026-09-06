@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="favicon.png">
+<title>Privacy Policy — Pastry Pirates</title>
+<meta name="description" content="What Pastry Pirates records when you play, and what it does not.">
+<link rel="canonical" href="https://playpastrypirates.com/privacy.html">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Privacy Policy — Pastry Pirates">
+<meta property="og:description" content="What Pastry Pirates records when you play, and what it does not.">
+<meta property="og:url" content="https://playpastrypirates.com/privacy.html">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No Firebase SDK — no game logic runs on this page (D-07, same as about.html/rules.html). -->
+<style>
+  /* Own stylesheet (D-07) — re-declares the colours/font it needs by eye. Never links or
+     @imports index.html's inline <style> block, and index.html is not touched by this file. */
+  :root { --teal: #29a3b2; --ink: #1f4249; --parch2: #fff6c0; --line: #cfe7eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif;
+    background: linear-gradient(160deg, #dcece9 0%, #e6efe1 45%, #f5f0dd 100%); background-attachment: fixed;
+    color: var(--ink); }
+  .pvPage { max-width: 720px; margin: 48px auto; padding: 0 24px 48px; }
+  .pvTopCta { text-align: center; margin-bottom: 28px; }
+  .pvPlayBtn { display: inline-block; font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 16px 32px; border-radius: 12px; border: 1.5px solid #e89827; cursor: pointer;
+    background: #fdf3e3; color: #8a5a12; text-decoration: none; box-shadow: 0 8px 24px rgba(253,182,61,.18); }
+  .pvPlayBtn:hover { background: #fae7cb; }
+  h1 { font-size: 26px; font-weight: 700; line-height: 1.2; margin: 0 0 6px; text-align: center; }
+  .pvLede { font-size: 13.5px; line-height: 1.5; text-align: center; margin: 0 0 24px; opacity: .8; }
+  .pvCard { background: linear-gradient(175deg, #ffffff, var(--parch2) 250%); border: 3px solid var(--teal);
+    border-radius: 20px; padding: 24px 28px; font-size: 13.5px; line-height: 1.55; }
+  .pvCard p { margin: 8px 0; }
+  .pvCard ul { margin: 8px 0 12px; padding-left: 20px; }
+  .pvCard li { margin: 8px 0; }
+  .pvFoot { margin-top: 24px; font-size: 12.5px; line-height: 1.5; text-align: center; opacity: .75; }
+  .pvFoot a { color: var(--teal); }
+  @media (max-width: 560px) {
+    .pvPage { margin: 28px auto; padding: 0 16px 32px; }
+    .pvCard { padding: 18px 20px; border-radius: 14px; }
+    h1 { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+<div class="pvPage">
+
+  <div class="pvTopCta">
+    <a class="pvPlayBtn" href="index.html">Play Pastry Pirates</a>
+  </div>
+
+  <h1>Privacy Policy</h1>
+  <p class="pvLede">Pastry Pirates is my game, and this is me telling you plainly what it records.</p>
+
+  <!-- Content mirrors about.html#privacy (added commit 09f8658c) — this page is the primary,
+       linked copy his ruling asked for ("its own html"); about.html's card stays as a shorter
+       pointer inside the About page's own flow rather than a second full copy. -->
+  <div class="pvCard">
+    <p>Two things, and neither of them leaves a cookie on your device.</p>
+    <ul>
+      <li><b>How the game is played.</b> Anonymised move data — what happened on the board — so I can
+        see where the game is confusing or unfair and fix it. Nothing beyond the name you type when
+        you pick how to play.</li>
+      <li><b>Basic visit numbers,</b> through Google Analytics: which page you landed on, where you
+        came from, and roughly where in the world you are. It is set up in what Google calls
+        cookieless mode, so nothing is stored on your device and nobody is asked to consent to
+        anything — which matters to me because children play this game. The trade is that I cannot
+        tell repeat visitors from new ones, and I am happy with that.</li>
+    </ul>
+    <p>There are no ads, no advertising trackers, and nothing is sold to anyone. If you would rather
+      not be counted at all, any browser's tracker blocking will stop it, and the game plays exactly
+      the same.</p>
+  </div>
+
+  <p class="pvFoot"><a href="about.html">About</a> · <a href="index.html">Play Pastry Pirates</a></p>
+
+</div>
+</body>
+</html>

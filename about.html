@@ -74,6 +74,10 @@
   .abtRules p { margin: 8px 0; }
 
   /* -------- rule rows: text left, game art right at a consistent half-width -------- */
+  /* The privacy card's list. Same measure and rhythm as .abtRules p, so the card reads as one
+     piece rather than a bolted-on notice — this is Wyatt speaking to a parent, not a legal box. */
+  .abtPrivacy { margin: 8px 0 12px; padding-left: 20px; }
+  .abtPrivacy li { margin: 8px 0; }
   .abtRuleRow { display: flex; align-items: flex-start; gap: 24px; margin: 12px 0 20px; }
   .abtRuleRow p { margin: 0; flex: 1 1 50%; min-width: 0; }
   /* DIRECT child only — the inline .narrIcon art lives inside the <p>, and an unscoped
@@ -224,6 +228,27 @@
       <li class="capFlaky">"YARRRRRGH I always be flippin' tails."<span>— Flaky Jack</span></li>
       <li class="capDough">"Have ye met me pet candycrab?"<span>— Dough Hook</span></li>
     </ul>
+  </div>
+
+  <!-- ⚑ HIS RULING, 2026-09-03, from the question UI: "Short line, and the detail on About." The
+       front card keeps one small true sentence and links here; the real explanation lives on this
+       page, "which is already in your own plain voice rather than pirate speak".
+       ⛔ SO THIS SECTION IS NOT IN PIRATE SPEAK, AND THAT IS THE RULE, NOT AN OVERSIGHT. About sits
+       OUTSIDE the game world — it is Wyatt speaking to a real person, and a parent reading about
+       what happens to their child's data is the last place for a costume. A retroactive audit once
+       "fixed" the credits into pirate voice and the shipped text had been right all along.
+
+       ⚑ SUPERSEDED IN PART, 2026-09-04T00:35:50Z (qid:t206-privacy-line): "move all of it off of
+       the main screen into a privacy policy that is in its own html... with small links to Privacy
+       Policy and About at the bottom of the index.html screen." The real explanation now lives at
+       /privacy.html (the "its own html" his new ruling asks for) so there is one canonical copy,
+       not two drifting in step by discipline (rule 23). This card keeps a short pointer rather than
+       the full text it held before — the plain-English, not-pirate rule above still applies. -->
+  <div class="abtCard abtRules" id="privacy">
+    <h2>What we record</h2>
+    <p>Anonymised play data, and — through cookieless Google Analytics — basic visit numbers. No
+      cookies, no ads, nothing sold to anyone. The full explanation is on its own page:
+      <a href="privacy.html">Privacy Policy</a>.</p>
   </div>
 
   <div class="abtCard">

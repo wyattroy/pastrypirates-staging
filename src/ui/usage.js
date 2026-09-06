@@ -29,6 +29,8 @@
 // GUARDED TO THE REAL DOMAINS: localhost, LAN and file:// runs (probes, dev servers, previews)
 // write nothing, so the counts mean players, not plumbing. ?usage=1 forces pings on to test the
 // wiring; ?usage=0 forces them off.
+import { isLiveHost } from "../shared/host.js";
+
 import { getMyId } from "./util.js";
 
 const USAGE_DB="https://pastry-pirates-default-rtdb.firebaseio.com";
@@ -40,10 +42,13 @@ function usageOn(){
   try{
     if(location.search.indexOf("usage=1")!==-1)return true;
     if(location.search.indexOf("usage=0")!==-1)return false;
-    const h=location.hostname;
     // NOT wyattroy.github.io: the custom domain means nothing real is served there except the
     // PREVIEW repo (scripts/deploy-preview.sh), whose traffic must never count as players.
-    return h==="playpastrypirates.com"||h==="www.playpastrypirates.com";
+    // THE LIST ITSELF MOVED OUT (2026-09-04, CEO 189 finding 6). This was the THIRD copy of "which
+    // host is the live game", and it disagreed with the second: it counted `www.` and
+    // src/analytics.js did not, so his own counter and Google Analytics could not have agreed about
+    // who a visitor was. One list now, in src/shared/host.js.
+    return isLiveHost(location.hostname);
   }catch(e){return false;}
 }
 function put(path,value,keep){

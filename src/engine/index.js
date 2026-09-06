@@ -281,7 +281,10 @@ class Game{
         // version of this note argued that making a baker non-blocking and un-tradeable-with would
         // be a defect. It was, right up until a storm blew a captain off the dock they had just lit
         // the ovens on.
-        baking:false,bake:null,bakedToday:false};
+        // ovensDay: the round a captain LIT the ovens (arrived home), null until they do.
+        // Read only by bakeRank's tiebreak (Wyatt's ruling, 2026-09-03T21:30:35Z) — never emitted
+        // into the event stream and consumes no r(), so the determinism corpus is untouched.
+        baking:false,bake:null,bakedToday:false,ovensDay:null};
     });
     // ships start at Isle of Tortuga's four docks (N/S/E/W of the island)
     const dirsArr=Object.values(DIRS);
@@ -2863,6 +2866,7 @@ class Game{
     const authored=recipeSteps(p.recipe);
     if(!authored)console.error("bake-off: no step order for recipe",p.recipe);
     p.baking=true;
+    p.ovensDay=this.round;
     p.bake=newBake(authored?authored.ings:p.recipe.slice());
     // The bench the captain studies is SCRAMBLED, not the recipe laid out in order — see
     // scrambleBench. Bound rng, never `this.r` bare: r() increments this.randCalls and detaches.
@@ -3085,11 +3089,17 @@ class Game{
   /* v2 rule 12: there is no bakeoff. Every captain who got home collaborates on one bakery — a
      scene, not a mechanic — and BEST BAKER goes to whoever brought the most to it. Ranked on
      crates (all of them, recipe or not), then coins, then who got home first. No flipping: the
-     title is earned across the whole voyage, not decided by one last coin. */
+     title is earned across the whole voyage, not decided by one last coin.
+     "Got home first" means the day a captain LIT THE OVENS, not the day they finished baking nor
+     their seat (Wyatt's ruling, 2026-09-03T21:30:35Z — the rules page already said this and the
+     game was breaking the tie by seat order instead). ovensDay is null in classic (non-bakeoff)
+     play, where this comparator is never reached with a real tie to break, so both branches fall
+     through unchanged to finishOrder — the only ordering that mode ever had. */
   bakeRank(a,b){
     const pa=this.players[a],pb=this.players[b];
     if(pb.ing.length!==pa.ing.length)return pb.ing.length-pa.ing.length;
     if(pb.coins!==pa.coins)return pb.coins-pa.coins;
+    if(pa.ovensDay!=null&&pb.ovensDay!=null&&pa.ovensDay!==pb.ovensDay)return pa.ovensDay-pb.ovensDay;
     return this.finishOrder.indexOf(a)-this.finishOrder.indexOf(b);
   }
   /* NOBODY WINS WITHOUT A FULL RECIPE (Wyatt, 2026-08-06). unfinish() already removes a robbed

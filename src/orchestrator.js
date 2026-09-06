@@ -814,7 +814,11 @@ async function asyncBattleRun(att,def){
   // battle's over — clear the broadcast scoreboard so every client's watchNarr can take the panel
   // back for the result narration (and so spectatingBattle resets). (#9)
   if(appState.isHost&&appState.db&&appState.room&&!appState.replaying)netRemoveBattle(appState.db,appState.room,netFail("battle clear"));
-  if(fled)return;
+  // T-249: a flee is the only one of asyncBattleRun's three exits that skipped settling the side
+  // bets — a NULL battle and a decided win both already tell every caller what happened. A flee
+  // has no winner either, so it gets the same NULL settlement: no bounty for anyone, but a caller
+  // is told their call resolved rather than left silent.
+  if(fled){await settleSideBets(bets,null);return;}
   if(nulled){
     // rule 9: NULL — the battle ends with no player gaining anything, and no caller is paid.
     appState.game.recordSkirmish(att,def,null);

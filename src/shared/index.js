@@ -532,18 +532,11 @@ function bakeoffEnabled(){
    next time the bake-off needs testing. Gated instead: the flags keep working exactly as before on
    localhost and from a file:// checkout, and do nothing at all on the live domain. ONE definition
    rather than a copy at each flag (rule 23) — a second copy is a second thing to keep in step. */
-function devHost(){
-  try{
-    const h = location.hostname;
-    // STAGING COUNTS AS A DEVELOPER'S MACHINE (W0-1, 2026-08-27). staging.playpastrypirates.com is
-    // where Wyatt plays work in progress; it did not exist on the day this gate was written, so the
-    // gate is not wrong, it is older than the environment. An EXACT match, never endsWith(): a
-    // suffix test would also admit evil-staging.playpastrypirates.com, and the whole value of this
-    // function is that the list of who counts is short enough to read.
-    return h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0" || h === ""
-        || h.endsWith(".local") || h === "staging.playpastrypirates.com";
-  }catch(err){ return false; }
-}
+/* MOVED to src/shared/host.js (2026-09-04, CEO 189 finding 6). The list of who counts lives in ONE
+   file now, because analytics and the usage counter each grew their own copy and two of the three
+   disagreed about www. Re-exported under the same name so every dev flag and dev_flag_gate_check
+   keep calling exactly what they called before. */
+import { devHost } from "./host.js";
 
 const OVENS_NOW=false;
 let ovensNowOn=null;

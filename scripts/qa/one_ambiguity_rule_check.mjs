@@ -219,6 +219,23 @@ try {
       if (id && !carried.has(id)) fails.push(`8: idOfRow names ${id} but the shared rule does not carry it — the page would offer a drag the command refuses`);
     }
   }
+
+  /* 9 — A ROW'S OWN LINE, NOT A LINE THAT MENTIONS IT. `T-240`'s own bug, 2026-09-04: `idOfRow`
+   * used to return the FIRST bracket-shaped match anywhere in a row's lines, including one
+   * embedded mid-sentence inside the row's OPENING line — a `⟨`T-206`⟩` quoted there for context,
+   * about a DIFFERENT item. The row's real identity, `⟨`T-240`⟩`, sat alone on its own dedicated
+   * line two rows down and was never reached, because the loop returned on the first line's match.
+   * The sweep then archived the row under `## T-206` — a heading already spoken for — and `T-240`
+   * came back "owned by nothing" (`chart_sweep_conserves_check.mjs`). Fixed by `OWN_LINE_ID_RE`: a
+   * line that IS nothing but the bracket wins over any line that merely CONTAINS one. */
+  {
+    const row = [
+      "- [ ] Your ruling: ⟨`T-206`⟩ **There is probably already a Google Analytics account…**",
+      "      ⟨`T-240`⟩",
+    ];
+    const id = idOfRow(row);
+    if (id !== "T-240") fails.push(`9: idOfRow returned "${id}" for a row whose OPENING line quotes T-206 in prose but whose own dedicated handle line is T-240 — the exact shape that mislabeled T-240's archive heading`);
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

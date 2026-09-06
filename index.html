@@ -1232,6 +1232,17 @@
   .modalOverlay { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center;
     padding: 24px; overflow-y: auto;
     background: radial-gradient(ellipse at 50% 12%, rgba(69,223,166,.22), rgba(41,163,178,.40) 68%); }
+  /* ⚑ qid:t206-privacy-line, his ruling 2026-09-04: "small links to Privacy Policy and About at
+     the bottom of the index.html screen (not inside of the popup modal box)". A body-level
+     sibling of #lobby, never nested in a .modalOverlay, so it is reachable BEFORE a player picks
+     how to play — the exact moment the old sentence (buried inside #stepChoose) needed to be
+     seen. z-index above every modal (1000/1001) so it stays visible and tappable even while the
+     welcome modal is open, rather than being hidden behind its backdrop. */
+  #legalFooter { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1002;
+    display: flex; justify-content: center; gap: 14px; padding: 5px 10px;
+    font-size: 11px; line-height: 1.4; pointer-events: none; }
+  #legalFooter a { pointer-events: auto; color: var(--ink); opacity: .55; text-decoration: underline; }
+  #legalFooter a:hover { opacity: .9; }
   /* NAME-02 (Wyatt, 2026-08-01): "i think maybe the modal pops up BEHIND the join crew modal —
      because the background blur changes color, but i cannot see it until i click back."
      Exactly right. Every .modalOverlay shares z-index:1000, so which one wins is decided purely by
@@ -1751,6 +1762,10 @@
   }
   #pp4Cap { position:fixed; left:0; right:0; bottom:0; z-index:22; background:rgba(255,253,242,.97);
     border-radius:14px 14px 0 0; box-shadow:0 -6px 24px rgba(0,0,0,.28);
+    /* T-256 — `bottom` is overridden inline by src/ui/stage.js's camFrame() on true phone width
+       (<=600px, the only case where this base `bottom:0` isn't superseded by the desktop/tablet
+       @media override below), so the footer's clearance is reserved there, not here. See the
+       comment beside `phoneFootReserve` in camFrame(). */
     padding:10px 12px calc(10px + env(safe-area-inset-bottom)); overflow:auto; display:none; }
   body.pp4Stage #pp4Cap { display:block; }
   /* ⛔ T-142 — THE CAPTAINS BAR READ STRAIGHT THROUGH EVERY OPEN MODAL, AND THE FAULT IS NOT THE ONE
@@ -2739,6 +2754,14 @@
   <div class="bootBar"><div class="bootBarFill"></div></div>
 </div>
 
+<!-- ⚑ qid:t206-privacy-line, his ruling 2026-09-04: two small links at the bottom of the screen,
+     never inside the popup modal. A sibling of #lobby, not a descendant — see the CSS comment
+     above #legalFooter for why. -->
+<div id="legalFooter">
+  <a href="privacy.html">Privacy Policy</a>
+  <a href="about.html">About</a>
+</div>
+
 <!-- ===================== WELCOME MODAL ===================== -->
 <div id="lobby" class="modalOverlay" style="display:none">
   <div class="modalCard">
@@ -2764,7 +2787,6 @@
           <div class="ccIcon"><img src="assets/icons/key.png" alt=""></div><div class="ccTitle">Join a Crew</div><div class="ccSub">enter a friend's code</div>
         </button>
       </div>
-      <div class="muted" style="font-size:12px;margin-top:10px;margin-bottom:8px"><img class="narrIcon" src="assets/icons/magnifying-glass.png" alt=""> Anonymised move data is recorded to help improve the game — nothing beyond the name ye confirm after picking how to play is collected.</div>
       <div id="fbnote" class="fbnote" style="display:none"><img class="narrIcon" src="assets/icons/gear.png" alt=""> Multiplayer needs a one-time Firebase setup — see <code>ONLINE_SETUP.md</code>. Solo play works right now!</div>
       <div id="busynote" class="fbnote" style="display:none"><img class="narrIcon" src="assets/icons/sailboat.png" alt=""> Lots of crews out sailing right now — multiplayer may be slow to sync. <b>Play Solo</b> works instantly and never waits on the crowd!</div>
     </div>

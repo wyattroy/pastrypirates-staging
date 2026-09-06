@@ -82,15 +82,24 @@ const SEED_AWARDS = `(()=>{
        and before \`assignBadges()\` is called, and touches nothing in between. */
     if(!g.players.every(p => p.done)) return;
     window.__t143seeded = true;
-    /* Every event below is a shape the engine really emits — no invented \`t\`, no \`state\` arrays.
-       assignBadges() gives a real badge to any seat with ANY positive stat, so one per seat is all
-       it takes to replace four fallbacks with four real awards. */
+    /* ⚠ CEO 214 CAUGHT THIS: the comment used to claim "no invented state arrays" and that claim
+       was false. \`consumeEvent()\` (src/orchestrator.js:1602) drains new events even after every
+       seat is \`done\` (the 2600ms flash before assignBadges), and calls spawnPops(e, ...)
+       (src/ui/util.js:1947) on each one, which reads \`e.state[i].pos\` for the seats the
+       narration names — trade reads both \`a\` and \`b\`, battle reads \`a\` and \`d\`, dock reads
+       \`p\`. Every event the real engine emits carries a \`state\` snapshot for exactly this reason
+       (consumeEvent's own guest-mirror branch reads \`e.state\`); this probe's events did not, so
+       the first drained event crashed the page with "Cannot read properties of undefined". The
+       CEO's own words: "good news for the game; the seeding needs fixing before this instrument is
+       trusted again." Fixed by snapshotting the real (frozen-by-now, every seat done) player state
+       once and attaching it to every pushed event — matching the shape consumeEvent expects. */
+    const snap=()=>g.players.map(p=>({pos:[...p.pos],coins:p.coins,ing:[...(p.ing||[])],done:p.done,baking:!!p.baking}));
     /* seat 0 — the most trades struck: The Silver-Tongued Ledger */
-    for(let i=0;i<6;i++) g.events.push({t:'trade', a:0, b:(i%2)?1:2});
+    for(let i=0;i<6;i++) g.events.push({t:'trade', a:0, b:(i%2)?1:2, gave:'wheat', got:'sugar', state:snap()});
     /* seat 1 — battles won; seat 3 is the one set upon: The Cutlass / The Painted Target */
-    for(let i=0;i<5;i++) g.events.push({t:'battle', a:1, d:3, winner:1, rounds:[[1,0],[1,0]]});
+    for(let i=0;i<5;i++) g.events.push({t:'battle', a:1, d:3, winner:1, rounds:[[1,0],[1,0]], state:snap()});
     /* seat 2 — crates bought at the dock: The Open Purse */
-    for(let i=0;i<8;i++) g.events.push({t:'dock', p:2, heads:true, got:'bought'});
+    for(let i=0;i<8;i++) g.events.push({t:'dock', p:2, heads:true, got:'bought', ing:'wheat', price:3, state:snap()});
     clearInterval(window.__t143timer);
   }, 60);
   return 'armed';

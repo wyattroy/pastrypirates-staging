@@ -29,13 +29,20 @@
  * EXIT: 0 (nothing to do, or done) · 1 refused, and nothing was written
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WRITE = process.argv.includes("--write");
-const CHARTS = [".planning/CHART.md", ".planning/GLASS-CHART.md"].filter((f) => existsSync(join(ROOT, f)));
-const SCAN = [...CHARTS, ".planning/CHART-LOG.md"].filter((f) => existsSync(join(ROOT, f)));
+const argVal = (k) => { const a = process.argv.find((s) => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : null; };
+/* ⛔ `--chart=` / `--log=` EXIST SO THIS CAN BE TESTED AT ALL (CEO 182, finding 5's opener).
+   Without them the only way to exercise this script was the live record — so a gate could
+   describe the bug in a comment but never prove the fix. Default behaviour (no flags) is
+   unchanged: the two live charts and the live log. */
+const CHART_OVERRIDE = argVal("chart");
+const CHARTS = (CHART_OVERRIDE ? CHART_OVERRIDE.split(",") : [".planning/CHART.md", ".planning/GLASS-CHART.md"]).filter((f) => existsSync(resolve(ROOT, f)));
+const LOG_OVERRIDE = argVal("log");
+const SCAN = [...CHARTS, LOG_OVERRIDE || ".planning/CHART-LOG.md"].filter((f) => existsSync(resolve(ROOT, f)));
 const NL = String.fromCharCode(10);
 
 /* THE HIGH-WATER MARK, and it must come from OWNERSHIP, not from any mention of the string "T-nnn".
@@ -44,7 +51,7 @@ const NL = String.fromCharCode(10);
    a row's own token line, or an archive heading, counts as an allocation. */
 let high = 0;
 for (const f of SCAN) {
-  const md = readFileSync(join(ROOT, f), "utf8");
+  const md = readFileSync(resolve(ROOT, f), "utf8");
   for (const m of md.matchAll(/^\s*⟨`T-(\d{3})`[^⟩]*⟩\s*$/gm)) high = Math.max(high, +m[1]);
   for (const m of md.matchAll(/^## T-(\d{3}) — /gm)) high = Math.max(high, +m[1]);
 }
@@ -117,14 +124,29 @@ function liveRows(md) {
 
 const plan = [];
 for (const f of CHARTS) {
-  const md = readFileSync(join(ROOT, f), "utf8");
+  const md = readFileSync(resolve(ROOT, f), "utf8");
   const { rows } = liveRows(md);
-  const seen = new Map();
+  /* ⛔ IDENTITY GOES TO THE OWNER, NEVER TO WHICHEVER ROW COMES FIRST (CEO 182, finding 4).
+     A row that merely MENTIONS a handle inline (no owner line of its own) is not that task —
+     it is prose ABOUT that task, and can sit anywhere in the file relative to the real owner.
+     Grouping by token first, then sorting each group so an owner-line row always outranks a
+     mention-only row, means the real owner keeps its identity regardless of which one the
+     document happens to list first. Only when a group has two+ real owner lines (which should
+     never legitimately happen) does document order break the tie, exactly as before. */
+  const byToken = new Map();
+  const untagged = [];
   for (const r of rows) {
-    if (!r.token) { plan.push({ f, r, why: "no tag at all", give: fresh() }); continue; }
-    const n = (seen.get(r.token) || 0) + 1;
-    seen.set(r.token, n);
-    if (n > 1) plan.push({ f, r, why: `shares ${r.token} with an earlier open row`, give: fresh(), was: r.token });
+    if (!r.token) { untagged.push(r); continue; }
+    if (!byToken.has(r.token)) byToken.set(r.token, []);
+    byToken.get(r.token).push(r);
+  }
+  for (const r of untagged) plan.push({ f, r, why: "no tag at all", give: fresh() });
+  for (const [token, group] of byToken) {
+    if (group.length < 2) continue;
+    const ordered = [...group].sort((a, b) => (b.owner === token ? 1 : 0) - (a.owner === token ? 1 : 0));
+    for (let i = 1; i < ordered.length; i++) {
+      plan.push({ f, r: ordered[i], why: `shares ${token} with an earlier open row`, give: fresh(), was: token });
+    }
   }
 }
 
@@ -137,8 +159,15 @@ for (const p of plan) {
 }
 if (!WRITE) { console.log(`${NL}DRY RUN — nothing written. Re-run with --write to apply.`); process.exit(0); }
 
+/* ⛔ VALIDATE EVERY FILE BEFORE WRITING ANY OF THEM (CEO 182, finding 5). The old loop wrote
+   each chart as it finished, so a refusal on the SECOND file left the first one already on
+   disk — a half-applied pass with no backup, and the refusal message ("nothing was written")
+   was false for whichever file it already wrote. Building every file's new content first,
+   checking every one, and writing only after all pass means either every chart moves or none
+   does — the same all-or-nothing guarantee `close_item.mjs` gives the ledger. */
+const writes = [];
 for (const f of CHARTS) {
-  const path = join(ROOT, f);
+  const path = resolve(ROOT, f);
   const before = readFileSync(path, "utf8");
   const { L } = parseRows(before);
   const mine = plan.filter((p) => p.f === f).sort((a, b) => b.r.start - a.r.start);   // BOTTOM UP, so indices hold
@@ -165,16 +194,17 @@ for (const f of CHARTS) {
   const ra = (after.match(/^- \[ \] /gm) || []).length;
   const glued = /⟨`T-\d{3}`[^⟩]*⟩[ \t]*[-*] \[/.test(after);
   if (ra !== rb || glued) {
-    console.log(`REFUSING to write ${f} — checklist rows ${rb} -> ${ra}${glued ? ", and a handle is welded to a bullet" : ""}. Nothing written.`);
+    console.log(`REFUSING to write ANY chart — ${f}'s checklist rows would go ${rb} -> ${ra}${glued ? ", and a handle would be welded to a bullet" : ""}. Nothing written, including any other chart already validated this run.`);
     process.exit(1);
   }
-  writeFileSync(path, after);
+  writes.push({ path, after });
 }
+for (const { path, after } of writes) writeFileSync(path, after);
 
 /* COUNTED BACK OFF DISK, never from the loop. */
 let stillUnnamed = 0;
 for (const f of CHARTS) {
-  const { rows } = liveRows(readFileSync(join(ROOT, f), "utf8"));
+  const { rows } = liveRows(readFileSync(resolve(ROOT, f), "utf8"));
   const seen = new Map();
   for (const r of rows) {
     if (!r.token) { stillUnnamed++; continue; }

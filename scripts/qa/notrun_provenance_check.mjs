@@ -96,7 +96,11 @@ if (!stampSrc) {
 } else {
   let record = null, err = null;
   try {
-    const stampRun = new Function("STAMP", "RUN_ID", `${stampSrc} return stampRun;`)("B1", "R1");
+    // T-009 (2026-09-04): stampRun() now also closes over TREE_HASH (the derived cache-key half —
+    // scripts/lib/game_tree_hash.mjs), so the reconstructed function needs it as a third free
+    // variable or this throws "TREE_HASH is not defined" — the reconstruction tracking a real
+    // signature change, not a new bug in the stamper itself.
+    const stampRun = new Function("STAMP", "RUN_ID", "TREE_HASH", `${stampSrc} return stampRun;`)("B1", "R1", "H1");
     record = stampRun({ name: "solo-desktop", screens: [1, 2, 3], verdict: [] });
   } catch (e) { err = e.message; }
   check("the real stamper runs and returns a record", !!record, err || "stampRun threw");
@@ -105,6 +109,8 @@ if (!stampSrc) {
       record.__runId === "R1", `got ${JSON.stringify(record.__runId)}`);
     check("the stamped record still carries the build stamp readDone() resumes on",
       record.__stamp === "B1", `got ${JSON.stringify(record.__stamp)}`);
+    check("the stamped record carries the game-tree hash the resume decision now actually gates on",
+      record.__treeHash === "H1", `got ${JSON.stringify(record.__treeHash)}`);
     check("the stamped record keeps everything the leg produced",
       record.name === "solo-desktop" && (record.screens || []).length === 3);
     if (sailedHere) check("END TO END: a freshly stamped record CLEARS the trial's NOT-RUN column",

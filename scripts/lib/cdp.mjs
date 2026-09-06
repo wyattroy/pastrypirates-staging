@@ -8,6 +8,19 @@ import { CHROME, LINUX_ARGS, PYTHON } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* withTimeout — bounds any promise so a caller can never hang forever waiting on it.
+   INBOX-20260904T004944Z: send()'s promise below used to resolve ONLY when Chrome's WebSocket
+   answered back, so a Runtime.evaluate awaiting a page-side promise that never settles (or a
+   crashed tab) hung the whole script -- and anything awaiting it, like `npm test` -- forever
+   instead of failing loud. Pure and CDP-agnostic on purpose, so it can be tested with a promise
+   that never resolves and no real Chrome (scripts/qa/cdp_timeout_check.mjs). */
+export function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`CDP call timed out after ${ms}ms: ${label}`)), ms);
+    promise.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
+  });
+}
+
 // one Chrome tab, driven over CDP. `serveRoot` is served on `httpPort` (fresh port = fresh module
 // cache, DRIVING-THE-GAME.md §1). Returns a rich handle; call .close() when done.
 /* freshProfileDir — a clean profile path, even when the old one is held open.
@@ -48,7 +61,11 @@ export async function openChrome({ W, H, dbgPort, httpPort, serveRoot, profileDi
     if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
     if (m.method === "Runtime.exceptionThrown") consoleErrs.push("EXC " + (m.params.exceptionDetails?.exception?.description || m.params.exceptionDetails?.text || "").slice(0, 2000));
     if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error") consoleErrs.push("ERR " + m.params.args.map(a => a.value ?? a.description ?? "").join(" ").slice(0, 2000)); };
-  const send = (method, params = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+  const send = (method, params = {}, timeoutMs = 120000) => {
+    const i = ++id;
+    const p = new Promise(res => { pend.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+    return withTimeout(p, timeoutMs, method).catch(e => { pend.delete(i); throw e; });
+  };
   const ev = async (expr) => { const r = await send("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true });
     if (r.result?.exceptionDetails) return { __err: r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text }; return r.result?.result?.value; };
   await send("Page.enable"); await send("Runtime.enable");

@@ -77,6 +77,27 @@ try {
     const r = await C.send("Page.captureScreenshot", { format: "png" });
     if (r.result?.data)
       fs.writeFileSync(path.join(OUTDIR, `t206-${page.replace(/\.html$/, "")}.png`), Buffer.from(r.result.data, "base64"));
+
+    /* ⚑ AND THE THING THAT ACTUALLY CHANGED, WHICH THE VIEWPORT SHOT DOES NOT CONTAIN. His ruling
+       put the explanation on About, and About's privacy card sits below three other cards — so the
+       picture above proves the page drew and proves NOTHING about the copy he ruled on. Rule 19 is
+       "screenshot the state you CHANGED", not "screenshot the page". */
+    if (page === "about.html") {
+      await C.goto(`${origin}/about.html#privacy`);
+      await C.waitFor("document.readyState==='complete'", 30000, "about#privacy");
+      await sleep(1200);
+      const seen = await C.ev(`(() => {
+        const el = document.getElementById("privacy");
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { onScreen: r.top < innerHeight && r.bottom > 0, h: Math.round(r.height), text: el.innerText.replace(/\\s+/g, " ").slice(0, 120) };
+      })()`);
+      if (!seen) problems.push("about.html has no #privacy card — the front card links to an anchor that does not exist, so his 'detail on About' goes nowhere");
+      else if (!seen.onScreen) problems.push(`about.html#privacy exists but the anchor did not bring it on screen (height ${seen.h})`);
+      else console.log(`             #privacy card is on screen, ${seen.h}px: "${seen.text}…"`);
+      const p = await C.send("Page.captureScreenshot", { format: "png" });
+      if (p.result?.data) fs.writeFileSync(path.join(OUTDIR, "t206-about-privacy.png"), Buffer.from(p.result.data, "base64"));
+    }
   }
 } finally {
   killAll();
