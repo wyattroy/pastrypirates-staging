@@ -123,8 +123,11 @@ two extremes sit in the worst possible places:
 
 - `battle-swords` (loudest, **and distorted in the file itself**) is `SHOTCLOCK_SOUND_PLACEHOLDER` —
   it plays **when you run out of time**.
-- `store-ingredient` (quietest file in the game) is `WIN_SOUND_PLACEHOLDER` — it is the **victory**
-  sound.
+- ~~`store-ingredient` (quietest file in the game) is `WIN_SOUND_PLACEHOLDER` — it is the
+  **victory** sound.~~ **FIXED 2026-09-06 (T-073):** the victory sound is now `battle-won`
+  (Luis's `PP_SFX_BattleWon.mp3`), and the constant is `WIN_SOUND` — it stopped being a
+  placeholder, so it stopped carrying the word. `store-ingredient` still plays a crate being
+  loaded, which is what it is for.
 
 Turning `battle-swords` down fixes the balance but **not** the clipping, which is baked into the
 file. That one needs a fresh export regardless.
@@ -160,16 +163,31 @@ is the `clash` slot still open in §4.
 
 ## 3. Two things to get right before music is added
 
-### The narration already asks for a drumroll, and nothing plays
+### ~~The narration already asks for a drumroll, and nothing plays~~ — IT PLAYS NOW (T-073, 2026-09-06)
 
 `src/orchestrator.js:1078` is literally `await flash("Drumroll...")`. The board pulls back for a
 last look, the blue box types the word, holds, fades, and the gold banner reveals the winner. The
-whole moment is built, staged and timed. **It is simply mute.**
+whole moment is built, staged and timed. ~~**It is simply mute.**~~ **NO LONGER — `playDrumroll()` fires on both end-of-voyage twins**
+(`applyEndMeta` for the guest, `liveResolveEndNet` for the host). The line moved from
+`src/orchestrator.js:1078` to `:1439`; cite it by name, not by number.
 
-**The window is exact, not estimated.** `src/ui/stage.js:578` holds every narration line for
+⛔ **BUT THE TIMING HALF OF HIS RULING IS NOT DELIVERED, AND THE NUMBER BELOW IS STALE.** Wyatt
+asked (2026-09-06) to *"match the narration box timing to the sfx file"*. **Measured: the file runs
+3148 ms and the box holds 1130 ms** — so the roll is still cut short by the winner reveal, equally
+on both screens. A first attempt passed the file's duration as `flash()`'s `holdMs` and was REVERTED
+the same day: that argument never crosses the wire (`sendNarr` forwards only `opts.wait`), so it
+held the HOST's box for 3148 ms and every guest's for 1130 — a split table, which is worse than a
+clipped roll. Doing it properly means the shared narration renderer knowing a line carries a sound,
+so both sides derive the same hold from the same file.
+
+~~**The window is exact, not estimated.** `src/ui/stage.js:578` holds every narration line for
 `Math.max(2550, Math.min(6750, msgHoldMs(msg) * 1.5))`, and `"Drumroll..."` is short enough to take
-that floor — so the roll is **2.55 seconds** and its final hit lands as the box fades into the
-reveal.
+that floor — so the roll is **2.55 seconds**.~~
+⚠ **THAT FLOOR NO LONGER EXISTS AND THIS PARAGRAPH MISLED A SESSION IN 2026-09.** D-34 replaced the
+whole model with reading speed (`narrationHoldMs`, `src/ui/util.js`) and, in stage.js's own words,
+*"the elegant version of that change DELETES the floor rather than lowering it"*. **Measured
+2026-09-06: the box holds "Drumroll..." for 1130 ms, and the file is 3148 ms** — so the roll is
+nearly three times the window, not sized to fit it.
 
 ### `initAudio()` blocks every sound on every file
 

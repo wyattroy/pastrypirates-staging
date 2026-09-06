@@ -23,6 +23,8 @@
   .track{height:9px;background:var(--line);border-radius:99px;overflow:hidden}
   .fill{height:100%;width:0;background:var(--sea);border-radius:99px;transition:width .25s}
   .count{font-size:.85rem;color:var(--muted);margin-top:6px}
+  .sync{font-size:.76rem;color:var(--muted);margin-top:2px;opacity:.85}
+  .sync.on{color:var(--ok)}
   .banner{background:#fff4e8;border:1px solid #e8c9a0;border-left:4px solid var(--gold);
     border-radius:10px;padding:14px 16px;margin:0 0 22px}
   .banner b{color:var(--warn)}
@@ -76,6 +78,7 @@
   <div class="bar">
     <div class="track"><div class="fill" id="fill"></div></div>
     <div class="count" id="count">0 of 11 done</div>
+    <div class="sync" id="sync">Saved in this browser</div>
   </div>
 
   <div class="banner">
@@ -90,7 +93,7 @@
       <table>
         <tr><th>What</th><th>State</th></tr>
         <tr><td>The publish rule, in code</td><td><b>221 game files, 7.3 MB</b> out of 3,355 tracked files</td></tr>
-        <tr><td>The gate that holds it</td><td>142 of 142 green. Proves every live URL survives and that a production build is <b>byte-identical</b> to the repo</td></tr>
+        <tr><td>The gate that holds it</td><td>144 of 144 green (counted 2026-09-06, not copied). Proves every live URL survives and that a production build is <b>byte-identical</b> to the repo</td></tr>
         <tr><td>Staging's five markers</td><td>build stamp, <code>[STAGING]</code> tab title, <code>Disallow: /</code>, no sitemap, noindex — all verified</td></tr>
         <tr><td>What stops being public</td><td><code>art-review/</code> (519 MB), <code>scripts/</code>, and three design docs. <code>RULES-V2.md</code> is live right now</td></tr>
       </table>
@@ -251,28 +254,39 @@ curl -o /dev/null -w "%{http_code}\n" https://playpastrypirates.com/RULES-V2.md 
 
   <div class="reset"><button id="reset">Clear my ticks and notes</button></div>
   <div class="foot">
-    Built 2026-09-06. Your ticks and notes are saved in this browser only.
+    Built 2026-09-06. Your ticks and notes follow you between your devices — tick a step on the
+    phone and it is ticked on the Mac. Anyone you send this link to can see and change them too.
     Everything the repo can do is done and green; what's left is the account and DNS work above.
   </div>
 </div>
 
 <script>
-/* localStorage is GUARDED because in a private tab the accessor THROWS rather than returning null,
+/* WHY the two stores. localStorage is the floor: it paints instantly and it still works when this
+   page is opened outside a Claude viewer. The `db` capability is what makes a tick made on the
+   phone show up on the Mac — same artifact, one shared document. Server state WINS on arrival,
+   because the whole point is that the other device is right and this one is stale.
+
+   localStorage is GUARDED because in a private tab the accessor THROWS rather than returning null,
    and an unguarded read at the top of a script takes the whole page down — a blank screen instead
    of the thing he asked for. Earned 2026-08-30. */
 (function () {
   var KEY = "pp-cloudflare-cutover-v1";
+  var DOC_PATH = "cutover/state";
+
   var store = null;
   try { store = window.localStorage; store.getItem(KEY); } catch (e) { store = null; }
 
-  var read = function () {
+  var readLocal = function () {
     if (!store) return {};
     try { return JSON.parse(store.getItem(KEY) || "{}") || {}; } catch (e) { return {}; }
   };
-  var write = function (s) { if (!store) return; try { store.setItem(KEY, JSON.stringify(s)); } catch (e) {} };
+  var writeLocal = function (s) { if (!store) return; try { store.setItem(KEY, JSON.stringify(s)); } catch (e) {} };
 
-  var state = read();
+  var state = readLocal();
   var steps = [].slice.call(document.querySelectorAll(".step[data-k]"));
+  var syncEl = document.getElementById("sync");
+  var docRef = null;
+  var saveTimer = null;
 
   function paint() {
     var boxes = steps.filter(function (s) { return s.dataset.k !== "fb"; });
@@ -283,27 +297,50 @@ curl -o /dev/null -w "%{http_code}\n" https://playpastrypirates.com/RULES-V2.md 
     document.getElementById("count").textContent = done + " of " + boxes.length + " done";
   }
 
+  /* Repaint every row from `state`. Skips a notes box you are typing in — a snapshot landing
+     mid-sentence must never take the sentence away. */
+  function applyState() {
+    steps.forEach(function (s) {
+      var saved = state[s.dataset.k] || {};
+      var box = s.querySelector("input");
+      var note = s.querySelector("textarea");
+      box.checked = !!saved.done;
+      s.classList.toggle("done", box.checked);
+      if (note && document.activeElement !== note) note.value = saved.note || "";
+    });
+    paint();
+  }
+
+  function persist(immediate) {
+    writeLocal(state);
+    if (!docRef) return;
+    clearTimeout(saveTimer);
+    var send = function () {
+      try {
+        docRef.set({ steps: state, updatedAt: new Date().toISOString() })
+              .catch(function () { /* offline or refused: localStorage still holds it */ });
+      } catch (e) {}
+    };
+    if (immediate) send(); else saveTimer = setTimeout(send, 700);
+  }
+
   steps.forEach(function (s) {
     var k = s.dataset.k;
     var box = s.querySelector("input");
     var note = s.querySelector("textarea");
-    var saved = state[k] || {};
-
-    box.checked = !!saved.done;
-    s.classList.toggle("done", box.checked);
-    if (note && saved.note) note.value = saved.note;
 
     box.addEventListener("change", function () {
       state[k] = state[k] || {};
       state[k].done = box.checked;
       s.classList.toggle("done", box.checked);
-      write(state); paint();
+      paint();
+      persist(true);
     });
     if (note) {
       note.addEventListener("input", function () {
         state[k] = state[k] || {};
         state[k].note = note.value;
-        write(state);
+        persist(false);
       });
     }
   });
@@ -311,16 +348,63 @@ curl -o /dev/null -w "%{http_code}\n" https://playpastrypirates.com/RULES-V2.md 
   document.getElementById("reset").addEventListener("click", function () {
     if (!confirm("Clear every tick and note on this page?")) return;
     state = {};
-    write(state);
     steps.forEach(function (s) {
       s.querySelector("input").checked = false;
       s.classList.remove("done");
       var t = s.querySelector("textarea"); if (t) t.value = "";
     });
     paint();
+    persist(true);
   });
 
-  paint();
+  applyState();
+
+  /* The capability arrives LATER, through a promise, and resolves null when this view cannot run
+     it — a saved copy of the file, a plain web host, a viewer that never answers (null after 10s).
+     So the page is fully working before this runs, and this only ever adds to it. */
+  if (window.claude && typeof window.claude.use === "function") {
+    window.claude.use("db").then(function (db) {
+      if (!db) return;
+      docRef = db.doc(DOC_PATH);
+      syncEl.textContent = "Synced \u2014 your ticks follow you between devices";
+      syncEl.className = "sync on";
+      docRef.onSnapshot(function (snap) {
+        var d = snap.exists ? snap.data() : null;
+        if (d && d.steps && typeof d.steps === "object") {
+          /* CLONE, never adopt. A delivered snapshot and its data() are frozen by the platform,
+             and the next debounced save writes whatever object `state` points at — so adopting
+             the snapshot directly would send the other device's copy straight back. */
+          var incoming = {};
+          Object.keys(d.steps).forEach(function (k) {
+            var v = d.steps[k] || {};
+            incoming[k] = { done: !!v.done, note: typeof v.note === "string" ? v.note : "" };
+          });
+          /* THE SENTENCE HE IS HALFWAY THROUGH IS THE ONE THING THE SERVER CANNOT KNOW. Repainting
+             already skips a focused notes box, but that only protected what was on SCREEN: the
+             replaced object still went into the next save, so a tick made on his phone would
+             persist the phone's older text over the sentence he was still typing on the Mac. Carry
+             the live text into the merged state, and let the server win on everything else. */
+          var live = document.activeElement;
+          if (live && live.tagName === "TEXTAREA" && live.closest) {
+            var host = live.closest(".step[data-k]");
+            if (host) {
+              var k = host.dataset.k;
+              incoming[k] = { done: !!(incoming[k] && incoming[k].done), note: live.value };
+            }
+          }
+          state = incoming;
+          writeLocal(state);
+          applyState();
+        } else if (Object.keys(state).length) {
+          persist(true);   // first run on a fresh store: seed it from what this device holds
+        }
+      }, function () {
+        syncEl.textContent = "Saved in this browser (sync unavailable)";
+        syncEl.className = "sync";
+        docRef = null;
+      });
+    }).catch(function () {});
+  }
 })();
 </script>
 </body>

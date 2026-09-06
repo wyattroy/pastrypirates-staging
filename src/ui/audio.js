@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["battle-swords", "coin-flip", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["battle-swords", "battle-won", "bells", "cannon", "coin-flip", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -58,6 +58,16 @@ const SFX_VOLUME = {
   "ship-move": 1.72,
   "store-ingredient": 2.79,
   "storm": 0.86,
+  /* T-073 — DELIBERATELY UNLEVELLED AT 1, and written down rather than omitted.
+     Wyatt's q7 ruling, 2026-09-06: "level everything together, once", AFTER every file is in —
+     partial levelling now would be redone anyway once the ambience bed and the rest are in the
+     mix. An ABSENT key and a key at 1 behave identically at runtime; the difference is that an
+     absent key looks like an oversight and this looks like the decision it is. The levelling pass
+     replaces these two numbers along with all six above. */
+  "battle-won": 1,
+  "bells": 1,
+  "cannon": 1,
+  "drumroll": 1,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -78,9 +88,43 @@ const STORM_FADE_SEC = 1.2;
 // silence; nothing in the six actually sounds like victory, so Claude selected the short, bright
 // one — closest of the six to a chime — as a stand-in. On the shopping list for Luis: a
 // purpose-made victory sound. Swapping it is a one-constant change.
-const WIN_SOUND_PLACEHOLDER = "store-ingredient";
+/* T-073, 2026-09-06 — NO LONGER A PLACEHOLDER, so it no longer carries the word.
+   ⚠ AND AN EARLIER VERSION OF THIS COMMENT PUT WORDS IN WYATT'S MOUTH. It said "Wyatt's §2 ruling
+   marks PP_SFX_BattleWon.mp3 CERTAIN" — HE NEVER RULED ON THE VICTORY SOUND. CEO 227 read all
+   fourteen of his comments (INBOX-20260906T162203Z..163615Z): none mentions the victory sound, the
+   win screen, or BattleWon. "certain" was a CONFIDENCE TAG in the PRD's own table, written by a
+   session, not by him. The swap is still obviously right and squarely inside "start the SFX
+   wiring" — the attribution was not, and a false "he ruled this" in a source comment is the kind
+   of line the next session inherits as settled fact.
+   The swap retires the worst
+   pairing in the game: `store-ingredient` is the QUIETEST stem here (-31.9 LUFS, docs/AUDIO.md
+   DEFECT-3's table) and it was playing the BIGGEST moment. Kept as a named constant, not inlined,
+   so the DOM-free harness can assert it by name. */
+const WIN_SOUND = "battle-won";
 
-// 260801-7f4 — a REAL choice, not a placeholder like WIN_SOUND_PLACEHOLDER above (or the
+/* The End-of-Voyage drumroll. src/orchestrator.js has called `await flash("Drumroll...")` since
+   the moment was built and NOTHING HAS EVER PLAYED under it. Wyatt's ruling (s3 #3): "do the
+   drumroll audio timing check, and match the narration box timing to the sfx file." */
+const DRUMROLL_SOUND = "drumroll";
+
+/* THE CANNON — fired when a shot LANDS, never when a battle merely happens.
+ * His ruling (s2/q5, 2026-09-06): "The cannon sound should fire when a shot has LANDED... this
+ * does not overlap with teh second coin flip in a battle, but comes a moment after it (eg. 100ms
+ * after)" and "cannon sound happens only when a shot lands".
+ *
+ * ⭐ NO OFFSET IS WIRED, MEASURED RATHER THAN TYPED. The coin stem runs 965ms; FLIP_SPIN_MS (795)
+ * plus FLIP_LAND_HOLD_MS (800) put the battle's resolve 1595ms after that sound starts — 630ms of
+ * clear air, six times the gap he asked for, produced by two constants that already exist. A
+ * sleep(100) here would be a third constant restating them and would rot the day either moves.
+ * Confirmed twice: ffprobe on the file, and soundDurationMs() in headless Chrome.
+ *
+ * WHY IT SITS IN THE ORCHESTRATOR AND NOT IN EVENT_SOUND: the `battle` event only fires once the
+ * whole fight has RESOLVED and carries no per-outcome detail, which is the same reason the clash
+ * had to move to engage time (see BATTLE_ENGAGE_SOUND above). The landing is a moment inside the
+ * fight, so only the fight's own code knows it happened. */
+const CANNON_SOUND = "cannon";
+
+// 260801-7f4 — a REAL choice, and so is WIN_SOUND above now (it stopped being a placeholder at
 // departed SHOTCLOCK one); this stem literally is a sword clash; it is not on any shopping
 // list for Luis. Named as a constant (not inlined) so the DOM-free harness can assert it by name.
 // This is the moment cue for a battle being JOINED — see playBattleEngage() below — fired from the
@@ -107,7 +151,12 @@ const EVENT_SOUND = {
   // v2.1: nothing runs aground any more — the storm keeps its own cue via `newround`
   shipwrecked: "storm",
   // D-06 — explicit silence, not merely absent from the table
-  blocked: null, moored: null, turn: null, newround: null, tradewind: null, bakeoff: null,
+  blocked: null, moored: null,
+  /* T-073 — YOUR TURN. His ruling (s4/q4): "Your Turn should use the Bell SFX sound. New day
+     should NOT use this sound." So `newround` stays null below; the bell is on the TURN.
+     ⭐ THIS IS THE ONE SOUND NOT HEARD BY THE WHOLE TABLE — see LOCAL_ONLY_SOUND_EVENTS. */
+  turn: "bells",
+  newround: null, tradewind: null, bakeoff: null,
   // playtest 21 item 3: the storm's one summary line. Deliberately SILENT — every ship in it has
   // already played its own cue (windmove/blownOut -> ship-move, anchorHold -> fishing) as it moved,
   // so a sound here would be a fifth noise describing four that just happened.
@@ -159,10 +208,26 @@ const EVENT_SOUND = {
 // it on the PAIR (e.t is "newround" AND e.storm) is correct, and because `newround` is emitted
 // exactly once per round (src/orchestrator.js's two live `newround` emissions), D-08's fires-once
 // falls out of this pure lookup with no dedup state needed at all.
+/* ⭐ D-07'S ONE SANCTIONED EXCEPTION, AND IT IS A SET SO THAT ADDING A SECOND IS A VISIBLE ACT.
+ * Everything on this path is heard by the whole table. "Your turn" cannot be — a cue meant for
+ * YOU that also fires on three other screens is not a signal, it is noise, and at a four-handed
+ * table it would ring four times a round. Wyatt was shown this file's own "ever" and the
+ * rule-preserving alternative (everyone hears it on every turn change) and chose the seat gate
+ * knowingly, 2026-09-06. Recorded in docs/INTENDED-BEHAVIOUR.md so a two-tab session does not
+ * report the difference as a host/guest defect.
+ * THE NEXT SOUND THAT WANTS A GATE IS A FRESH DECISION FOR HIM, not a precedent this set grants. */
+const LOCAL_ONLY_SOUND_EVENTS = new Set(["turn"]);
+
+/* STILL PURE. It only LABELS the cue; it never asks who is playing. The seat test needs appState,
+ * and this file imports nothing by design (leaf tier) — so the answer is handed to playForEvent
+ * by its single caller instead. That keeps the whole map assertable under plain Node. */
 function soundForEvent(e) {
   if (e.t === "newround" && e.storm) return { name: "storm", bus: "storm" };
   const name = EVENT_SOUND[e.t];
-  return name ? { name, bus: "master" } : null;
+  if (!name) return null;
+  const out = { name, bus: "master" };
+  if (LOCAL_ONLY_SOUND_EVENTS.has(e.t)) out.localOnly = true;
+  return out;
 }
 
 /* ================= Lazy audio graph — built ONLY by initAudio(), nothing at module load ================= */
@@ -297,8 +362,15 @@ function fadeStorm() {
 }
 
 // The impure dispatcher — called once per event that just arrived, on both host (liveRender())
-// and guest (watchEvents()). D-07: no appState.mySeat/isLocalTo gate anywhere on this path, ever —
-// the whole table is audible. Never writes a field onto the event object to communicate with this
+// and guest (watchEvents()). D-07: the whole table is audible, and that is still the rule for
+// every cue but ONE.
+// ⚠ THIS COMMENT USED TO END "no appState.mySeat/isLocalTo gate anywhere on this path, EVER".
+// That absolute stopped being true on 2026-09-06 when Wyatt ruled the your-turn bell is heard by
+// that player alone (LOCAL_ONLY_SOUND_EVENTS above). It is corrected here rather than left
+// standing, because a "never" beside code that does it once is how the next reader reports
+// working code as a bug — the exact rot that had to be cleaned out of docs/AUDIO.md the same day.
+// The gate is NOT taken here: `isLocalSeat` is passed IN by the single caller, so this file still
+// imports nothing and the seat logic stays where appState already lives. Never writes a field onto the event object to communicate with this
 // module: all dedup/fade state (stormNode above) lives in this file's own module-locals, never on
 // an object game.ev() produced or that netPushEvent carries — that risks drifting the determinism
 // corpus the v1.3 engine fence exists to protect.
@@ -331,7 +403,7 @@ function fadeStorm() {
    can only ever mean "this exact event again". Nothing is written onto the event object — the module
    header forbids it, because an event field would risk drifting the determinism corpus. */
 let lastSounded = null;
-function playForEvent(e) {
+function playForEvent(e, isLocalSeat) {
   if (e === lastSounded) return;                 // the same event replayed by a second liveRender()
   lastSounded = e;
   // The arrival of the next round header or the voyage's end is the exact game-state signal that
@@ -341,6 +413,10 @@ function playForEvent(e) {
   if (e.t === "newround" || e.t === "end") fadeStorm();
   const s = soundForEvent(e);
   if (!s) return;
+  /* The exception, applied. `isLocalSeat` is UNDEFINED for every caller that does not pass it, so
+     a localOnly cue stays SILENT rather than leaking to the whole table when the answer is unknown
+     — silence is the safe failure here, not sound. */
+  if (s.localOnly && isLocalSeat !== true) return;
   const bus = s.bus === "storm" ? stormGain : masterGain;
   const node = play(s.name, { bus });
   if (s.bus === "storm") stormNode = node || null;
@@ -350,7 +426,7 @@ function playForEvent(e) {
 // those stay silent as events per D-06. Called from both places appState.liveDone is set true
 // (host and guest).
 function playWinScreen() {
-  play(WIN_SOUND_PLACEHOLDER, { bus: masterGain });
+  play(WIN_SOUND, { bus: masterGain });
 }
 
 // 260801-7f4 — the moment a fight is JOINED, not the `battle` event (which only exists once the
@@ -360,6 +436,29 @@ function playWinScreen() {
 // on the false->true edge of appState.spectatingBattle). A named moment cue, built the same way as
 // playWinScreen() — calls the private play() primitive with a fixed stem and the master bus, and
 // nothing else.
+/* HOW LONG IS A STEM, IN MILLISECONDS — read off the decoded buffer, never typed.
+ *
+ * RULE 9, and this is the case the rule was written for: the drumroll's narration box has to be
+ * held open for as long as the drumroll actually lasts, and that length is a property of a FILE
+ * somebody re-exports. A typed 3150 would be right until Luis sends a longer roll, and then it
+ * would be silently wrong — audio running on past a box that has already faded.
+ *
+ * Returns 0, never NaN and never a throw, when the buffer is not decoded yet (muted boot,
+ * unsupported browser, fetch still in flight). Callers treat 0 as "no opinion" and fall back to
+ * the reading-speed hold, which is what the box did before any of this existed. */
+function soundDurationMs(name) {
+  const b = buffers[name];
+  return b && b.duration > 0 ? Math.round(b.duration * 1000) : 0;
+}
+
+function playDrumroll() {
+  play(DRUMROLL_SOUND, { bus: masterGain });
+}
+
+function playCannon() {
+  play(CANNON_SOUND, { bus: masterGain });
+}
+
 function playBattleEngage() {
   play(BATTLE_ENGAGE_SOUND, { bus: masterGain });
 }
@@ -367,6 +466,7 @@ function playBattleEngage() {
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
-  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND_PLACEHOLDER,
+  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
+  soundDurationMs, playDrumroll, playCannon,
   BATTLE_ENGAGE_SOUND, playBattleEngage,
 };

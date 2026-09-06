@@ -27,7 +27,7 @@
 //      (CEO 159, correctly), the ledger recorded that it "lives with Wyatt", and NOTHING in the
 //      record shows anybody ever told him. A curtain that excludes its owner is worse than no
 //      curtain, and every gate stayed green through it.
-//      `.planning/wyclau/CURTAIN-DELIVERED.md` records the SHA-256 that was handed to him, with
+//      `.planning/CURTAIN-DELIVERED.md` records the SHA-256 that was handed to him, with
 //      when and by what channel — **never the word itself**. Change the word without delivering
 //      it and the two hashes disagree and the build fails, the same day.
 //
@@ -66,7 +66,7 @@ const PAGE = join(ROOT, "stats.html");
 const ROBOTS = join(ROOT, "robots.txt");
 const USAGE = join(ROOT, "src", "ui", "usage.js");
 const WRITERS = join(ROOT, "src", "net", "writers.js");
-const DELIVERED = join(ROOT, ".planning", "wyclau", "CURTAIN-DELIVERED.md");
+const DELIVERED = join(ROOT, ".planning", "CURTAIN-DELIVERED.md");
 
 const red = (process.argv.find(a => a.startsWith("--red=")) || "").slice(6);
 const fails = [];
@@ -276,7 +276,7 @@ if (pageExists) {
     fails.push("E: nothing records that the curtain's word was ever given to Wyatt.\n" +
                "   His whole ask was \"so I can see how many people are playing\" — a page he\n" +
                "   cannot open has not done it. Write the SHA-256 you handed him, with when and\n" +
-               "   by what channel, to .planning/wyclau/CURTAIN-DELIVERED.md as `sha256: <hex>`.\n" +
+               "   by what channel, to .planning/CURTAIN-DELIVERED.md as `sha256: <hex>`.\n" +
                "   THE WORD ITSELF NEVER GOES IN THAT FILE — this repo is public.");
   } else if (recorded !== onPage) {
     fails.push("E: the curtain word was changed and no delivery is recorded for the new one.\n" +
@@ -302,7 +302,7 @@ if (pageExists) {
         .filter(f => !/\.(png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ttf|ico|pdf|zip)$/i.test(f));
       // The delivery record is read from the IN-MEMORY copy, so a `--red=` that plants a word in
       // it is actually seen. Reading it off disk here would make that red-proof silently toothless.
-      const RECORD_REL = ".planning/wyclau/CURTAIN-DELIVERED.md";
+      const RECORD_REL = ".planning/CURTAIN-DELIVERED.md";
       for (const f of [RECORD_REL, ...tracked.filter(f => f.replace(/\\/g, "/") !== RECORD_REL)]) {
         let text;
         if (f === RECORD_REL) text = delivered;

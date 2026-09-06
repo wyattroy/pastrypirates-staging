@@ -183,6 +183,9 @@ there is no second tree. `scripts/lib_twin_check.js` has nothing to watch here.
   `/4` — it is what ships — but the manifest must say which one it recorded.
 - **The twin question.** `scripts/determinism_baseline.js` would be a byte-identical copy of a
   root file that is NOT under `scripts/lib/`, so `scripts/lib_twin_check.js` does not currently
+<!-- doc-check: allow 4/scripts/determinism_baseline.js -->
+- **The twin question.** `4/scripts/determinism_baseline.js` would be a byte-identical copy of a
+  root file that is NOT under `scripts/lib/`, so `4/scripts/lib_twin_check.js` does not currently
   watch it. Either extend that gate's pair list (it already special-cases the `no_undef_check.js`
   pair one directory up, for exactly this reason) or the two will drift unnoticed.
 

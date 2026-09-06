@@ -77,7 +77,18 @@ const HTML_URL_RE = /(?:src|href)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^"')]+)[
    go unnoticed later. `.planning/`, `node_modules/` and the scratch/profile directories are
    skipped: they are full of captured HTML from probes and playtests, and a gate that fails on a
    screenshot contact sheet from August is a gate people learn to ignore. */
-const SKIP_DIR = /^(\.|node_modules$|classic$|art-review$|notes$|sea-trial-shots$|judge-)/;
+const SKIP_DIR = /^(\.|node_modules$|_site$|classic$|art-review$|notes$|sea-trial-shots$|judge-)/;
+/* `_site` is BUILD OUTPUT, not source — `scripts/build-site.mjs` assembles it and `.gitignore`
+   line 149 keeps it untracked. It has to be skipped because the built `classic/index.html`
+   sits one directory deeper than the source one, so its `../assets/...` URLs resolve outside
+   the build and this gate reported 24 missing pictures for art that is perfectly present.
+   NOT hypothetical: it was RED in Wyatt's working tree on 2026-09-06 (CEO 235 finding 9),
+   left there by a bare `npm run build:site`. `site_build_check.mjs` had already met this and
+   defended only its own temp directory. And it will happen MORE, not less: that same build
+   command is what Cloudflare Pages runs, so anyone reproducing a deploy locally lays the trap
+   again. The list above is hand-kept and therefore rots (CLAUDE.md §6) — deriving it from
+   `.gitignore` is the real fix and is deliberately NOT done here, because widening this gate's
+   reach was outside the change that hit it. */
 /* `notes/sketches/` earns its place on that list by having failed this gate the minute the walk
    went recursive: `notes/sketches/09-recipe-card/option-c-real-art.html` names two pastry files up
    a relative path that does not resolve from where it sits. It is a throwaway design mockup
