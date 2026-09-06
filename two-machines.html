@@ -84,8 +84,10 @@ back.</p>
 <div class="rule"><div class="n">1</div><div>
   <h4>Bookend every Mac session</h4>
   <p>Sit down: <code>git pull --rebase</code> &nbsp;·&nbsp; Before the lid closes: <code>git push</code>.
-  If either complains, <b>stop and paste it to Claude.</b> A hook now does both halves for you —
-  these are here so you know what it’s doing.</p>
+  If either complains, <b>stop and paste it to Claude.</b> A hook now does the <b>sit-down</b> half
+  for you, automatically. The <b>push</b> half is still yours on purpose — a hook that silently
+  pushed your unreviewed work for you would be its own kind of risk, so it only warns you if you
+  try to close the lid with something unpushed.</p>
 </div></div>
 <div class="rule"><div class="n">2</div><div>
   <h4>On the Mac, start Claude with <code>/door</code></h4>
@@ -207,6 +209,27 @@ item, whose only question is <em>did the thing you asked for actually happen?</e
   <tr><td><b>The Glass</b></td><td>your status page — where you see progress, write ideas, and rule on questions</td></tr>
   <tr><td><b>The ledger</b></td><td><code>.planning/CTO-LEDGER.md</code> — how two machines avoid working on the same thing. They cannot see each other; this is the only place they coordinate</td></tr>
 </table>
+
+<h3>Which sessions can publish a page — and why it kept confusing us</h3>
+
+<p>Some Claude sessions can create a shareable page (an “artifact”) and some cannot.
+<b>It is decided entirely by how the session was started.</b></p>
+
+<table>
+  <tr><th>How it runs</th><th>Can publish?</th></tr>
+  <tr><td><b>Interactive</b> — you open Claude Code in a terminal and type</td><td><b>Yes</b> — and so can any helper it spawns</td></tr>
+  <tr><td><b>Headless</b> — Bell watches, scheduled ticks, <b>and Remote Control</b></td><td><b>No</b> — and spawning a helper doesn’t rescue it</td></tr>
+</table>
+
+<div class="warn"><p><b>Remote Control is headless.</b> When you drive the Blade from your Mac it
+<em>feels</em> like a normal conversation and it isn’t — under the hood it is the same mode the
+robot watches run in. That is why Claude spent 6 September telling you publishing was impossible
+while another session had already done it an hour earlier.</p></div>
+
+<p><b>So: if you want a page published, use a session you started by typing in a terminal on that
+machine.</b> Everything else writes the finished page into a queue
+(<code>.planning/wyclau/PUBLISH-QUEUE.md</code>) and a session that <em>can</em> publish picks it up
+with <code>node scripts/wyclau/publish_queue.mjs</code>.</p>
 
 <h2 id="commands">7. The commands worth knowing</h2>
 
