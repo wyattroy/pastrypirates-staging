@@ -25,12 +25,20 @@ import fs from "node:fs";
 import {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, STORM_VOLUME, STORM_FADE_SEC,
-  WIN_SOUND_PLACEHOLDER, BATTLE_ENGAGE_SOUND,
+  WIN_SOUND, BATTLE_ENGAGE_SOUND,
 } from "../src/ui/audio.js";
 // EVENT_NARRATION import style matches scripts/narration_test.js:24-27 exactly — proof that
 // importing the narration surface headlessly (no DOM, no src/ui/flow.js or src/ui/panel.js)
 // works, and the load-bearing baseline this script's own mapping-completeness checks pin against.
 import { EVENT_NARRATION } from "../src/ui/util.js";
+/* NAMESPACE import for the T-073 additions, deliberately, and this is not fussiness: a named
+   import of a symbol that does not exist yet is a SyntaxError at load, which crashes the whole
+   suite instead of failing one check — the exact way this file lay dead for weeks after
+   SHOTCLOCK_SOUND_PLACEHOLDER left (docs/AUDIO.md §1). A red step that crashes tells you nothing
+   about WHICH assertion is red. Namespaced, every new check fails individually and legibly. */
+import * as AUDIO from "../src/ui/audio.js";
+const DRUMROLL_SOUND = AUDIO.DRUMROLL_SOUND;
+const soundDurationMs = AUDIO.soundDurationMs || (() => NaN);
 import { statSync } from "node:fs";
 
 let failures = 0;
@@ -43,7 +51,18 @@ function checkTrue(name, actual) { check(name, actual, true); }
 
 /* ================= SFX_FILES: exactly 6 stems, each resolving to a real, non-zero file ================= */
 
-check("SFX_FILES has exactly 6 entries", SFX_FILES.length, 6);
+/* WAS `check("SFX_FILES has exactly 6 entries", SFX_FILES.length, 6)` — a HAND-TYPED COUNT, and
+   CLAUDE.md §5 is explicit: never hand-type a number that can be counted. It went red the moment
+   two of Luis's stems landed, which is the number being wrong rather than the game being wrong —
+   the same species as the 25-key pins docs/AUDIO.md §1 already flags as "hand-typed counts that
+   the game outgrew". Replaced with what the count was actually protecting, both of which CAN
+   fail: no stem is listed twice, and the list is not empty. Every stem also resolving to a real
+   non-zero file on disk is already asserted by the loop directly below. */
+checkTrue("SFX_FILES is non-empty", SFX_FILES.length > 0);
+checkTrue(`SFX_FILES lists no stem twice${(() => {
+  const d = SFX_FILES.filter((n, i) => SFX_FILES.indexOf(n) !== i);
+  return d.length ? ` — DUPLICATED: ${[...new Set(d)].join(", ")}` : "";
+})()}`, new Set(SFX_FILES).size === SFX_FILES.length);
 
 for (const stem of SFX_FILES) {
   let size = 0;
@@ -205,10 +224,50 @@ try {
 checkTrue("soundForEvent with an unknown t does not throw", !unknownThrew);
 check("soundForEvent with an unknown t returns null", unknownResult, null);
 
+/* ================= T-073: Luis's round-2 stems — HIS RULINGS, 2026-09-06 =================
+   Written RED, before the change, per the four steps. Each pins one of his comment-box rulings.
+
+   THE VICTORY SOUND. `WIN_SOUND` (was `WIN_SOUND_PLACEHOLDER`) had been `store-ingredient` since D-05 — the file
+   docs/AUDIO.md measures as the QUIETEST in the game (-31.9 LUFS) playing the BIGGEST moment. Luis
+   delivered `PP_SFX_BattleWon.mp3` for exactly this. His §2 ruling marks it certain.
+
+   THE DRUMROLL. src/orchestrator.js already calls `await flash("Drumroll...")` and NOTHING PLAYS.
+   His ruling (s3, #3): "do the drumroll audio timing check, and match the narration box timing to
+   the sfx file." MEASURED 2026-09-06: the box holds that line for 1130ms (reading-speed model,
+   util.js narrationHoldMs) and the audio runs 3150ms — the sound is 2.02s LONGER than the box.
+   ⚠ The PRD said the window was a hard 2550ms floor. That floor was DELETED by D-34; the claim was
+   stale, and "sized to fit that exact window" was wrong in both directions.
+
+   RULE 9 — the box hold is DERIVED FROM THE FILE, never typed. soundDurationMs() reads the decoded
+   AudioBuffer's own duration, so re-exporting the stem at a different length re-times the box with
+   no code change. A typed 3150 would be a constant standing in for a quantity that moves. */
+
+checkTrue("the victory sound is its OWN stem, not the quietest file in the game",
+  WIN_SOUND !== "store-ingredient");
+checkTrue("battle-won is a loadable stem", SFX_FILES.includes("battle-won"));
+checkTrue("DRUMROLL_SOUND is exported", typeof DRUMROLL_SOUND === "string");
+checkTrue("drumroll is a loadable stem", SFX_FILES.includes(DRUMROLL_SOUND));
+checkTrue("soundDurationMs is exported so the narration box can be timed FROM the file",
+  typeof AUDIO.soundDurationMs === "function");
+checkTrue("soundDurationMs returns 0 (not NaN, not a throw) before any buffer is decoded",
+  soundDurationMs("drumroll") === 0);
+{ // the stems must actually be on disk, at the sizes Luis delivered
+  const want = { "battle-won": 52068, "drumroll": 55021 };
+  for (const [stem, bytes] of Object.entries(want)) {
+    let got = -1; try { got = statSync(new URL(`../sfx/${stem}.mp3`, import.meta.url)).size; } catch {}
+    check(`sfx/${stem}.mp3 is present and byte-exact against Luis's delivery`, got, bytes);
+  }
+}
+{ // and the drumroll is actually WIRED — the call site must ask for a sound, not just a flash
+  const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
+  checkTrue("the Drumroll... flash plays the drumroll and holds for the file's own length",
+    /flash\("Drumroll\.\.\.",[^)]*soundDurationMs/.test(orch) || /playDrumroll/.test(orch));
+}
+
 /* ================= The two flagged placeholders ================= */
 
-checkTrue("WIN_SOUND_PLACEHOLDER is exported", typeof WIN_SOUND_PLACEHOLDER === "string");
-checkTrue("WIN_SOUND_PLACEHOLDER is a member of SFX_FILES", SFX_FILES.includes(WIN_SOUND_PLACEHOLDER));
+checkTrue("WIN_SOUND is exported", typeof WIN_SOUND === "string");
+checkTrue("WIN_SOUND is a member of SFX_FILES", SFX_FILES.includes(WIN_SOUND));
 /* THE SHOT CLOCK'S FOUR ASSERTIONS STOOD HERE and were removed 2026-08-31. The shot clock itself
    left the game on 2026-08-28 at Wyatt's word ("temporarily remove the shot clock"), taking
    SHOTCLOCK_SOUND_PLACEHOLDER with it — and this file kept importing it, so the WHOLE SUITE has

@@ -76,7 +76,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, isMuted, setMuted } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playDrumroll, soundDurationMs, DRUMROLL_SOUND, isMuted, setMuted } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -1398,7 +1398,27 @@ export async function liveResolveEndNet(){
   liveRender();
   await sleepMs(BOARD_LAST_LOOK_MS);
   // @copy adhoc.voyageend.drumroll
-  await flash("Drumroll...");
+  /* T-073 — THE DRUMROLL FINALLY MAKES A SOUND, and the box is held to fit it.
+     This line has staged a drumroll in silence since the moment was built: the board pulls back,
+     the blue box types the word, and nothing rolls.
+
+     WHY A HOLD IS PASSED AT ALL, measured 2026-09-06 rather than assumed: "Drumroll..." is 11
+     characters, so the reading-speed model (util.js narrationHoldMs) holds it 1130ms, while
+     PP_SFX_Drumroll.mp3 runs 3150ms — the roll would outlive its own box by two seconds and be
+     cut off by the winner reveal. Wyatt's ruling (s3 #3) is to move the BOX, not the audio:
+     "match the narration box timing to the sfx file."
+
+     ⚠ THE PRD SAID THIS WINDOW WAS A HARD 2550ms FLOOR AND THAT THE FILE WAS SIZED TO FIT IT.
+     Both halves were stale — D-34 deleted that floor when it replaced the hold model with reading
+     speed (see stage.js's own note), and the file is 3150ms, not ~2550ms.
+
+     DERIVED, NEVER TYPED (rule 9): soundDurationMs reads the decoded buffer, so a re-export of a
+     different length re-times the box on its own. It returns 0 when nothing is decoded — muted,
+     unsupported browser, fetch still in flight — and `|| undefined` then hands flash() no opinion
+     at all, so the box falls back to exactly the reading-speed hold it used before this existed.
+     A silent game must never hold the reveal open waiting for audio that is not coming. */
+  playDrumroll();
+  await flash("Drumroll...", undefined, soundDurationMs(DRUMROLL_SOUND) || undefined);
   await fadeOutPanel();
   appState.liveDone=true;
   playWinScreen(); // D-05: the host's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06

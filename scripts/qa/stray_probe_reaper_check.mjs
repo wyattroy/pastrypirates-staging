@@ -131,9 +131,26 @@ console.log("stray_probe_reaper_check — abandoned browsers are KILLED, and the
     "$p=@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe' OR Name='msedge.exe'\" | " +
     "Where-Object { $_.CommandLine -match 'remote-debugging-port' }); " +
     "\"$(@($p | Where-Object { -not $live[[int]$_.ParentProcessId] }).Count) $($p.Count)\"";
+  /* ⛔ `[ -z "$pid" ] && continue` IS THE WHOLE FIX, AND IT IS NOT DEFENSIVE PADDING.
+   * A `<<EOF` heredoc wrapping a command substitution that produced NOTHING still feeds the loop
+   * ONE BLANK LINE. So on a machine with zero debug browsers this counted n=1, and the blank $ppid
+   * matched no live pid, so o=1 — "THE REAPER WANTS TO KILL 0 AND THIS MACHINE HAS 1 ABANDONED".
+   * MEASURED 2026-09-06, not reasoned: `while ... done <<EOF\n$(true)\nEOF` prints `orphans=1
+   * total=1` on a machine with no browsers at all.
+   *
+   * WHAT IT COST: this gate is 2nd in `npm test`, so the ENTIRE suite exited 1 on any clean
+   * machine — the release loop's own "npm test, exit 0" precondition could never be met, and the
+   * only way past it was to stop believing a red gate. That is the failure this project keeps
+   * paying for from the other side (docs/HARD-WON-LESSONS.md §3: a gate aimed wrong "is not
+   * silent, it is reassuring"); a gate that cries wolf on a clean machine trains exactly the
+   * habit of ignoring it.
+   *
+   * RED-PROOFED BY THE BUG ITSELF: the failing case is a machine with no browsers, which is the
+   * state this fix was written in — it was red before this line and green after, with nothing else
+   * changed. The Windows branch never had this fault: PowerShell counts an empty array as 0. */
   const posixQ =
     "live=$(ps -eo pid | tail -n +2 | tr -d ' '); n=0; o=0; " +
-    "while read -r pid ppid rest; do n=$((n+1)); " +
+    "while read -r pid ppid rest; do [ -z \"$pid\" ] && continue; n=$((n+1)); " +
     "  echo \"$live\" | grep -qx \"$ppid\" || o=$((o+1)); " +
     "done <<EOF\n$(ps -eo pid,ppid,command | grep -- '--remote-debugging-port' | grep -v grep)\nEOF\n" +
     "echo \"$o $n\"";

@@ -15,6 +15,30 @@ missing was one place to look at the moment of doubt. That moment is when you ar
 
 ---
 
+## 🔔 THE "YOUR TURN" BELL IS HEARD BY ONE PLAYER ONLY. THAT IS DELIBERATE, AND IT IS THE FIRST ONE.
+
+**If you are driving two tabs and the bell fires on one screen and not the other — that is the game
+working.** Do not report it, do not "fix" it, and do not delete the seat gate that produces it.
+
+**Wyatt ruled it on 2026-09-06, having been shown the cost.** He was told, in the question UI, that
+the audio path carries a hard rule — `src/ui/audio.js:300`, verbatim: *"D-07: no
+`appState.mySeat`/`isLocalTo` gate anywhere on this path, ever — the whole table is audible"* — and
+that a your-turn cue needs exactly the gate that comment forbids. He was offered the rule-preserving
+version (everyone hears the bell on every turn change) and **chose the per-player cue anyway**,
+because a bell that rings four times a round is not a signal to you.
+
+**So D-07 now has exactly ONE sanctioned exception, and it is this sound.** Everything else on that
+path is still ungated and must stay that way — a battle, a storm, a coin flip, a trade is heard by
+the whole table. **The next sound that wants a seat gate is a NEW decision and goes back to Wyatt;
+this ruling is not a precedent that opens the path.**
+
+⚠ **Consequence for the parity gate and for anyone reading `audio.js`:** the D-07 comment as written
+says *"ever"*, and after this it is wrong as an absolute. **Whoever wires the bell updates that
+comment in the same commit** — a rule that says "never" beside code that does it once is how the
+next reader concludes the code is broken.
+
+---
+
 ## ⚠ READ THIS BEFORE YOU REPORT ANY DISCREPANCY
 
 **Two screens showing different things is not evidence of a defect until you have checked this
