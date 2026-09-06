@@ -49,7 +49,10 @@ function check(name, actual, expected) {
 }
 function checkTrue(name, actual) { check(name, actual, true); }
 
-/* ================= SFX_FILES: exactly 6 stems, each resolving to a real, non-zero file ================= */
+/* ================= SFX_FILES: every stem resolves to a real, non-zero file =================
+   (The heading said "exactly 6 stems" and sat above a list of nine — CEO 227 finding 4. The count
+   went when the hand-typed check did; the heading was left behind, which is how a heading becomes
+   the next reader's wrong fact.) */
 
 /* WAS `check("SFX_FILES has exactly 6 entries", SFX_FILES.length, 6)` — a HAND-TYPED COUNT, and
    CLAUDE.md §5 is explicit: never hand-type a number that can be counted. It went red the moment
@@ -260,8 +263,61 @@ checkTrue("soundDurationMs returns 0 (not NaN, not a throw) before any buffer is
 }
 { // and the drumroll is actually WIRED — the call site must ask for a sound, not just a flash
   const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
-  checkTrue("the Drumroll... flash plays the drumroll and holds for the file's own length",
-    /flash\("Drumroll\.\.\.",[^)]*soundDurationMs/.test(orch) || /playDrumroll/.test(orch));
+  /* ⛔ THIS CHECK COULD NOT FAIL AND CEO 227 MUTATION-TESTED IT TO PROVE IT. The `|| /playDrumroll/`
+     alternative matched the IMPORT LINE (orchestrator.js:79), so deleting the call and reverting to
+     a bare flash() still printed PASS — green on a build where the drumroll never plays. The
+     alternative is gone, and the assertion is now what it always claimed to be: the roll is played
+     on BOTH twins. Host-only was the actual defect (finding 1), so counting the call sites is the
+     assertion that would have caught it. */
+  {
+    const sites = (orch.match(/^\s*[^/\n]*playDrumroll\(\);/gm) || []).length;
+    checkTrue(`the drumroll is played on BOTH the host and guest end-of-voyage twins (found ${sites} call site(s), want 2)`,
+      sites === 2);
+  }
+}
+
+/* ================= T-073 slice 2: the cannon, on a LANDED shot =================
+   His ruling (s2): "The cannon sound should fire when a shot has LANDED -- make sure that this
+   does not overlap with teh second coin flip in a battle, but comes a moment after it (eg. 100ms
+   after)." And (q5): "cannon sound happens only when a shot lands, per my previous note."
+
+   ⭐ NO OFFSET CONSTANT IS WIRED, AND THAT IS THE POINT (rule 9). Measured 2026-09-06, both from
+   the file and again in a real browser: the coin stem runs 965ms, while FLIP_SPIN_MS (795,
+   board.js:2330) + FLIP_LAND_HOLD_MS (800, board.js:2348) put the resolve 1595ms after that sound
+   starts — 630ms of clear air. His "eg. 100ms" is already exceeded six-fold by pacing two existing
+   constants produce. A typed sleep(100) here would be a third constant restating them, and would
+   go silently wrong the day either moves. Full working: .planning/wyclau/T-073-SLICE2-CANNON-MEASURED.md
+
+   ⛔ AND IT MUST NOT FIRE ON EVERY BATTLE. Two of the four resolve outcomes land nothing — both
+   captains missing, and both firing heads in a CROSSWIND where the game's own line says "the
+   cannonballs collide". Firing there would put a cannon over the sentence saying nothing hit. The
+   engine already computes the test: `scorer` is non-null exactly when a shot got through. */
+
+checkTrue("CANNON_SOUND is exported", typeof AUDIO.CANNON_SOUND === "string");
+checkTrue("cannon is a loadable stem", SFX_FILES.includes("cannon"));
+{
+  let got = -1; try { got = statSync(new URL("../sfx/cannon.mp3", import.meta.url)).size; } catch {}
+  check("sfx/cannon.mp3 is present and byte-exact against Luis's delivery", got, 33540);
+}
+{
+  const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
+  checkTrue("the battle resolve fires the cannon", /playCannon\(\)/.test(orch));
+  /* THE GUARD, READ FROM SOURCE, because a finished module cannot show that the call is
+     CONDITIONAL. This is the assertion that stops the cannon being wired to the battle instead of
+     to the hit — the one mistake his ruling explicitly forbids. */
+  checkTrue("the cannon is fired ONLY when a shot landed — guarded by the engine's own scorer",
+    /if\s*\(\s*scorer\s*\)\s*playCannon\(\)/.test(orch));
+  /* ⚠ THIS ONE WAS VACUOUS WHEN FIRST WRITTEN AND WAS TIGHTENED BEFORE THE FIX LANDED. With no
+     cannon in the file at all, "no hand-typed delay before the cannon" is trivially true — it
+     passed in the RED step, which is the one thing a check in a RED step must not do (a
+     measurement that cannot fail is not a measurement). It now REQUIRES the call to exist, so it
+     is red until the wiring lands and a real regression guard afterwards. */
+  {
+    const i = orch.indexOf("playCannon()");
+    const near = i < 0 ? "" : orch.slice(Math.max(0, i - 400), i + 400);
+    checkTrue("no hand-typed delay sits beside the cannon — the existing flip pacing IS the gap",
+      i >= 0 && !/sleep\(\s*\d{2,4}\s*\)/.test(near.replace(/sleep\(hold\)/g, "")));
+  }
 }
 
 /* ================= The two flagged placeholders ================= */

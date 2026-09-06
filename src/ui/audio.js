@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["battle-swords", "battle-won", "coin-flip", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["battle-swords", "battle-won", "cannon", "coin-flip", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -65,6 +65,7 @@ const SFX_VOLUME = {
      absent key looks like an oversight and this looks like the decision it is. The levelling pass
      replaces these two numbers along with all six above. */
   "battle-won": 1,
+  "cannon": 1,
   "drumroll": 1,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
@@ -86,8 +87,15 @@ const STORM_FADE_SEC = 1.2;
 // silence; nothing in the six actually sounds like victory, so Claude selected the short, bright
 // one — closest of the six to a chime — as a stand-in. On the shopping list for Luis: a
 // purpose-made victory sound. Swapping it is a one-constant change.
-/* T-073, 2026-09-06 — NO LONGER A PLACEHOLDER, so it no longer carries the word. Wyatt's §2
-   ruling marks PP_SFX_BattleWon.mp3 CERTAIN for the victory fanfare, and it retires the worst
+/* T-073, 2026-09-06 — NO LONGER A PLACEHOLDER, so it no longer carries the word.
+   ⚠ AND AN EARLIER VERSION OF THIS COMMENT PUT WORDS IN WYATT'S MOUTH. It said "Wyatt's §2 ruling
+   marks PP_SFX_BattleWon.mp3 CERTAIN" — HE NEVER RULED ON THE VICTORY SOUND. CEO 227 read all
+   fourteen of his comments (INBOX-20260906T162203Z..163615Z): none mentions the victory sound, the
+   win screen, or BattleWon. "certain" was a CONFIDENCE TAG in the PRD's own table, written by a
+   session, not by him. The swap is still obviously right and squarely inside "start the SFX
+   wiring" — the attribution was not, and a false "he ruled this" in a source comment is the kind
+   of line the next session inherits as settled fact.
+   The swap retires the worst
    pairing in the game: `store-ingredient` is the QUIETEST stem here (-31.9 LUFS, docs/AUDIO.md
    DEFECT-3's table) and it was playing the BIGGEST moment. Kept as a named constant, not inlined,
    so the DOM-free harness can assert it by name. */
@@ -97,6 +105,23 @@ const WIN_SOUND = "battle-won";
    the moment was built and NOTHING HAS EVER PLAYED under it. Wyatt's ruling (s3 #3): "do the
    drumroll audio timing check, and match the narration box timing to the sfx file." */
 const DRUMROLL_SOUND = "drumroll";
+
+/* THE CANNON — fired when a shot LANDS, never when a battle merely happens.
+ * His ruling (s2/q5, 2026-09-06): "The cannon sound should fire when a shot has LANDED... this
+ * does not overlap with teh second coin flip in a battle, but comes a moment after it (eg. 100ms
+ * after)" and "cannon sound happens only when a shot lands".
+ *
+ * ⭐ NO OFFSET IS WIRED, MEASURED RATHER THAN TYPED. The coin stem runs 965ms; FLIP_SPIN_MS (795)
+ * plus FLIP_LAND_HOLD_MS (800) put the battle's resolve 1595ms after that sound starts — 630ms of
+ * clear air, six times the gap he asked for, produced by two constants that already exist. A
+ * sleep(100) here would be a third constant restating them and would rot the day either moves.
+ * Confirmed twice: ffprobe on the file, and soundDurationMs() in headless Chrome.
+ *
+ * WHY IT SITS IN THE ORCHESTRATOR AND NOT IN EVENT_SOUND: the `battle` event only fires once the
+ * whole fight has RESOLVED and carries no per-outcome detail, which is the same reason the clash
+ * had to move to engage time (see BATTLE_ENGAGE_SOUND above). The landing is a moment inside the
+ * fight, so only the fight's own code knows it happened. */
+const CANNON_SOUND = "cannon";
 
 // 260801-7f4 — a REAL choice, and so is WIN_SOUND above now (it stopped being a placeholder at
 // departed SHOTCLOCK one); this stem literally is a sword clash; it is not on any shopping
@@ -397,6 +422,10 @@ function playDrumroll() {
   play(DRUMROLL_SOUND, { bus: masterGain });
 }
 
+function playCannon() {
+  play(CANNON_SOUND, { bus: masterGain });
+}
+
 function playBattleEngage() {
   play(BATTLE_ENGAGE_SOUND, { bus: masterGain });
 }
@@ -404,6 +433,7 @@ function playBattleEngage() {
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
-  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, soundDurationMs, playDrumroll,
+  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
+  soundDurationMs, playDrumroll, playCannon,
   BATTLE_ENGAGE_SOUND, playBattleEngage,
 };

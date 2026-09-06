@@ -76,7 +76,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playDrumroll, soundDurationMs, DRUMROLL_SOUND, isMuted, setMuted } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playDrumroll, playCannon, soundDurationMs, DRUMROLL_SOUND, isMuted, setMuted } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -722,6 +722,19 @@ async function asyncBattleRun(att,def){
   // @copy misc.battleline.bothmiss
   else rmsg=`<span class="cancel">Both miss — ⚫ TAILS all round.</span>`;
   rounds.push([ah?1:0,dh?1:0,0,scorer]);
+  /* T-073 — THE CANNON, AND IT FIRES ON THE HIT, NOT ON THE BATTLE.
+     His ruling: "cannon sound happens only when a shot lands". `scorer` is non-null exactly when a
+     shot got through, so it is the test the engine already computes — and guarding on it keeps the
+     cannon SILENT on the two outcomes where nothing lands: both captains missing, and both firing
+     heads in a crosswind, where the line directly below says "the cannonballs collide". A cannon
+     over that sentence would contradict the game's own words.
+
+     NO DELAY IS ADDED, and that is measured, not assumed. He asked for it to come clear of the
+     second coin flip, "eg. 100ms after". By this line the coin stem (965ms) finished 630ms ago:
+     FLIP_SPIN_MS (795) + FLIP_LAND_HOLD_MS (800) have both elapsed since playFlip() fired at the
+     spin paint. Adding a sleep here would restate two constants that already produce the gap, and
+     would go wrong silently the day either of them is tuned. */
+  if(scorer)playCannon();
   battlePublish(base({atState:ah?"H":"T",dfState:dh?"H":"T",live:null,winCoin:scorer,result:rmsg}));
   await sleep(hold);
 
@@ -929,7 +942,13 @@ export async function applyEndMeta(){
   appState.game.round=m.round;appState.game.battles=m.battles;appState.game.trades=m.trades;appState.game.attWins=m.attWins;
   appState.game.finishOrder=m.finishOrder||[];appState.game.winner=m.winner;
   (m.flips||[]).forEach((f,i)=>{if(appState.game.players[i]){appState.game.players[i].flips=f;appState.game.players[i].heads=(m.heads||[])[i]||0;}});
-  appState.liveDone=true;playWinScreen();render(); // D-05: the guest's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06
+  /* T-073 — THE GUEST HEARS THE DRUMROLL TOO. Added 2026-09-06 after CEO 227 caught it host-only:
+     playDrumroll() went into liveResolveEndNet() alone, so the roll played on one screen and not
+     the other. That is rule 23 — host/guest decides who COMPUTES, never what a player experiences.
+     It is paired here deliberately, in the same statement as playWinScreen, because this twin is
+     the established shape for an end-of-voyage cue (D-05 did exactly this for the win sound) — a
+     future reader moving one must see the other on the same line. */
+  appState.liveDone=true;playDrumroll();playWinScreen();render(); // D-05: the guest's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06
 }
 
 /* ================= host game loop (networked) ================= */
@@ -1418,7 +1437,23 @@ export async function liveResolveEndNet(){
      at all, so the box falls back to exactly the reading-speed hold it used before this existed.
      A silent game must never hold the reveal open waiting for audio that is not coming. */
   playDrumroll();
-  await flash("Drumroll...", undefined, soundDurationMs(DRUMROLL_SOUND) || undefined);
+  /* ⛔ THE HOLD OVERRIDE WAS REMOVED, 2026-09-06, AND IT MUST NOT COME BACK THIS WAY.
+     It read: flash("Drumroll...", undefined, soundDurationMs(DRUMROLL_SOUND) || undefined) — the
+     box held for the file's own 3148ms instead of the reading-speed 1130ms, which is exactly what
+     Wyatt asked for ("match the narration box timing to the sfx file").
+     IT WAS STILL WRONG, because flash's third argument NEVER LEAVES THIS MACHINE. The broadcast is
+     onNetBroadcast(msg, variants, opts, pre) (panel.js:1264) and sendNarr forwards only
+     `opts && opts.wait` (orchestrator.js:229) — no holdMs, and nothing in `opts` survives either.
+     So the host's box held 3148ms while every guest's held 1130ms, and the winner was revealed two
+     seconds earlier on their screens than on his. A fix for a timing complaint that desynchronises
+     the table is worse than the complaint.
+     ⭐ WHAT IT NEEDS INSTEAD, and it is a real piece of design rather than a line: ONE fact both
+     sides read for themselves. Both already have the decoded file, so both can derive the same
+     3148ms — but only if the narration render path itself knows this line carries a sound, which
+     is a shared-renderer change, not an argument at one call site. Until that exists the roll is
+     cut short by the reveal ON BOTH SCREENS EQUALLY, which is a smaller fault than a split table.
+     His ruling is NOT yet delivered; see .planning/wyclau/T-073-SLICE2-CANNON-MEASURED.md. */
+  await flash("Drumroll...");
   await fadeOutPanel();
   appState.liveDone=true;
   playWinScreen(); // D-05: the host's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06
