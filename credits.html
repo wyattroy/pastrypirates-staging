@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="favicon.png">
+<title>Credits — Pastry Pirates</title>
+<meta name="description" content="Who made Pastry Pirates, and who helped.">
+<link rel="canonical" href="https://playpastrypirates.com/credits.html">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Credits — Pastry Pirates">
+<meta property="og:description" content="Who made Pastry Pirates, and who helped.">
+<meta property="og:url" content="https://playpastrypirates.com/credits.html">
+<meta property="og:image" content="https://playpastrypirates.com/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="663">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Credits — Pastry Pirates">
+<meta name="twitter:description" content="Who made Pastry Pirates, and who helped.">
+<meta name="twitter:image" content="https://playpastrypirates.com/og-image.jpg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No Firebase SDK and no game logic — same as about.html/rules.html (D-07). -->
+<!-- No Google Analytics here, deliberately: his ruling on T-206 named three pages exactly —
+     "The public pages only — the game, About and Rules" — and Credits was not one of them.
+     Adding it would be scope creep past an explicit, page-by-page ruling. Ask him first. -->
+<!-- THIS FILE IS GENERATED. DO NOT EDIT IT.
+     Every word below is the in-game Credits modal in index.html (#creditsModal .modalByline).
+     Change the credits by editing the modal, then run:
+         node scripts/build_credits_page.mjs
+     scripts/qa/credits_page_check.mjs re-runs the generator on every npm test and fails the build
+     if this file differs from it by one byte, so a hand-edit here does not drift quietly. -->
+<style>
+  /* Own stylesheet, same rule about.html/rules.html follow (D-07): this page never links or
+     @imports index.html's inline <style> block. Colours re-declared from index.html's own
+     --teal / --ink / --parch2. */
+  :root { --teal: #29a3b2; --ink: #1f4249; --accent: #fdb63d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif;
+    background: linear-gradient(160deg, #dcece9 0%, #e6efe1 45%, #f5f0dd 100%); background-attachment: fixed;
+    color: var(--ink); }
+  .creditsPage { max-width: 640px; margin: 40px auto; padding: 0 20px 56px; }
+  .creditsTopCta { text-align: center; margin-bottom: 28px; }
+  .creditsPlayBtn { display: inline-block; font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 16px 32px; border-radius: 12px; border: 1.5px solid #e89827; cursor: pointer;
+    background: #fdf3e3; color: #8a5a12; text-decoration: none; box-shadow: 0 8px 24px rgba(253,182,61,.18); }
+  .creditsPlayBtn:hover { background: #fae7cb; }
+  h1 { font-size: 28px; font-weight: 700; line-height: 1.2; margin: 0 0 24px; text-align: center; }
+  .creditsBody { background: #fffdf4; border: 1px solid #cfe7eb; border-radius: 16px;
+    padding: 24px 28px; box-shadow: 0 12px 30px rgba(10,35,40,.10); }
+  .creditsBody p { font-size: 15px; line-height: 1.65; margin: 0; }
+  .creditsBody a { color: var(--teal); }
+  .creditsFoot { margin-top: 28px; font-size: 12.5px; line-height: 1.5; text-align: center; opacity: .75; }
+  .creditsFoot a { color: var(--teal); }
+  @media (max-width: 560px) {
+    .creditsPage { margin: 24px auto; padding: 0 14px 40px; }
+    .creditsBody { padding: 16px 18px; border-radius: 12px; }
+    h1 { font-size: 23px; }
+  }
+</style>
+</head>
+<body>
+<div class="creditsPage">
+
+  <div class="creditsTopCta">
+    <a class="creditsPlayBtn" href="index.html"><img style="height:1.05em;width:auto;vertical-align:-0.16em" src="assets/icons/anchor.png" alt=""> Play Pastry Pirates</a>
+  </div>
+
+  <h1>🎗️ Credits</h1>
+
+  <div class="creditsBody">
+    <p>This game was made by <a href="http://wyattroy.com" target="_blank" rel="noopener">Wyatt Roy</a>, a designer and overly enthusiastic noodle. It was inspired by two highschoolers, Luca and Amelia, who were taught by <a href="https://www.leskodesignwork.com/" target="_blank" rel="noopener">Nick Lesko</a> how to design their own board game. When I came to class and saw theirs, an amazing bridge-building game called <i>Seafarers</i>, something in me clicked. Or broke. Or both. For the next 8 days straight (and counting) I did nothing except eat pastry, talk like a pirate, and build Pastry Pirates.<br><br>The game owes an immense amount to <a href="https://www.luiszanforlin.com/" target="_blank" rel="noopener">Luis Zanforlin</a>, who spent his entire last day in Boston imagining mechanics for it in his head, and who later wrote every sound effect you hear, my father Robin and mother Cathy, two of its first multiplayer testers, and <a href="https://xavaar.com/" target="_blank" rel="noopener">Xavaar</a>, who came up with the idea for how the wind should affect your movements based on real sailing — as well as ways to make battles genuinely strategic, and playtesting it with an obsession that mirrored my own. And lastly, to my sweet partner Juju, who has tolerated me turning every conversation towards Pastry Pirates with the acceptance of a Buddhist monk.</p>
+  </div>
+
+  <p class="creditsFoot">
+    <a href="index.html">Play Pastry Pirates</a> · <a href="about.html">About</a>
+  </p>
+
+</div>
+</body>
+</html>

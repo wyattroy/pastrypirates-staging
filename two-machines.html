@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<!-- Wyatt's own reference page. noindex on purpose: it is for him, not for players or Google. -->
+<title>Pastry Pirates — how the whole thing is put together</title>
+<style>
+  body { font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         max-width: 820px; margin: 0 auto; padding: 28px 20px 90px; color: #1d2430; background: #fbfaf6; }
+  h1 { font-size: 31px; line-height: 1.2; margin: 0 0 6px; }
+  .sub { color: #5b6675; margin: 0 0 26px; font-size: 16px; }
+  h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 20px; border-top: 2px solid #e6e2d6; }
+  h3 { font-size: 18px; margin: 24px 0 6px; }
+  .toc { background: #fff; border: 1px solid #ddd8c9; border-radius: 10px; padding: 14px 20px; margin: 0 0 8px; }
+  .toc ol { margin: 6px 0 0; padding-left: 22px; } .toc li { margin: 4px 0; }
+  .toc a { color: #1d2430; }
+  .big { background: #fff; border: 2px solid #1d2430; border-radius: 12px; padding: 18px 20px; margin: 24px 0; }
+  .big p { margin: 0; font-size: 20px; font-weight: 600; }
+  .cols { display: flex; gap: 14px; flex-wrap: wrap; margin: 18px 0; }
+  .col { flex: 1 1 300px; background: #fff; border: 1px solid #ddd8c9; border-radius: 10px; padding: 16px 18px; }
+  .col h4 { margin: 0 0 2px; font-size: 17px; }
+  .col .role { color: #7a6a3f; font-size: 13px; font-weight: 700; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; }
+  .col ul { margin: 0; padding-left: 18px; } .col li { margin: 5px 0; }
+  code { background: #efece0; border-radius: 5px; padding: 2px 7px; font-size: 15px;
+         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: #1d2430; color: #f4f1e6; padding: 14px 16px; border-radius: 9px; overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14.5px; line-height: 1.5; }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .rule { display: flex; gap: 14px; align-items: flex-start; margin: 18px 0; }
+  .n { flex: 0 0 34px; height: 34px; border-radius: 50%; background: #1d2430; color: #fff;
+       display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .rule > div { flex: 1; } .rule h4 { margin: 4px 0 4px; font-size: 18px; }
+  .warn { background: #fff6ed; border-left: 4px solid #d97b28; padding: 12px 16px; margin: 18px 0; border-radius: 0 8px 8px 0; }
+  .warn p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 16px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #e6e2d6; vertical-align: top; }
+  th { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #5b6675; }
+  .foot { margin-top: 48px; color: #7a8494; font-size: 14px; border-top: 1px solid #e6e2d6; padding-top: 14px; }
+</style>
+
+<h1>Pastry Pirates — how the whole thing is put together</h1>
+<p class="sub">Your reference page. Written 6 September 2026, after a morning lost to Claude misreading this.</p>
+
+<div class="toc">
+  <b>On this page</b>
+  <ol>
+    <li><a href="#machines">Your two computers</a></li>
+    <li><a href="#sites">One repo, two websites</a></li>
+    <li><a href="#head">What “HEAD” and “detached HEAD” mean</a></li>
+    <li><a href="#game">The game itself — what the code is</a></li>
+    <li><a href="#qa">How anything gets proven before it ships</a></li>
+    <li><a href="#wyclau">The Watch, the Chart, the Glass — how work gets picked up</a></li>
+    <li><a href="#commands">The commands worth knowing</a></li>
+  </ol>
+</div>
+
+<h2 id="machines">1. Your two computers</h2>
+
+<div class="big"><p>The Blade is <b>home</b>. The Mac is a <b>visitor</b>.</p></div>
+
+<p>The Blade never moves and never sleeps, so it can hold things. The Mac goes in your bag. So the
+Mac should never be the <em>only</em> place something lives — it arrives, does its bit, hands it
+back.</p>
+
+<div class="cols">
+  <div class="col">
+    <h4>The Blade (Windows)</h4><p class="role">Home</p>
+    <ul><li>Runs the Watch, all day</li><li>Runs sea trials (85 minutes each)</li>
+        <li>Anything that must not be interrupted</li></ul>
+  </div>
+  <div class="col">
+    <h4>The Mac</h4><p class="role">Visitor</p>
+    <ul><li>Thinking, reviewing, talking to Claude</li><li>Small edits</li>
+        <li>Then push, and walk away</li></ul>
+  </div>
+</div>
+
+<p><b>Don’t start a sea trial on the Mac.</b> It takes 85 minutes and you’ll close the lid.</p>
+<p>The two machines never talk to each other. <b>GitHub is the only thing they share.</b></p>
+
+<h3>Three rules</h3>
+<div class="rule"><div class="n">1</div><div>
+  <h4>Bookend every Mac session</h4>
+  <p>Sit down: <code>git pull --rebase</code> &nbsp;·&nbsp; Before the lid closes: <code>git push</code>.
+  If either complains, <b>stop and paste it to Claude.</b> A hook now does both halves for you —
+  these are here so you know what it’s doing.</p>
+</div></div>
+<div class="rule"><div class="n">2</div><div>
+  <h4>On the Mac, start Claude with <code>/door</code></h4>
+  <p>It syncs and asks <em>“can this machine actually publish?”</em> — the check that would have
+  caught 3 September on day one instead of day three.</p>
+</div></div>
+<div class="rule"><div class="n">3</div><div>
+  <h4>Never close the Mac when git is mid-something</h4>
+  <p>If you see <b>“continue”</b>, <b>“abort”</b> or <b>“rebase in progress”</b>, git is holding the
+  door open waiting for you. That is what stranded your hand-drawn X for three days.</p>
+</div></div>
+
+<h2 id="sites">2. One repo, two websites</h2>
+
+<p>There is <b>one repo you work in</b> — <code>pastrypirates</code>, cloned on both machines.
+There are <b>two websites</b>, and reaching each is a different action.</p>
+
+<table>
+  <tr><th></th><th>Staging</th><th>Production</th></tr>
+  <tr><td><b>Address</b></td><td>staging.playpastrypirates.com</td><td>playpastrypirates.com</td></tr>
+  <tr><td><b>Who’s there</b></td><td>you, playing work-in-progress</td><td>real players</td></tr>
+  <tr><td><b>The action</b></td><td>a <b>copy</b> — you <b>publish</b></td><td>a <b>merge</b> — you <b>release</b></td></tr>
+  <tr><td><b>The command</b></td><td><code>npm run deploy:staging</code></td><td><code>git merge</code> into <code>main</code></td></tr>
+  <tr><td><b>Approval</b></td><td>none needed, do it daily</td><td><b>always yours</b>, live instantly</td></tr>
+</table>
+
+<div class="warn"><p><b>You never “merge to staging.”</b> Staging is an address, not a branch. That one
+wrong verb confused Claude for a whole morning.</p></div>
+
+<p>There <em>is</em> a second GitHub repo, <code>pastrypirates-staging</code> — but it is just a
+<b>web host</b> that happens to be a git repo, like an FTP folder. Nobody develops in it.
+<b>Don’t clone it.</b> It exists only because GitHub Pages serves one branch per repo at one
+address, so a second address needs a second repo.</p>
+
+<div class="warn"><p><b>Production being older than your branch is normal.</b> It is deliberately
+unreleased. Not a bug, and nobody should alarm you about it.</p></div>
+
+<h2 id="head">3. What “HEAD” and “detached HEAD” mean</h2>
+
+<p><b>HEAD is just a label meaning “where I am right now.”</b> Think of the project’s history as a
+long row of saved snapshots. HEAD is the finger pointing at the one you’re standing on.</p>
+
+<p>Normally HEAD points at a <b>branch name</b> — say <code>claude/cloud-handoff-planning</code> —
+and the branch points at the newest snapshot. When you commit, the branch moves forward and HEAD
+comes along with it, still attached. <b>That’s the normal, healthy state.</b></p>
+
+<p><b>“Detached HEAD” means the finger is pointing straight at a snapshot instead of at a branch
+name.</b> You’re standing on a specific moment in history with no branch under your feet.</p>
+
+<div class="warn"><p><b>Why it matters:</b> if you commit while detached, the new snapshot belongs to
+no branch — so <b>it cannot be pushed, and nobody else can ever see it.</b> The work is real and
+saved, and it is invisible from every other machine. That is exactly what happened to your Mac: it
+sat detached for three days holding your drawing, and from the Blade it looked identical to a Mac
+that had simply done nothing.</p></div>
+
+<p>How you get detached without meaning to: an interrupted <code>rebase</code> (git steps you
+through history one snapshot at a time, so mid-rebase you are always detached), or checking out a
+commit ID directly. <b>The fix is to get back onto a branch</b> — finish the rebase
+(<code>git rebase --continue</code>) or abandon it (<code>git rebase --abort</code>) — after
+making sure any commits that exist only there are pushed somewhere safe first.</p>
+
+<h2 id="game">4. The game itself — what the code is</h2>
+
+<p><b>Vanilla HTML, CSS and JavaScript. No build step, no framework, no bundler.</b> The file in the
+repo is the file the browser runs. That is why production can move by a plain <code>git merge</code>
+and why there is nothing to “compile.”</p>
+
+<table>
+  <tr><th>Where</th><th>What</th></tr>
+  <tr><td><code>index.html</code></td><td>the page itself — markup and all the CSS</td></tr>
+  <tr><td><code>src/engine/</code></td><td><b>the rules of the game.</b> Sailing, battles, trades, the bake-off. Knows nothing about screens</td></tr>
+  <tr><td><code>src/ui/</code></td><td><b>everything drawn.</b> The board, the narration box, prompts, the camera, sound</td></tr>
+  <tr><td><code>src/net/</code></td><td>multiplayer — Firebase, who reads and who writes</td></tr>
+  <tr><td><code>src/state/</code>, <code>src/shared/</code></td><td>the game’s memory, and the bits both sides need</td></tr>
+  <tr><td><code>src/orchestrator.js</code></td><td>the conductor — runs a voyage turn by turn</td></tr>
+  <tr><td><code>assets/</code>, <code>sfx/</code></td><td>the art and the sounds</td></tr>
+  <tr><td><code>classic/</code></td><td>v1, frozen, still playable at /classic</td></tr>
+</table>
+
+<p><b>Three ways to play, one game:</b> solo against AI captains, pass-and-play on one device, and
+a real-time crew game over Firebase. Whether you are host or guest decides <em>who computes</em> —
+it must never decide <em>what is drawn</em>.</p>
+
+<p><b>The multiplayer engine is seeded</b>, so the same voyage replays identically. Changing what the
+engine emits invalidates that whole recorded corpus — which is why fixes are preferred in the
+drawing layer rather than the rules layer.</p>
+
+<h2 id="qa">5. How anything gets proven before it ships</h2>
+
+<p>Three layers, smallest to largest.</p>
+
+<table>
+  <tr><td><b>The gates</b><br><code>npm test</code></td>
+      <td><b>141 checks, no browser, about a minute.</b> They read the real files and each one has been
+      proven able to FAIL before being trusted. Run constantly.</td></tr>
+  <tr><td><b>The sea trial</b><br><code>node scripts/sea_trial.mjs</code></td>
+      <td><b>A robot actually plays the game</b> — ten voyages, three modes, three screen sizes, both
+      browser engines, with a real mouse — screenshotting as it goes and running a vision judge over
+      the pictures. <b>85 minutes.</b> It leaves a report you can open, which is the point: “did you
+      run the sea trial?” can’t be answered vaguely.</td></tr>
+  <tr><td><b>The posed pair</b></td>
+      <td>For “is this drawn wrong?”, the same seeded board photographed <b>before and after</b>. The
+      trial <em>finds</em> a problem; a posed pair <em>settles</em> it.</td></tr>
+</table>
+
+<p><b>And four steps, never reordered:</b> show it broken (write the check that fails <em>first</em>)
+→ change it → show that same check pass → sweep. Plus a fresh-context <b>CEO review</b> after every
+item, whose only question is <em>did the thing you asked for actually happen?</em></p>
+
+<h2 id="wyclau">6. The Watch, the Chart, the Glass</h2>
+
+<p>How work gets picked up when you aren’t driving.</p>
+
+<table>
+  <tr><td><b>The Chart</b></td><td><code>.planning/CHART.md</code> — the one plan. Every open job, ranked. Your DO NOW press puts a row at the top</td></tr>
+  <tr><td><b>The Inbox</b></td><td>your words, verbatim, the moment you say them. Read before anything else</td></tr>
+  <tr><td><b>The Bell</b></td><td>on the Blade, every 10 minutes: “is a watch running?” If not, it starts one</td></tr>
+  <tr><td><b>The Watch</b></td><td>a fresh session that takes <b>one</b> job, proves it, and <b>ends on purpose</b>. Then the Bell rings the next</td></tr>
+  <tr><td><b>The Glass</b></td><td>your status page — where you see progress, write ideas, and rule on questions</td></tr>
+  <tr><td><b>The ledger</b></td><td><code>.planning/CTO-LEDGER.md</code> — how two machines avoid working on the same thing. They cannot see each other; this is the only place they coordinate</td></tr>
+</table>
+
+<h2 id="commands">7. The commands worth knowing</h2>
+
+<pre><code>node scripts/where_is_my_work.mjs     is my work on staging? is it live?
+node scripts/wyclau/can_push.mjs      can this machine publish? yes/no + the fix
+
+git pull --rebase                     sit down
+git push                              before the lid closes
+
+npm test                              the 141 gates, about a minute
+npm run deploy:staging -- "what changed"    publish to staging
+
+node scripts/qa/gear.mjs              how deeply must this change be tested?
+node scripts/sea_trial.mjs            the 85-minute robot playthrough</code></pre>
+
+<h3>Where the long explanations live</h3>
+<table>
+  <tr><td><code>docs/GIT-AND-DEPLOY.md</code></td><td>the release process, in full</td></tr>
+  <tr><td><code>docs/QA-PROCESS.md</code></td><td>testing, end to end</td></tr>
+  <tr><td><code>docs/DRIVING-THE-GAME.md</code></td><td>how to make a browser play the game</td></tr>
+  <tr><td><code>docs/AUDIO.md</code>, <code>docs/BOARD-RENDERING.md</code>, <code>docs/TRADE-SYSTEM.md</code></td><td>one per subsystem</td></tr>
+  <tr><td><code>docs/HARD-WON-LESSONS.md</code></td><td>everything that has already cost a day</td></tr>
+  <tr><td><code>.claude/CLAUDE.md</code></td><td>the rules every Claude session loads</td></tr>
+</table>
+
+<p class="foot">Earned 6 September 2026: Claude ran a git command that answers a question about
+<em>production</em>, concluded your merge had failed, and told you so twice. Three mechanisms now
+exist so neither of us has to remember any of it — a command that reads the live sites, a hook that
+fires the moment that git question is asked, and a hook that stops either machine quietly holding
+work nobody else can see.</p>
+
+</html>

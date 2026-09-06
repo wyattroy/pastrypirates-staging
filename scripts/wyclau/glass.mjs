@@ -898,7 +898,16 @@ try {
    a marker with no updatedAt, no staleness rule of its own, a future date, or one past its own
    rule is ignored rather than trusted — a broken status file must never be able to hold the light
    green, which would be the timer heartbeat of 2026-08-31 rebuilt one directory over. */
-if (!longRun) {
+/* ⚠ ONLY WHEN THIS MACHINE HAS NO MARKER AT ALL — narrowed 2026-09-01, by a gate that was right.
+   The first version ran whenever the local read produced nothing, which includes the cases
+   glass_longrun_status_check exists to protect: a marker that is malformed, frozen past its own
+   staleness, or claiming a year of allowed silence. Those are FINDINGS ABOUT THIS MACHINE, and
+   quietly answering them with a healthy marker from another machine is precisely the green light
+   nothing can turn off that the local reader was built to refuse. A broken local marker must stay
+   visible as broken; only genuine ABSENCE (this machine is simply not running a long job) may look
+   elsewhere. */
+const hasLocalMarker = (() => { try { readFileSync(join(WY, "LONG-RUN"), "utf8"); return true; } catch { return false; } })();
+if (!longRun && !hasLocalMarker) {
   try {
     const statusDir = join(LR_WY, "status");   // honours --longrun-root, same as the direct read
     for (const f of readdirSync(statusDir)) {

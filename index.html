@@ -2947,6 +2947,15 @@
     <div class="modalByline" style="text-align:left">
       <p>This game was made by <a href="http://wyattroy.com" target="_blank" rel="noopener">Wyatt Roy</a>, a designer and overly enthusiastic noodle. It was inspired by two highschoolers, Luca and Amelia, who were taught by <a href="https://www.leskodesignwork.com/" target="_blank" rel="noopener">Nick Lesko</a> how to design their own board game. When I came to class and saw theirs, an amazing bridge-building game called <i>Seafarers</i>, something in me clicked. Or broke. Or both. For the next 8 days straight (and counting) I did nothing except eat pastry, talk like a pirate, and build Pastry Pirates.<br><br>The game owes an immense amount to <a href="https://www.luiszanforlin.com/" target="_blank" rel="noopener">Luis Zanforlin</a>, who spent his entire last day in Boston imagining mechanics for it in his head, and who later wrote every sound effect you hear, my father Robin and mother Cathy, two of its first multiplayer testers, and <a href="https://xavaar.com/" target="_blank" rel="noopener">Xavaar</a>, who came up with the idea for how the wind should affect your movements based on real sailing — as well as ways to make battles genuinely strategic, and playtesting it with an obsession that mirrored my own. And lastly, to my sweet partner Juju, who has tolerated me turning every conversation towards Pastry Pirates with the acceptance of a Buddhist monk.</p>
     </div>
+    <!-- T-101, his instruction of 2026-09-02 3:07 PM ET: "so I have a URL to send collaborators."
+         A real <a>, not a <button> — the same reason rules.html needed one (T-100/CEO 171): a
+         crawler follows links, never button clicks, and this is the one crawlable path from the
+         homepage to credits.html. Plain register on purpose: this modal is outside the game world
+         (CLAUDE.md §2), so this line is his own voice, not pirate speak, unlike rules.html's
+         equivalent line. It sits OUTSIDE .modalByline, so scripts/lib/credits_page.mjs's narrow
+         .modalByline selector never pulls it into the generated page — no data-page-omit marker
+         needed the way rules.html needed one, because the extraction never reaches this div. -->
+    <p style="text-align:center;font-size:12.5px;opacity:.75;margin-top:14px">These credits live at <a href="credits.html">playpastrypirates.com/credits.html</a> — a page you can send to a collaborator.</p>
     <!-- KOFI-01: after the credits text, per the requirement. A button onto the SAME #kofiModal the
          footer opens — one embedded panel, two doors — so neither route leaves the game. -->
     <div style="text-align:center;margin-top:16px">
