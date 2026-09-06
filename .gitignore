@@ -142,3 +142,9 @@ w1-crewphone-recheck/
 # is named <thing>_check.mjs, so `_scratch*` cannot swallow one.
 _scratch*
 _scratch*/
+
+# Cloudflare Pages publish directory — assembled by scripts/build-site.mjs on every deploy.
+# Never committed: it is derived from the tracked tree, and a stale copy in git would be a
+# SECOND source of truth for what the live game is (CLAUDE.md rule 23).
+_site/
+_site_stg/

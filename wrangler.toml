@@ -1,0 +1,38 @@
+# Cloudflare Pages — project configuration for playpastrypirates.com
+#
+# WHY THIS FILE EXISTS AND WHAT IT DELIBERATELY DOES NOT HOLD.
+# Cloudflare Pages can be configured entirely in its dashboard. Configuration that lives only in a
+# dashboard is configuration nobody can review, diff or explain six weeks later — this project has
+# already paid for that once, when the reason staging was stale was recorded as a permission
+# problem for four CEO verdicts running while the real cause sat underneath it. So the build
+# contract lives here, in the repo, next to the script it names.
+#
+# WHAT IS NOT HERE, ON PURPOSE: the custom domains. Under GitHub Pages a CNAME FILE claimed a
+# hostname, and that file is the thing that nearly took the live game down twice by being copied
+# where it did not belong. Cloudflare holds domain assignment in the dashboard instead, which means
+# no file in this repo can contest a hostname any more. That hazard is not mitigated here — it is
+# GONE, and CLAUDE.md rule 14 retires with it once production has actually left Pages.
+#
+# ⚠ DO NOT DELETE THE `CNAME` FILE FROM THE REPO UNTIL PRODUCTION IS OFF GITHUB PAGES.
+# While the apex still resolves to Pages, that 21-byte file is the only thing holding the domain.
+# `scripts/build-site.mjs` already keeps it out of the publish set, so it is harmless where it is.
+#
+# TWO PAGES PROJECTS, ONE REPO — his answer, 2026-09-06:
+#   pastrypirates            production branch `main`      -> playpastrypirates.com
+#   pastrypirates-staging    production branch `staging`   -> staging.playpastrypirates.com
+# Both point at THIS repository. There is no second repository any more.
+# `build-site.mjs` decides which environment it is building from CF_PAGES_BRANCH: `main` is
+# production and gets a byte-identical copy of the game; everything else is stamped
+# `<stamp>-staging@<sha>`, titled [STAGING], and served `Disallow: /` with an X-Robots-Tag.
+
+name = "pastrypirates"
+compatibility_date = "2026-09-06"
+pages_build_output_dir = "_site"
+
+# The build command is set in the Pages dashboard (Settings -> Builds) to:
+#
+#     node scripts/build-site.mjs
+#
+# It is not settable from wrangler.toml for Pages projects, which is the one piece of this
+# contract that unavoidably lives in the dashboard. If a deploy ever publishes the wrong set of
+# files, check that field first — it is the only part of this that a diff cannot show you.
