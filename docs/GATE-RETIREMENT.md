@@ -9,7 +9,7 @@ any part that hasn't fired in a month justifies itself or goes."* This is that p
 ## 1. The suite ceiling — mechanical, wired, red-proofed
 
 `package.json`'s `gates` object carries `total` (what `gate_count_check.js` already enforced) and
-now `ceiling`. `scripts/qa/gate_ceiling_check.mjs` fails the build the moment `total > ceiling`.
+now `ceiling`. `gate_ceiling_check.mjs` used to fail the build the moment `total > ceiling`. **It was retired on 2026-09-06 with the rest of the process machinery.** The ceiling that still matters — CLAUDE.md may only ever get SHORTER — is section 8 of `scripts/doc_command_check.js`.
 
 **The ceiling does not prevent growth. It prevents SILENT growth.** Hitting it is not an error in
 the gate you just added — it is the suite asking you to make a conscious choice, in the same

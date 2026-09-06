@@ -132,7 +132,7 @@ its D-51 paired-field invariant, `art-review/narration-table-baseline.json`'s th
 
 **So a copy at `scripts/determinism_baseline.js` loads `4/`'s engine and writes
 `scripts/fixtures/determinism/` — with nothing configured and nothing to remember.** That is the
-same property `scripts/lib_twin_check.js`'s header explains and defends: the copy is not a
+same property `lib_twin_check.js` *(retired with the second tree)*'s header explains and defends: the copy is not a
 duplicate of the code, it is what AIMS the code.
 
 **DO NOT "improve" this by having a `4/` copy import the root's `scripts/lib/load_engine.js`.** It
@@ -168,7 +168,7 @@ node scripts/determinism_baseline.js --verify
 ```
 
 **The "twin question" below is now moot too** — there is no second copy to keep in step, because
-there is no second tree. `scripts/lib_twin_check.js` has nothing to watch here.
+there is no second tree. `lib_twin_check.js` *(retired with the second tree)* has nothing to watch here.
 
 **Three things 03-03 must decide when it does step 2, none of which is decided here:**
 
@@ -182,10 +182,10 @@ there is no second tree. `scripts/lib_twin_check.js` has nothing to watch here.
   `playBakeoff()`, not `playClassic()` (`HARD-WON-LESSONS.md` §3). That IS the right ruleset for
   `/4` — it is what ships — but the manifest must say which one it recorded.
 - **The twin question.** `scripts/determinism_baseline.js` would be a byte-identical copy of a
-  root file that is NOT under `scripts/lib/`, so `scripts/lib_twin_check.js` does not currently
+  root file that is NOT under `scripts/lib/`, so `lib_twin_check.js` *(retired with the second tree)* does not currently
 <!-- doc-check: allow 4/scripts/determinism_baseline.js -->
 - **The twin question.** `4/scripts/determinism_baseline.js` would be a byte-identical copy of a
-  root file that is NOT under `scripts/lib/`, so `4/scripts/lib_twin_check.js` does not currently
+  root file that is NOT under `scripts/lib/`, so `lib_twin_check.js` *(retired with the second tree)* does not currently
   watch it. Either extend that gate's pair list (it already special-cases the `no_undef_check.js`
   pair one directory up, for exactly this reason) or the two will drift unnoticed.
 

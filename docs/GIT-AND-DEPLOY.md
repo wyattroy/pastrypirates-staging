@@ -194,7 +194,8 @@ shipped.
 ### The loop
 
 ```bash
-git checkout -b aug28-whatever            # 1. a dated branch (monthDD-topic)
+git checkout dev && git pull origin dev   # 1. ONE branch. Wyatt's ruling, 2026-09-06:
+                                          #    no branch per bug, no branch per session
 
 npm run bump                              # 2. BUMP THE BUILD — see the box below
 npm test                                  # 3. the gates — exit 0
