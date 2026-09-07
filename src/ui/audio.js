@@ -269,11 +269,38 @@ function setMuted(v) {
 // The one place the master level is decided (D-12/D-13): 0 when muted OR the tab is hidden,
 // otherwise 1 — applied through a ramp, never a bare assignment, so mute and tab-blur can never
 // stomp on each other mid-transition.
+/* WYATT, 2026-09-06: "sound is no longer working even in solo in safari -- i have sound turned on,
+   and nothing is playing" ... "it works in chrome though". Safari-only is the whole clue.
+
+   ONE FILE, TWO AUDIO RAMPS, AND ONLY ONE OF THEM WAS WRITTEN SAFELY. fadeStorm() (:401) cancels
+   scheduled values and anchors at the CURRENT value before ramping, with a comment that says
+   exactly why: "anchor the ramp at the CURRENT value, not a stale target." This function — the one
+   that decides whether ANY sound is audible — did neither. It fired a bare setTargetAtTime() on
+   top of whatever automation was already queued.
+
+   WHY THAT IS SAFARI-SHAPED. `setTargetAtTime` is an exponential approach anchored to a moment on
+   ctx.currentTime, and **ctx.currentTime STOPS ADVANCING while the context is suspended or, on
+   Apple platforms only, `interrupted`.** Safari enters those states aggressively: a background
+   tab, a second window taking audio focus, the system sleeping — which is exactly what testing
+   crew in two Safari windows consists of. The hide ramp toward 0 lands. The show ramp back to 1 is
+   then scheduled against a frozen clock, on top of the un-cancelled ramp still sitting in the
+   queue, and the master never climbs back. Source nodes still start — so Safari lights the tab's
+   audio indicator, which is what he saw — into a bus pinned near silence. Chrome has no
+   `interrupted` state and a forgiving automation queue, so Chrome was fine throughout.
+
+   THE FIX IS THE RULE THE OTHER RAMP ALREADY FOLLOWS, plus one thing that ramp does not need:
+   when the clock is NOT running there is nothing for a ramp to travel along, so the value is set
+   OUTRIGHT. A ramp on a stopped clock is not a slow fade, it is no fade at all. */
 function applyMasterGain() {
   if (!ctx || !masterGain) return; // safe to call with no graph built yet
   const hidden = typeof document !== "undefined" && document.hidden;
   const target = isMuted() || hidden ? 0 : 1;
-  masterGain.gain.setTargetAtTime(target, ctx.currentTime, 0.05);
+  const g = masterGain.gain;
+  const now = ctx.currentTime;
+  g.cancelScheduledValues(now);          // nothing stale may survive this call
+  g.setValueAtTime(g.value, now);        // anchor at where the gain ACTUALLY is
+  if (ctx.state === "running") g.setTargetAtTime(target, now, 0.05);
+  else g.value = target;                 // frozen clock: no ramp can travel, so land it now
 }
 
 async function loadOne(name) {
@@ -302,7 +329,10 @@ async function initAudio() {
   // autoplay policy even when construction itself happened inside a real user gesture's call
   // stack (as it does here — see the one-shot unlock in src/orchestrator.js's wireLobby()). A
   // rejected resume() must never propagate into the game action the gesture rode in on (T-21-04).
-  ctx.resume().catch(() => {});
+  /* The boot wake goes through the same one door as every other. It used to be a bare resume()
+     whose resolution nobody acted on — and applyMasterGain() had already run four lines above,
+     against a clock that was not yet moving. */
+  wakeCtx();
   if (!visibilityHandlerAttached && typeof document !== "undefined") {
     visibilityHandlerAttached = true;
     document.addEventListener("visibilitychange", () => {
@@ -310,7 +340,12 @@ async function initAudio() {
       if (!document.hidden) {
         // REQUIRED on iOS Safari — a backgrounded AudioContext enters "interrupted" and will not
         // resume playback on its own even once the tab is visible again.
-        ctx.resume().catch(() => {});
+        /* THROUGH wakeCtx(), NOT A SECOND RAW resume(). This used to call resume() and then
+           applyMasterGain() on the very next line — synchronously, while the context was still
+           suspended and its clock still frozen, which is the exact ordering that pinned the master
+           bus. wakeCtx() re-applies the gain once resume() RESOLVES. One waking path for the whole
+           file; the play() funnel and this handler cannot drift apart. */
+        wakeCtx();
       }
       applyMasterGain();
     });
@@ -347,8 +382,17 @@ async function initAudio() {
    propagate into the game action that triggered the sound. This play is still allowed to proceed —
    a context that resumes a few milliseconds late plays late, which is better than silence, and the
    NEXT sound finds it running. */
+/* Yesterday this only woke the context. That was necessary and not sufficient: a context can come
+   back RUNNING with its master bus still pinned by the automation above, which is the state he was
+   in. So the gain is re-applied once resume() actually RESOLVES — at that point the clock is
+   moving again and a ramp means something. `resuming` stops a resume() being fired on every single
+   sound while one is already in flight; Safari does not enjoy that. */
+let resuming = false;
 function wakeCtx() {
-  if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+  if (!ctx || ctx.state === "running" || resuming) return;
+  resuming = true;
+  ctx.resume().then(() => { resuming = false; applyMasterGain(); })
+              .catch(() => { resuming = false; });
 }
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
