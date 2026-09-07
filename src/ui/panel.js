@@ -45,7 +45,7 @@ import {
 } from "./util.js";
 import { escHtml } from "./recipe.js";
 import { netHandlers } from "./handlers.js";
-import { isMuted } from "./audio.js";
+import { isMuted, audioDiagnosis } from "./audio.js";
 
 const $=id=>document.getElementById(id);
 // sleepMs, not a bare setTimeout: a dropped beat must cost a late line, never the voyage (util.js)
@@ -98,6 +98,10 @@ export function setClockUI(){
     // index.html sizes these to 60% of the button (~29px), overriding .narrIcon's inline 18px —
     // id+element beats class, so no extra rule is needed.
     setIf(muteEl,"innerHTML",isMuted()?iconImg(SOUND_OFF_IMG):iconImg(SOUND_ON_IMG));
+    /* ONE ATTRIBUTE CARRIES THE WHOLE TRUTH, so the menu row and the icon cannot disagree.
+       audioDiagnosis() is the only thing that decides; the CSS just renders what it says. */
+    const diag=audioDiagnosis();
+    if(muteEl.dataset.audio!==diag)muteEl.dataset.audio=diag;
     // Tooltip copy recorded in .planning/todos/pending/copy-shipped-vs-approved-gate.md — no
     // @copy marker (a new misc.sound.* id would need registering in art-review's node-group
     // table, out of scope for this phase; see that file's phase-21 entry for the follow-up).

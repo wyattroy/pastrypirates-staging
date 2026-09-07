@@ -402,6 +402,26 @@ function wakeCtx() {
 /* Whether sound can ACTUALLY be heard right now — the question the unlock could not previously
    ask, which is why it gave up after one try. Exported for src/orchestrator.js's gesture unlock. */
 function audioRunning() { return !!ctx && ctx.state === "running"; }
+/* WHY THE GAME NOW SAYS THIS OUT LOUD. Wyatt spent an evening on "no sound in Safari" and I was
+   wrong three times, because the screen showed exactly one word — "ON" — whether the engine was
+   running, asleep, or had never loaded a single sample. He had no way to tell those apart and
+   neither did I, so every step was a guess shipped to staging.
+
+   THE TWO REMAINING CAUSES NEED OPPOSITE FIXES and look identical from the outside:
+     "blocked"    the AudioContext exists but is not running — the browser has not let it start,
+                  or has suspended it. Another tap normally fixes it (see the gesture unlock).
+     "nosamples"  the context IS running and not one mp3 decoded — the files never arrived. That
+                  is a content blocker, an extension or a failed fetch, and no amount of tapping
+                  will help.
+   A player whose audio is blocked deserves to know that too, rather than assuming the game is
+   broken. This is the game being honest about its own state, on the row that already claims to
+   report it. */
+function audioDiagnosis() {
+  if (isMuted()) return "muted";
+  if (!ctx || ctx.state !== "running") return "blocked";
+  if (!Object.keys(buffers).length) return "nosamples";
+  return "ok";
+}
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
   /* MUTE NOW SKIPS THE SOUND ENTIRELY — Wyatt, 2026-09-06: "yes, make mute skip the sound
@@ -598,7 +618,7 @@ function playBattleEngage() {
 }
 
 export {
-  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning,
+  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

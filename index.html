@@ -2169,6 +2169,13 @@
   #footerRow.pp4MenuList #btnMute::after { content:"Sound: ON"; position:static; width:auto;
     height:auto; transform:none; font:inherit; }
   #footerRow.pp4MenuList #btnMute[aria-pressed="true"]::after { content:"Sound: OFF"; }
+  /* THE ROW NOW TELLS THE TRUTH WHEN SOUND IS NOT WORKING. It said "Sound: ON" whether the engine
+     was running, asleep, or had never loaded a sample — so a whole evening of "no sound in Safari"
+     had exactly one word of evidence on screen, and every diagnosis was a guess. One attribute
+     (data-audio, set from audioDiagnosis()) decides all four states, so nothing can disagree. */
+  #footerRow.pp4MenuList #btnMute[data-audio="muted"]::after { content:"Sound: OFF"; }
+  #footerRow.pp4MenuList #btnMute[data-audio="blocked"]::after { content:"Sound: ON \2014 blocked by yer browser"; }
+  #footerRow.pp4MenuList #btnMute[data-audio="nosamples"]::after { content:"Sound: ON \2014 sound files not loaded"; }
   /* W4-1: and this one applies in EVERY mode, which is what made the fault architectural rather
      than a pass-and-play quirk. Same reason as the rule above — the panel is capped, so a zero
      horizontal margin pins it left. */
