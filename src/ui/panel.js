@@ -125,10 +125,19 @@ export function setClockUI(){
     // and this game is played on iOS. Still compared before writing, because this runs on the 500ms
     // tick and unconditional DOM writes behind the blur are exactly what cost 137% CPU in Safari
     // (see this function's header).
-    const muteLabel=isMuted()?"Turn the sound back on":"Mute the sound";
+    /* THREE STATES, ONE SOURCE. The label names where the player IS and what the next tap does,
+       because a cycle has no "off" position to infer — his ruling, 2026-09-07. It is keyed off the
+       same audioDiagnosis() the row's CSS uses, so the words, the icon and the menu row cannot
+       disagree with each other or with what is actually audible.
+       ARIA-PRESSED IS GONE ON PURPOSE: it is a BINARY, and it would announce "sound off" or
+       "sound on" for a mode that is neither. aria-label carries the whole state instead, which is
+       the treatment that works on touch as well as desktop (see MUTE-01 above). */
+    const muteLabel=diag==="muted"?"Sound is off. Tap for sound and music."
+                   :diag==="nomusic"?"Sound on, music off. Tap to mute."
+                   :"Sound and music on. Tap to turn the music off.";
     setIf(muteEl,"title",muteLabel);
     setAttrIf(muteEl,"aria-label",muteLabel);
-    setAttrIf(muteEl,"aria-pressed",isMuted()?"true":"false");
+    if(muteEl.hasAttribute("aria-pressed"))muteEl.removeAttribute("aria-pressed");
   }
   // the end-of-voyage swap: the panel that once hid here is gone; only Play again remains to show
   $("btnPlayAgain").style.display=appState.liveDone?"":"none";

@@ -67,14 +67,10 @@ import {
   RIM_SWEEP_MS_PER_CELL, RIM_SWEEP_MIN_MS, RIM_SWEEP_MAX_MS, isDisabledBtn,
   SHIP_GLIDE_MS, SAIL_ROUTE_TICK_MS, MOTION_BRIDGE_TICKS, MAX_NAME_LEN, getLastName,
   vwPx, fixedRect,
-  clearSoloState, clearSession,   // ?pilot=new starts a NEW voyage; these own the two saved blobs
 } from "./util.js";
 import { passGate, requireName, showStep, openNameModal, confirmName, wireNameModal, setNameWarning } from "./lobby.js";
 import { playBakeoffLive } from "./bakeoff.js";
 import { netHandlers } from "./handlers.js";
-import { pilotLine, pilotMsg, pilotSee, pilotRung, pilotDepth, pilotFirstTime,
-  pilotStartFromTheTop, pilotSkipToVeteran, pilotDecayOnLaunch, pilotApplyUrlFlag } from "./pilot.js";
-import { showCourseFor, clearCourse } from "./course.js";
 
 const $=id=>document.getElementById(id);
 // ⏩ fast-forward: every flow beat (storm steps, rim sweeps, bot beats, battle pauses) collapses
@@ -405,20 +401,12 @@ export function sailSelfCheck(player,cells){
    (holdVerb(), src/ui/stage.js:445) is private to that module, so there is no shared way to say
    tap-or-click from here. Re-testing `matchMedia("(pointer: coarse)")` in this file would be a
    second copy of the same rule to keep in step. Export holdVerb() and both lines can read it. */
-export function sailPickMsg(seat,cells,base="tap to sail"){
+export function sailPickMsg(seat,cells){
   // v2 rule 2: sailing is FREE, so the (−1🌕) parenthetical is gone.
   const g=appState.game;
   const swept=!!(g&&g.onRim&&(cells||[]).some(c=>c&&g.onRim(c)));
-  /* `base` IS THE ONLY THING THE PILOT REPLACES, and its DEFAULT is the shipped clause — so every
-     existing caller, and the wire payload, get byte-for-byte the line this built before.
-     The captain's name and the swept clause are composed here at every rung: they are situational
-     facts rather than teaching, and a first-timer needs them more than anyone. */
-  /* The swept clause becomes its own sentence when the rung already ended in one, or two em-dashes
-     collide ("— head for a dock. — blue squares take two taps"). With the DEFAULT base there is no
-     terminal stop, so the original form is what renders — identical by construction. */
-  const tail=swept?(/[.!?]$/.test(base)?" Blue squares take two taps.":" — blue squares take two taps"):"";
   // /4 playtest 6: one line — the card must stay small
-  return `${pn(seat)}: ${base}${tail}`;
+  return `${pn(seat)}: tap to sail${swept?" — blue squares take two taps":""}`;
 }
 /* THE SAIL CARD, BUILT ONCE. 02.15-01, the narrow half — see renderPickPrompt (02.15-02 Task 3,
    THE TRACER) for the wide one, which converged the ORCHESTRATION around this same builder.
@@ -446,20 +434,8 @@ export function sailPanelHTML(msg,hint){
      2026-08-25 (silent on a real board; fires on an impossible square). What is gone is the
      player-facing red text. `hint` stays in the signature and on the wire so the spec shape and
      the guest payload are unchanged. */
-  /* THE HINT SLOT DRAWS AGAIN — but it is no longer the red shout, and that distinction is the
-     whole of this change. Wyatt deleted the shout's TEXT on 2026-08-25 ("I don't care about the
-     red shout at all — it's not useful any more") while the parameter was deliberately kept on the
-     wire so the spec shape and the guest payload stayed unchanged. That dormant, already-crossing-
-     the-wire field is now the Pilot's helper line — no new field, no new parity risk, and the
-     guest reads exactly what the host composed.
-     sailSelfCheck() still runs and still console.error()s; what it produces no longer rides here,
-     so a self-check failure can never again become player-facing red text. See pickCell().
-     LAST IN THE MARKUP, per the standing top-to-bottom reveal rule for #actionPanel: back button,
-     message, buttons, helper text. */
-  const sub=hint?`<div class="apSub">${hint}</div>`:"";
   return `<div class="apMsg">${msg}</div>`+
-    `<div class="apBtns"><button class="apBtn" id="apStay" style="display:none">Stay put</button></div>`+
-    sub;
+    `<div class="apBtns"><button class="apBtn" id="apStay" style="display:none">Stay put</button></div>`;
 }
 /* THE WIND HINT IS GONE (Wyatt, 2026-08-25): "Remove the sail prompt saying wind blows east
    entirely because the game calculates this for you." It was ALREADY invisible — `sailWindHint()`
@@ -607,7 +583,7 @@ export function renderPickPrompt(spec,answer){
   clearSailWindow();
   const svg=$("board"),hs=[];
   appState.currentPrompt=spec;
-  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;clearCourse();};
+  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;};
   const done=v=>{teardown();answer(v);};
   const cellPx=boardCell();
   /* ITEM 21: the yellow flashing square UNDER the captain's own boat — "to indicate that they may
@@ -642,28 +618,7 @@ export function renderPickPrompt(spec,answer){
   // reverse), which docs/GIT-AND-DEPLOY.md's mid-session ship-to-live model makes a real scenario.
   // Pure plumbing: no currently-reachable call passes a falsy spec.msg, so today's rendered text is
   // unchanged.
-  /* ── THE PILOT SPEAKS HERE, on the device that is actually looking ──────────────────────────
-     This renderer runs on whichever machine draws the prompt, for both tiers, which is exactly the
-     property the Pilot needs: the count is per device, so a first-time guest gets rung 0 while a
-     veteran host reads the line it always read.
-     AT THE BOTTOM RUNG NOTHING IS RECOMPOSED — spec.msg, straight off the wire, byte-identical.
-     Only above it does this device build its own longer line, and `sailPickMsg` composes it from
-     the same parts (the name, the swept clause) so the two can never drift. */
-  const seat=spec.seat!=null?spec.seat:(appState.mySeat??0);
-  const rung=pilotLine("sail.pick","tap to sail");
-  const teaching=pilotRung("sail.pick")<pilotDepth("sail.pick")-1;
-  const msg=teaching?sailPickMsg(seat,spec.cells,rung.msg):(spec.msg||sailPickMsg(seat,spec.cells));
-  panel(sailPanelHTML(msg,rung.sub||null),true);
-  /* THE ONWARD GUIDE RETIRES ON THE SAME DIAL AS THE WORDS — no second thing to remember to turn
-     off. While the sail ladder still has a rung to give the course is drawn; when it reaches the
-     bottom it stops with it. Drawn for the captain whose prompt this is, from the position the
-     SPEC carries — never this client's own players[].pos, which on a guest is a stale render
-     shell (the same rule the stay square already follows). */
-  const who=appState.game&&appState.game.players?appState.game.players[seat]:null;
-  if(teaching&&who&&spec.pos)
-    showCourseFor(appState.game,{...who,pos:spec.pos},svg,cellPx);
-  else clearCourse();
-  pilotSee("sail.pick");
+  panel(sailPanelHTML(spec.msg||sailPickMsg(appState.mySeat),spec.hint),true);
   $("apStay").onclick=()=>done(null);
   /* THE CAMERA REQUEST RIDES WITH THE SQUARES — rule 23's converge move, and the missing half of a
      guest's sail prompt. camFitSail() had exactly ONE caller: pickCell(), which runs on the machine
@@ -743,25 +698,7 @@ export function pickCell(player,cells){
   // guest's game.players[].pos is a stale render shell and must never be read for this.
   // `cells` is handed to sailPickMsg for W2-8: the line says a blue square takes two taps only
   // when one of THESE squares is a blue one. Same list the renderer is about to colour.
-  /* `bug` no longer rides on the wire. It was `hint:bug||null` and NOTHING RENDERED IT — the
-     player-facing red text went on 2026-08-25 and the parameter was kept only to hold the payload
-     shape steady. Now that sailPanelHTML draws `hint` again, leaving the shout in it would quietly
-     restore the very text he deleted, on the one path he would never see it coming. sailSelfCheck
-     still runs above and still console.error()s, which is the whole of what he kept. */
-  if(bug)console.warn("sailSelfCheck:",bug);
-  /* ⚠ NOTHING THE PILOT SAYS GOES ON THE WIRE, AND THAT IS A RULE RATHER THAN A TIDINESS.
-     The spec below is built on the machine running the ENGINE — the HOST in a crew game. If the
-     rung were chosen here, a veteran host would silence a first-time guest: the whole point of the
-     Pilot being per device is that a guest who has never sailed gets help the host does not need.
-     So the wire carries the SHIPPED line, exactly as it does today, and each device applies its
-     own rung in renderPickPrompt — the one renderer both tiers already share.
-     That also makes gate 3 ("no rung string reaches netSetNarr") true literally rather than by
-     argument, and it keeps D-35 intact: the guest still RENDERS what the host authored, then adds
-     a presentation layer of its own that emits no event.
-     `seat` is stamped so the renderer can re-compose the line without guessing whose turn it is;
-     remotePrompt() in orchestrator.js already stamps the same field, so the payload shape is
-     unchanged. */
-  const spec={kind:"pick",seat:player.idx,cells,msg:sailPickMsg(player.idx,cells),hint:null,pos:[player.pos[0],player.pos[1]]};
+  const spec={kind:"pick",cells,msg:sailPickMsg(player.idx,cells),hint:bug||null,pos:[player.pos[0],player.pos[1]]};
   const base=decisionIsLocal(player.idx)?localPickCell(player,spec)
     :netHandlers().onRemotePrompt(player.idx,spec);
   return base.then(c=>{netHandlers().onLogDecision(c);return c;});
@@ -1202,26 +1139,7 @@ export async function animateRimSweepIfAny(ev){
   const to=ev.state[seat]&&ev.state[seat].pos;
   const from=prev.state[seat]&&prev.state[seat].pos;
   if(!to||!from||!g.onRim(from))return false;
-  const rode=await animateRimSweepRun(seat,from,to);
-  /* THE TRADE-WIND LADDER, AFTER THE RIDE RATHER THAN BEFORE IT.
-     The rim carrying a ship most of the way across the sea is the most startling thing that
-     happens to a first-time captain, and nothing says why — the tradewind bubble that used to
-     stand here was withdrawn. Spoken once the ride has been WATCHED, because the sentence explains
-     something that just happened; said first it would be a rule about a thing not yet seen.
-     ⚠ NOT GATED ON WHOSE SHIP IT IS, and the mode-fork gate is what talked me out of that. My
-     first version only spoke when the swept captain was local — a conditional on WHO IS PLAYING,
-     inside code that draws, which is exactly the class of thing that gate exists to stop. It was
-     also worse teaching: watching a BOT get carried across the sea explains the rim just as well
-     as being carried yourself, and the spec's own observation about the opening is that a
-     first-timer sits through two bot turns before touching anything. So it fires on the first
-     sweep this DEVICE witnesses, whoever is aboard. The count is per device either way, and
-     nothing here rides the wire. */
-  if(rode){
-    const learn=pilotMsg("rim.sweep","");
-    pilotSee("rim.sweep");
-    if(learn)await flash(learn);
-  }
-  return rode;
+  return animateRimSweepRun(seat,from,to);
 }
 // /4 (Wyatt's playtest, storm rides): the SAME guarded ride, callable with an explicitly known
 // entry cell. A swept storm step emits nothing between stepping onto the rim and tradewind()
@@ -1680,7 +1598,7 @@ async function pickBarterCrates(player,ing){
     opts.push({label:"← Back",back:true,value:"__back__"});
     // @copy misc.blackmarket.pick1 / pick2 — draft, Wyatt rewrites
     const msg=first===null
-      ?`The black market'll take any 2 ingredients fer ${dockFlavorIcon(ing)} — what's the first?`
+      ?`The black market'll take any 2 crates fer ${dockFlavorIcon(ing)} — what's the first?`
       :`Givin' ${ilabelImg(first)} an' one more fer ${dockFlavorIcon(ing)} — what's the second?`;
     /* THE LAST SHARED HELPER LINE IS GONE (Wyatt, 2026-08-25). It read "Both crates leave the
        Sugar Seas fer good." on the first pick and "Tap it an' the bargain's struck — both crates
@@ -1716,7 +1634,7 @@ export async function humanDock(player,port){
   // already puts explanatory text (and, per the standing top-to-bottom rule, is revealed last).
   // @copy misc.paramprompt.dockflip
   const h=await humanFlip(player,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
-    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy an ingredient.`);
+    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy a crate.`);
   if(h==="back")return "back";
   player.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
   let got=h?"treasure":"dockhand";
@@ -1767,8 +1685,8 @@ export async function humanDock(player,port){
           why:shortWhy},
       ];
       // @copy misc.blackmarket.barterbtn — draft, Wyatt rewrites
-      if(black)opts.push({label:`Trade any 2 ingredients fer ${ilabelImg(ing)}`,short:`2 → ${iconImg(ING_IMG[ing])}`,value:"barter",disabled:!canBarter,
-        why:`The barter takes 2 ingredients off yer hands, and ye're carryin' ${player.ing.length}.`});
+      if(black)opts.push({label:`Trade any 2 crates fer ${ilabelImg(ing)}`,short:`2 crates → ${iconImg(ING_IMG[ing])}`,value:"barter",disabled:!canBarter,
+        why:`The barter takes 2 crates off yer hands, and ye're carryin' ${player.ing.length}.`});
       opts.push({label:"Nah",value:false});
       // @copy misc.blackmarket.whisper — draft, Wyatt rewrites
       /* HIS COPY PASS, 2026-08-25. The black-market whisper said in a sentence what the two
@@ -1779,13 +1697,7 @@ export async function humanDock(player,port){
          string and the greyed Buy button's tap-why THE SAME STRING, so the line under the pill was
          a second copy of a sentence the button says while pointing at itself. The price and the
          barter alternative are both on the two buttons' own labels. */
-      /* THE PRICE CLIMBS, AND ONLY THE PILOT SAYS SO. Wyatt ruled this ladder IN on 2026-09-02.
-         The Buy button already states the price; what nothing states is that the number rises as
-         the island empties (v2 rule 11: 6 minus the crates left, so 3 -> 3\u{1F315}, 2 -> 4, 1 -> 5),
-         which is the whole reason getting there first matters. Legal under the editorial law: the
-         button names the price, never that it moves. */
-      const sub=pilotMsg("dock.buy",null)||null;
-      if(sub)pilotSee("dock.buy");
+      const sub=null;
       /* W2-4 (Wyatt, 2026-08-27): "Money must be explicit wherever it changes hands."
          This prompt is the ONE place in the dock flow that had gone quiet about it. The line
          BEFORE the flip already names both payouts (:1394) and the recap AFTER it already names
@@ -1942,7 +1854,7 @@ async function counterOffer(q,player,offer){
     const opts=theirs.map(i=>crateOpt(player.ing,i));
     // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost
     opts.push({label:`💰 Coin instead`,short:`💰 Coin`,value:"__coinsonly__",disabled:room<1,
-      why:`${pn(player.idx)} has no coin at all — it must be an ingredient.`});
+      why:`${pn(player.idx)} has no coin at all — it must be a crate.`});
     opts.push({label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"__deny__"});
     opts.push({label:"← Back",back:true,value:"__back__"});
     // @copy prompt.trade.counterwant — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
@@ -2111,7 +2023,7 @@ export async function humanTrade(player){
       const canOfferCoins=player.coins>0;
       const ingOpts=[...new Set(player.ing)].map(i=>crateOpt(player.ing,i));
       ingOpts.push({label:"— coins only —",value:"__coinsonly__",disabled:!canOfferCoins,
-        why:`Yer purse is empty — ye've no coin to offer, so it must be an ingredient.`});
+        why:`Yer purse is empty — ye've no coin to offer, so it must be a crate.`});
       ingOpts.push({label:"← Back",back:true,value:"__back__"});
       // no shared helper line: the greyed "— coins only —" option already carries "Yer purse is
       // empty — ye've no coin to offer, so it must be a crate." (2026-08-25)
@@ -2320,23 +2232,6 @@ export async function humanTrade(player){
   await narrateLastEvent();
   liveRender();
   return true;
-}
-/* WHICH LADDER SPEAKS AT THE ACT MENU — one helper slot, four teachable buttons.
-   FIRST SIGHTING, NOT TURN COUNT. The ladder with the most rungs still to give wins, so a captain
-   offered their first battle on day nine still meets its rung 0 — whenever that is. Nothing here
-   needs to know how experienced a player is; the counts already know, moment by moment.
-   A GREYED CIRCLE IS SKIPPED: it teaches nothing a captain can act on, and it already carries its
-   own `why`. That is also what keeps this from ever colliding with the anchored reasons. */
-const ACT_LADDERS=[["dock","act.menu"],["attack","act.attack"],["trade","act.trade"],["pass","act.muse"]];
-function actLadder(opts){
-  let best=null,bestLeft=0;
-  for(const [val,id] of ACT_LADDERS){
-    const o=(opts||[]).find(x=>x&&x.value===val);
-    if(!o||o.disabled)continue;
-    const left=pilotDepth(id)-1-pilotRung(id);
-    if(left>bestLeft){bestLeft=left;best=id;}
-  }
-  return best;
 }
 export async function humanAct(player,sailCtx){
   applyActiveSeat(player.idx);
@@ -2563,25 +2458,7 @@ export async function humanAct(player,sailCtx){
      one another. It is now enforced where it belongs, on the options themselves — Attack's why and
      Trade's why are separate strings on separate buttons, so neither can swallow the other by
      construction, which is stronger than the two independent `if`s this replaced. */
-  /* ⚠ THE PILOT PUTS A LINE BACK IN THIS SLOT, AND THAT RUNS STRAIGHT INTO THE RULING ABOVE.
-     Worth stating plainly rather than burying, because he deleted the last thing that lived here.
-
-     WHAT HE DELETED was a DUPLICATE: every sentence it showed was already on the control it
-     described, as that option's own `why`, anchored to the button with a tail. He was right, and
-     nothing here restores it — each button's `why` is still the only place a greyed circle
-     explains itself, and the two can never collide because a greyed option is skipped below.
-
-     WHAT THIS SHOWS is a RULE the buttons do not state: that a hail reaches the whole table, that
-     a broadside is one flip each and the winner takes a crate. That is the editorial law he set on
-     the same day — A RUNG MAY NOT RESTATE ITS OWN BUTTON — and it is what tells the two apart.
-     It also deletes itself: two sightings of Attack and the line is gone for good.
-
-     I am flagging it for his eye in playtesting rather than treating "different enough" as
-     settled. If he reads it as the tooltip coming back, the fix is one line: drop these four
-     ladders and let the act menu teach nothing. */
-  const helpId=actLadder(opts);
-  const sub=helpId?(pilotMsg(helpId,null)||null):null;
-  if(helpId)pilotSee(helpId);
+  const sub=null;
   const prompt=`${pn(player.idx)}, what'll ye do:`;
   // @copy prompt.act.menu
   const v=await ask(prompt,opts,null,sub);
@@ -3059,31 +2936,25 @@ export async function botTurn(player){
    nor meaningful). The dispatcher does not reproduce it; the serial branch DOES set the actor,
    because there the device genuinely follows one seat at a time.
    Gate: scripts/qa/draft_dispatch_convergence_check.mjs. */
-/* `subFor` is OPTIONAL and per-seat, and it is how the Pilot reaches the two draft moments
-   without a second dispatcher. It lands in localAsk's helper slot (.apSub) — last in the DOM, per
-   the standing top-to-bottom reveal order — and it is deliberately NOT passed to
-   onRemoteDraftPrompt: a rung is per device, so a remote seat's own device supplies its own. The
-   host composing one for a guest is the exact thing the Pilot exists to avoid. */
-export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce,subFor}){
-  const sub=seat=>subFor?(subFor(seat)||null):null;
+export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce}){
   const results={};
   if(appState.passAndPlay){
     if(isPublic){
       // ONE DEVICE, ONE SHOWING — the table reads it together, off one screen.
-      results[seats[0]]=await localAsk(msgFor(seats[0]),optsFor(seats[0]),null,sub(seats[0]));
+      results[seats[0]]=await localAsk(msgFor(seats[0]),optsFor(seats[0]));
       return results;
     }
     // one device, secret options: draft in turn, each behind the pass-the-device screen
     for(const seat of seats){
       await passGate(seat);
       applyActiveSeat(seat);
-      results[seat]=await localAsk(msgFor(seat),optsFor(seat),null,sub(seat));
+      results[seat]=await localAsk(msgFor(seat),optsFor(seat));
     }
     return results;
   }
   if(announce)netHandlers().onBroadcast(announce.html,announce.variants,{wait:true});
   await Promise.all(seats.map(seat=>{
-    if(decisionIsLocal(seat))return localAsk(msgFor(seat),optsFor(seat),null,sub(seat)).then(i=>{
+    if(decisionIsLocal(seat))return localAsk(msgFor(seat),optsFor(seat)).then(i=>{
       results[seat]=i;
       if(waitMsg)showNarration(waitMsg,{wait:true}); // item 19: no deadline on a wait line
     });
@@ -3147,58 +3018,6 @@ export async function showAhoyIntro(){
   // gather for. The leading ⚓ is KEPT again here: D-16 requires removal stated in words, and he
   // named no icon. D-53 (a `--` becomes an em dash) is a no-op check on this string — it has none.
   const msg=`⚓ Ahoy! Choose a recipe, gather each ingredient, then sail home first to win!`;
-  /* ── THE FORK, and it is a STARTING RUNG rather than a yes/no ──────────────────────────────
-     Shown only on a device that has never played — the absence of the Pilot's one storage key IS
-     the "never played" test, so one key answers both questions it needs to.
-
-     ASKED LOCALLY, ON PURPOSE, AND IT NEVER TOUCHES THE WIRE. The Pilot is per device, not per
-     table: a first-time guest must be able to get help the veteran host does not need. That makes
-     this a Decider in docs/INTENDED-BEHAVIOUR.md §3's sense, and it is safe for the one reason
-     that file gives — IT EMITS NO EVENT. localAsk draws a panel and resolves a promise; nothing
-     reaches netSetNarr, nothing reaches the event stream, no RNG is drawn.
-     The barrier that follows is the sync point, so a table whose captains answer at different
-     speeds still converges before anybody sails.
-
-     This card already draws any number of circles, so making it two costs one argument.
-     Wyatt's own framing, which matters for later: if testing says some captains want a middle
-     setting, that is a THIRD CIRCLE AND A NUMBER — not a new system. */
-  /* ── DECAY IS EVALUATED HERE, ONCE, AND NOWHERE ELSE ────────────────────────────────────────
-     Every voyage passes through this card, before a single rung has been read, which is the one
-     property the schedule needs: under 7 days nothing changes · 7-30 back one rung · 30-90 back
-     two · over 90 back to the top.
-     EVALUATED BETWEEN VOYAGES, NEVER DURING ONE, and that is what makes it predictable — it
-     answers the objection the spec raised against decay in its own first draft. Words can never
-     grow back mid-game, and two voyages in one evening behave identically.
-     Skipped on a replay: a host refresh re-runs this path, and decaying again would hand a captain
-     back rungs they had already spent purely because their browser reloaded. */
-  /* THE URL FLAG IS READ BEFORE ANYTHING ELSE TOUCHES THE COUNTS — ?pilot=new has to be able to
-     un-answer the fork, and one line below is where the fork asks. */
-  if(!appState.replaying){
-    const flag=pilotApplyUrlFlag();
-    /* ⚠ "new" MEANS A NEW VOYAGE, and without this the flag silently did nothing on any device
-       that had played. boot() RESUMES an interrupted solo game before the opening ever runs, so
-       the captain was dropped straight back into a voyage in progress — past the fork, past every
-       rung — with no error and no hint. Measured rather than reasoned: five of six modes came back
-       reading "Wyatt, choose yer recipe" off a resumed game.
-       CLEARED THROUGH THE FUNCTIONS THAT OWN THOSE BLOBS, never by removing keys by hand — the
-       first attempt hardcoded `pp_solo`/`pp_sess`, which is what docs/DRIVING-THE-GAME.md §2 still
-       calls them, and the real keys have been `pp4_solo`/`pp4_sess` for some time. A second copy of
-       a name is a second thing to keep in step, and this one was already out of step. */
-    if(flag==="new"){clearSoloState();clearSession();}
-  }
-  if(!appState.replaying)pilotDecayOnLaunch();
-  /* NOT ON A REPLAY. netIntroBarrier below self-skips when appState.replaying is set, because a
-     host refresh re-runs this whole path — and a localAsk here would put a card on screen and wait
-     for a tap that is never coming, hanging the rebuild. The fork inherits the same guard rather
-     than relying on nobody noticing. */
-  if(!appState.replaying&&pilotFirstTime()){
-    // @copy misc.introbarrier.pilotfork — DRAFT COPY, his to rewrite.
-    const knows=await localAsk(`🦜 Do ye know how to play?`,[
-      {label:"Yaargh!",value:0,cls:"primary",stage:true},
-      {label:"Nah",value:1,cls:"primary",stage:true},
-    ]);
-    if(knows===1)pilotStartFromTheTop(); else pilotSkipToVeteran();
-  }
   // NARR-01/D-25 (Wyatt-approved 2026-07-29): button trimmed to just "Arrgh!" — icon kept (D-16).
   // @copy misc.introbarrier.ahoy
   await netIntroBarrier(msg,"⚓ Arrgh!");

@@ -41,17 +41,9 @@ Kill the old servers when you move on, so a stale port cannot be reached by acci
 localStorage.clear();   // then reload
 ```
 
-`boot()` resumes an interrupted solo game from **`pp4_solo`** and, historically, took an early
-return before Firebase init. Leftover `pp4_solo`/`pp4_sess` from a previous run will silently put
-you in a resumed game instead of the welcome screen.
-
-> ⚠ **THE KEYS ARE `pp4_solo` / `pp4_sess`, and this page said `pp_solo` / `pp_sess` until
-> 2026-09-07.** Nobody noticed because `localStorage.clear()` above wipes everything regardless.
-> It costs you the moment you want to clear the SAVED GAME while keeping something else — which is
-> exactly what a probe testing "a device that has already played" needs. It cost an hour: five of
-> six flag modes came back testing a resumed voyage, with no error and no hint.
-> `clearSoloState()` / `clearSession()` (`src/ui/util.js`) own these blobs; call those rather than
-> naming the keys, and this cannot go stale again.
+`boot()` resumes an interrupted solo game from `pp_solo` and, historically, took an early return
+before Firebase init. Leftover `pp_solo`/`pp_sess` from a previous run will silently put you in a
+resumed game instead of the welcome screen.
 
 Two tabs on the same origin share `localStorage`, so a second tab inherits the first tab's `pp_id`.
 For a two-seat multiplayer test use a separate Chrome profile or an incognito window.
@@ -89,23 +81,6 @@ appState.game.players.some(p => p.strategy === 'human')
 Hosting instead: `document.getElementById('choiceHost').click()` creates a real Firebase room on the
 first click. **Delete the room afterwards** — `appState.db.ref('rooms/'+room).remove()` — or use the
 back link on the room screen, which calls `abandonRoom()` and tears it down properly.
-
-### 3d. `?pilot=new` — the tutorial's own entry point
-
-`src/ui/pilot.js` spends every rung the first time it is seen, so "show me the first-time copy"
-otherwise means finding a device that has never played. Three modes, **on a dev host only**
-(localhost, `*.local`, and **staging** — `src/shared/host.js`):
-
-| URL | what it does |
-|---|---|
-| `?pilot=new` | every ladder back to rung 0, the fork un-answered, **and the saved voyage cleared** so it really is a new one |
-| `?pilot=vet` | every ladder at its last rung — today's game exactly, no fork |
-| `?pilot=off` | the parrot silenced, as if it had been tapped off |
-
-**It does nothing at all on the live domain, silently** — that is the `devHost()` gate and it is
-deliberate. Any checklist item using it must point at staging.
-`scripts/qa/pilot_url_flag_check.mjs` drives all three in a browser and red-proofs them against an
-unknown flag, because a flag that quietly does nothing is worse than no flag.
 
 ## 3b. STARTING A CREW GAME — "Start the voyage!" is not the button that starts the voyage
 

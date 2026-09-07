@@ -39,40 +39,6 @@ next reader concludes the code is broken.
 
 ---
 
-## 🦜 THE TUTORIAL IS PER DEVICE, SO TWO SCREENS DELIBERATELY SAY DIFFERENT THINGS
-
-**If a guest's sail prompt reads "Tap a gold square to sail — head for a dock" while the host's
-reads "tap to sail", that is the game working.** Do not report it, and do not "converge" the two.
-
-**The Pilot (`src/ui/pilot.js`) counts, per device, how many times this device has seen each
-teachable moment**, and shows a shorter line each time until it reaches the one that ships today.
-A first-time guest sitting next to a veteran host must be able to get help the host does not need —
-that is the entire reason the feature exists, and a table-wide count would defeat it. **The
-onward guide (the dotted course and the pulsing X) is on the same dial and diverges the same way.**
-
-**Why this does not break rule 23.** Rule 23 says host/guest must never decide what a player SEES,
-and §3's own test is *would this make two screens showing the same game show different things a
-player is entitled to see?* Both captains are entitled to the same GAME; verbosity is not game
-content. Concretely, and each of these is a gate:
-
-- **Nothing the Pilot says reaches the wire.** `pickCell()` builds the spec on the machine running
-  the engine and puts the **shipped** line in it; each device applies its own rung inside
-  `renderPickPrompt()`, the one renderer both tiers already share. So the payload is byte-identical
-  to what it was before the tutorial existed.
-- **It emits no event**, which is §3's invariant for a Decider — the same licence pass-and-play's
-  hand-over gate runs under.
-- **It draws no random number**, so the same seed produces the same voyage with the tutorial on or
-  off. Proved by a posed pair rather than argued: `scripts/qa/pilot_posed_pair.mjs` photographs one
-  live game object twice — pilot ON 60 dashes / 5 marks / **13 sail squares**, pilot OFF 0 / 0 /
-  **13 sail squares**.
-
-**The thing that WOULD be a bug:** a rung string appearing in a broadcast, or the two screens
-offering different *squares*. Neither is possible by construction above, and both have gates.
-
-*Added 2026-09-07, in the commit that introduced the divergence — this file's own standing rule.*
-
----
-
 ## ⚠ READ THIS BEFORE YOU REPORT ANY DISCREPANCY
 
 **Two screens showing different things is not evidence of a defect until you have checked this
@@ -373,9 +339,7 @@ drift rule 23 exists to prevent, and it had already started.
 - one recipe card highlighted and another not is the two-tap selection state, not a rendering failure;
 - a ship drawn at reduced opacity is BAKING and deliberately off the board, not disabled or broken;
 - a coin slider drawn greyed and undraggable is a captain with an empty purse — the disabled control IS the answer;
-- a narration bubble sits off-centre because it is anchored to a captain's ship with a tail; only a battle result is deliberately centred;
-- a wavy line of cream dashes across the water, ending in a white X on a dock, is the onward guide teaching a first-time captain where to sail — it is drawn under the gold squares on purpose and retires by itself;
-- a dock marked with a pulsing white X rather than a thin orange ring is the current design for every captain, not a tutorial-only marker.
+- a narration bubble sits off-centre because it is anchored to a captain's ship with a tail; only a battle result is deliberately centred.
 ```
 
 ---

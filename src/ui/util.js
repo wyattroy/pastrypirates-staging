@@ -487,12 +487,12 @@ const EVENT_NARRATION={
     const buyTail=bought
       ?(barter?` — then trades ${gave} to the black market for ${goods}.`
         :e.black?` — then pays the black market for ${goods} ${spent}.`
-        :` — then buys ${goods} ${spent}.`+(e.wentDry?` That were the last of it — the shelves be bare!`:``))
+        :` — then buys ${goods} ${spent}.`+(e.wentDry?` That were the last crate — the shelves be bare!`:``))
       :``;
     const buyTailYou=bought
       ?(barter?` — then ye trade ${gave} to the black market for ${goods}.`
         :e.black?` — then ye pay the black market for ${goods} ${spent}.`
-        :` — then ye buy ${goods} ${spent}.`+(e.wentDry?` Ye took the last of it — the shelves be bare!`:``))
+        :` — then ye buy ${goods} ${spent}.`+(e.wentDry?` Ye took the last crate — the shelves be bare!`:``))
       :``;
     const txt=isLocalTo(e.p,viewerSeat)
       ?(e.heads
@@ -653,7 +653,7 @@ const EVENT_NARRATION={
     // G3: every ${e.spoil} below became ${spoilText}. Not one sentence, clause order or word
     // changed — the only difference is how the spoil AMOUNT is spelled.
     if(e.spoilIng)spoilClause=viewerIsWinner?`Ye take ${spoilText}.`:`${pn(e.winner)} takes ${spoilText}.`;
-    else if(isBribe)spoilClause=viewerIsLoser?`Ye bribe yer way out of giving away an ingredient with ${spoilText}.`:`${pn(loser)} bribes their way out of giving away an ingredient with ${spoilText}.`;
+    else if(isBribe)spoilClause=viewerIsLoser?`Ye bribe yer way out of giving away a crate with ${spoilText}.`:`${pn(loser)} bribes their way out of giving away a crate with ${spoilText}.`;
     // FIX-07 (ruled 2026-07-31, verbatim): an empty-hold loser reads this third line, not the bribe
     // wording and not the all-they-have fallback below.
     else if(isEmptyHoldFive)spoilClause=viewerIsLoser?`Ye give up ${spoilText}.`:`${pn(loser)} gives up ${spoilText}.`;
@@ -681,12 +681,12 @@ const EVENT_NARRATION={
         // shot home. X takes yer cocoa." The spoil is a SECOND sentence here, not the em-dash
         // continuation the score-led head uses, because the head already ends in a full stop.
         if(e.spoilIng)txt=`${windHeadThird} ${pn(e.winner)} takes yer ${spoilText}.`;
-        else if(isBribe)txt=`${windHeadThird} Ye bribe yer way out of givin' away an ingredient with ${spoilText}.`;
+        else if(isBribe)txt=`${windHeadThird} Ye bribe yer way out of givin' away a crate with ${spoilText}.`;
         else if(isEmptyHoldFive)txt=`${windHeadThird} Ye give up ${spoilText}.`;
         else txt=`${windHeadThird} Ye give up all ye have${spoilText?`: ${spoilText}`:""}.`;
       }
       else if(e.spoilIng)txt=`${head} and takes yer ${spoilText}`;
-      else if(isBribe)txt=`${head} — ye bribe yer way out of givin' away an ingredient with ${spoilText}.`;
+      else if(isBribe)txt=`${head} — ye bribe yer way out of givin' away a crate with ${spoilText}.`;
       // FIX-07: mechanical person-swap of the ruled "Ye give up {spoil}." line into this composite's
       // own em-dash-continuation shape, matching the pattern the bribe/all-they-have branches above
       // already use in this same chain.
@@ -1037,7 +1037,7 @@ const BADGE_POOL=[
   // v2 rule 3: no fishing, so the Golden Herring is retired. In its place, the award that
   // actually measures a v2 captain — who spent the most at the docks now that every crate on the
   // board has a price on it (rules 10/11).
-  {key:"cratesBought", img:"doubloon", name:"The Open Purse",                      byline:"Paid the harbourmaster more than any captain on the Sugar Seas.", stat:"Most ingredients bought", unit:"",         scale:4},
+  {key:"cratesBought", img:"doubloon", name:"The Open Purse",                      byline:"Paid the harbourmaster more than any captain on the Sugar Seas.", stat:"Most crates bought", unit:"",         scale:4},
   {key:"dist",         img:"compass",  name:"The Horizon-Chaser's Compass",      byline:"For the salt-crusted soul who sailed further than sense allowed.", stat:"Farthest traveled",  unit:" sq",      scale:45},
   {key:"longestBattle",img:"medal",    name:"The Iron Gut Medal",                byline:"For the crew that refused to sink.",                               stat:"Longest battle",     unit:" rounds",  scale:4},
   {key:"tails",        img:"blackspot",name:"The Black Spot of Bad Tides",       byline:"Survived the curse — worst luck on the Sugar Seas.", stat:"Most tails flipped", unit:" tails", scale:16},

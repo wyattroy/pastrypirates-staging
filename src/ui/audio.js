@@ -73,6 +73,22 @@ const SFX_VOLUME = {
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
 const MUTE_KEY = "pp_muted";
 
+/* ================= THE SOUND CONTROL IS THREE-WAY — his ruling, 2026-09-07 ================= */
+/* "Make sure The audio/mute switch is 3-way— sound+music, sound, mute— repeat again from
+   sound+music."
+
+   THIS CLOSES AN OPEN QUESTION, it does not invent one. docs/AUDIO.md §4 has carried it since
+   2026-08-19 as question 2 — "Three-state cycle instead of two switches?" — with the note that a
+   cycle "adds no new control to a screen where placing the mute button already cost several
+   rounds". He has now ruled, and the ORDER is part of the ruling: full -> sfx -> mute -> full.
+
+   `isMuted()` stays the whole game's question and simply derives from this, so not one of its
+   callers changes: mute is still mute. What is new is that "sound is on" now has two answers, and
+   only the music can tell them apart. scripts/qa/ambience_one_seam_check.mjs holds the order, the
+   wrap, and the three menu labels. */
+const SOUND_MODES = ["full", "sfx", "mute"];
+const SOUND_MODE_KEY = "pp_soundMode";
+
 // D-11 — Claude's discretion (21-CONTEXT.md): the storm sits quieter underneath the short sounds
 // so flips, clashes and dockings stay clear on top of it. Opening value; a by-ear browser pass
 // tunes this one number, never the graph shape.
@@ -80,6 +96,94 @@ const STORM_VOLUME = 0.35;
 // D-09 — Claude's discretion: the fade duration once the storm moment resolves (the next
 // `newround`/`end`). Opening value, same tuning-point discipline as STORM_VOLUME.
 const STORM_FADE_SEC = 1.2;
+
+/* ================= THE AMBIENCE BED — Luis's twelve clips, Wyatt's numbers ================= */
+/* An ocean loop with gulls and creaks scattered over it. Luis's own spec, quoted by Wyatt:
+   "for the ambient, I got you the looping ocean + seagull and creak clips. You'll need to come up
+   with a randomizer for these clips. also randomize the stereo placement as you play them" — the
+   randomiser is this project's job, not his.
+
+   ⛔ DELIBERATELY NOT IN SFX_FILES, AND THAT IS LOAD-BEARING. initAudio() does
+   `await Promise.all(SFX_FILES.map(loadOne))`, so nothing in the game makes a sound until every
+   stem in that array has arrived. docs/AUDIO.md §3 wrote the consequence down before these files
+   existed: "Add a music bed to that list and every sound effect in the game goes silent until the
+   music finishes downloading, potentially the first minute of play on a phone." The bed is 917 KB
+   against the ten stems' 583 KB. It loads on its own path (initAmbience) and fades in whenever it
+   arrives, so a slow phone gets a silent sea and a fully audible game rather than the reverse.
+   scripts/qa/ambience_one_seam_check.mjs fails if a clip ever appears in both arrays. */
+const AMBIENCE_FILES = [
+  "ocean-loop",
+  "gull-1", "gull-2", "gull-3", "gull-4", "gull-5",
+  "creak-1", "creak-2", "creak-3", "creak-4", "creak-5", "creak-6",
+];
+
+/* ⭐ HIS NUMBERS. Wyatt dialled these by hand in the Sea Bed Tuner on 2026-09-07 and pasted the
+   block out of it — https://claude.ai/code/artifact/4623cd73-2340-4611-832f-522ebbf33442 — with
+   "THIS IS AWESOME BUILD IT NOW". They are a ruling, not a default for somebody to improve on.
+   The dB he actually saw on the slider sits beside each one, so the two can never disagree about
+   what he chose. scripts/qa/ambience_one_seam_check.mjs fails if any of them drifts. */
+const AMBIENCE_SEA = 0.596;              // -4.5 dB — the bed everything else sits on
+const AMBIENCE_GULL = 0.168;             // -15.5 dB — well down; raw, the gulls land 12 dB ABOVE the sea
+const AMBIENCE_CREAK = 1.122;            // +1.0 dB — raw, the creaks sit 6 dB UNDER it
+const AMBIENCE_GULL_MEAN_SEC = 10;       // average wait between cries
+const AMBIENCE_CREAK_MEAN_SEC = 13;      // average wait between groans of the hull
+const AMBIENCE_SPREAD = 0.7;             // how far to port/starboard a scattered clip may land
+const AMBIENCE_LIVELINESS = 0.35;        // how much each hit shifts in loudness and pitch
+
+/* Recorded from the same tuner block, NOT WIRED, and written down rather than dropped so nobody
+   re-derives it by ear later. Music needs two things this branch does not have: his own "short 1"
+   edit (it is on Drive; the tuner played a cut of the full master instead), and the three-phase
+   sound button — Music+SFX -> SFX only -> mute — which is a new feature with its own consistency
+   sweep, not a sound swap. Handoff items 4 and 6. */
+const MUSIC_LEVEL = 0.141;               // -17.0 dB
+const MUSIC_PAN = -0.7;                  // 70% to port. His choice; worth a headphone check.
+
+/* "Out on the Ocean", Fiddlers Plus — credited on the Credits page by his instruction, 2026-09-07.
+   34.5s, mono, 540 KB. NOT in SFX_FILES for the same reason the bed is not: initAudio() awaits
+   that whole array. Mono is not an accident worth fixing — a mono source is exactly what pans
+   cleanly, and MUSIC_PAN moves all of it.
+   ⚠ THIS IS A CUT OF THE FULL MASTER, NOT HIS OWN "short 1" EDIT. His edit is on Drive and could
+   not be reached (the Chrome extension was not connected, and the Drive connector returns base64
+   into the session rather than to disk). The important part: MUSIC_LEVEL and MUSIC_PAN above were
+   judged BY HIM against this exact audio in the tuner, so his numbers mean what he heard. Swapping
+   in his edit later is one file and no code. */
+const MUSIC_FILE = "music-ocean";
+
+/* ⭐ THE SONG WAITS A MINUTE BEFORE IT COMES ROUND AGAIN. Wyatt, 2026-09-07: "the song shouldn't
+   immediately restart after it finishes— it should wait a minute."
+   NOTE FOR THE RECORD: an earlier note (handoff §1, 2026-09-06) said "2-minute gap before it
+   repeats". THIS IS THE LATER RULING AND IT WINS — a minute. Recorded rather than silently
+   reconciled, so nobody restores 120 from the older page believing it is the live decision.
+   The track therefore does NOT loop: it ends, this timer runs, and it starts again. A looping
+   source would make this constant dead code, which is what the gate checks for. */
+const MUSIC_GAP_SEC = 60;
+
+/* Measured integrated loudness (EBU R128, ffmpeg), so ONE family level can control files that were
+   delivered up to 8.3 dB apart. The trim is COMPUTED from this table below rather than typed
+   beside it — CLAUDE.md, "nothing is a constant": a re-export from Luis needs one number changed
+   here, not two kept in step. Creak 6 arrives 8.3 dB under creak 3 and takes a ~2.03x boost; at a
+   single flat creak level it would simply never be heard at any setting. */
+const AMBIENCE_LUFS = {
+  "ocean-loop": -32.2,
+  "gull-1": -20.5, "gull-2": -21.1, "gull-3": -19.6, "gull-4": -21.2, "gull-5": -21.0,
+  "creak-1": -38.6, "creak-2": -38.3, "creak-3": -36.4,
+  "creak-4": -36.6, "creak-5": -36.6, "creak-6": -44.7,
+};
+const AMBIENCE_FAMILY = {
+  gull: AMBIENCE_FILES.filter(n => n.startsWith("gull-")),
+  creak: AMBIENCE_FILES.filter(n => n.startsWith("creak-")),
+};
+// clip name -> the multiplier that brings it to its own family's mean loudness.
+const AMBIENCE_TRIM = {};
+for (const fam of Object.keys(AMBIENCE_FAMILY)) {
+  const names = AMBIENCE_FAMILY[fam];
+  const mean = names.reduce((a, n) => a + AMBIENCE_LUFS[n], 0) / names.length;
+  for (const n of names) AMBIENCE_TRIM[n] = Math.pow(10, (mean - AMBIENCE_LUFS[n]) / 20);
+}
+
+// The bed comes up and goes down on a ramp, never a cut — a sea that snaps on is a click.
+const AMBIENCE_FADE_IN_SEC = 2.5;
+const AMBIENCE_FADE_OUT_SEC = 0.9;
 
 /* SHOTCLOCK_SOUND_PLACEHOLDER stood here (D-22, battle-swords standing in for a purpose-made
    time-out alert). Left with the shot clock 2026-08-28 — restore the shopping-list note with it. */
@@ -241,29 +345,64 @@ let visibilityHandlerAttached = false;
 // Seeded lazily, on first isMuted()/setMuted() call — never read at module load.
 let mutedCache = null;
 
-function readMutedFromStorage() {
+/* Reads the three-way mode, MIGRATING the old boolean the first time it finds one. A player who
+   muted the game last week must still find it muted; a player who did not gets the full mix.
+   Anything unrecognised degrades to "full" rather than throwing (T-21-01's discipline). */
+function readModeFromStorage() {
   try {
-    return localStorage.getItem(MUTE_KEY) === "1";
+    const m = localStorage.getItem(SOUND_MODE_KEY);
+    if (SOUND_MODES.includes(m)) return m;
+    return localStorage.getItem(MUTE_KEY) === "1" ? "mute" : "full";
   } catch (e) {
-    return false; // absent/tampered store degrades to unmuted, never a crash (T-21-01)
+    return "full"; // absent/tampered store degrades to everything on, never a crash (T-21-01)
   }
 }
 
 // isMuted()/setMuted() are safe to call before initAudio() has ever run — mutedCache is seeded
 // independently of the audio graph, and applyMasterGain() (called by setMuted()) itself no-ops
 // when ctx is still null.
+/* THE ONE QUESTION EVERY EXISTING CALLER ASKS, and it still means exactly what it meant. Mute is
+   one of the three modes, so play(), applyMasterGain() and panel.js all keep working unchanged —
+   the three-way switch adds a state, it does not move the goalposts under anything. */
 function isMuted() {
-  if (mutedCache === null) mutedCache = readMutedFromStorage();
+  return soundMode() === "mute";
+}
+/* Whether the MUSIC may play. The only thing that separates the two sound-on modes. */
+function musicOn() {
+  return soundMode() === "full";
+}
+function soundMode() {
+  if (mutedCache === null) mutedCache = readModeFromStorage();
   return mutedCache;
 }
-function setMuted(v) {
-  mutedCache = !!v;
+function setSoundMode(m) {
+  mutedCache = SOUND_MODES.includes(m) ? m : "full";
   try {
-    localStorage.setItem(MUTE_KEY, mutedCache ? "1" : "0");
+    localStorage.setItem(SOUND_MODE_KEY, mutedCache);
+    /* The old key is kept in step, not abandoned. Nothing in the game reads it any more, but a
+       player who rolls back to an older build must not silently lose a mute they chose. */
+    localStorage.setItem(MUTE_KEY, mutedCache === "mute" ? "1" : "0");
   } catch (e) {
     // swallowed — mirrors pp_timerOff's own try/catch discipline exactly
   }
   applyMasterGain();
+  /* The bed and the music are the two sounds that never stop on their own, so a mode change has to
+     reach them directly. play()'s own `if (isMuted()) return` guard cannot help: their sources were
+     started minutes ago and are still going. syncBeds() is a no-op when there is nothing running. */
+  syncBeds();
+}
+/* full -> sfx -> mute -> full. The wrap is the ruling, not a nicety: "repeat again from
+   sound+music". Derived from the array so the order lives in exactly one place. */
+function cycleSoundMode() {
+  const i = SOUND_MODES.indexOf(soundMode());
+  setSoundMode(SOUND_MODES[(i + 1) % SOUND_MODES.length]);
+  return soundMode();
+}
+/* Kept because it is exported and reads clearly at a call site that genuinely means "silence
+   everything" — it maps onto the cycle rather than living beside it as a second way to set the
+   same state. Nothing in the game calls it today. */
+function setMuted(v) {
+  setSoundMode(v ? "mute" : "full");
 }
 
 // The one place the master level is decided (D-12/D-13): 0 when muted OR the tab is hidden,
@@ -420,7 +559,11 @@ function audioDiagnosis() {
   if (isMuted()) return "muted";
   if (!ctx || ctx.state !== "running") return "blocked";
   if (!Object.keys(buffers).length) return "nosamples";
-  return "ok";
+  /* THE THIRD SOUND-ON STATE, added here rather than beside the row. This function is already the
+     single thing that decides what the menu says — panel.js's own comment: "ONE ATTRIBUTE CARRIES
+     THE WHOLE TRUTH, so the menu row and the icon cannot disagree." A middle position the row
+     could not name would be a switch the player cannot read. */
+  return musicOn() ? "ok" : "nomusic";
 }
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
@@ -513,6 +656,240 @@ function fadeStorm() {
   } catch (e) {
     // a source already stopped/ended on its own is not an error worth surfacing
   }
+}
+
+/* ================= THE AMBIENCE BED — runtime ================= */
+/* THE SEAM IS THE SCREEN BEING UP, NOT WHO IS COMPUTING THE GAME. startAmbience() has exactly one
+   caller — showGameView() in src/ui/lobby.js — and stopAmbience() exactly two, showHome() and
+   showRoom(). That file's own header states why those three are the right place: "Wired in these
+   three functions rather than at each caller, because every route to these screens goes through
+   them and a route added later cannot forget." Solo, pass-and-play, host, guest and the
+   reload-resume path all reach the board through showGameView() and therefore cannot drift apart.
+
+   THIS IS THE POINT WYATT MADE ABOUT THE DRUMROLL, applied before the mistake rather than after:
+   "DO NOT ARCHITECT DRIFTABLE CODE OR I WILL FIRE YOU" (2026-09-06). A bed started from a host path
+   and a guest path is that same fault wearing a different coat — two screens, two lifetimes, and
+   nothing making them agree. scripts/qa/ambience_one_seam_check.mjs fails the build if a second
+   start seam ever appears anywhere under src/. */
+
+/* A SEPARATE BUFFER STORE, deliberately — not the `buffers` map above. audioDiagnosis() reports
+   "nosamples" from `Object.keys(buffers).length`, which is how a player learns that no mp3 decoded
+   at all. Decoding the bed into that same map would make that check pass while every actual game
+   sound was still missing, turning an honest diagnosis into a false green. */
+const ambBuffers = {};
+let ambBus = null, ambSeaGain = null, ambGullGain = null, ambCreakGain = null;
+let ambSeaSrc = null;
+const ambTimers = {};
+let ambWanted = false;    // the board is on screen
+let ambRunning = false;   // sources are actually live
+let ambLoading = null;    // the in-flight load promise, so a second call does not refetch
+let ambGen = 0;           // bumped on every stop, so a scatter timer from a previous run cannot fire
+
+/* Find the first and last sample carrying real signal, so the bed loops INSIDE the decoded buffer.
+   docs/AUDIO.md §3: "MP3 pads a sliver of silence onto both ends of every file, so a naive MP3 loop
+   clicks each time it comes round... Set loopStart/loopEnd on the AudioBufferSourceNode." That doc
+   says "two numbers per looping file"; these two are MEASURED off the samples at load instead, so a
+   re-export from Luis re-times itself and there is no pair of constants to keep in step. */
+function ambLoopPoints(buf) {
+  const th = 0.0015, ch = buf.getChannelData(0), n = ch.length;
+  let a = 0, b = n - 1;
+  while (a < n && Math.abs(ch[a]) < th) a++;
+  while (b > a && Math.abs(ch[b]) < th) b--;
+  return b > a ? { start: a / buf.sampleRate, end: b / buf.sampleRate } : { start: 0, end: buf.duration };
+}
+
+async function ambLoadOne(name) {
+  const res = await fetch(`${SFX_DIR}${name}.mp3`);
+  const arr = await res.arrayBuffer();
+  ambBuffers[name] = await ctx.decodeAudioData(arr);
+}
+
+/* The bed's own load path — the whole reason these clips are not in SFX_FILES. Lazy, idempotent,
+   and never awaited by anything the player is waiting on. */
+async function initAmbience() {
+  if (ambLoading) return ambLoading;
+  ambLoading = (async () => {
+    await initAudio();                       // idempotent; returns at once if the graph exists
+    if (!ctx) return;                        // unsupported browser — a silent sea, never a crash
+    if (!ambBus) {
+      ambBus = ctx.createGain();
+      ambBus.gain.value = 0;                 // comes up on a ramp in ambStart(), never a cut
+      ambBus.connect(masterGain);            // governed by the one mute/tab-blur ramp, like everything else
+      ambSeaGain = ctx.createGain();   ambSeaGain.gain.value = AMBIENCE_SEA;     ambSeaGain.connect(ambBus);
+      ambGullGain = ctx.createGain();  ambGullGain.gain.value = AMBIENCE_GULL;   ambGullGain.connect(ambBus);
+      ambCreakGain = ctx.createGain(); ambCreakGain.gain.value = AMBIENCE_CREAK; ambCreakGain.connect(ambBus);
+      /* The music sits OUTSIDE ambBus, on its own gain and pan straight into masterGain. It is not
+         part of the bed and must not fade with it — the middle position of his three-way switch
+         silences the song and keeps the sea, which is only possible if they are separate. */
+      musicPanNode = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      musicGain = ctx.createGain();
+      musicGain.gain.value = MUSIC_LEVEL;
+      if (musicPanNode) { musicPanNode.pan.value = MUSIC_PAN; musicGain.connect(musicPanNode).connect(masterGain); }
+      else musicGain.connect(masterGain);   // no panner on this browser: centred music beats none
+    }
+    /* The song rides the bed's load path, not the game's. Same reason and the same 540 KB
+       argument: docs/AUDIO.md §3, "Music must load on its own path and fade in whenever it
+       arrives." */
+    await Promise.all(AMBIENCE_FILES.concat([MUSIC_FILE]).map(ambLoadOne));
+  })().catch(() => { /* a bed that fails to arrive is a quiet game, never a broken one */ });
+  return ambLoading;
+}
+
+// One scattered cry or creak: a fresh source every time, trimmed to its family, jittered by
+// AMBIENCE_LIVELINESS, and panned somewhere inside AMBIENCE_SPREAD. Luis asked for the randomised
+// stereo by name; the loudness and pitch jitter is what stops five gull files sounding like five
+// gull files on repeat.
+function ambFireOne(fam) {
+  const names = AMBIENCE_FAMILY[fam];
+  const name = names[(Math.random() * names.length) | 0];
+  const buf = ambBuffers[name];
+  if (!ctx || !buf) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = 1 + (Math.random() * 2 - 1) * 0.10 * AMBIENCE_LIVELINESS;
+  const g = ctx.createGain();
+  g.gain.value = AMBIENCE_TRIM[name] * Math.pow(10, ((Math.random() * 2 - 1) * 7 * AMBIENCE_LIVELINESS) / 20);
+  const dest = fam === "gull" ? ambGullGain : ambCreakGain;
+  src.connect(g);
+  /* createStereoPanner is absent on some older WebKit builds. A bed with no panning is still a
+     bed; a bed that throws takes the whole voyage's audio down with it. */
+  if (ctx.createStereoPanner) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = (Math.random() * 2 - 1) * AMBIENCE_SPREAD;
+    g.connect(p).connect(dest);
+  } else {
+    g.connect(dest);
+  }
+  src.start();
+}
+
+/* Exponential gaps, not a fixed interval. A metronome is exactly what makes a bed sound like a
+   loop: the ear finds a regular beat within about a minute and then cannot un-hear it. */
+function ambSchedule(fam, gen) {
+  const meanS = fam === "gull" ? AMBIENCE_GULL_MEAN_SEC : AMBIENCE_CREAK_MEAN_SEC;
+  const dt = Math.max(0.3, -Math.log(1 - Math.random()) * meanS);
+  ambTimers[fam] = setTimeout(() => {
+    if (!ambRunning || gen !== ambGen) return;   // a timer from a previous run is dead on arrival
+    ambFireOne(fam);
+    ambSchedule(fam, gen);
+  }, dt * 1000);
+}
+
+function ambStart() {
+  if (ambRunning || !ctx || !ambBuffers["ocean-loop"]) return;
+  ambRunning = true;
+  const gen = ++ambGen;
+  const buf = ambBuffers["ocean-loop"];
+  const lp = ambLoopPoints(buf);
+  ambSeaSrc = ctx.createBufferSource();
+  ambSeaSrc.buffer = buf;
+  ambSeaSrc.loop = true;
+  ambSeaSrc.loopStart = lp.start;
+  ambSeaSrc.loopEnd = lp.end;
+  ambSeaSrc.connect(ambSeaGain);
+  ambSeaSrc.start(0, lp.start);
+  const now = ctx.currentTime;
+  const g = ambBus.gain;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);              // anchor at where it ACTUALLY is — fadeStorm's rule
+  if (ctx.state === "running") g.linearRampToValueAtTime(1, now + AMBIENCE_FADE_IN_SEC);
+  else g.value = 1;                            // frozen clock: a ramp cannot travel, so land it
+  ambSchedule("gull", gen);
+  ambSchedule("creak", gen);
+}
+
+function ambStop() {
+  if (!ambRunning) return;
+  ambRunning = false;
+  ambGen++;                                    // orphan every scatter timer still in flight
+  for (const k of Object.keys(ambTimers)) { clearTimeout(ambTimers[k]); delete ambTimers[k]; }
+  const src = ambSeaSrc;
+  ambSeaSrc = null;
+  if (!ctx || !ambBus) return;
+  const now = ctx.currentTime;
+  const g = ambBus.gain;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0.0001, now + AMBIENCE_FADE_OUT_SEC);  // never literal zero — fadeStorm's note
+  try { if (src) src.stop(now + AMBIENCE_FADE_OUT_SEC + 0.05); } catch (e) { /* already ended */ }
+}
+
+/* ---- the music: plays, ENDS, waits a minute, comes round again ---- */
+let musicSrc = null, musicGain = null, musicPanNode = null, musicTimer = null, musicRunning = false;
+
+function musicPlayOnce() {
+  const buf = ambBuffers[MUSIC_FILE];
+  if (!ctx || !buf) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  /* DELIBERATELY NOT src.loop. Looping would restart the song the instant it ended and make
+     MUSIC_GAP_SEC dead code — his ruling is that it waits. So the track runs to its end, `onended`
+     fires, and the timer below brings it back. */
+  src.connect(musicGain);
+  src.onended = () => {
+    if (src !== musicSrc || !musicRunning) return;   // stopped or superseded: not our business
+    musicSrc = null;
+    musicTimer = setTimeout(() => { if (musicRunning) musicPlayOnce(); }, MUSIC_GAP_SEC * 1000);
+  };
+  src.start();
+  musicSrc = src;
+}
+
+function musicStart() {
+  if (musicRunning || !ctx || !ambBuffers[MUSIC_FILE]) return;
+  musicRunning = true;
+  musicPlayOnce();
+}
+
+function musicStop() {
+  if (!musicRunning) return;
+  musicRunning = false;
+  if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+  const src = musicSrc;
+  musicSrc = null;
+  if (!ctx || !musicGain) return;
+  /* Ramped, never cut — a song stopping dead mid-bar is worse than the silence it makes room for. */
+  const now = ctx.currentTime;
+  const g = musicGain.gain;
+  g.cancelScheduledValues(now);
+  g.setValueAtTime(g.value, now);
+  g.linearRampToValueAtTime(0.0001, now + AMBIENCE_FADE_OUT_SEC);
+  try { if (src) src.stop(now + AMBIENCE_FADE_OUT_SEC + 0.05); } catch (e) { /* already ended */ }
+  // restore the level for the next start, once the ramp has certainly landed
+  setTimeout(() => { if (musicGain && !musicRunning) musicGain.gain.value = MUSIC_LEVEL; },
+             (AMBIENCE_FADE_OUT_SEC + 0.2) * 1000);
+}
+
+/* THE ONE RECONCILER, and it now answers for both continuous sounds. Five things can change
+   whether the sea or the song should be audible — the board coming up, the board going away, the
+   sound mode changing, and the clips finally arriving — and every one of them calls this rather
+   than starting or stopping anything itself. That is what stops a "start" and a "stop" racing each
+   other into a bed that is running with nobody able to say so.
+
+   THE TWO ANSWERS DIFFER BY EXACTLY ONE TERM. The sea plays whenever sound is on at all; the music
+   additionally needs the full mode. That single difference IS the middle position of his three-way
+   switch, expressed once. */
+function syncBeds() {
+  const soundOn = ambWanted && !isMuted();
+  if (soundOn && ambBuffers["ocean-loop"]) ambStart(); else ambStop();
+  if (soundOn && musicOn() && ambBuffers[MUSIC_FILE]) musicStart(); else musicStop();
+}
+
+/* MUTE STOPS THE SEA OUTRIGHT rather than only pulling the master bus to zero. Wyatt, 2026-09-06:
+   "yes, make mute skip the sound entirely" — asked because a muted Safari still lit the tab's audio
+   indicator on every cue, so the toggle looked broken. A LOOPING bed is that same complaint with a
+   stopwatch on it: it would hold the indicator lit for the entire voyage. play() already returns
+   early when muted; this is the same rule for the sound that never stops on its own. */
+
+function startAmbience() {
+  ambWanted = true;
+  initAmbience().then(syncBeds).catch(() => {});
+  syncBeds();                                  // already loaded from an earlier voyage: start now
+}
+
+function stopAmbience() {
+  ambWanted = false;
+  syncBeds();
 }
 
 // The impure dispatcher — called once per event that just arrived, on both host (liveRender())
@@ -623,4 +1000,13 @@ export {
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,
   BATTLE_ENGAGE_SOUND, playBattleEngage,
+  /* The bed. startAmbience/stopAmbience have exactly three call sites between them, all in
+     src/ui/lobby.js's three screen functions — see the runtime block's header, and the gate that
+     holds it to that. The constants are exported so a headless harness can assert his tuned values
+     by name without a browser, the same way WIN_SOUND and CANNON_SOUND are. */
+  AMBIENCE_FILES, AMBIENCE_LUFS, AMBIENCE_TRIM, startAmbience, stopAmbience, initAmbience,
+  AMBIENCE_SEA, AMBIENCE_GULL, AMBIENCE_CREAK,
+  AMBIENCE_GULL_MEAN_SEC, AMBIENCE_CREAK_MEAN_SEC, AMBIENCE_SPREAD, AMBIENCE_LIVELINESS,
+  MUSIC_LEVEL, MUSIC_PAN, MUSIC_FILE, MUSIC_GAP_SEC,
+  SOUND_MODES, SOUND_MODE_KEY, soundMode, setSoundMode, cycleSoundMode, musicOn,
 };

@@ -43,6 +43,14 @@ import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN } from "./util.js";
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
 import { syncBoardSizing } from "./board.js";
+/* THE AMBIENCE BED RIDES THE THREE SCREEN FUNCTIONS BELOW, and this file's own header already
+   states the reason: "Wired in these three functions rather than at each caller, because every
+   route to these screens goes through them and a route added later cannot forget." The bed is a
+   property of the BOARD BEING ON SCREEN — never of who is computing the game — so solo,
+   pass-and-play, host, guest and the reload-resume path all start and stop it identically and
+   cannot drift apart. That is Wyatt's drumroll ruling applied before the mistake instead of after
+   it, and scripts/qa/ambience_one_seam_check.mjs fails the build if a second seam appears. */
+import { startAmbience, stopAmbience } from "./audio.js";
 // playtest 18: passGate's /4 form is a centre-stage ceremony built through panel() — same
 // hand-built stage pattern as the bake-off intro and the black-market beat. No cycle: panel.js
 // imports nothing from this file.
@@ -320,6 +328,7 @@ const showBackdrop=on=>{const b=$("welcomeBackdrop");if(b)b.style.display=on?"bl
    Wired in these three functions rather than at each caller, because every route to these screens
    goes through them and a route added later cannot forget. */
 export function showHome(){
+  stopAmbience();               // leaving the board: the sea goes with it
   showStep("stepChoose");
   $("lobby").style.display="flex";$("lobbyRoom").style.display="none";
   showBackdrop(true);
@@ -328,6 +337,7 @@ export function showHome(){
   hideBootLoader();
 }
 export function showRoom(){
+  stopAmbience();               // the room screen is not the board either
   $("lobby").style.display="none";$("lobbyRoom").style.display="flex";
   showBackdrop(true);
   $("game").style.display="none";$("game").classList.add("bg-blurred");
@@ -336,6 +346,7 @@ export function showRoom(){
   hideBootLoader();
 }
 export function showGameView(){
+  startAmbience();              // THE one seam — every route to the board passes through here
   $("lobby").style.display="none";$("lobbyRoom").style.display="none";
   showBackdrop(false);
   $("game").style.display="";$("game").classList.remove("bg-blurred");

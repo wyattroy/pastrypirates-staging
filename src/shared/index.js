@@ -215,14 +215,7 @@ const TET=[
   [[0,0],[1,0],[2,0]],[[0,0],[1,0],[0,1]],
   [[0,0],[1,0],[2,0],[3,0]],[[0,0],[1,0],[0,1],[1,1]],
   [[0,0],[1,0],[2,0],[0,1]],[[0,0],[1,0],[1,1],[2,1]],[[0,0],[1,0],[2,0],[1,1]]];
-/* sugar: "Crystal Sugar" -> "Sugar Cane", and it is a STRUCTURAL find rather than a word choice.
-   Six of the seven ingredients name the RAW thing a baker transforms; sugar alone named the refined
-   product. "Cacao Pods -> chocolate" asks a player to imagine something; "Crystal Sugar -> sugar"
-   asks nothing. GRAVEYARD, do not re-propose: Sugar Cubes ("no one would ever bake with sugar
-   cubes"), Sugar Loaves ("loaf" primes BREAD in a baking game), Lumps, Casks, Jars, Bricks, and
-   Sugar Gems — which he approved and then withdrew minutes later: "as a human, it just doesn't
-   quite make intuitive sense". */
-const ING_NAME={wheat:"Toasty Wheat",dairy:"Fresh Milk",sugar:"Sugar Cane",eggs:"Speckled Eggs",
+const ING_NAME={wheat:"Toasty Wheat",dairy:"Fresh Milk",sugar:"Crystal Sugar",eggs:"Speckled Eggs",
   cocoa:"Cacao Pods",vanilla:"Vanilla Beans",spice:"Hot Cinnamon"};
 // the plain baker's term each pirate ingredient stands in for — shown as a gloss on recipe cards
 const ING_PLAIN={wheat:"flour",dairy:"butter & milk",sugar:"sugar",eggs:"eggs",
@@ -244,27 +237,11 @@ const DOCK_PLACE={sugar:"Glitter Bay",vanilla:"Custard Key",spice:"the Spice Isl
 //
 // The name keeps every adjective that belongs to it ("Luscious", "Red-Hot", "Sand-Speckled"). Note
 // `eggs`: its prefix carries no "of" — that asymmetry is exactly why this is data and not a pattern.
-/* HIS OWN WORDING, 2026-09-03, and it supersedes my longer draft. Measured: his averages 24.0
-   characters against 25.9 before and 30.3 for mine — "shorter, easier to read" is right, and his
-   is the shortest of the three.
-   FIVE NAMES FOR ONE OBJECT BECOME ONE. "a jar of", "a sack of", "some jugs of", "a pod of",
-   "a dozen", "sprigs of" — every dock said the thing differently, and four of the seven names did
-   not even match the recipe card beside them. Now all seven read "a crate of X", and Cacao Pods,
-   Vanilla Beans, Speckled Eggs and Sugar Cane match their cards exactly.
-   AND THE PHRASE IS THE TEACHING. His reversal of r30: keep the container words EVERYWHERE rather
-   than only in the arrival line, so they "introduce the idea that you buy a crate of an ingredient,
-   so that this doesn't come completely out of the blue at the end of the game during the bakeoff."
-   dockFlavor() is used in exactly three places — the dock narration, the BUY PROMPT and the black
-   market — and the buy prompt is the one moment a captain actually acquires one. r30 as first
-   written would have deleted the teaching moment. */
-const DOCK_FLAVOR={sugar:{prefix:"a crate of",name:"Sugar Cane"},vanilla:{prefix:"a crate of",name:"Vanilla Beans"},
-  spice:{prefix:"a crate of",name:"Cinnamon Sticks"},wheat:{prefix:"a crate of",name:"Wheat Sheaves"},dairy:{prefix:"a crate of",name:"Milk Jugs"},
-  eggs:{prefix:"a crate of",name:"Speckled Eggs"},cocoa:{prefix:"a crate of",name:"Cacao Pods"}};
+const DOCK_FLAVOR={sugar:{prefix:"a jar of",name:"Crystal Sugar"},vanilla:{prefix:"a bundle of",name:"Velvety Vanilla Beans"},
+  spice:{prefix:"sprigs of",name:"Red-Hot Cinnamon"},wheat:{prefix:"a sack of",name:"Toasty Wheat"},dairy:{prefix:"some jugs of",name:"Fresh Milk"},
+  eggs:{prefix:"a dozen",name:"Sand-Speckled Eggs"},cocoa:{prefix:"a pod of",name:"Luscious Cacao Beans"}};
 const dockPlace=x=>DOCK_PLACE[x]||"the island";
-// UNCHANGED IN SIGNATURE. The VALUES moved on 2026-09-03 (his seven words above) — the note below
-// described the F5 change and claimed the joined strings stayed byte-identical, which stopped being
-// true the moment those words became his rather than mine. Corrected in place rather than deleted:
-// it still records WHY the {prefix,name} split exists. Two things depended on the values,
+// UNCHANGED in signature AND in value — all 7 joined strings stay byte-identical, because two things
 // depend on that: the seven `misc:dockFlavor:<ing>` audit cards render dockFlavor(ing) directly (so
 // Wyatt's seven reviewed rows read exactly as they did), and the neutral dock narration's own
 // wording is not what F5 changes. scripts/narration_test.js pins all 7 against hardcoded literals.  [UNGATED-IN-4: narration_test.js reads the root tree, not this one]
