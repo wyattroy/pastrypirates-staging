@@ -1239,10 +1239,28 @@
      seen. z-index above every modal (1000/1001) so it stays visible and tappable even while the
      welcome modal is open, rather than being hidden behind its backdrop. */
   #legalFooter { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1002;
-    display: flex; justify-content: center; gap: 14px; padding: 5px 10px;
-    font-size: 11px; line-height: 1.4; pointer-events: none; }
-  #legalFooter a { pointer-events: auto; color: var(--ink); opacity: .55; text-decoration: underline; }
-  #legalFooter a:hover { opacity: .9; }
+    display: flex; justify-content: center; gap: 14px; padding: 6px 10px;
+    font-size: 12px; line-height: 1.4; pointer-events: none; }
+  /* WYATT, 2026-09-06, having played a whole solo voyage on his phone: "Privacy policy and about
+     links on index need to be lighter, they're almost invisible."
+     MEASURED BEFORE CHANGING IT, at 390x844 on staging: they rendered `rgb(31, 66, 73)` at
+     `opacity: .55` — dark teal at just over half, on a blurred photographic backdrop whose own
+     tone varies square to square. Opacity was doing the invisibility; the text-shadow is what
+     makes one colour survive a background that is light in places and dark in others, which is
+     why this is not simply a brighter ink. */
+  #legalFooter a { pointer-events: auto; color: var(--ink); opacity: 1; text-decoration: underline;
+    text-shadow: 0 1px 2px rgba(255,255,255,.75), 0 0 6px rgba(255,255,255,.55); }
+  #legalFooter a:hover { text-decoration-thickness: 2px; }
+  /* ...AND THE SECOND HALF OF THE SAME RULING: "It should only be visible on the pre-game screen,
+     not any time during the game." It never had a hiding rule at all — `position:fixed` at
+     `z-index:1002` meant it outranked every in-game surface and sat over the captains box for the
+     whole voyage, which is exactly what his screenshot shows. `body.pp4Stage` is the class
+     stage.js adds when the board mounts (src/ui/stage.js:2121), so it is the one fact that is
+     true for solo, pass-and-play and crew alike — one condition, not three kept in step (rule:
+     one display path). stage.js's `phoneFootReserve` reads the REAL computed style rather than a
+     typed number, so it sees `display:none` here and returns 0 by itself — the captains box gets
+     that strip of screen back with no second edit, and nothing has to remember these two agree. */
+  body.pp4Stage #legalFooter { display: none; }
   /* NAME-02 (Wyatt, 2026-08-01): "i think maybe the modal pops up BEHIND the join crew modal —
      because the background blur changes color, but i cannot see it until i click back."
      Exactly right. Every .modalOverlay shares z-index:1000, so which one wins is decided purely by
@@ -1618,7 +1636,18 @@
        element is position:fixed, per the note above), so its own box collapses to near-0 tall
        without this — and util.js's vwPx()/vhPx() read that same box, so a collapsed body would
        have handed every camera/layout calculation on the page a ~56px-tall "screen". */
-    body.pp4Stage { max-width:var(--pp4W, 430px); min-height:100vh; margin:0 auto;
+    /* T-266, Wyatt 2026-09-06 on an iPhone: "Captains box cut off by a blue strip at bottom of
+       screen in safari mobile." `100vh` on iOS Safari is the LARGE viewport — the height the page
+       would have if the browser toolbar were hidden — so body measured TALLER than the strip of
+       screen he could actually see. Everything downstream inherits that error, because vhPx()
+       (src/ui/util.js:1246) reads THIS box: the board, the camera and #pp4Cap's `bottom:0` were
+       all placed against a screen ~60-90px longer than the one in his hand, and the captains
+       card's last row landed underneath Safari's own bar. `dvh` is the DYNAMIC viewport — it
+       tracks the toolbar as it collapses and expands, which is the measurement the layout wanted
+       all along. The 100vh line stays directly above as the fallback for any browser without
+       `dvh`; a browser that understands the second declaration overwrites the first, and one that
+       does not simply ignores it and behaves exactly as it does today. */
+    body.pp4Stage { max-width:var(--pp4W, 430px); min-height:100vh; min-height:100dvh; margin:0 auto;
       transform:translateZ(0); --pp4CapGap:14px; }   /* the gap between board and captains column — read by computeStageGeometry() too, so it is written once */
   }
   /* D-31 SIDE-BY-SIDE — computeStageGeometry() adds this class only when the window is wide
@@ -1644,8 +1673,10 @@
   body.pp4Stage.pp4Side #pp4Col { display:flex; flex-direction:column; gap:var(--pp4CapGap);
     position:fixed; left:calc(100% + var(--pp4CapGap)); top:var(--pp4Top, 0px);
     width:var(--pp4CapColW, 300px); max-height:calc(100vh - var(--pp4Top, 0px) - 16px);
+    max-height:calc(100dvh - var(--pp4Top, 0px) - 16px);
     /* item 21 (his pick): the column fills the page's height so the menu can bottom-align */
     height:calc(100vh - var(--pp4Top, 0px) - 16px);
+    height:calc(100dvh - var(--pp4Top, 0px) - 16px);
     overflow-y:auto; z-index:22; }
   body.pp4Stage.pp4Side #pp4Col > #pp4Cap { position:static; left:auto; right:auto; top:auto;
     bottom:auto; width:auto; max-width:none; max-height:none; overflow:visible; flex:0 0 auto; }

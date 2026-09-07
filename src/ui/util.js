@@ -767,6 +767,65 @@ const EVENT_NARRATION={
   // table. It is the same field the engine pays from and the same field the Pass button states, so
   // a line that tells a captain what they were paid cannot drift from what they were actually
   // paid. The wording is Wyatt's and is fixed; only the number derives.
+  /* THE POST-STORM SUMMARY — the line Wyatt found missing on 2026-09-06, playing solo to the end.
+     "Solo: storm summary narration is missing."
+
+     IT WAS MISSING IN EVERY MODE, not just solo, and this is the other half of an August ruling
+     that only ever shipped its first half. ITEM 8 (Wyatt, 2026-08-23c): "The storm narrated the
+     fact that flaky jack was blown into the trade winds — it shouldn't. trade winds, like
+     everything else, should be reported once with the post-storm summary." The four mid-storm
+     lines (windmove, blownOut, anchorHold, blocked) and the tradewind bubble were duly withdrawn.
+     THE SUMMARY THAT WAS MEANT TO REPLACE THEM WAS NEVER WRITTEN. `stormSummaryEvent` has been
+     emitting a full payload — moved/held/shipHeld/blown/swept — into a table with no entry for
+     it, so describeFor() returned null at line 789 and the bubble never appeared. A storm
+     announced itself in the day header and then moved four ships in total silence.
+
+     HIS SHAPE, chosen from the question UI 2026-09-06: name the captains, group the outcomes.
+     Grouping is what keeps it one line instead of four on a phone — the engine already hands us
+     the seats bucketed by outcome, so this reads them rather than re-deriving anything.
+     shipHeld is the bucket that exists BECAUSE captains were being silently omitted (see
+     noteStormOutcome: 71 omitted across 300 seeded games), so it gets a clause of its own here.
+     Every bucket the engine can fill has one; a bucket cannot be added there without this line
+     going quiet about it, which is the failure this whole entry is repairing. */
+  stormSummary:(e,at,cellPx,viewerSeat)=>{
+    const dir=DIRNAME[e.dir];
+    /* "ye" wherever the local player is in the group, exactly as the trade and battle lines do —
+       a summary that calls you by name while addressing everyone else in second person is the
+       inconsistency rule "one display path" exists to stop. */
+    const list=(seats)=>{
+      const names=seats.map(i=>isLocalTo(i,viewerSeat)?"<b>ye</b>":pn(i));
+      if(names.length<=1)return names[0]||"";
+      if(names.length===2)return `${names[0]} an' ${names[1]}`;
+      return `${names.slice(0,-1).join(", ")} an' ${names[names.length-1]}`;
+    };
+    /* Second person takes the plural verb ("ye drop"), so a group is singular ONLY when it is one
+       captain who is not you. THIS IS THE BUG THE HARNESS CAUGHT: the first draft built every
+       clause in the passive ("X is driven"), which read fine in a list and produced the fragment
+       "The storm Crustbeard is driven 3 squares NORTH!" whenever it was the only clause. */
+    const sng=(seats)=>seats.length===1&&!isLocalTo(seats[0],viewerSeat);
+    /* TWO GRAMMATICAL SUBJECTS, KEPT APART. What the storm DOES to a captain takes the storm as
+       its subject, so those clauses share the one "The storm …" opener and read as one sentence
+       however many of them fire. What a captain does about it takes the captain, so those follow
+       the dash. Wyatt's own shape, chosen from the question UI 2026-09-06:
+         "The storm drives Flaky Jack and Wyargh WEST — Crustbeard drops anchor and holds fast…" */
+    const byStorm=[],byCaptain=[];
+    if(e.moved.length) byStorm.push(`drives ${list(e.moved)} ${STORM_PUSH} squares ${dir}`);
+    if(e.blown.length) byStorm.push(`blows ${list(e.blown)} clean off the dock`);
+    if(e.swept.length) byStorm.push(`sweeps ${list(e.swept)} into the trade winds`);
+    if(e.held.length)  byCaptain.push(`${list(e.held)} ${sng(e.held)?"drops":"drop"} anchor an' ${sng(e.held)?"holds":"hold"} fast`);
+    if(e.shipHeld.length)byCaptain.push(`${list(e.shipHeld)} ${sng(e.shipHeld)?"is":"are"} pinned by the hull ahead`);
+    const join=(a)=>a.length<=1?(a[0]||""):a.length===2?`${a[0]} an' ${a[1]}`:`${a.slice(0,-1).join(", ")} an' ${a[a.length-1]}`;
+    /* The engine already refuses to emit this event when every bucket is empty ("say nothing
+       rather than narrate an absence"), so one of these two is always populated — but a narration
+       builder that CAN return an empty sentence is one bad merge away from showing him "🌀 !". */
+    if(!byStorm.length&&!byCaptain.length)return null;
+    const txt=byStorm.length
+      ? `🌀 The storm ${join(byStorm)}${byCaptain.length?` — ${join(byCaptain)}`:""}!`
+      : `🌀 The storm blows through — ${join(byCaptain)}!`;
+    return {cls:"storm",txt,
+      caps:e.moved.concat(e.blown,e.swept).map(i=>[i,"🌀 blown by the storm"])
+          .concat(e.held.concat(e.shipHeld).map(i=>[i,"⚓ held fast"]))};
+  },
   pass:(e,at,cellPx,viewerSeat)=>({
     txt:`🌊 ${seaLine(e.sea,isLocalTo(e.p,viewerSeat),pn(e.p))} <span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>`,
     // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
