@@ -438,6 +438,41 @@ function play(name, opts) {
 function playFlip() {
   play("coin-flip");
 }
+/* THE SOUND MUST LAST AS LONG AS THE COIN SPINS — Wyatt, 2026-09-06: "the guest docking coin flip
+   lasted too long -- it kept flipping longer than the sound file lasted."
+
+   He is describing a seam, not a wrong number. The spin is painted the instant the coin is tapped
+   and runs until a RESULT ARRIVES; on a guest that result comes over the wire, so its length is the
+   network's to decide and cannot be known in advance. The sound was fired exactly once, at
+   setFlipCoin("spin") (src/ui/board.js:2407). Whenever the wire took longer than one coin-flip
+   sample, the player watched a coin spin in silence — and docking IS a coin flip, so it is the
+   moment most likely to show it.
+
+   CAPPING THE SPIN WOULD BE THE WRONG FIX: landing a face before the result is known is a lie
+   about the game. So the audio carries the picture instead.
+
+   THE INTERVAL IS DERIVED, NEVER TYPED — the decoded buffer's own duration. Re-recording the sample
+   at a different length re-times this automatically, and there is no second number to keep in step.
+   The absolute ceiling below is a LEAK GUARD, not a game rule: it exists only so a caller that
+   never calls stop can never leave a sound looping for the rest of the session. */
+let flipLoopTimer = null;
+function startFlipSpinSound() {
+  stopFlipSpinSound();
+  playFlip();
+  const b = buffers["coin-flip"];
+  if (!b || !b.duration) return;                 // not decoded yet: one shot is all we can honestly give
+  const everyMs = Math.max(120, b.duration * 1000);
+  const startedAt = Date.now();
+  const tick = () => {
+    if (Date.now() - startedAt > 30000) { stopFlipSpinSound(); return; }  // leak guard, see above
+    playFlip();
+    flipLoopTimer = setTimeout(tick, everyMs);
+  };
+  flipLoopTimer = setTimeout(tick, everyMs);
+}
+function stopFlipSpinSound() {
+  if (flipLoopTimer) { clearTimeout(flipLoopTimer); flipLoopTimer = null; }
+}
 
 // D-09: a no-op when no storm node is in flight. Otherwise ramps the CURRENT gain value down to a
 // small epsilon over STORM_FADE_SEC — never to literal zero, which can throw or hitch in some
@@ -563,7 +598,7 @@ function playBattleEngage() {
 }
 
 export {
-  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted, audioRunning,
+  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

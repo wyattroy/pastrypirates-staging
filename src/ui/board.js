@@ -156,7 +156,7 @@ import {
 import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
-import { playFlip } from "./audio.js";
+import { playFlip, startFlipSpinSound, stopFlipSpinSound } from "./audio.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
 // see the file header's deviation note.
@@ -1459,9 +1459,23 @@ export { positionChatBubble, removeChatBubble };
 // event broadcast all belong to the event stream, and every storm outcome that changes any of them
 // emits its own event and goes through the full liveRender()/render() path exactly as before. The
 // live-players-as-a-seat-array idiom is the same one drawBoard() already uses at :244.
+/* Is the board currently holding the boot placeholder rather than a real voyage? Read off the
+   game object itself (seedIdleGameState), so it cannot disagree with reality. */
+function idlePlaceholder(){ return !!(appState.game && appState.game.__idle); }
+/* Ships stay HIDDEN, not parked, while the placeholder is up. Hiding is the honest picture: we do
+   not yet know where anybody is. Parking them paints a confident lie — four captains at Tortuga —
+   which is exactly what he saw. Cleared the moment a real game replaces the placeholder. */
+function hideShipsWhileIdle(){
+  for(const el of shipEls) if(el) el.style.visibility="hidden";
+}
+function unhideShips(){
+  for(const el of shipEls) if(el&&el.style.visibility==="hidden") el.style.visibility="";
+}
 export function renderLiveShips(){
   if(appState.replaying)return;      // reload-replay rebuilds state silently — same guard liveRender() uses
   if(!shipEls.length)return;         // board not built yet
+  if(idlePlaceholder()){hideShipsWhileIdle();return;}
+  unhideShips();
   const live=appState.game.players;  // shipXY() only reads .pos off each entry
   live.forEach((player,i)=>{
     const [x,y]=shipXY(player.pos,i,live,cell);
@@ -1671,6 +1685,8 @@ export function showSeatCoins(seat,coins){
   el.innerHTML=`${iconImg(COIN_IMG)} ${coins}`;
 }
 export function render(){
+  if(idlePlaceholder()){if(shipEls.length)hideShipsWhileIdle();return;}
+  if(shipEls.length)unhideShips();
   const e=appState.game.events[appState.evIdx];if(!e)return;
   const st=e.state;
   // recipes are secret: only the local human's own recipe target is revealed.
@@ -2151,6 +2167,24 @@ export function seedIdleGameState(){
   try{
     const strategies=["pirate","trader","balanced","rusher"];
     appState.game=new Game(roundCfg(strategies),Math.floor(Math.random()*1e9),true);
+    /* WYATT, 2026-09-06: "after refreshing the page, the boats temporarily reset to tortuga
+       instead of showing up at their correct positions. the moment your boat moves, all boats go
+       to their correct spots."
+
+       THIS OBJECT IS WHAT HE WAS LOOKING AT. It is a throwaway placeholder — four bots, a random
+       seed, every ship on its start square — seeded only to hold up the "appState.game always
+       exists" invariant. The comment at its call site says "draws nothing", and that WAS true when
+       it was written. It is not true on the resume path: src/orchestrator.js calls showGameView()
+       three lines BEFORE beginGame() replaces this object, because the "⚓ Reconnecting to yer
+       voyage…" message needs the board visible to sit on. So the board's first paint after any
+       refresh comes from here — hence four boats stacked on Tortuga and every coin reading "–",
+       until the first real update lands.
+
+       THE FLAG LIVES ON THE OBJECT IT DESCRIBES, which is the whole point: beginGame() assigns a
+       brand-new Game over the top, so the mark disappears with the thing it marked. There is no
+       teardown anyone can forget and no second place that has to agree (rule: what makes these two
+       agree? — nothing has to). */
+    appState.game.__idle=true;
     appState.roster=strategies.map(s=>({bot:true,strat:s}));
     appState.mySeat=null;
   }catch(err){console.error("idle game state failed to seed",err);}
@@ -2364,13 +2398,20 @@ export function setFlipCoin(state){
   // later (setFlipActive below) — re-entering the state ye are already in must not re-play the
   // sound, or every flip is heard twice.
   const wasSpin=el.classList.contains("spin");
+  /* THE SPIN SOUND STOPS HERE, ON THE ONE LINE THAT ENDS EVERY SPIN. Every state change clears the
+     classes through this line — a landed face, a re-arm, a disarm, a cancelled prompt — so stopping
+     the loop here means it cannot outlive the picture by ANY route, including ones nobody has
+     written yet. Placing it in the "H"/"T" branches instead would have covered the two exits I
+     happened to think of. (Wyatt, 2026-09-06: the flip "kept flipping longer than the sound file
+     lasted" — the fix is the sound following the coin, and this is the half that makes it stop.) */
+  stopFlipSpinSound();
   el.classList.remove("heads","tails","spin","wait","active");el.onclick=null;el.style.backgroundImage="";
   if(state==="H"){el.classList.add("heads");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent="";}
   else if(state==="T"){el.classList.add("tails");el.style.backgroundImage=`url(${FLIP_TAILS_IMG})`;el.textContent="";}
   // D-49: the flip's clock starts on the frame the spin is PAINTED, and only on the frame it
   // actually starts — the `wasSpin` guard that already stops the sound doubling is the same
   // guard that stops broadcastFlip's repaint a beat later restarting the timer under the tap.
-  else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";if(!wasSpin){flipSpinAt=performance.now();playFlip();}}
+  else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";if(!wasSpin){flipSpinAt=performance.now();startFlipSpinSound();}}
   else{el.classList.add("wait");el.textContent="";}
 }
 export function setFlipActive(onClick){
