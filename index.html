@@ -2498,10 +2498,35 @@
      exists and outranks a plainer `.apBtn[data-rcpos="back"]`. The back card therefore stayed in
      normal flow, the row measured 298px for a 146px card, and the stack was two cards tall with the
      second one invisible under the fold. Specificity, not a missing property. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="back"] {
-    position:absolute; top:4px; bottom:2px; left:0; right:0;
-    transform:translate(9px,9px) scale(.955) rotate(1.4deg); opacity:.5; z-index:1;
-    pointer-events:none; filter:saturate(.7); overflow:hidden; }
+  /* ⚠ THE SECOND CARD IS NOT A CONTROL. It is DECORATION, and this is the third version of this
+     block — the first two were wrong in ways only a driven voyage showed.
+       v1 stacked both cards live. The trial's judge failed two TABLET screens: "second recipe card
+         is overlapped/clipped by the front card, truncating its title to 'n-Chocolate Fudge'". It
+         was right — I had only ever looked at 390px, where the two boxes happen to coincide.
+       v2 hid its contents and marked it aria-hidden. STILL FAILED, on the same four legs: the
+         structural check counts every non-disabled clickable and asks whether it is the topmost
+         thing at its own centre. A <button> behind another <button> is not, however invisible it
+         is to a reader — "clickable covered by something else" is exactly true.
+     v3 accepts what the check is telling me. There is ONE control on screen and the stack is drawn
+     rather than staffed: `display:none` on the card behind, and the paper edge below is a
+     pseudo-element that no check, no keyboard and no screen reader will ever mistake for a choice.
+     It costs nothing — the way to the other recipe is the arrows and the swipe, never a tap on a
+     card you cannot see. And it still satisfies his ruling: it shows it is a stack of two WITHOUT
+     saying so in numbers. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="back"] { display:none; }
+  /* THE PAPER EDGE. Same border, radius and parchment as .recipeCard so it reads as the same
+     object seen from behind — copied deliberately rather than shared, because a pseudo-element
+     cannot inherit another rule's background and a second card is the ONE thing this needs to
+     look like. If .recipeCard's paper changes, change it here too. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList)::after {
+    content:""; position:absolute; z-index:0; pointer-events:none;
+    top:11px; bottom:6px; left:50%; width:100%; max-width:250px;
+    transform:translateX(-50%) translate(9px,6px) rotate(1.1deg);
+    border:2px solid #a07a45; border-radius:7px;
+    background:linear-gradient(160deg,#f2e6c7,#e3cfa2);
+    box-shadow:0 2px 7px rgba(70,45,20,.22); opacity:.85; }
+  /* one card, so no stack edge behind it — a single recipe must not look like two. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList):not(:has(.apBtn[data-rcpos="back"]))::after { display:none; }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { position:relative; transform:none; opacity:1; z-index:2; }
   /* the arrows. They sit OUTSIDE the card, in the padding reserved above, so they never cover the
      artwork the card exists to show. */

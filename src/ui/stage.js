@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.1-staging@b5ddb501";
+const PP4_STAMP = "2026.09.07.2-staging@681a307b";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2121,14 +2121,29 @@ let rcKey = null;
 function mountRecipeStack(ap){
   const cards = [...ap.querySelectorAll(".apBtn")].filter(b => b.querySelector(".recipeList"));
   if (cards.length < 2){ rcKey = null; return; }
-  const key = cards.map(c => c.innerHTML.length).join("|") + ":" + cards.length;
+  /* ⚠ THE KEY MUST NOT MOVE WHILE THE PICKER IS UP. It was `innerHTML.length`, which CHANGES the
+     moment the "Bake this!" pill is added — so selecting a card remounted the whole stack on the
+     next frame: arrows destroyed and rebuilt, and the dotted course re-charted, every frame the
+     pill was on screen. The recipe titles are what actually identifies this picker, and they are
+     fixed for as long as it is up. */
+  const key = cards.map(c => (c.querySelector(".recipeTitle") || {}).textContent || "").join("|");
   if (key === rcKey) return;
   rcKey = key;
 
   let front = 0;
   const row = cards[0].parentElement;
   const paint = () => {
-    cards.forEach((c, i) => c.dataset.rcpos = (i === front ? "front" : "back"));
+    cards.forEach((c, i) => {
+      const isFront = i === front;
+      c.dataset.rcpos = isFront ? "front" : "back";
+      /* THE HIDDEN CARD IS HIDDEN FROM EVERYTHING, not just from the eye. It is a real <button>
+         sitting behind another one: without this it stays in the tab order and is announced by a
+         screen reader as a choosable recipe that cannot be reached, and the sea trial's structural
+         check found it exactly that way on four legs — "clickable covered by something else".
+         pointer-events:none already stopped the mouse; these stop the keyboard and the reader. */
+      c.setAttribute("aria-hidden", String(!isFront));
+      c.tabIndex = isFront ? 0 : -1;
+    });
     chartFrontRecipe(cards[front]);
   };
   const step = (d) => { front = (front + d + cards.length) % cards.length; paint(); };
