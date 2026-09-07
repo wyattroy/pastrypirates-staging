@@ -875,6 +875,57 @@
   #rimHost { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
   #rimHost > div { position: absolute; }
   #rimHost img { display: block; width: 100%; height: 100%; }
+  /* THE ONWARD GUIDE'S MARKER LAYER (src/ui/course.js). The dotted course itself is STATIC, so it
+     is SVG inside #board and the camera carries it for free on the viewBox. Only the treasure X
+     pulses, and a continuously animated thing has to be HTML — Chrome does not composite an SVG
+     transform animation at all (~62 layouts/sec as SVG, ZERO as HTML, measured twice on this
+     project). So the marker gets this layer, and #courseHost is registered in CAM_HTML_LAYERS.
+     z-index 1, LEVEL WITH #rimHost AND BELOW #sailHost(2), and that is the rule rather than a
+     preference: the course is scenery, the gold squares are a choice, and scenery must never
+     cover a choice. */
+  /* "WHERE DID MY RECIPE GO?" — his own ask. The captains box blinks ONCE as the line lands.
+     A sentence saying `below` and a box that blinks are the same instruction twice, and the second
+     one works without being read.
+     OUTLINE AND box-shadow ONLY, never a size or a position: the captains box is a flex column
+     that other things are measured against, so animating its geometry would move the board. Two
+     slow beats rather than a flash — this is a signpost, not an alarm. */
+  .pp4StowFlash { animation: pp4StowBlink 1.6s ease-in-out 2; border-radius: 12px; }
+  @keyframes pp4StowBlink {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,166,35,0); }
+    45%      { box-shadow: 0 0 0 3px rgba(245,166,35,.85), 0 0 18px rgba(245,166,35,.45); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pp4StowFlash { animation: none; box-shadow: 0 0 0 3px rgba(245,166,35,.85); }
+  }
+  /* A PILOT RUNG RIDING INSIDE A NARRATION LINE. It reads as the helper text it is — the same
+     italic, lighter voice .apSub uses — rather than as a second sentence of the game's own
+     narration. Used by the storm ladder, which appends to the round header instead of taking a
+     beat of its own. */
+  .apSubInline { font-style:italic; font-size:.88em; opacity:.85; display:inline-block;
+    margin-top:3px; }
+  #courseHost { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  /* the wrapper holds the static tilt and NEVER animates; the art breathes inside it. Written on
+     one element the keyframe overwrites the rotate every frame — the same failure as the compass
+     chip whose CSS animation silently erased its SVG transform attribute. */
+  .pp4CourseMark { position: absolute; transform: rotate(-4deg); }
+  .pp4CourseMarkArt { display: block; width: 100%; height: 100%;
+    filter: drop-shadow(0 1px 3px rgba(0,25,35,.55));
+    animation: pp4CourseBreathe 1.2s ease-in-out infinite; }
+  /* THE SWELL IS THE PULSE, AND THERE IS NO RING. Wyatt, 2026-09-03: "I want the x to pulse,
+     remove the ring." That reverses his own two earlier rulings to keep the slow white ripple —
+     the later one wins, and it is written down here so nobody restores a ring from the older
+     comment. Depth 0.15 and period 1.2s are his dialled numbers (pd/ps in COURSE), traced round
+     the sine the tuner drew rather than eyeballed: 1 → 1.15 → 1 → 0.85 → 1. */
+  @keyframes pp4CourseBreathe {
+    0%   { transform: scale(1); }
+    25%  { transform: scale(1.15); }
+    50%  { transform: scale(1); }
+    75%  { transform: scale(0.85); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pp4CourseMarkArt { animation: none; }
+  }
   /* the wrapper holds the tangent rotation and NEVER animates; the img drifts along that rotated
      local axis, so each arrow travels its own stretch of channel rather than all of them sliding
      the same way across the board */
@@ -2420,8 +2471,55 @@
   /* the helper line sits under the stage button, on the dim sea — light text so it reads there */
   #pp4Prompt.pp4Center .apSub { color:#fffdf2; opacity:.9; text-align:center; font-size:13px;
     text-shadow:0 1px 8px rgba(0,0,0,.6); }
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { min-width:0; box-sizing:border-box; padding:5px 5px 6px; }
+  /* ── ONE CARD AT A TIME, ON A VISIBLE STACK OF TWO ──────────────────────────────────────────
+     His ruling 18: the card must show "visually that it is a stack of two, which didn't say one of
+     two in numbers." So the two cards share ONE grid cell; the back one is offset, shrunk and
+     dimmed so the stack is legible as an object rather than as a counter. There is deliberately no
+     "1 of 2" anywhere in this block — the picture IS the count.
+     A SIDE-BY-SIDE PAIR IS WHAT THIS REPLACES, and the subgrid alignment that went with it goes
+     too: two cards can only fall out of step with each other while they are both on screen. */
+  /* ⚠ THE FRONT CARD STAYS IN NORMAL FLOW AND THE BACK ONE IS TAKEN OUT OF IT.
+     The first version stacked both with `grid-area:1/1`, which LOOKED right and measured wrong: the
+     row reported 167px while the panel's scrollHeight saw only 199 for the whole picker, so the row
+     overflowed the panel by 53px and the ingredient icons were clipped off the bottom of the card —
+     with empty screen below it. Measured, not guessed: row bottom 732 against panel bottom 679.
+     One card in flow means the row is exactly as tall as the card the captain is looking at, and
+     every height the panel computes downstream is honest. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) {
+    display:block; position:relative; padding:4px 30px 2px; touch-action:pan-y; }
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
+    width:100%; max-width:250px; min-width:0; box-sizing:border-box; margin:0 auto;
+    padding:6px 6px 8px; transition:transform .22s cubic-bezier(.2,.9,.3,1.05), opacity .22s; }
+  /* the card behind, sized to the front one by its own inset rather than by a typed height.
+     pointer-events:none is load-bearing: without it the hidden card is still a tap target over the
+     visible one's edge, and the wrong recipe gets chosen. */
+  /* ⚠ THE SELECTOR CARRIES THE FULL PREFIX ON PURPOSE. A shorter one lost: the "Bake this!" pill
+     needs a positioning context, so `…:has(.recipeList) .apBtn { position:relative }` already
+     exists and outranks a plainer `.apBtn[data-rcpos="back"]`. The back card therefore stayed in
+     normal flow, the row measured 298px for a 146px card, and the stack was two cards tall with the
+     second one invisible under the fold. Specificity, not a missing property. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="back"] {
+    position:absolute; top:4px; bottom:2px; left:0; right:0;
+    transform:translate(9px,9px) scale(.955) rotate(1.4deg); opacity:.5; z-index:1;
+    pointer-events:none; filter:saturate(.7); overflow:hidden; }
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { position:relative; transform:none; opacity:1; z-index:2; }
+  /* the arrows. They sit OUTSIDE the card, in the padding reserved above, so they never cover the
+     artwork the card exists to show. */
+  /* ⚠ THE ARROWS ARE BROWN ON CREAM, NOT WHITE ON TRANSLUCENT. The first version borrowed the
+     ribbon chips' rule — white on rgba(255,255,255,.16) — which is invisible on this panel's cream
+     ground. They measured as present and correctly placed (30x44 at both edges) and could not be
+     seen in the screenshot, which is the whole reason to look at the picture as well as the numbers.
+     The palette is the card's own: #3a2600 ink on #f5a623, already this codebase's pairing. */
+  .pp4RcArrow { position:absolute; top:50%; transform:translateY(-50%); z-index:4;
+    width:30px; height:44px; display:flex; align-items:center; justify-content:center;
+    border:2px solid #c9821a; border-radius:9px; background:#f5a623; color:#3a2600;
+    font-size:20px; font-weight:800; line-height:1; cursor:pointer; padding:0;
+    box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .pp4RcArrow.prev { left:0; } .pp4RcArrow.next { right:0; }
+  .pp4RcArrow:active { background:#e0951a; transform:translateY(-50%) scale(.94); }
+  @media (prefers-reduced-motion: reduce) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { transition:none; }
+  }
   /* D-46 fault 5 — THE TWO RECIPES ARE ONE TABLE, SO THEIR ROWS LINE UP.
      Measured at 390x664: "Vanilla Bean Crème Brûlée" wraps to two lines, "Mexican Chocolate Torte"
      to three, and the two ingredient lists therefore start 7.8px apart — so Hot Cinnamon sits half
@@ -2435,22 +2533,42 @@
      here and the "Bake this!" pill is position:absolute, so neither is a track.
      @supports-gated, so a browser without subgrid (Safari before 16) gets exactly today's layout
      rather than a broken one — this is a cosmetic alignment, never a reason to risk the picker. */
-  @supports (grid-template-rows: subgrid) {
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { grid-template-rows:auto auto 1fr; }
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
-      display:grid; grid-row:span 3; grid-template-rows:subgrid; align-content:start; }
-  }
+  /* THE SUBGRID BLOCK THAT STOOD HERE IS RETIRED, and D-46 fault 5 is retired with it rather than
+     regressed: it existed so two cards SIDE BY SIDE would line their ingredient rows up when one
+     title wrapped to three lines and the other to two. One card at a time cannot fall out of step
+     with a card that is not on screen, and the ingredient rows it aligned are icons now, not rows.
+     Deleted rather than left inert — a rule that no longer applies is the next reader's wrong
+     answer about why the layout works. */
   body.pp4Stage #actionPanel .apBtn .recipeTitle { font-size:12.5px; line-height:1.2; }
   body.pp4Stage #actionPanel .apBtn .recipeThumb { height:54px; width:auto; display:block; margin:0 auto 2px; }
   body.pp4Stage #actionPanel .apBtn .recipeDesc { display:none; }
   /* playtest 21 item 5: every ingredient of both recipes has to be readable WITHOUT SCROLLING, now
      that the hint line sits above the cards as well. The savings are taken from padding and leading
      — the type size is untouched, because a recipe nobody can read is not a fix. */
-  body.pp4Stage #actionPanel .apBtn .recipeList { padding:2px 8px 3px; }
-  body.pp4Stage #actionPanel .apBtn .recipeList li { font-size:10.5px; line-height:1.3; padding:2px 0; gap:6px; }
-  body.pp4Stage #actionPanel .apBtn .recipeList .ri img { width:17px; height:17px; }
-  body.pp4Stage #actionPanel .apBtn .recipeList .rc { display:none; }
-  body.pp4Stage #actionPanel .apBtn.pp4Focus { outline:3px solid #f5a623; }
+  /* R2's icon row. The five ingredients now read as one line of pictures rather than ten lines of
+     text — his own ruling, and the reason the card can be a single column at all. Sized so all five
+     fit at 320px without wrapping; `flex-wrap` is still on, because a six-ingredient recipe is a
+     config change away and a clipped row would be the bug. */
+  .recipeIcons { display:flex; flex-wrap:wrap; justify-content:center; align-items:center;
+    gap:6px; padding:6px 8px 2px; }
+  .recipeIcons .ri { width:auto; flex:0 0 auto; line-height:0; }
+  .recipeIcons .ri img { width:30px; height:30px; object-fit:contain; display:block; }
+  body.pp4Stage #actionPanel .apBtn .recipeIcons { padding:5px 6px 2px; gap:5px; }
+  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { width:26px; height:26px; }
+  /* THE FOCUSED CARD RESERVES A STRIP FOR THE PILL, rather than the pill covering whatever is
+     underneath it. Moving it off the artwork (O2) only pushed the problem onto the ingredient
+     icons — a smaller crime, still a crime, and visible in the very next screenshot. The card
+     grows by exactly the pill's own height when it is selected, so the pill lands in space that
+     belongs to it and covers nothing at all.
+     The growth is on .pp4Focus only, so an unselected card is the size it always was. */
+  /* ⚠ FULL PREFIX, AND THIS IS THE SECOND TIME THE SAME TRAP BIT IN ONE SITTING.
+     `body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn` sets the card's padding, and it
+     outranks a plainer `.apBtn.pp4Focus` — so the reserved strip silently did not exist and the
+     pill went on covering the ingredient icons, exactly as it had covered the artwork. The rule was
+     right; the selector lost. Anything overriding a property that block sets has to carry the same
+     prefix. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.pp4Focus {
+    outline:3px solid #f5a623; padding-bottom:40px; }
   /* playtest 19 item 2: the "Bake this!" pill, over the pastry art of the tapped card (Wyatt's
      pick). It is a SPAN dressed as a button and deliberately INERT — the card is itself the
      <button>, so a nested one is invalid HTML and gets hoisted out, and pointer-events:none means
@@ -2468,17 +2586,25 @@
      Ink and edge are NOT invented here: #3a2600 on #f5a623 with a #c9821a border is already this
      codebase's pairing for text on this orange (.btl-col .windTag.dw, the downwind battle tag).
      White would have been the obvious choice and fails contrast on it (~2.2:1). */
-  .pp4Bake { position:absolute; left:50%; top:35px; z-index:2; pointer-events:none;
+  /* ⚠ O2 — THE PILL NO LONGER COVERS THE ARTWORK. This is one of the four he was offered and left
+     unticked, so it is MY BEST GUESS pending his word, and it is flagged for him rather than
+     folded in quietly. It got worse rather than better when the picker became one big card: at
+     top:35px the pill sat squarely over the pastry the card exists to show.
+     It now straddles the card's BOTTOM EDGE, where it covers a border and a few pixels of padding
+     instead of the picture. Everything else about it is untouched — still a SPAN dressed as a
+     button, still pointer-events:none so the tap falls through into the second-tap confirm that
+     already exists, still his own #f5a623/#3a2600 pairing. */
+  .pp4Bake { position:absolute; left:50%; top:auto; bottom:5px; z-index:3; pointer-events:none;
     background:#f5a623; color:#3a2600; border:2px solid #c9821a; border-radius:999px;
     padding:7px 13px; font-size:13px; font-weight:800; letter-spacing:.02em; white-space:nowrap;
     box-shadow:0 4px 14px rgba(0,0,0,.45);
     animation:pp4BakeIn .22s cubic-bezier(.2,.9,.3,1.15) both; }
   @keyframes pp4BakeIn {
-    from { opacity:0; transform:translate(-50%,-50%) scale(.8); }
-    to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    from { opacity:0; transform:translate(-50%,0) scale(.8); }
+    to   { opacity:1; transform:translate(-50%,0) scale(1); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .pp4Bake { animation:none; transform:translate(-50%,-50%); }
+    .pp4Bake { animation:none; transform:translate(-50%,0); }
   }
   #choicePassPlay.pp4Off { filter:grayscale(.75) brightness(.92); position:relative; cursor:default; }
   .pp4OffNote { font-size:11.5px; font-weight:700; color:#fff; opacity:.95; margin-top:6px; font-style:italic; }
@@ -2575,9 +2701,35 @@
      two-hand-synced-numbers trap this project keeps paying for. */
   /* (#pp4Clock shared this box rule until the shot clock left, 2026-08-28 — its chip rules and
      the pp4ClockFlash keyframes went with it.) */
-  #pp4FF, #pp4Chat { box-sizing:border-box; align-items:center; justify-content:center;
+  #pp4FF, #pp4Chat, #pp4Help { box-sizing:border-box; align-items:center; justify-content:center;
     min-width:34px; padding:3px 8px; line-height:18px; border:none; border-radius:8px;
     background:rgba(255,255,255,.16); color:#fff; font-family:inherit; text-align:center; }
+  /* THE PARROT AND THE QUESTION MARK — Wyatt, 2026-09-02: "Parrot + ? so that it hints at what it
+     does. could that work?" The bird for the desire to tap it, the glyph so it says what it does.
+     It shares the ONE box rule above with ⏩ and 💬 rather than being a third hand-written box,
+     which is playtest 21 item 8's own ruling.
+     SIDE BY SIDE, NOT A CORNER BADGE: a badge would borrow the chat unread-dot's language and read
+     as a permanent notification.
+     The parrot ALSO keeps the turn-order Start button and that is not a collision — his call:
+     "keep the parrot on the start button -- it makes it seem like the parrot is the one talking to
+     you, which is perfect and feels consistent with parrot being your helper!" One voice in two
+     places, which is what makes the tutorial a character rather than a system. */
+  #pp4Help { display:inline-flex; font-size:14px; cursor:pointer; letter-spacing:-.5px; }
+  #pp4Help.off { opacity:.5; }
+  /* THE RIBBON FITS AT 320px. Measured before a line of the tutorial existed: the row is clean at
+     430/390/360 and runs 21px off the edge at 320 once the ? is added — red-proofed both ways, so
+     the button is the cause and not an existing fault being blamed on it.
+     THE FIX BELONGS TO THE RIBBON, NOT TO THE TUTORIAL. #pp4Ribbon is a flex row and flex-shrink
+     already absorbs the extra character everywhere else; what actually binds is the four captain
+     circles at a fixed 111px, which cannot shrink. So the circles become the elastic element —
+     which is why the number did not move between button variants, and why this block would be
+     worth shipping even if the ? never did. */
+  @media (max-width: 359px) {
+    #pp4Ribbon { gap:6px; padding-left:8px; padding-right:8px; }
+    .pp4Boats { gap:3px; }
+    .pp4Boat { width:20px; height:20px; }
+    #pp4FF, #pp4Chat, #pp4Help { min-width:30px; padding:3px 6px; }
+  }
   /* ⏩ fast-forward: appears in the ribbon only while a bot holds the wheel (stage.js ribbonTick);
      lights orange while a one-shot skip runs so a second tap can't double-arm */
   #pp4FF { display:none; font-size:15px; cursor:pointer; }
@@ -2946,12 +3098,12 @@
       <p><b>🌬️ Wind.</b> Each day the wind picks a direction and holds it for the whole table. Look at the compass: the big needle is this day's wind, and the ghost needle behind it is <b>next</b> day's. <span data-engine-rule="forecast">That forecast is never wrong, so ye can plan around it — save for a storm, which the compass warns ye of a day ahead but won't say which way it'll blow.</span></p>
       <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b data-rule="sailRange"></b> squares in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b data-rule="sailUpwind"></b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
       <p><b>⚓ Act</b> — choose one:</p>
-      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads"></b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails"></b>🌕. Either way ye may then <b>buy</b> a crate, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
+      <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads"></b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails"></b>🌕. Either way ye may then <b>buy</b> an ingredient, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
       <p><b>💰 Crate prices rise.</b> A crate costs <b data-rule="crateBase"></b>🌕 <b>minus however many are left on that island</b> — so the first off a full island is <b data-rule="priceFirst"></b>🌕, the next <b data-rule="priceNext"></b>🌕, and the last one <b data-rule="priceLast"></b>🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
-      <p><b>🕯️ The black market.</b> A sold-out island always has ONE more crate under the counter — a flat <b data-rule="blackMarket"></b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two crates</b> from yer hold in trade for it — even two of the same.</p>
-      <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one crate</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody. <span data-engine-rule="sanctuary">But once a captain's ovens are lit they're beyond yer reach — rob 'em on the way home, or not at all.</span> Ye can't attack a ship with an empty hold; there's nothing to take.</p>
+      <p><b>🕯️ The black market.</b> A sold-out island always has ONE more ingredient under the counter — a flat <b data-rule="blackMarket"></b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two ingredients</b> from yer hold in trade for it — even two of the same.</p>
+      <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one ingredient</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody. <span data-engine-rule="sanctuary">But once a captain's ovens are lit they're beyond yer reach — rob 'em on the way home, or not at all.</span> Ye can't attack a ship with an empty hold; there's nothing to take.</p>
       <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b data-rule="callBounty"></b>🌕 from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
-      <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — crates, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
+      <p><b>Trade</b> — hail the <b>whole table</b> at once. Say what ye <b>want</b> and what ye'll <b>give</b> — ingredients, coins, or both. Every captain holding it answers: accept, deny, or name their price. Ye see every answer together, then take one or walk away. One round of haggling, and no bonus for shaking hands.</p>
       <p><b>Muse</b> — do none of it. Sit back, dream o' pastry, and pocket <b data-rule="passCoin"></b>🌕 for yer patience.</p>
       <h4><img class="narrIcon" src="assets/icons/current-swirl.png" alt=""> The trade winds</h4>
       <p>The sea around the rim of the world flows in a mighty clockwise current, in arcs of varying length each game. Sail (or get blown) into it and yer instantly swept to the far corner of that stretch — a daring shortcut for captains in a hurry!</p>
@@ -2961,7 +3113,7 @@
       <p>Dock at Tortuga holdin' yer whole recipe and yer ovens light <b>that very turn</b>. Yer recipe's revealed, yer ingredient crates get shuffled before yer eyes — and ye must name them back <b>in the recipe's own order</b>, from memory. Pay <b data-rule="bakeRewatch"></b>🌕 to watch the shuffle again, as often as yer purse allows.</p>
       <p>Crates ye place right <b>lock in</b>; the rest get shuffled again tomorrow, and ye bake again — yer attempt IS yer turn. The whole table watches every bake, so make it a show. Get every crate in its place and ye've baked it!</p>
       <h4><img class="narrIcon" src="assets/icons/crown.png" alt=""> Winning</h4>
-      <p>First captain to bake their full recipe wins the voyage. Two captains bakin' it on the same day? No contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most crates in the hold, then most coin, then whoever got home first.</p>
+      <p>First captain to bake their full recipe wins the voyage. Two captains bakin' it on the same day? No contest — they <b>bake together</b>. <b>Best Baker</b> goes to whoever brought the most to the bench: most ingredients in the hold, then most coin, then whoever got home first.</p>
       <p><i>May yer flips be heads and yer rivals be broke.</i></p>
       <!-- T-100 / CEO 171. THE ONLY CRAWLABLE LINK FROM THE GAME TO ITS OWN RULES PAGE, and it was
            missing: the footer's "How to play" is a <button>, so a search engine following links
