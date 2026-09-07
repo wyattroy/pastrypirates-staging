@@ -322,8 +322,37 @@ async function initAudio() {
 // initAudio() never ran, the browser is unsupported, or the fetch/decode hasn't resolved yet).
 // A NEW AudioBufferSourceNode + a fresh per-play GainNode every call — never reused, never
 // restarted, never dropped because another instance is already running (D-10).
+/* THE CONTEXT CAN GO TO SLEEP AGAIN, AND NOTHING USED TO NOTICE — Wyatt, 2026-09-06, crew in two
+   Safari windows: "sounds don't seem to be working for guests... i can see that safari THINKS it is
+   playing sounds (the little sound icon in the browser url field appears when a sfx should appear)
+   but i hear nothing... Refreshing the page seems to have fixed it."
+
+   THAT PAIR OF SYMPTOMS IS THE DIAGNOSIS. A source node really is started — so Safari lights the
+   tab's audio indicator — while the AudioContext sits in `suspended` or, on Apple platforms,
+   `interrupted`, so nothing reaches the speakers. A reload builds a fresh context inside a fresh
+   gesture and it works again.
+
+   `resume()` was called in exactly two places (initAudio, and visibilitychange), so the context was
+   woken ONCE at boot and never re-checked. Safari suspends aggressively — another tab taking audio
+   focus, a Private window, a window switch, the system sleeping — and switching between two Safari
+   windows is precisely what playing host-and-guest on one Mac consists of. Nothing else in the game
+   was ever going to notice, because `play()` only ever asked whether the BUFFER existed.
+
+   HIS INSTRUCTION, same message: "this should be solved architecturally through the shared engine
+   from which both host and guest drain; not through driftable patches." play() IS that engine —
+   every sound in the game, host or guest, solo or crew, reaches the speakers through this one
+   function. So the wake-up lives here, once, and there is no guest-side anything to drift.
+
+   Fire-and-forget for the same reason initAudio's is (T-21-04): a rejected resume must never
+   propagate into the game action that triggered the sound. This play is still allowed to proceed —
+   a context that resumes a few milliseconds late plays late, which is better than silence, and the
+   NEXT sound finds it running. */
+function wakeCtx() {
+  if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+}
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
+  wakeCtx();
   const bus = (opts && opts.bus) || masterGain;
   const src = ctx.createBufferSource();
   src.buffer = buffers[name];

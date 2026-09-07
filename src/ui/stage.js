@@ -40,7 +40,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.06.1-staging@c6fa8b2b";
+const PP4_STAMP = "2026.09.06.1-staging@e62d4021";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1847,7 +1847,36 @@ function cerBandTick(){
   const g = Math.max(0, Math.min(gapMax, Math.floor((room - contentH) / (kids.length - 1))));
   if (veil.dataset.gap !== String(g)){ veil.style.rowGap = g + "px"; veil.dataset.gap = String(g); }
 }
+/* THE VEIL MUST NEVER OUTLIVE ITS OWN CAP — Wyatt, 2026-09-06, playing crew in two Safari windows:
+   "the director stopped refocusing the camera correctly for my guest view after I docked...
+   refreshing the page fixes this."
+
+   WHY THE CAMERA IS THE SYMPTOM OF A VEIL BUG. camTo() (:134) is the one door every director move
+   walks through, and while the ceremony veil is up it REMEMBERS a glide instead of performing it —
+   his own ruling, quoted at :118. So a veil that is left up does not look like a stuck veil; it
+   looks like a camera that stopped following, for the rest of the voyage.
+
+   HOW IT GETS STUCK. cerWatchResult()'s poll had two exits that clear the interval WITHOUT
+   guaranteeing a teardown: the landed branch tears down only `if (!flipCoinWrap.active)` — the
+   interval is already cleared by then, so an armed coin at that instant means nothing ever tears
+   down — and the `armedAgain` branch clears the interval outright, correctly expecting the next
+   flip to start a fresh watcher. If it does not, the veil stands with nothing watching it.
+   Docking IS a coin flip (docs/INTENDED-BEHAVIOUR.md), which is why his dock is where it bit.
+
+   NOT PATCHED PER-SIDE — his instruction, same message: solve it "architecturally through the
+   shared engine from which both host and guest drain; not through driftable patches." This is one
+   watchdog in the shared stage code, armed whenever the ceremony makes progress and cleared by any
+   real teardown. The cap is CER_VEIL_WAIT_CAP_MS, which already exists and is already DERIVED from
+   the ceremony's own two clocks — "the longest the veil can legitimately stand" (:1862). No third
+   number to keep in step. A guest whose coin state arrives over the wire is simply the likeliest
+   to hit the race; the rule does not know or care which side it is on. */
+let cerWatchdog = null;
+function cerArmWatchdog(){
+  if (cerWatchdog) clearTimeout(cerWatchdog);
+  cerWatchdog = setTimeout(() => { cerWatchdog = null; cerTeardown(); }, CER_VEIL_WAIT_CAP_MS);
+}
 function cerTeardown(){
+  if (cerWatchdog){ clearTimeout(cerWatchdog); cerWatchdog = null; }
   const veil = $("pp4Veil"); if (!veil) return;
   const fp = $("flipPanel"), row = $("controlsRow");
   if (fp && row && fp.parentElement !== row) row.insertBefore(fp, row.firstChild);
@@ -1877,9 +1906,17 @@ function cerWatchResult(){
       // playtest 10 item 6: the landed face hits like a gavel — shudder + golden flare
       c.classList.add("pp4Land");
       setTimeout(() => c.classList.remove("pp4Land"), 700);
-      setTimeout(() => { if (!$("flipCoinWrap")?.classList.contains("active")) cerTeardown(); }, CER_REVEAL_MS);
+      /* If the coin re-armed during the reveal beat, this used to do NOTHING — and the interval
+         above was already cleared, so the veil was left standing with no watcher at all. Watch
+         the new flip instead; the watchdog is the backstop, not the mechanism. */
+      setTimeout(() => {
+        if (!$("flipCoinWrap")?.classList.contains("active")) cerTeardown();
+        else { cerArmWatchdog(); cerWatchResult(); }
+      }, CER_REVEAL_MS);
     }
-    else if (armedAgain){ clearInterval(iv); }        // a new flip re-armed: veil stays, caption returns
+    // a new flip re-armed: veil stays, caption returns — but the watcher must be REPLACED, not
+    // simply dropped, or nothing is left to take the veil down when this flip lands.
+    else if (armedAgain){ clearInterval(iv); cerArmWatchdog(); cerWatchResult(); }
     else if (performance.now() - t0 > CER_FALLBACK_MS){ clearInterval(iv); cerTeardown(); }
   }, 120);
 }
@@ -1911,6 +1948,7 @@ function flipArmed(el, onClick){
   const fp = $("flipPanel"), slot = $("pp4CerSlot");
   if (fp && slot && fp.parentElement !== slot) slot.appendChild(fp);
   document.body.classList.add("pp4Cer");
+  cerArmWatchdog();   // from this instant the veil has a deadline it cannot miss
   // playtest 10 item 5: the old prompt card is hidden under the veil (CSS body.pp4Cer) — its
   // words move up here: the ask above the coin, the stakes line beneath it. Copied on the next
   // frame, AFTER localAsk's panel() has rendered (the arm hook fires first), and with the
