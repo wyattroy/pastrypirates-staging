@@ -391,9 +391,17 @@ let resuming = false;
 function wakeCtx() {
   if (!ctx || ctx.state === "running" || resuming) return;
   resuming = true;
-  ctx.resume().then(() => { resuming = false; applyMasterGain(); })
-              .catch(() => { resuming = false; });
+  /* THE FLAG MUST BE ABLE TO CLEAR ITSELF. Safari can leave resume()'s promise PENDING FOREVER
+     when the context is `interrupted` — it neither resolves nor rejects. A flag cleared only by
+     those two paths would then block every future attempt for the life of the page, which is a
+     deadlock I shipped in 0bda3be7 and am removing here rather than leaving for the next reader. */
+  const clear = () => { resuming = false; };
+  setTimeout(clear, 1000);
+  ctx.resume().then(() => { clear(); applyMasterGain(); }).catch(clear);
 }
+/* Whether sound can ACTUALLY be heard right now — the question the unlock could not previously
+   ask, which is why it gave up after one try. Exported for src/orchestrator.js's gesture unlock. */
+function audioRunning() { return !!ctx && ctx.state === "running"; }
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
   /* MUTE NOW SKIPS THE SOUND ENTIRELY — Wyatt, 2026-09-06: "yes, make mute skip the sound
@@ -555,7 +563,7 @@ function playBattleEngage() {
 }
 
 export {
-  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted,
+  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, isMuted, setMuted, audioRunning,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

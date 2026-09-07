@@ -76,7 +76,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, setMuted } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, setMuted, audioRunning } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -2538,14 +2538,41 @@ export function leaveGame(){netLeaveRoom();clearSession();clearSoloState();locat
 // changes and never has to know that #flipCoinWrap is not an .apBtn (docs/DRIVING-THE-GAME.md
 // §4a). Fire-and-forget with a .catch() (T-21-04) — never awaited here, and never called from
 // playFlip()/any per-play path: unlock is a once-per-page-session concern, not a per-play one.
+/* THE UNLOCK KEPT TRYING UNTIL IT WORKS — Wyatt, 2026-09-06, after two of my fixes failed to
+   restore his sound: "there is still no sound in safari... even with a hard refresh, sound is now
+   gone in safari" and, decisively, "it works in chrome though."
+
+   WHY THE PREVIOUS TWO FIXES COULD NOT HAVE WORKED, stated plainly because I shipped them both.
+   **Safari only honours AudioContext.resume() from inside a USER-GESTURE call stack.** My first
+   fix woke the context from inside play() — which is driven by game events, timers and the network,
+   never by a tap — so on Safari every one of those attempts was refused. Chrome resumes happily
+   outside a gesture, which is exactly why Chrome was fine and Safari was not. The browser split he
+   reported WAS the diagnosis and I read it as an environment quirk twice before seeing it.
+
+   AND THIS FUNCTION IS WHERE IT BITES. It fired on the first gesture, called initAudio(), and then
+   REMOVED BOTH LISTENERS WITHOUT EVER CHECKING WHETHER AUDIO ACTUALLY STARTED. One attempt, never
+   verified, never retried. If that first tap did not take — and on Safari a tap that merely opens
+   a modal frequently does not — the page had spent its only chance, and no later tap could help.
+   A hard refresh changed nothing because the same one-shot failed the same way.
+
+   Now the listeners STAY until audioRunning() is true. Every real tap the player makes is another
+   attempt, inside a real gesture, which is the only kind Safari accepts. They unhook themselves the
+   moment sound is genuinely working, so the steady state is identical to before. */
 function unlockAudioOnce(){
   initAudio().catch(()=>{});
-  document.removeEventListener("pointerdown",unlockAudioOnce);
-  document.removeEventListener("keydown",unlockAudioOnce);
+  // Not synchronous: initAudio()'s resume() resolves a tick later, so asking right now would always
+  // say "not running" and never unhook. Ask after it has had a chance to land.
+  setTimeout(()=>{
+    if(!audioRunning())return;                       // still blocked — keep listening for the next tap
+    document.removeEventListener("pointerdown",unlockAudioOnce);
+    document.removeEventListener("keydown",unlockAudioOnce);
+  },350);
 }
 export function wireLobby(){
-  document.addEventListener("pointerdown",unlockAudioOnce,{once:true});
-  document.addEventListener("keydown",unlockAudioOnce,{once:true});
+  /* NOT {once:true} — see unlockAudioOnce's own note. A single shot is what left Safari silent for
+     a whole page session. These unhook themselves once audio is confirmed running. */
+  document.addEventListener("pointerdown",unlockAudioOnce);
+  document.addEventListener("keydown",unlockAudioOnce);
   $("btnCreate").onclick=()=>{createRoom();};
   $("btnJoin").onclick=()=>{joinRoom();};
   $("btnStart").onclick=()=>{$("startConfirmModal").style.display="flex";};
