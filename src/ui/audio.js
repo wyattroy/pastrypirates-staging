@@ -352,6 +352,24 @@ function wakeCtx() {
 }
 function play(name, opts) {
   if (!ctx || !buffers[name]) return;
+  /* MUTE NOW SKIPS THE SOUND ENTIRELY — Wyatt, 2026-09-06: "yes, make mute skip the sound
+     entirely." Asked because of what he saw while testing crew: "when i DO mute the host screen,
+     safari still shows the sfx firing whenever a sound file WOULD play — though i cannot hear it
+     through my speakers." He was right to distrust it. Mute was `masterGain.gain = 0`, so a source
+     node was still started on every cue: silent, but enough for Safari to light the tab's audio
+     indicator — the toggle looked broken because the one visible signal said it had done nothing.
+
+     SAFE BECAUSE NOTHING TIMES OFF A SOUND. play()'s return value has exactly one consumer,
+     `stormNode`, and only fadeStorm() reads it — which is already written as "a no-op when no storm
+     node is in flight", so a muted storm makes it a true no-op rather than an error. No caller
+     awaits a sound or reads its duration; the cannon and drumroll beats are measured constants, not
+     audio callbacks. So a muted player and an unmuted one still run the game at identical pace,
+     which matters: in crew they are the same voyage on two screens.
+
+     applyMasterGain() is deliberately UNCHANGED and still ramps the master bus. A long sound that
+     was already in flight when he hits mute must still fall silent, and that is the path that does
+     it. This gate only stops NEW ones from starting. */
+  if (isMuted()) return;
   wakeCtx();
   const bus = (opts && opts.bus) || masterGain;
   const src = ctx.createBufferSource();

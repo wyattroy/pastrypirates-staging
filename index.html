@@ -1248,8 +1248,10 @@
      tone varies square to square. Opacity was doing the invisibility; the text-shadow is what
      makes one colour survive a background that is light in places and dark in others, which is
      why this is not simply a brighter ink. */
-  #legalFooter a { pointer-events: auto; color: var(--ink); opacity: 1; text-decoration: underline;
-    text-shadow: 0 1px 2px rgba(255,255,255,.75), 0 0 6px rgba(255,255,255,.55); }
+  /* WHITE, NO HALO — his call, 2026-09-06, looking at the halo version: "make the privacy policy
+     text white instead of grey and remove the halo." Taste is his; this is what he asked for
+     exactly. (The halo was my attempt at surviving a backdrop that varies; he prefers it clean.) */
+  #legalFooter a { pointer-events: auto; color: #fff; opacity: 1; text-decoration: underline; }
   #legalFooter a:hover { text-decoration-thickness: 2px; }
   /* ...AND THE SECOND HALF OF THE SAME RULING: "It should only be visible on the pre-game screen,
      not any time during the game." It never had a hiding rule at all — `position:fixed` at
