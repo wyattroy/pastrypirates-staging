@@ -26,6 +26,7 @@
  */
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { serve, launch, attach, makeHost, killAll, sleep, SHOTS } from "./mp_rig.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
@@ -64,8 +65,23 @@ const STATE = `(async()=>{ const st=(await import('/src/state/index.js')).appSta
   return { room: st.room||null, mySeat: st.mySeat, isHost: !!st.isHost }; })()`;
 
 const url = serve(PORT);
-launch(DBG_A, "/tmp/pp-name-host", { url: "about:blank" });
-launch(DBG_B, "/tmp/pp-name-guest", { url: "about:blank" });
+/* ⚠ A PROFILE DIRECTORY PER RUN, NOT PER SCRIPT. These were "/tmp/pp-name-host" and
+   "/tmp/pp-name-guest", reused by every run — and four sibling probes in this same directory
+   (crew_bake_probe, crew_trade_probe, local_trade_probe, bakeoff_shots) already use mkdtempSync.
+   Rule 23's "when a second consumer appears, converge", with the convergent version sitting right
+   next door.
+   WHY IT IS WORTH THE TWO LINES, paid for in full elsewhere today: Chrome keeps localStorage in
+   its profile, and killAll() does not wait — so a dying browser from the previous run flushes its
+   state back into a shared directory after the next run has started. That reads as the GAME
+   misbehaving. It cost this project an hour in scripts/qa/_pilot_url_flag_probe.mjs, where it made
+   a working feature look broken on alternate runs, and the general rule earned there is: ANYTHING
+   THAT WAITS FOR A SHARED RESOURCE RACES, so do not share the resource.
+   Found by the SFX session's audit of every Chrome-driving script, and handed over rather than
+   sat on. Nothing else in scripts/ has this shape. */
+const PROF_A = fs.mkdtempSync(path.join(os.tmpdir(), "pp-name-host-"));
+const PROF_B = fs.mkdtempSync(path.join(os.tmpdir(), "pp-name-guest-"));
+launch(DBG_A, PROF_A, { url: "about:blank" });
+launch(DBG_B, PROF_B, { url: "about:blank" });
 await sleep(1800);
 const A = await attach(DBG_A), B = await attach(DBG_B);
 let code = null;
@@ -163,6 +179,8 @@ try {
   if (code) { try { await A.ev(`(async()=>{const st=(await import('/src/state/index.js')).appState;
       if(st.db) await st.db.ref('rooms/${code}').remove(); return 1;})()`); log(`\n  room ${code} deleted`); } catch (e) { log("  could not delete room: " + e.message); } }
   killAll();
+  // leave nothing behind, so the next run cannot inherit a browser that has already played
+  for (const d of [PROF_A, PROF_B]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
 }
 
 fs.writeFileSync(path.join(OUT, "name-collision-log.txt"), notes.join("\n") + "\n");

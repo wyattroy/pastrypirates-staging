@@ -67,6 +67,7 @@
 // every time (harmless, and needed so a genuine re-entry still sees the current room state).
 
 import { appState } from "./state/index.js";
+import { pilotMsg, pilotSee } from "./ui/pilot.js";
 import { pingVisit, pingStart, pingFin, usageGid } from "./ui/usage.js";
 import { Game, roundCfg, rollStorm } from "./engine/index.js";
 import { applyResult } from "./engine/bakeoff.js";
@@ -984,6 +985,27 @@ export async function recipeDraftNet(){
   if(pending.length){
     // G4 (Wyatt-approved 2026-07-30): one short line — the prompt's job is to ask, not re-teach.
     // Not an extracted @copy site: the message reaches the dispatcher via a variable. D-29 (`yer`).
+    /* ⚠ R5 IS THE ONE RULING OF HIS THIRTY-ONE THAT IS NOT BUILT, AND THIS IS WHY.
+       He asked for: "maybe it should come from the standard narration box as everything else comes
+       from. Like, it should be attached to the boat, as the normal narrations are."
+
+       IT WAS TRIED AND MEASURED, NOT SKIPPED. The cheap version looked certain to work: this moment
+       already broadcasts a wait line whose variant for each drafting captain is deliberately the
+       empty string — because they have the question on their card instead — so moving the question
+       into that variant should have been the whole edit. It is not. With the panel's own message
+       emptied, THE QUESTION DISAPPEARED FROM THE SCREEN ALTOGETHER: the narration channel does not
+       draw a bubble while a prompt card is up, which is precisely the consequence the spec warned
+       this ruling carried, and the reason it called this the largest single change on its page.
+
+       WHAT IT ACTUALLY NEEDS: the picker must stop being a prompt-panel card at all, so the
+       narration channel is free to speak. That restructures how a prompt is drawn — the one
+       mechanism every other question in the game also rides — and it is not a change to make
+       blind, in the same sitting as ten other things, on the strength of a screenshot I have not
+       shown him. Reverted rather than half-landed: a picker whose question has vanished is worse
+       than a picker whose question is in the panel.
+
+       G4 (Wyatt-approved 2026-07-30): one short line — the prompt's job is to ask, not re-teach.
+       Not an extracted @copy site: the message reaches the dispatcher via a variable. D-29 (`yer`). */
     const msgFor=player=>`${pn(player.idx)}, choose yer recipe:`;
     const optsFor=player=>[{label:recipeCardHTML(player.recipeChoices[0]),value:0,cls:"recipeCard"},
                        {label:recipeCardHTML(player.recipeChoices[1]),value:1,cls:"recipeCard"}];
@@ -997,11 +1019,18 @@ export async function recipeDraftNet(){
        replay reconstructs the identical stream. */
     const byIdx={};pending.forEach(player=>{byIdx[player.idx]=player;});
     // @copy misc.draftwait.recipechoosing
+    // @copy misc.draftwait.recipechoosing
     const announce={html:pending.length>1?"⚓ Everyone's choosing their recipe…":`${pn(pending[0].idx)} is choosing a recipe…`,
       variants:pending.map(q=>({seat:q.idx,html:""}))};
     // @copy misc.draftwait.recipechosen
     // a wait line: it holds until the crew actually finishes, not for 2.5 seconds (item 19)
     const draftWait=pending.length>1?"⚓ Recipe chosen! Waiting for the rest of the crew…":null;
+    /* NO HELPER LINE FROM HERE. The recipe.draft ladder drives the .pp4RecipeHint element that
+       already sits at this moment (src/ui/stage.js) — putting one here as well gave the picker two
+       sentences saying nearly the same thing, above and below the card. His own rule for this
+       screen is the reason it matters: "The recipe choice moment has a lot of text in it already,
+       and it's pretty overwhelming -- even as is. Adding more text is not the solution to this."
+       draftDispatch keeps its optional `subFor` — it is the right seam and costs nothing unused. */
     const results=await draftDispatch({seats:pending.map(player=>player.idx),isPublic:false,
       msgFor:i=>msgFor(byIdx[i]),optsFor:i=>optsFor(byIdx[i]),waitMsg:draftWait,announce});
     for(const player of pending){picks[player.idx]=results[player.idx];logDecision(results[player.idx]);}
@@ -1010,6 +1039,34 @@ export async function recipeDraftNet(){
   if(appState.db&&appState.room&&!appState.replaying)await netSetRecipes(appState.db,appState.room,picks,netFail("recipe picks"));
   if(!appState.replaying)updateRecipeBanner();
   liveRender();
+  /* ── "WHERE DID MY RECIPE GO?" — his own ask, 2026-09-02 ────────────────────────────────────
+     THE ONE LADDER THAT ADDS A LINE WHERE THE GAME SAYS NOTHING TODAY. It earns the exception
+     because the answer to the question is "look down there", and nothing currently points down
+     there. Its bottom rung is SILENCE rather than today's copy, so a veteran's game is still
+     byte-identical — pilotMsg() returns "" and this whole block does nothing.
+     AND THE CAPTAINS BOX FLASHES ONCE as the line lands: a sentence saying `below` and a box that
+     blinks are the same instruction twice, and the second one works without being read. */
+  if(!appState.replaying)for(const player of appState.game.players){
+    if(player.strategy!=="human"||!decisionIsLocal(player.idx))continue;
+    const line=pilotMsg("recipe.stowed","");
+    pilotSee("recipe.stowed");
+    if(!line)break;
+    flashCaptainsBox();
+    await flash(line.replace("{name}",pn(player.idx)),undefined,undefined,
+      [{seat:player.idx,html:line.replace("{name}","")
+        .replace(/^Yer recipe's stowed below, /,"Yer recipe's stowed below — ")}]);
+    break;                       // one showing per device: the box is the same box for all seats
+  }
+}
+/* The blink itself. A class the CSS owns for one animation, removed when it ends, so nothing is
+   left on the element to go stale — and nothing here animates width/height/top/left. */
+function flashCaptainsBox(){
+  const cap=document.getElementById("pp4Cap")||document.getElementById("captainsPanel");
+  if(!cap)return;
+  cap.classList.remove("pp4StowFlash");
+  void cap.getBoundingClientRect();          // force a commit, or re-adding the class is a no-op
+  cap.classList.add("pp4StowFlash");
+  setTimeout(()=>cap.classList.remove("pp4StowFlash"),1600);
 }
 /* TODAY'S DAY, MOVED VERBATIM. Extracted rather than rewritten so "flag off = the game
    Wyatt has been playing" is a property of the code's shape, not a claim about a conditional.
@@ -1369,8 +1426,22 @@ export async function runLiveNet(){
     appState.game.ev({t:"newround",dir:appState.game.windNow,streak:appState.game.stormNow?appState.game.stormStreak:0,windStreak:appState.game.noteWind(appState.game.windNow),next:appState.game.forecastWind(),nextStorm:appState.game.stormNext});liveRender(); // NARR-04
     // wind direction (and any storm) used to be visible only in the captain's log — call it
     // out in the yellow panel too, briefly, so it's not missed
+    /* THE STORM LADDER RIDES THE ROUND HEADER — one line, not a second beat.
+       Wyatt ruled the storm IN on 2026-09-02. A storm moves EVERY ship three squares before anyone
+       acts and says nothing about why, and it hits about one first voyage in five, so a first-timer
+       meets it as the board rearranging itself for no reason.
+       APPENDED to the header the round already prints rather than given its own hold: this moment
+       is already a pause, and the one thing verbosity must not do is make the game drag. The hold
+       is unchanged (900ms) because narration holds are derived from reading speed with a ceiling
+       the game already tunes — a longer line cannot hold longer than that ceiling. */
+    let header=describe(appState.game.events[appState.game.events.length-1]).txt;
+    if(appState.game.stormNow&&!appState.replaying){
+      const learn=pilotMsg("storm.hit","");
+      pilotSee("storm.hit");
+      if(learn)header+=`<br><span class="apSubInline">${learn}</span>`;
+    }
     // @copy adhoc.round.header
-    await flash(describe(appState.game.events[appState.game.events.length-1]).txt,900);
+    await flash(header,900);
     // v2 rule 7: one storm for the whole table, before anybody acts.
     if(appState.game.stormNow)await runStormLive(appState.game.windNow);
     ended=appState.game.cfg.bakeoff?await runLiveDayBakeoff(order):await runLiveDayClassic(order);

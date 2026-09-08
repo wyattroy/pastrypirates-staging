@@ -21,6 +21,8 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
 import { showsThinkingIndicator } from "../shared/visibility.js";
+import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
+import { showCourseFor, paintMarks, clearCourse } from "./course.js";
 
 const $ = id => document.getElementById(id);
 const AR = { N: "↑", S: "↓", E: "→", W: "←" };
@@ -40,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.1-staging@4bca119c";
+const PP4_STAMP = "2026.09.07.3-staging@bd68862c";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -473,7 +475,11 @@ function boatUXY(i){
 // write is skipped when the value hasn't changed, so an idle stage costs almost nothing.
 // The HTML overlays that are mapped to board coordinates and must therefore carry the camera.
 // See where it is applied below for why this is a list rather than two named consts.
-const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost"];
+// "courseHost" is the onward guide's marker layer (src/ui/course.js). It is board-mapped, so it
+// belongs here — BOARD-RENDERING §3 calls adding it "the step that gets forgotten", and #rimHost
+// was forgotten exactly this way: the current stayed parked on the full-board layout while the
+// water zoomed away beneath it. A LIST, not named consts, for the same reason.
+const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost"];
 let ribHCache = 48, ribHAt = -1e9, lastVB = "", lastRipT = "";
 /* THE TOP BAND — where the board's top edge goes: the bottom of the ribbon, or of the wind pill
    when that sits lower (playtest 17, Wyatt: "the wind/forecast pip covers the top of the trade
@@ -1298,6 +1304,18 @@ function pillTick(){
   if (p.style.display !== want) p.style.display = want;
 }
 
+/* THE PARROT CHIP'S OWN STATE, in one place. It is the only control in the ribbon whose look
+   depends on something stored rather than on the live game, so it is synced on the toggle and at
+   build time rather than every ribbonTick — a per-frame localStorage read to draw an opacity would
+   be paying a real cost for nothing. */
+function syncHelpChip(){
+  const b = $("pp4Help"); if (!b) return;
+  const on = pilotIsOn();
+  b.classList.toggle("off", !on);
+  b.setAttribute("aria-pressed", String(on));
+  b.title = on ? "Yer parrot's watchin'" : "Yer parrot's restin'";
+}
+
 /* ================= ribbon ================= */
 function ribbonTick(){
   // D-31: a captain's held ingredients change every turn, which changes the captains card's own
@@ -2038,34 +2056,139 @@ function recipeGuard(){
       btn.appendChild(bake);
     }
     const g = appState.game; if (!g) return;
-    const names = [...btn.querySelectorAll(".rn")].map(x => x.textContent.trim());
+    /* THE RACE IS GONE, AND SO IS THE REVERSE LOOKUP.
+       This block used to read each ingredient's DISPLAYED NAME off the card and match it back
+       against ING_NAME through a DYNAMIC IMPORT — a second copy of the name->id mapping, resolved
+       asynchronously. That promise is what left "orange dock rings still on the water two days into
+       the voyage" (found 2026-08-20): the committing tap ran clearGlow() synchronously, then the
+       promise settled and appended rings onto a board with nothing left to remove them. It needed a
+       focusBtn re-check to paper over it, and nobody could hit it on a warm module cache.
+       The card now CARRIES the ids in data-ing (see recipeCardHTML), so the ids are in hand
+       synchronously, there is no second copy of the mapping, and there is no promise to lose a race
+       in. The fix deletes the guard as well as the bug. */
     const cp = cellPx(), svg = svgEl();
-    // resolve display-name -> ingredient id through the shared table
-    import("../shared/index.js").then(sh => {
-      /* THE RINGS OUTLIVED THE CARD THAT ASKED FOR THEM. Found 2026-08-20 while screenshotting a
-         crew game: orange dock rings still on the water two days into the voyage.
-         The commit path is synchronous — second tap calls clearGlow() and lets the click through —
-         but the rings are appended from THIS promise. Commit before it settles and clearGlow has
-         already run on an empty board, so the rings land afterwards with nothing left to remove
-         them. Nobody can hit it on a warm module cache, which is why it has never been seen by
-         hand; a cold first tap of the session is a different story.
-         focusBtn is nulled by the committing tap, so "is this card still the focused one?" is the
-         exact question, and it costs one comparison. */
-      if (focusBtn !== btn) return;
-      const ids = names.map(n => Object.entries(sh.ING_NAME || {}).find(([k, v]) => v === n)?.[0]).filter(Boolean);
-      ids.forEach(ing => {
-        const c = (g.dockOf && g.dockOf[ing]) || (g.islandOf && g.islandOf[ing]); if (!c) return;
-        const el = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        el.setAttribute("cx", (c[0] + 0.5) * cp); el.setAttribute("cy", (c[1] + 0.5) * cp);
-        // playtest 12 (2.4): a tight ring on the dock square itself, not a splash over the island
-        el.setAttribute("r", cp * 0.55); el.setAttribute("fill", "#f5a623"); el.setAttribute("fill-opacity", "0.18");
-        el.setAttribute("stroke", "#f5a623"); el.setAttribute("stroke-width", 3);
-        el.classList.add("pp4Glow"); svg.appendChild(el);
-      });
-    }).catch(() => {});
+    {
+      const ids = [...btn.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
+      /* ── THE THIN ORANGE RING IS GONE, EVERYWHERE, FOR EVERYBODY ────────────────────────────
+         Wyatt, 2026-09-02: "I think what looks better is the pulsing x. That way, the players will
+         already have seeing the X marks the spot when they start sailing, and it'll kind of be a
+         learning moment before they even start."
+         So this is NOT a tutorial-only marker and it is not gated on a rung: the whole game's dock
+         preview becomes his X, at every rung, for every captain. That also answers his separate
+         standing complaint about these circles — "those dock circles should look substantially
+         different -- they need a UI redesign" — on all three counts at once. They were thin,
+         STATIC and ORANGE: orange is the game's `act now` colour, already spent on the gold squares
+         and the confirm pills, so a ring in it read as chrome rather than as the way in. The X
+         moves, is not orange, and carries meaning of its own.
+         ⚠ THE "Bake this!" PILL IS STILL #f5a623 AND STILL CORRECT. His playtest-21 ruling was
+         "the same bright color as the rings around the island" — the pill was matched TO the rings,
+         not the other way round. Retiring the rings does not retire the pill's colour, and the
+         index.html comment that ties them together is updated in this same commit rather than left
+         describing a pairing that no longer exists.
+         ── AND THE COURSE, at the moment he asked for it ──────────────────────────────────────
+         "that Dotted course should appear during the recipe choice phase to help them make a
+         decision." One continuous tour from the captain's own boat through every dock this card
+         would send them to — so the two cards are compared as VOYAGES, not as word lists. */
+      /* THE SEAT IS THE ACTIVE ONE, NOT `mySeat`, and the gate is right to insist.
+         `appState.mySeat` is the seat of whoever is WATCHING; on a pass-and-play device the picker
+         walks every captain in turn behind the pass screen, so mySeat would chart the wrong boat's
+         voyage for three of the four. S.activeSeat is the seat whose prompt is actually up — the
+         same source ribbonTick already reads — so this draws one captain's course from one rule
+         rather than forking on who is looking. (scripts/qa's mode-fork gate caught this on the
+         first run; it is exactly the class of thing that gate exists for.) */
+      chartFrontRecipe(btn);      // ONE place decides which docks a recipe sends you to
+    }
   }, true);
 }
-function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); }
+/* THE ONE TEARDOWN. It still removes .pp4Glow — nothing draws those on the picker any more, but
+   the class is used elsewhere and a teardown that forgets a thing it used to own is how the rings
+   outlived their card once already (found 2026-08-20: orange rings still on the water two days
+   into a crew game). clearCourse() takes the dashes AND the markers. */
+/* ── THE STACK CONTROLLER — one card at a time, arrows AND swipe ────────────────────────────────
+   His ruling 24: "a lot of users are probably going to wanna swipe between them." So both gestures
+   drive one piece of state, and neither is the special case.
+
+   MOUNTED FROM THE PROMPT TICK, which runs every frame, so it is guarded by a key built from the
+   cards themselves: re-running on an unchanged picker must cost nothing, and a NEW picker (the next
+   captain, behind the pass screen) must rebuild. Comparing the card markup is what makes both true
+   without a flag anybody has to remember to clear.
+
+   FLIPPING RE-DRAWS THE DOTTED COURSE — his ruling 18 — and the front card's course is drawn as
+   soon as the picker opens rather than waiting for a tap, because that is what ruling 16 asks the
+   course to be for: "that Dotted course should appear during the recipe choice phase to help them
+   make a decision." Comparing two recipes is then comparing two VOYAGES. */
+let rcKey = null;
+function mountRecipeStack(ap){
+  const cards = [...ap.querySelectorAll(".apBtn")].filter(b => b.querySelector(".recipeList"));
+  if (cards.length < 2){ rcKey = null; return; }
+  /* ⚠ THE KEY MUST NOT MOVE WHILE THE PICKER IS UP. It was `innerHTML.length`, which CHANGES the
+     moment the "Bake this!" pill is added — so selecting a card remounted the whole stack on the
+     next frame: arrows destroyed and rebuilt, and the dotted course re-charted, every frame the
+     pill was on screen. The recipe titles are what actually identifies this picker, and they are
+     fixed for as long as it is up. */
+  const key = cards.map(c => (c.querySelector(".recipeTitle") || {}).textContent || "").join("|");
+  if (key === rcKey) return;
+  rcKey = key;
+
+  let front = 0;
+  const row = cards[0].parentElement;
+  const paint = () => {
+    cards.forEach((c, i) => {
+      const isFront = i === front;
+      c.dataset.rcpos = isFront ? "front" : "back";
+      /* THE HIDDEN CARD IS HIDDEN FROM EVERYTHING, not just from the eye. It is a real <button>
+         sitting behind another one: without this it stays in the tab order and is announced by a
+         screen reader as a choosable recipe that cannot be reached, and the sea trial's structural
+         check found it exactly that way on four legs — "clickable covered by something else".
+         pointer-events:none already stopped the mouse; these stop the keyboard and the reader. */
+      c.setAttribute("aria-hidden", String(!isFront));
+      c.tabIndex = isFront ? 0 : -1;
+    });
+    chartFrontRecipe(cards[front]);
+  };
+  const step = (d) => { front = (front + d + cards.length) % cards.length; paint(); };
+
+  row.querySelectorAll(".pp4RcArrow").forEach(a => a.remove());
+  for (const [cls, d, label] of [["prev", -1, "Previous recipe"], ["next", 1, "Next recipe"]]){
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pp4RcArrow " + cls; b.setAttribute("aria-label", label);
+    b.textContent = cls === "prev" ? "‹" : "›";
+    // stopPropagation, or the arrow's click also reaches recipeGuard's document listener and
+    // counts as a tap on the card underneath — which would select a recipe the captain was only
+    // flicking past.
+    b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); step(d); });
+    row.appendChild(b);
+  }
+
+  /* THE SWIPE. Pointer events, not touch events, so a trackpad drag and a finger are one path.
+     A 34px threshold and a dominant-axis test: the panel scrolls vertically, so a swipe that is
+     mostly up or down must be left to it rather than eaten here. */
+  let sx = 0, sy = 0, live = false;
+  row.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; live = true; });
+  row.addEventListener("pointerup", (e) => {
+    if (!live) return; live = false;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) < 34 || Math.abs(dx) <= Math.abs(dy)) return;
+    // a real swipe is not a tap: stop it before recipeGuard reads it as one
+    e.preventDefault(); e.stopPropagation();
+    step(dx < 0 ? 1 : -1);
+  }, true);
+  row.addEventListener("pointercancel", () => { live = false; });
+  paint();
+}
+
+/* The front card's docks, charted. Shared by the stack above and by recipeGuard's first tap, so
+   "which docks does this recipe send me to" is answered in ONE place. */
+function chartFrontRecipe(card){
+  const g = appState.game; if (!g || !card) return;
+  const ids = [...card.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
+  const seat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
+  const me = (seat != null && g.players) ? g.players[seat] : null;
+  if (me) showCourseFor(g, me, svgEl(), cellPx(), ids);
+  else paintMarks(ids.map(i => (g.dockOf && g.dockOf[i]) || (g.islandOf && g.islandOf[i])).filter(Boolean), cellPx());
+}
+
+function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); clearCourse(); }
 function clearBake(){ document.querySelectorAll(".pp4Bake").forEach(e => e.remove()); }
 
 /* ========== the trade-wind ride preview (playtest 20, Mando's three lost turns) ========== */
@@ -2164,8 +2287,39 @@ function buildStage(){
     <span class="pp4Boats">${order.map(i => `<img class="pp4Boat" src="${BOAT_IMG[i]}">`).join("")}</span>
     <button id="pp4FF" type="button" title="Skip to yer next turn">⏩</button>
     <button id="pp4Chat" type="button" title="Scuttlebutt">💬<span id="pp4ChatDot"></span></button>
+    <button id="pp4Help" type="button" title="Yer parrot">🦜?</button>
     <button id="pp4Menu" type="button">☰</button>`;
   document.body.appendChild(rib);
+  /* THE PARROT IS A TWO-STATE TOGGLE — his ruling, chosen over a three-step, because an
+     unlabelled three-state control gets pressed at random. ON puts every ladder back to the top
+     and says so; OFF silences it. One line of narration each way, drawn through flash() so it
+     arrives in the box the game already speaks from — nothing here is a tooltip (he killed one of
+     those for the Muse button on 2026-08-27 and the ruling is respected, not argued with). */
+  $("pp4Help").onclick = () => {
+    const on = pilotToggle();
+    syncHelpChip();
+    /* OFF MEANS OFF, THIS INSTANT. Measured on the posed pair: without this the words stopped at
+       the next prompt but the course stayed drawn on the board, so the control looked broken for a
+       whole turn — a toggle that does not visibly do anything is worse than no toggle. Switching
+       ON does not draw a course here on purpose: the guide belongs to a prompt, and it arrives with
+       the next one rather than appearing over whatever is on screen now. */
+    if (!on) clearCourse();
+    // @copy misc.pilot.toggle — DRAFT COPY, his to rewrite.
+    // It speaks through stageFlash, i.e. the narration box the game already talks from. Nothing
+    // in this feature is a tooltip: he killed a hover tooltip for the Muse button on 2026-08-27
+    // ("don't build the tooltip, ignore this and let the idea go") and that ruling is respected
+    // rather than argued with.
+    /* ⚠ NOT WHILE A PROMPT IS UP. Measured on the posed pair at 320px: the toggle's line drew
+       straight over the sail prompt's own helper line and half of each was unreadable — two boxes
+       in one place, which is the collision the narration channel exists to prevent.
+       The chip dims either way, so the control is never silent; the sentence is a courtesy and it
+       waits for a moment that has room for it. */
+    const promptUp = !!document.querySelector("#actionPanel .apMsg");
+    if (S.active && !promptUp)
+      stageFlash(on ? "🦜 Yer parrot's watchin' — he'll start from the top."
+                    : "🦜 Yer parrot settles down. Fair winds, captain.");
+  };
+  syncHelpChip();
   // FAST-FORWARD (Wyatt's spec, 2026-08-12): ONE tap arms ONE skip — everything paces instantly
   // until the next prompt that involves him (his sail, a flip, a battle call, an offered trade),
   // which ends the skip at normal speed and never re-arms it (flow.js ffEndNow is the other half:
@@ -2914,6 +3068,7 @@ function promptTick(force){
   const recipes = !!ap.querySelector(".recipeList");
   box.classList.toggle("pp4Recipes", recipes);
   let hint = box.querySelector(".pp4PeekHint");
+  if (recipes) mountRecipeStack(ap);
   if (recipes){
     box.classList.remove("radial", "centered");
     /* THE PICKER SITS AS LOW AS IT CAN WHILE STILL FITTING — it is no longer a flat 45% of the
@@ -2926,7 +3081,22 @@ function promptTick(force){
        The 844 emulation hid it completely, which is D-42's whole point.
        The lift itself is applied after the cards exist and can be measured — see the note by the
        maxHeight cap below. This stays the STARTING point, so nothing changes on a tall screen. */
-    const top = Math.round(vhPx() * 0.45);
+    /* ── R4: THE CARDS MOVE UP, TO JUST BELOW THE BOARD ────────────────────────────────────────
+       Wyatt: "they are too low down the screen. I want them to be higher up on the screen, so that
+       they're kind of just below the bottom of the board."
+       ⚠ THE TRAP, WRITTEN DOWN SO IT IS NOT PAID FOR TWICE: #boardwrap is TALLER than the drawn
+       board, so anchoring to ITS bottom puts the card BELOW the captains box. The captains box's
+       own top IS "just below the drawn board" — it is the element already sitting there — so that
+       is what this reads. One measurement, from the renderer, never arithmetic of mine.
+       The 0.45-of-the-viewport fallback stays for the case where the box has not been laid out
+       yet; it is what shipped before, so nothing regresses when the measurement is unavailable. */
+    const capTop = (() => {
+      const cap = $("pp4Cap");
+      if (!cap) return null;
+      const r = cap.getBoundingClientRect();
+      return r.height > 0 ? Math.round(r.top) : null;
+    })();
+    const top = capTop != null ? capTop : Math.round(vhPx() * 0.45);
     box.style.left = "8px"; box.style.top = top + "px";
     box.style.width = (vwPx() - 16) + "px";
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
@@ -2957,11 +3127,19 @@ function promptTick(force){
        position — this one first, overwritten a moment later — which is two things kept in step by
        nothing (rule 23). peekHintTick() is now the only writer, so the placement cannot disagree
        with itself, and the comment above no longer describes something the screen contradicts. */
+    /* THE PILOT SPEAKS THROUGH THE LINE THAT IS ALREADY HERE.
+       This hint is the recipe draft's own helper text, and it is where the ladder belongs — the
+       first attempt put the rung in the panel's .apSub instead and the picker ended up carrying TWO
+       sentences saying nearly the same thing, one above the card and one below it. Caught by
+       looking at the screenshot, not by a gate.
+       The shipped wording is passed IN, so at the bottom rung this element renders exactly the
+       string it always did. */
     const msg = ap.querySelector(".apMsg");
     if (msg && !ap.querySelector(".pp4RecipeHint")){
       const rh = document.createElement("div");
       rh.className = "pp4RecipeHint";
-      rh.textContent = "Tap a recipe to highlight its docks";
+      rh.textContent = pilotMsg("recipe.draft", "Tap a recipe to highlight its docks");
+      pilotSee("recipe.draft");
       msg.insertAdjacentElement("afterend", rh);
     }
     // playtest 19: the cap is the room left UNDER THE PANEL'S OWN TOP, not under the box's. The

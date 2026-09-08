@@ -10,7 +10,11 @@
 // seam Phase 9 established stays in that direction), never via a direct import here.
 // scripts/module_graph_check.js and scripts/ui_contract_check.js both gate this mechanically.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
 
-import { ASSET_BASE, ING_NAME, ING_PLAIN, iname, ingImg } from "../shared/index.js";
+/* ING_PLAIN is gone from this import, which is r31 landing: the plain-baker gloss ("sugar",
+   "butter & milk", "flour") existed to translate the card's ingredient NAMES, and the card no
+   longer prints names. The constant itself stays exported from shared/index.js — it is one small
+   table and something else may yet want it — but nothing reads it today. */
+import { ASSET_BASE, ING_NAME, iname, ingImg } from "../shared/index.js";
 import { appState } from "../state/index.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863),
@@ -351,13 +355,32 @@ export function winRecipeSpan(idx){
   if(!p||!p.recipe)return "";
   return `<span class="narrRecipeLink" data-idx="${idx}">📜 ${escHtml(recipeTitle(p.recipe))}</span>`;
 }
+/* R2, his ruling 18: "picture, name, ingredient icons. NOTHING ELSE."
+   It came with the bluntest note on the whole list — "Your recipe cards look terrible. I'm sorry."
+   — about the three-way merge he had picked, so the answer is subtraction rather than a redesign.
+   GONE: the ten ingredient NAMES, and the plain-baker gloss under each one (ING_PLAIN, his r31 —
+   "once the card shows pictures instead of names, the translation has nobody left to serve"). The
+   description was already display:none on the stage; it goes here too, so the markup and the
+   screen agree instead of one hiding the other.
+   His reason for all of it, and it governs this whole moment: "The recipe choice moment has a lot
+   of text in it already, and it's pretty overwhelming -- even as is. Adding more text is not the
+   solution to this."
+
+   `data-ing` CARRIES THE INGREDIENT ID, and that is not decoration. The dock chart used to recover
+   these ids by reverse-matching each DISPLAYED NAME against ING_NAME — a second copy of the
+   mapping, resolved through a dynamic import, and the race in that promise is exactly what once
+   left orange rings on the water two days into a crew game. Carrying the id is the same discipline
+   the sail squares already use with data-gx/data-gy: carry the fact, never re-derive it.
+
+   `recipeList` IS KEPT AS THE CLASS even though it is no longer a list. It is a HOOK, not a
+   description: three separate selectors in stage.js find the picker by it, and renaming it here to
+   read nicely would silently unhook all three. */
 export function recipeCardHTML(recipe){
   const info=recipeInfo(recipe);
-  const items=recipe.map(i=>`<li><span class="ri">${ingImg(i)}</span><span class="rn">${iname(i)}</span><span class="rc">${ING_PLAIN[i]||""}</span></li>`).join("");
-  const desc=info?`<div class="recipeDesc">${info.desc}</div>`:"";
+  const items=recipe.map(i=>`<span class="ri" data-ing="${i}">${ingImg(i)}</span>`).join("");
   const thumb=info&&info.img?`<img class="recipeThumb" src="${info.img}" alt="">`:"";
-  return thumb+`<div class="recipeTitle">${recipeTitle(recipe)}</div>`+desc+
-    `<ul class="recipeList">${items}</ul>`;
+  return thumb+`<div class="recipeTitle">${recipeTitle(recipe)}</div>`+
+    `<div class="recipeList recipeIcons">${items}</div>`;
 }
 // ---- recipe modal: click a player's recipe name (in the captain's row, once one is chosen) to
 // view the full bakeable recipe, print it, or email it. NOT wired onto the initial draft-pick

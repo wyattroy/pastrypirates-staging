@@ -284,6 +284,22 @@ never name the production host, and must not be missing.
 
 DNS lives at **Squarespace**: `CNAME` · host `staging` · value `wyattroy.github.io`.
 
+### ⚠ EVERY MERGE THAT TOUCHES A LISTED PAGE NEEDS THE SITEMAP COMMAND AFTERWARDS
+
+`scripts/qa/sitemap_lastmod_check.mjs` reads dates from **`git log`, not from disk** — so it cannot
+go red until the commit that trips it EXISTS. Two consequences, and both fired on 2026-09-07:
+
+1. **A sweep run before you commit is blind to it.** A session ran `npm test` green, committed
+   `index.html` and `credits.html`, published to staging, and only then was the gate able to fail.
+   The green tick was honest when it ran and false by the time it shipped. **Run the sweep AFTER
+   the commit.**
+2. **A merge moves dates too.** It bit both branches of the same two-way merge. Expect it on every
+   merge rather than rediscovering it:
+
+```bash
+node scripts/qa/sitemap_write.mjs   # never a hand-typed date — that is what the script is for
+```
+
 ## 6. Absolute paths, always — the two-trees hazard
 
 The Bash tool's working directory resets, and announces it at the bottom of unrelated output.

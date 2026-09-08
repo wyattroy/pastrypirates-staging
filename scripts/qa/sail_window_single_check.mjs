@@ -34,13 +34,30 @@
  * (double render kept 8 squares; answer left 4 orphans; clearSailWindow did not exist).
  */
 "use strict";
-import { openChrome } from "../lib/cdp.mjs";
+import { openChrome, freshProfileDir } from "../lib/cdp.mjs";
 import { REPO, gameURL } from "../lib/chrome.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const HTTP = 8479, DBG = 9479; // this gate's own ports, never shared (HARD-WON-LESSONS §8)
+/* ⚠ "ITS OWN PORTS, NEVER SHARED" WAS TRUE OF OTHER GATES AND FALSE OF ITS OWN PREVIOUS RUN.
+   That is what the old comment here said, and it is why nobody looked twice — including two
+   sessions on 2026-09-07 who each parsed this chain for browser-driving gates and both reported
+   ZERO, because they grepped `launch(` and `--user-data-dir` and this file spells it
+   `openChrome({ profileDir })`. It is the ONLY gate in `npm test` that starts a browser.
+
+   THE RACE, and it is measured elsewhere rather than theorised here: `killAll()` does not wait, so
+   a fixed debug port lets attach() find the PREVIOUS run's Chrome — still shutting down, still
+   holding a profile that has already played. That produced alternating pass/fail on identical
+   source in another gate, and once a HANG (node exit 13, "unsettled top-level await"), which is
+   worse than a failure because the next session reads a timeout as a machine problem and re-runs
+   until green. docs/DRIVING-THE-GAME.md §8d has the full account.
+
+   Derived from the pid so there is no race to win rather than a race to survive. The offsets keep
+   this gate's pair inside its own historical band and away from other probes'. */
+const PORT_SPREAD = 400;                       // room for concurrent runs without meeting a neighbour
+const SLOT = process.pid % PORT_SPREAD;
+const HTTP = 8479 + SLOT, DBG = 9479 + SLOT;
 let failed = false;
 const check = (label, cond, detail) => {
   if (cond) console.log(`PASS -- ${label}`);
@@ -50,7 +67,10 @@ const check = (label, cond, detail) => {
 console.log("sail_window_single_check — one sail window, ever; a cleared prompt keeps no squares\n");
 const c = await openChrome({
   W: 900, H: 700, dbgPort: DBG, httpPort: HTTP, serveRoot: REPO,
-  profileDir: path.join(os.tmpdir(), "pp4-sail-window-check"),
+  // freshProfileDir (scripts/lib/cdp.mjs) verifies the wipe actually happened — rmSync raises
+  // EBUSY when a file is held open, and a partial delete can leave the directory standing with
+  // content in it — and hands back a timestamped sibling when it cannot. Eleven gates already use it.
+  profileDir: freshProfileDir(path.join(os.tmpdir(), `pp4-sail-window-check-${process.pid}`)),
 });
 try {
   await c.nav(gameURL(HTTP));
