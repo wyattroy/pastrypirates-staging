@@ -598,7 +598,15 @@
   @keyframes apWhyIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .apWhy { animation: none; } }
   /* #5c: helper line under the action buttons */
-  .apSub { margin-top: 8px; font-size: 12.5px; opacity: .8; font-style: italic; }
+  /* ⭐ BIGGER, IN ALL THREE PLACES IT IS DRAWN — Wyatt, 2026-09-07 playtest item 3: "the helper
+     text is too small to read. Increase the size of the helper text font."
+     THE HELPER LINE IS WHERE THE PILOT SPEAKS. Every `sub` rung in src/ui/pilot.js lands in this
+     slot, so "too small to read" is not a cosmetic note — it is the tutorial being unreadable at
+     the one moment it is teaching. 12.5px italic at 80% opacity on a phone was asking a lot.
+     Raised to 15px and the opacity lifted with it; italic still separates this voice from the
+     game's own. The radial and centre-stage variants below move by the same proportion rather
+     than being left behind — one line, three surfaces, and a player must not meet three sizes. */
+  .apSub { margin-top: 8px; font-size: 15px; opacity: .9; font-style: italic; }
   /* small, consistent "back" affordance for every back-able decision — deliberately lower-key
      than the real choices below it (a chevron-in-a-circle, iOS-nav-bar style), not another
      button competing for attention in the main row */
@@ -909,23 +917,25 @@
      chip whose CSS animation silently erased its SVG transform attribute. */
   .pp4CourseMark { position: absolute; transform: rotate(-4deg); }
   .pp4CourseMarkArt { display: block; width: 100%; height: 100%;
-    filter: drop-shadow(0 1px 3px rgba(0,25,35,.55));
-    animation: pp4CourseBreathe 1.2s ease-in-out infinite; }
+    filter: drop-shadow(0 1px 3px rgba(0,25,35,.55)); }
   /* THE SWELL IS THE PULSE, AND THERE IS NO RING. Wyatt, 2026-09-03: "I want the x to pulse,
      remove the ring." That reverses his own two earlier rulings to keep the slow white ripple —
      the later one wins, and it is written down here so nobody restores a ring from the older
-     comment. Depth 0.15 and period 1.2s are his dialled numbers (pd/ps in COURSE), traced round
-     the sine the tuner drew rather than eyeballed: 1 → 1.15 → 1 → 0.85 → 1. */
-  @keyframes pp4CourseBreathe {
-    0%   { transform: scale(1); }
-    25%  { transform: scale(1.15); }
-    50%  { transform: scale(1); }
-    75%  { transform: scale(0.85); }
-    100% { transform: scale(1); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .pp4CourseMarkArt { animation: none; }
-  }
+     comment.
+     ⭐ THE ANIMATION ITSELF NOW LIVES IN THE ATTENTION VOCABULARY BLOCK, and the private
+     @keyframes that stood here is DELETED — Wyatt, 2026-09-07 playtest item 19: "The X's aren't
+     pulsing smoothly — they're pausing at the halfway point between small and large size;
+     instead, they should pulse smoothly from small to big according to the same motion as the
+     action prompt buttons (reuse that function if possible to reduce drift and maintain
+     consistency)."
+     HE DIAGNOSED IT EXACTLY. The old keyframes ran 1 → 1.15 → 1 → 0.85 → 1 across FIVE stops with
+     `ease-in-out`, and ease-in-out decelerates into and out of EVERY stop — so the 50% keyframe,
+     sitting at scale(1) in the middle of the cycle, produced a visible halt at true size twice a
+     second. That is the pause he saw, and it was a property of having written a second keyframe
+     at all. The button's pp4Grow is two stops, one swell, no halt — and the same 1.15 peak, so
+     his dialled depth is unchanged. One gesture, one definition (rule 8). */
+  /* (the reduce-motion guard for this element moved into the attention block with the animation
+     itself — it MUST sit after the rule it overrides, and it now does.) */
   /* the wrapper holds the tangent rotation and NEVER animates; the img drifts along that rotated
      local axis, so each arrow travels its own stretch of channel rather than all of them sliding
      the same way across the board */
@@ -1952,7 +1962,7 @@
      elsewhere; on phone (no transformed ancestor) `%` resolves against the true viewport, same as
      `vw` did — no change there (D-18). */
   #pp4Prompt.radial .apSub { display:block; position:fixed; background:rgba(255,253,242,.9);
-    border-radius:9px; padding:4px 10px; font-size:11px; font-style:italic; color:#4a3223;
+    border-radius:9px; padding:5px 11px; font-size:13.5px; font-style:italic; color:#4a3223;
     width:max-content; max-width:80%; box-shadow:0 4px 12px rgba(0,0,0,.25); margin:0; }
   #pp4Prompt.radial .apBack { display:flex; position:fixed; width:38px; height:38px;
     border-radius:50%; align-items:center; justify-content:center; pointer-events:auto;
@@ -2477,7 +2487,7 @@
      compact card, since it is the recipe's first and only unhurried read */
   #pp4Prompt.pp4Center .apMsg .bkoCard li { font-size:13.5px; }
   /* the helper line sits under the stage button, on the dim sea — light text so it reads there */
-  #pp4Prompt.pp4Center .apSub { color:#fffdf2; opacity:.9; text-align:center; font-size:13px;
+  #pp4Prompt.pp4Center .apSub { color:#fffdf2; opacity:.95; text-align:center; font-size:15.5px;
     text-shadow:0 1px 8px rgba(0,0,0,.6); }
   /* ── ONE CARD AT A TIME, ON A VISIBLE STACK OF TWO ──────────────────────────────────────────
      His ruling 18: the card must show "visually that it is a stack of two, which didn't say one of
@@ -2493,10 +2503,85 @@
      with empty screen below it. Measured, not guessed: row bottom 732 against panel bottom 679.
      One card in flow means the row is exactly as tall as the card the captain is looking at, and
      every height the panel computes downstream is honest. */
+  /* ⭐ THE STACK REBUILT — Wyatt's playtest item 6, 2026-09-07, eight numbered changes.
+     ⚠ WHY THE CARD WAS JAMMED LEFT (his 6.8: "the cards should be centered within the white box;
+     not left justified"). `margin:0 auto` was here all along and could never work: the row is
+     display:block, but `.apBtn` is a <button> with no display set, so it is INLINE-BLOCK — and
+     auto side margins do nothing to an inline-level box. MEASURED on desktop before the fix: row
+     content 154..730, card at 154..403, i.e. flush against the left padding with 327px of nothing
+     to its right. `text-align:center` on the row is the one-property fix, and it touches no
+     layout inside the card (whose title and icon row are already centred).
+     THAT MISALIGNMENT WAS ALSO THE CAUSE OF 6.1. The old paper-edge pseudo-element WAS centred in
+     the row, so it and the card disagreed by ~48px — and 176px of blank slab showed beside a 250px
+     card. He called it "50% at least"; it measured 71% of a card width. Both are fixed by the same
+     line, and the pseudo-element is gone entirely (see below).
+     THE GEOMETRY IS DERIVED, NOT TYPED (rule 9). --rcW shrinks on a narrow screen so that the peek
+     and the swap circle still fit beside it; the peek is a FRACTION of the card, so "80%
+     overlapped" stays true at every width instead of only at 250px. */
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) {
-    display:block; position:relative; padding:4px 30px 2px; touch-action:pan-y; }
+    display:block; position:relative; touch-action:pan-y; text-align:center;
+    /* ⚠ THE PADDING IS SYMMETRIC AND HAS TO BE. The back card is absolutely positioned at
+       `left:50%`, which for an abspos child resolves against the row's PADDING box — so the moment
+       the row's left and right padding differ, the back card centres somewhere the front card
+       does not, and the peek is wrong on one side. Measured with a 67px right pad: the visible
+       fraction went to 0.332 and the front card slid back against the left edge. Symmetric
+       padding keeps `left:50%` meaning the same point for both cards, which is the whole reason
+       the stack lines up at all.
+       min-width holds the box open for card + both peeks. Without it the white box hugs whatever
+       is widest — the helper line while it is there, the bare card once it goes on selection —
+       and the box collapsed 362px -> 280px under his thumb. */
+    padding:4px 6px 2px;
+    min-width:calc(var(--rcW) + var(--rcPeek) * 2 + 8px); max-width:100%;
+    /* ⚠ THE CARD SHRINKS SO THAT HIS TWO NUMBERS CAN BOTH BE TRUE, and the arithmetic is here
+       rather than in three media queries. The stack needs, to the right of the card's centre:
+       half a card + a 20% peek + a 10px gap + the 34px circle. Solve for the card and it is
+       (half the row - 44) / 0.7. MEASURED at the three sizes he named — row content 322/362/624 —
+       that allows 167 / 196 / 383, so the clamp lands on 166 / 195 / 250 (capped).
+       A 250px card at 390px WILL NOT FIT: 125 + 50 + 10 + 34 = 219 against 161px of room. That is
+       geometry, not a bug, and it is why the card is smaller on a phone than it was. If he would
+       rather keep the big card, the circle has to overlap the peek instead — it is on his sheet. */
+    /* ⚠ THE CARD IS 250px AND STAYS 250px, AND BOTH OTHER ATTEMPTS ARE WORTH KNOWING ABOUT.
+       A 250px card, a 20% peek AND a 34px circle standing 10px clear of it need 219px to the right
+       of the card's centre. At 390px the row offers 161. That is geometry, not a bug: his 6.1 and
+       his 6.5 cannot both be satisfied at full card width on a phone, so one of them bends.
+         attempt 1 — shrink the card to fit (`calc(100% / 1.4 - 64px)`). It fit, and it was WRONG:
+           it made the card 166px on a phone, wrapped the five-ingredient row onto two lines, and
+           was CIRCULAR besides — the panel is shrink-to-fit, so card -> row -> panel -> `100%`
+           -> card. Measured: the card jumped 166 -> 150 the instant "Bake this!" appeared.
+         attempt 2 — measure it once in JS. That only moved the loop into a resize listener whose
+           answer depended on when it happened to run: 166 at phone, still 166 at tablet, 195 at
+           desktop, 250 when selected. Four sizes for one card.
+       SO THE CARD WINS AND THE CIRCLE BENDS. The card is the thing he is choosing between and it
+       has to be readable; the circle is chrome. It now sits CENTRED ON the back card's right edge
+       rather than 10px clear of it — which fits at every width, so the picture is identical at all
+       three sizes (his item 26), and there is no feedback loop left to be unstable.
+       AND IT IS A CONSTANT, WITH NO `100%` ANYWHERE IN IT. Every percentage form of this was
+       unstable for the same measured reason: #actionPanel is shrink-to-fit, and the helper line
+       ("Tap a recipe to chart its docks…") is what makes it wide. Select a card and that line goes
+       — the box collapsed 362px -> 280px, `100%` collapsed with it, and the card went 250 -> 216
+       under his thumb. A constant cannot do that. The row's own min-width below is what stops the
+       BOX collapsing, so the circle keeps its place too. */
+    --rcW: 250px;
+    --rcPeek: calc(var(--rcW) * 0.2);      /* his 6.1: 80% overlapped, so 20% of the card shows */
+    --rcGap: 10px;                          /* his 6.5: the circle sits 10px off the back card */
+    --rcSwap: 34px; }
+  /* ⭐ THE TWO PLACES A NARROW SCREEN IS TREATED DIFFERENTLY, and both numbers are measured
+     rather than picked. The stack needs `card x 1.4 + 8px` of row (card + a peek each side), and
+     the row has to live inside #actionPanel's content box:
+       390px viewport -> the white box measures 362 wide with 14px padding, so 334 of content
+                         -> card <= (334 - 8) / 1.4 = 233.  Set 225, which leaves a little air.
+       320px viewport -> ~264 of content -> card <= 183.  Set 180.
+     A 225px card on a phone against 250 elsewhere is the one inconsistency left in this picker,
+     and it is the ordinary responsive kind — the composition, the peek fraction and the circle's
+     place are identical at every width, which is what his item 26 asked for. */
+  @media (max-width: 430px) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 225px; }
+  }
+  @media (max-width: 360px) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 180px; }
+  }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
-    width:100%; max-width:250px; min-width:0; box-sizing:border-box; margin:0 auto;
+    width:var(--rcW); max-width:250px; min-width:0; box-sizing:border-box; margin:0 auto;
     padding:6px 6px 8px; transition:transform .22s cubic-bezier(.2,.9,.3,1.05), opacity .22s; }
   /* the card behind, sized to the front one by its own inset rather than by a typed height.
      pointer-events:none is load-bearing: without it the hidden card is still a tap target over the
@@ -2506,50 +2591,82 @@
      exists and outranks a plainer `.apBtn[data-rcpos="back"]`. The back card therefore stayed in
      normal flow, the row measured 298px for a 146px card, and the stack was two cards tall with the
      second one invisible under the fold. Specificity, not a missing property. */
-  /* ⚠ THE SECOND CARD IS NOT A CONTROL. It is DECORATION, and this is the third version of this
-     block — the first two were wrong in ways only a driven voyage showed.
-       v1 stacked both cards live. The trial's judge failed two TABLET screens: "second recipe card
-         is overlapped/clipped by the front card, truncating its title to 'n-Chocolate Fudge'". It
-         was right — I had only ever looked at 390px, where the two boxes happen to coincide.
-       v2 hid its contents and marked it aria-hidden. STILL FAILED, on the same four legs: the
-         structural check counts every non-disabled clickable and asks whether it is the topmost
-         thing at its own centre. A <button> behind another <button> is not, however invisible it
-         is to a reader — "clickable covered by something else" is exactly true.
-     v3 accepts what the check is telling me. There is ONE control on screen and the stack is drawn
-     rather than staffed: `display:none` on the card behind, and the paper edge below is a
-     pseudo-element that no check, no keyboard and no screen reader will ever mistake for a choice.
-     It costs nothing — the way to the other recipe is the arrows and the swipe, never a tap on a
-     card you cannot see. And it still satisfies his ruling: it shows it is a stack of two WITHOUT
-     saying so in numbers. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="back"] { display:none; }
-  /* THE PAPER EDGE. Same border, radius and parchment as .recipeCard so it reads as the same
-     object seen from behind — copied deliberately rather than shared, because a pseudo-element
-     cannot inherit another rule's background and a second card is the ONE thing this needs to
-     look like. If .recipeCard's paper changes, change it here too. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList)::after {
-    content:""; position:absolute; z-index:0; pointer-events:none;
-    top:11px; bottom:6px; left:50%; width:100%; max-width:250px;
-    transform:translateX(-50%) translate(9px,6px) rotate(1.1deg);
-    border:2px solid #a07a45; border-radius:7px;
-    background:linear-gradient(160deg,#f2e6c7,#e3cfa2);
-    box-shadow:0 2px 7px rgba(70,45,20,.22); opacity:.85; }
-  /* one card, so no stack edge behind it — a single recipe must not look like two. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList):not(:has(.apBtn[data-rcpos="back"]))::after { display:none; }
+  /* ⚠ THE SECOND CARD, v4 — AND THE HISTORY MATTERS BECAUSE HE HAS NOW ASKED FOR WHAT v1 AND v2
+     TRIED TO DO. His 6.3: "The back card should have its text and images on it always." His 6.7:
+     "Tapping the back card should trigger the two to animatedly swap."
+       v1 stacked both cards LIVE. The sea trial's judge failed two TABLET screens: "second recipe
+         card is overlapped/clipped by the front card, truncating its title". True — I had only
+         looked at 390px, where the two boxes happen to coincide.
+       v2 hid its contents and marked it aria-hidden. STILL FAILED on four legs: the structural
+         check counts every non-disabled clickable and asks whether it is the topmost thing AT ITS
+         OWN CENTRE. A <button> behind another <button> never is, however invisible to a reader.
+       v3 gave up and drew a blank pseudo-element. That is the thing he is now objecting to — "it
+         clearly looks blank" — and it was 71% of a card wide on desktop.
+     v4 SEPARATES BEING SEEN FROM BEING TAPPED, which is what both earlier failures were really
+     about. The back card is a REAL card with its real art and title, offset so exactly 20% of it
+     shows — and it is pointer-events:none, aria-hidden, out of the tab order. It cannot fail the
+     structural check because it is not a clickable at all. What IS clickable is .pp4RcPeek, a
+     transparent strip that covers ONLY the visible sliver, so its own centre is genuinely the
+     topmost thing there. His 6.7 is satisfied by a control the check agrees is real.
+     Scaled and dimmed a touch so it reads as further away rather than as a second front card —
+     and clipped-safe: it never sticks out further than the swap circle allows for. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="back"] {
+    display:block; position:absolute; z-index:1; pointer-events:none;
+    left:50%; top:10px; margin:0;
+    /* ⚠ PERCENTAGES IN A `transform` RESOLVE AGAINST THE ELEMENT, NOT ITS CONTAINER — and that is
+       exactly why the first version showed 9.8% of the back card instead of 20%. `--rcPeek` is
+       `--rcW * 0.2`, and `--rcW` contains a `100%`; used in `left` on the row's children it means
+       the ROW, but substituted into this transform it meant THE CARD'S OWN WIDTH, so the peek came
+       out as 0.2 x min(250, cardWidth - 108) = 28px. Measured, not reasoned: back-card visible
+       fraction 0.098 against the 0.20 he asked for.
+       So the offset is written as a plain element-relative percentage, which is what a transform
+       wants anyway. -28% is -50% (the centring half) + 22%; the scale below pulls the right edge
+       back by ~1.75% of the width, landing the visible sliver on ~20.25%. */
+    transform:translateX(-28%) scale(.965) rotate(1.1deg);
+    transform-origin:50% 0; filter:brightness(.93) saturate(.88); opacity:.97; }
+  /* THE TAP STRIP over the back card's visible 20% — his 6.7. Transparent by design: the thing a
+     captain sees and aims at is the card edge underneath it. Sized and placed from the same three
+     custom properties the cards use, so it can never drift off the sliver it stands for. */
+  .pp4RcPeek { position:absolute; z-index:3; cursor:pointer; background:transparent; border:0;
+    padding:0; -webkit-tap-highlight-color:transparent;
+    top:10px; height:calc(100% - 18px);
+    left:calc(50% + var(--rcW) / 2); width:var(--rcPeek); }
+  .pp4RcPeek:focus-visible { outline:3px solid #f5a623; outline-offset:2px; border-radius:6px; }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { position:relative; transform:none; opacity:1; z-index:2; }
-  /* the arrows. They sit OUTSIDE the card, in the padding reserved above, so they never cover the
-     artwork the card exists to show. */
-  /* ⚠ THE ARROWS ARE BROWN ON CREAM, NOT WHITE ON TRANSLUCENT. The first version borrowed the
-     ribbon chips' rule — white on rgba(255,255,255,.16) — which is invisible on this panel's cream
-     ground. They measured as present and correctly placed (30x44 at both edges) and could not be
-     seen in the screenshot, which is the whole reason to look at the picture as well as the numbers.
-     The palette is the card's own: #3a2600 ink on #f5a623, already this codebase's pairing. */
-  .pp4RcArrow { position:absolute; top:50%; transform:translateY(-50%); z-index:4;
-    width:30px; height:44px; display:flex; align-items:center; justify-content:center;
-    border:2px solid #c9821a; border-radius:9px; background:#f5a623; color:#3a2600;
-    font-size:20px; font-weight:800; line-height:1; cursor:pointer; padding:0;
+  /* ⭐ ONE ROUND SWAP CIRCLE, NOT TWO SQUARE ARROWS — his 6.5: "the left/right buttons should be
+     replaced with one button that hovers 10 px to the right of the back card's edge that has a ↩
+     icon on it — and that arrow button should be in a round circle."
+     WHY ONE IS RIGHT AND NOT JUST FEWER: there are exactly two recipes, so "previous" and "next"
+     were the same action wearing two hats, sitting at opposite ends of the box for a choice with
+     no direction in it. One circle says what it does — swap these two.
+     ITS PLACE IS DERIVED FROM THE CARD, not typed: half a card, plus the peek, plus his 10px. That
+     is why --rcW shrinks on a narrow screen — the circle stays 10px off the back card's edge at
+     every width instead of being pushed out of the box at 390px.
+     The palette is the card's own: #3a2600 ink on #f5a623, this codebase's pairing. (The previous
+     arrows were first drawn white-on-translucent, borrowed from the ribbon chips, and were
+     invisible on cream — measured as correctly placed and impossible to see, which is the whole
+     reason to look at the picture as well as the numbers.) */
+  .pp4RcSwap { position:absolute; top:50%; z-index:5;
+    /* TUCKED JUST INSIDE THE BACK CARD'S EDGE — its right edge and the card's coincide. This is
+       the only placement that fits at 390px: centred ON the edge needs 192px of room to the right
+       of the card's centre and there are 181; this needs 175. One placement at every width beats
+       a circle that jumps to a different spot on a phone (his item 26 asks for exactly that). */
+    left:calc(50% + var(--rcW) / 2 + var(--rcPeek) - var(--rcSwap));
+    transform:translateY(-50%);
+    width:var(--rcSwap); height:var(--rcSwap); display:flex; align-items:center;
+    justify-content:center; border:2px solid #c9821a; border-radius:50%; background:#f5a623;
+    color:#3a2600; font-size:19px; font-weight:800; line-height:1; cursor:pointer; padding:0;
     box-shadow:0 2px 8px rgba(0,0,0,.25); }
-  .pp4RcArrow.prev { left:0; } .pp4RcArrow.next { right:0; }
-  .pp4RcArrow:active { background:#e0951a; transform:translateY(-50%) scale(.94); }
+  .pp4RcSwap:active { background:#e0951a; transform:translateY(-50%) scale(.92); }
+  /* THE SWAP ITSELF — his 6.2: "The cards should animate when swapping to look like they're
+     switching front to back." One class, added for the length of the move and removed after, so
+     nothing is left on the element to go stale. The outgoing front card drops back and dims as the
+     incoming one rises; because the two elements simply exchange their data-rcpos, the CSS above
+     carries them the rest of the way. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList).rcSwapping .apBtn[data-rcpos="front"] {
+    transform:translateX(20%) scale(.965); opacity:.55; }
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList).rcSwapping .apBtn[data-rcpos="back"] {
+    transform:translateX(-50%) scale(1) rotate(0deg); opacity:1; }
   @media (prefers-reduced-motion: reduce) {
     body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { transition:none; }
   }
@@ -2586,8 +2703,19 @@
     gap:6px; padding:6px 8px 2px; }
   .recipeIcons .ri { width:auto; flex:0 0 auto; line-height:0; }
   .recipeIcons .ri img { width:30px; height:30px; object-fit:contain; display:block; }
-  body.pp4Stage #actionPanel .apBtn .recipeIcons { padding:5px 6px 2px; gap:5px; }
-  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { width:26px; height:26px; }
+  /* ⭐ FIVE INGREDIENTS, ONE ROW, AT ANY CARD WIDTH — a regression I caused and caught in the
+     posed shot rather than in the numbers. Narrowing the card (see --rcW: it had to shrink so the
+     peek and the swap circle could both fit) pushed the fifth icon onto a second line at 390px,
+     and that row of five IS the recipe's signature — it is how a captain reads a card at a glance.
+     A five-column grid says "five, in a row" structurally, so the icons scale down together
+     instead of one of them falling off the end. max-width keeps 26px as the ceiling, so nothing
+     changes on a wide card. */
+  body.pp4Stage #actionPanel .apBtn .recipeIcons {
+    display:grid; grid-template-columns:repeat(5,1fr); padding:5px 6px 2px; gap:5px;
+    justify-items:center; align-items:center; }
+  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri { width:100%; }
+  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img {
+    width:100%; max-width:26px; height:auto; aspect-ratio:1; margin:0 auto; }
   /* THE FOCUSED CARD RESERVES A STRIP FOR THE PILL, rather than the pill covering whatever is
      underneath it. Moving it off the artwork (O2) only pushed the problem onto the ingredient
      icons — a smaller crime, still a crime, and visible in the very next screenshot. The card
@@ -2600,8 +2728,18 @@
      pill went on covering the ingredient icons, exactly as it had covered the artwork. The rule was
      right; the selector lost. Anything overriding a property that block sets has to carry the same
      prefix. */
+  /* ⭐ AND THE RESERVED STRIP IS GONE AGAIN — Wyatt, playtest item 6.6, 2026-09-07: "when the
+     player clicks the recipe card, the 'Bake this!' should appear over the middle of the card,
+     over the top of the card — it should not change the height of the card."
+     MEASURED BEFORE THE CHANGE, at 390x844: the card was 146px tall unselected and 193px selected.
+     A card that jumps 47px the instant ye tap it makes the whole picker move under yer thumb, and
+     on a short phone it is what pushed the stack toward the fold.
+     HIS ANSWER IS BETTER THAN MINE WAS. The strip existed so the pill would cover nothing; he has
+     simply ruled that covering the middle of the card is FINE — it is a confirmation, it is meant
+     to be the loudest thing there, and it goes away on the second tap. So the pill is centred over
+     the card and the card does not move at all. */
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.pp4Focus {
-    outline:3px solid #f5a623; padding-bottom:40px; }
+    outline:3px solid #f5a623; }
   /* playtest 19 item 2: the "Bake this!" pill, over the pastry art of the tapped card (Wyatt's
      pick). It is a SPAN dressed as a button and deliberately INERT — the card is itself the
      <button>, so a nested one is invalid HTML and gets hoisted out, and pointer-events:none means
@@ -2627,17 +2765,20 @@
      instead of the picture. Everything else about it is untouched — still a SPAN dressed as a
      button, still pointer-events:none so the tap falls through into the second-tap confirm that
      already exists, still his own #f5a623/#3a2600 pairing. */
-  .pp4Bake { position:absolute; left:50%; top:auto; bottom:5px; z-index:3; pointer-events:none;
+  /* his 6.6: over the MIDDLE of the card, not pinned to its bottom edge. `top:50%` with the
+     translate below centres it on both axes; it is absolute, so it contributes nothing to the
+     card's height — which is the half of his instruction that matters most. */
+  .pp4Bake { position:absolute; left:50%; top:50%; bottom:auto; z-index:6; pointer-events:none;
     background:#f5a623; color:#3a2600; border:2px solid #c9821a; border-radius:999px;
     padding:7px 13px; font-size:13px; font-weight:800; letter-spacing:.02em; white-space:nowrap;
     box-shadow:0 4px 14px rgba(0,0,0,.45);
     animation:pp4BakeIn .22s cubic-bezier(.2,.9,.3,1.15) both; }
   @keyframes pp4BakeIn {
-    from { opacity:0; transform:translate(-50%,0) scale(.8); }
-    to   { opacity:1; transform:translate(-50%,0) scale(1); }
+    from { opacity:0; transform:translate(-50%,-50%) scale(.8); }
+    to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .pp4Bake { animation:none; transform:translate(-50%,0); }
+    .pp4Bake { animation:none; transform:translate(-50%,-50%); }
   }
   #choicePassPlay.pp4Off { filter:grayscale(.75) brightness(.92); position:relative; cursor:default; }
   .pp4OffNote { font-size:11.5px; font-weight:700; color:#fff; opacity:.95; margin-top:6px; font-style:italic; }
@@ -2749,6 +2890,31 @@
      places, which is what makes the tutorial a character rather than a system. */
   #pp4Help { display:inline-flex; font-size:14px; cursor:pointer; letter-spacing:-.5px; }
   #pp4Help.off { opacity:.5; }
+
+  /* ═══════════════ POLLY'S BOX — the parrot switch answering out loud ═══════════════
+     Wyatt, 2026-09-07 playtest item 9: "when parrot is enabled/disabled, there should be a little
+     helper box (it should look like a narration box but we can call it something different so you
+     don't get confused in the code) that says 'Polly's helping!' when on, and 'Polly's not
+     helping'." Named for what he called it, at his instruction — it is NOT a narration and must
+     never be routed through the narration channel.
+
+     WHY IT HAS ITS OWN PLACE INSTEAD OF THE NARRATION COLUMN. The line this replaces went through
+     stageFlash and had to be SUPPRESSED whenever a prompt was up, because at 320px it drew over
+     the sail prompt's own helper line and made both unreadable. That left the control silent at
+     exactly the moment a player is most likely to press it. Pinned directly under the ribbon,
+     centred, above the board and below the chip it belongs to, it collides with nothing — so it
+     can speak every single time.
+
+     pointer-events:none so it can never swallow a tap meant for the board underneath, and opacity
+     alone carries the fade (a compositor-only property — no layout, no repaint of the sea). */
+  #pp4Polly { position:fixed; left:50%; margin-left:-140px; width:280px; box-sizing:border-box;
+    top:calc(52px + env(safe-area-inset-top)); z-index:60; text-align:center;
+    background:rgba(255,253,242,.96); color:#4a3223; border:2.5px solid #177; border-radius:11px;
+    padding:8px 12px; font-size:15px; font-style:italic; font-weight:700; line-height:1.3;
+    box-shadow:0 6px 18px rgba(0,0,25,.3); pointer-events:none;
+    opacity:0; transition:opacity .18s ease; }
+  #pp4Polly.show { opacity:1; }
+  @media (prefers-reduced-motion: reduce) { #pp4Polly { transition:none; } }
   /* THE RIBBON FITS AT 320px. Measured before a line of the tutorial existed: the row is clean at
      430/390/360 and runs 21px off the edge at 320 once the ? is added — red-proofed both ways, so
      the button is the cause and not an existing fault being blamed on it.
@@ -2883,6 +3049,15 @@
      still reads the one shared pp4Glow, so rule 8's "one gesture, one definition" is intact.
      Guarded by scripts/qa/w45_sea_hint_check.mjs, whose assertion 3 was inverted in the same
      commit and now fails if the hint ever animates again. */
+  /* ⭐ THE FRONT RECIPE CARD, UNCLICKED — Wyatt, playtest item 6.4: "the front recipe should have
+     the standard orange attention-gradient flash on it even when unclicked."
+     LEGAL HERE, AND THE BLOCK'S OWN EXCLUSION LIST SAYS WHY IT IS THE GLOW AND NOT THE GROW: "the
+     draft-pick recipe cards — a 276px card scaling 1.11 sliced the hint line above it and collided
+     the two cards by 34px at peak. Cards never pulse." That ruling is about SCALE. pp4Glow is a
+     box-shadow ring that moves nothing and occupies no layout, so it cannot reproduce that fault —
+     and it is the same ring every other "this is what we are asking of ye" control wears. The
+     exclusion stands, unweakened: no card is in either GROW rule below. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"]:not(.pp4Focus),
   #pp4Prompt.pp4Center #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]),
   #actionPanel .btlBtn:not(:disabled):not([aria-disabled="true"]),
   #btnStart:not(:disabled),
@@ -2920,6 +3095,25 @@
     animation: pp4GrowSoft 1.1s ease-in-out infinite; }
   #pp4Prompt.radial #actionPanel:not(.pendingReveal) .apBtn:not(.apDisabled):not(:disabled):not([aria-disabled="true"]) {
     animation: pp4Grow 1.1s ease-in-out infinite; }
+  /* ⭐ THE TREASURE X ON THE CHARTED COURSE — added here rather than beside the marker's own CSS,
+     because that is what this block's opening rule requires: "To make a new surface glow or grow,
+     add its selector here — never write a new @keyframes or a per-surface animation rule
+     elsewhere." It had a private copy and the copy had drifted (see .pp4CourseMarkArt above); this
+     is that drift being closed, on his instruction to "reuse that function".
+     THE FULL SWELL, NOT THE SOFT ONE: an X about half a square across, over open water, is the
+     same read-at-arm's-length problem as the radial petals — and 1.15 is the depth he dialled for
+     it anyway. No ring, per his 2026-09-03 ruling; the glow list above deliberately excludes it. */
+  .pp4CourseMarkArt { animation: pp4Grow 1.1s ease-in-out infinite; }
+  /* ⚠ AND ITS REDUCE-MOTION GUARD, DIRECTLY BELOW THE RULE IT OVERRIDES. This guard used to live
+     ~2000 lines up, beside the marker's own CSS — which was correct only while the animation lived
+     there too. Both selectors are a bare `.pp4CourseMarkArt` (0,1,0), so the cascade is decided by
+     SOURCE ORDER, and moving the animation down here without moving the guard would have silently
+     re-animated the X for every player who has asked their device to stop moving things. Caught by
+     reading the cascade rather than by a probe, which would not have been running with the setting
+     on. The X goes STILL rather than swapping to the glow the buttons use — his 2026-09-03 ruling
+     ("I want the x to pulse, remove the ring") means a ring is not an option here, even as a
+     reduced-motion substitute. */
+  @media (prefers-reduced-motion: reduce) { .pp4CourseMarkArt { animation: none; } }
 
   /* Hover pauses the pulse (a transform in a running keyframe beats anything :hover sets — the
      sail squares' own lesson). REDUCE MOTION swaps the grow for the STILL glow rather than for
@@ -2985,6 +3179,17 @@
 <div id="legalFooter">
   <a href="privacy.html">Privacy Policy</a>
   <a href="about.html">About</a>
+  <!-- ⭐ CREDITS MOVED HERE FROM INSIDE THE MODAL — his playtest item 16, 2026-09-07: "the line at
+       the bottom ... which should be removed: 'These credits live at....'". He was reading the
+       credits when it told him where the credits are.
+       IT COULD NOT SIMPLY BE DELETED. That sentence carried the ONLY <a href="credits.html"> on
+       the page, and scripts/qa/credits_page_check fails without one: the footer control is a
+       <button>, so with the sentence gone the credits page was unreachable to a crawler following
+       links from the homepage — the page would still exist and Google would never be told.
+       THIS ROW IS THE RIGHT HOME AND IT IS HIS OWN PATTERN: qid:t206-privacy-line, 2026-09-04 —
+       "two small links at the bottom of the screen, never inside the popup modal." It is three
+       now, which is the one part of this he has not ruled on; it is on his sheet. -->
+  <a href="credits.html">Credits</a>
 </div>
 
 <!-- ===================== WELCOME MODAL ===================== -->
@@ -3132,7 +3337,13 @@
       <p><b>⛵ Sail.</b> Sailing is <b>free</b>. Move up to <b data-rule="sailRange"></b> squares in any mix of directions — but the moment yer route bites into the wind, even for one square, the whole move is capped at <b data-rule="sailUpwind"></b>. Across the wind doesn't count against ye. Sail past other ships, but don't end on one.</p>
       <p><b>⚓ Act</b> — choose one:</p>
       <p><b>Dock</b> — tie up at an island's dock (one ship at a time!) and flip for yer fortune: <b>heads</b> ye strike buried treasure and take <b data-rule="dockHeads"></b>🌕; <b>tails</b> ye spend the turn workin' the docks for <b data-rule="dockTails"></b>🌕. Either way ye may then <b>buy</b> an ingredient, with the coin ye just earned. Stay as long as ye like and keep flipping.</p>
-      <p><b>💰 Crate prices rise.</b> A crate costs <b data-rule="crateBase"></b>🌕 <b>minus however many are left on that island</b> — so the first off a full island is <b data-rule="priceFirst"></b>🌕, the next <b data-rule="priceNext"></b>🌕, and the last one <b data-rule="priceLast"></b>🌕. Get there first, or pay for dawdling. Ye may buy crates that aren't on yer recipe — they make excellent trade bait...</p>
+      <!-- His rewrite, 2026-09-07 playtest item 23. The formula clause ("A crate costs 6🌕 minus
+           however many are left on that island") is GONE at his instruction: the three prices that
+           follow it already say what it says, and the word "crate" is now "ingredient" throughout
+           the game. Two slips in his pasted replacement are corrected — "the first ingredient a
+           full island" is missing its "off", and "ingedients" — and flagged to him rather than
+           silently kept. `data-rule="crateBase"` leaves this sentence with it. -->
+      <p><b>💰 Ingredient prices rise.</b> The first ingredient off a full island is <b data-rule="priceFirst"></b>🌕, the next <b data-rule="priceNext"></b>🌕, and the last one <b data-rule="priceLast"></b>🌕. Get there first, or pay for dawdling. Ye may buy ingredients that aren't on yer recipe — they make excellent trade bait...</p>
       <p><b>🕯️ The black market.</b> A sold-out island always has ONE more ingredient under the counter — a flat <b data-rule="blackMarket"></b>🌕, forever. Steep, but no recipe is ever truly dead. Skint? The black market'll also take <b>any two ingredients</b> from yer hold in trade for it — even two of the same.</p>
       <p><b>Attack</b> — fight an adjacent ship! Pay <b data-rule="powder"></b>🌕 for powder, then <b>one broadside each</b>. Heads beats tails. Both heads? The captain firing <b>downwind</b> lands the shot — a crosswind clash and the cannonballs collide. Both tails and the defender may slip away, <b>free</b>. If the shot doesn't tell, the attacker may pay <b data-rule="refire"></b>🌕 to load another broadside and fire alone — heads and it lands — as often as they can pay. Break off and the battle ends with <b>nobody gaining a thing</b>. The winner takes <b>one ingredient</b> of their choosing. Nobody changes squares. <b>Every dock is raidable</b> — a berth protects nobody. <span data-engine-rule="sanctuary">But once a captain's ovens are lit they're beyond yer reach — rob 'em on the way home, or not at all.</span> Ye can't attack a ship with an empty hold; there's nothing to take.</p>
       <p><b>🔭 Callin' the fight.</b> Any captain not in it may call the winner from the crow's nest. It's <b>free</b>, it costs ye nothing to be wrong, and ye get <b data-rule="callBounty"></b>🌕 from the bank if yer right. Nobody's paid on a battle that ends with no winner.</p>
@@ -3180,7 +3391,10 @@
          equivalent line. It sits OUTSIDE .modalByline, so scripts/lib/credits_page.mjs's narrow
          .modalByline selector never pulls it into the generated page — no data-page-omit marker
          needed the way rules.html needed one, because the extraction never reaches this div. -->
-    <p style="text-align:center;font-size:12.5px;opacity:.75;margin-top:14px">These credits live at <a href="credits.html">playpastrypirates.com/credits.html</a> — a page you can send to a collaborator.</p>
+    <!-- "These credits live at playpastrypirates.com/credits.html — a page you can send to a
+         collaborator." DELETED, his playtest item 16. He asked whether it was staging-only; it was
+         not — it shipped on every build. It told a reader already reading the credits where the
+         credits are. -->
     <!-- KOFI-01: after the credits text, per the requirement. A button onto the SAME #kofiModal the
          footer opens — one embedded panel, two doors — so neither route leaves the game. -->
     <div style="text-align:center;margin-top:16px">

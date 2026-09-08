@@ -153,7 +153,12 @@ EXCLUDES=(
   --exclude=robots.txt     # preview must stay Disallow:/ — do not publish the live Allow:/
   --exclude=sitemap.xml    # lists playpastrypirates.com URLs; meaningless on the preview
   --exclude=physical-board/  # never public — see the note above
-  --exclude=.git/
+  # ⚠ NO TRAILING SLASH, AND THAT IS THE POINT. `--exclude=.git/` matches a DIRECTORY only, and
+  # in a git WORKTREE `.git` is a FILE containing `gitdir: /path/to/...`. Every deploy run from a
+  # worktree — which is how most sessions here work — therefore copied that file straight into the
+  # staging repo, where it is meaningless and points at a path on somebody's laptop. Found
+  # 2026-09-08 when the restore below tried to put the real .git back and hit `Not a directory`.
+  --exclude=.git
   --exclude=.planning/
   --exclude=.claude/
   --exclude=art-review/
@@ -192,7 +197,61 @@ else
   echo "    no gh — cloning over https"
   git clone -q "https://github.com/$STAGING_REPO" "$WORK/staging"
 fi
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#  ⚠ "rsync protects --exclude'd paths from --delete" IS NOT TRUE ON EVERY rsync, AND THIS
+#    SCRIPT BELIEVED IT IN THREE PLACES (the header above, the EXCLUDES note, and the CNAME
+#    guard's own comment). Found 2026-09-08 on a Mac:
+#
+#        $ rsync --version
+#        openrsync: protocol version 29
+#        rsync version 2.6.9 compatible
+#        $ npm run deploy:staging
+#        rsync(98720): error: .git: unlinkat: Directory not empty     -> exit 23
+#
+#    macOS now ships **openrsync**, not GNU rsync, and it does NOT treat an excluded path as
+#    protected from deletion. It tried to delete the freshly-cloned staging checkout's OWN .git
+#    and aborted the whole deploy. NOTHING PUBLISHED — and the failure was only visible because
+#    the exit code was read OUTSIDE a pipe (CLAUDE.md); `| tail` had reported 0.
+#
+#    THE ABORT WAS THE LUCKY PART. `.git` is alphabetically first, so openrsync hit it and died
+#    before reaching CNAME, robots.txt and sitemap.xml — the three files the preview keeps its
+#    OWN copies of, every one of them protected by nothing but this same false assumption. A
+#    deploy that got past .git would have deleted the preview's `Disallow: /`, and the CNAME
+#    guard below would then have caught the outage-shaped half while robots.txt went quietly.
+#
+#    SO THE PROTECTION IS NOW DONE HERE, BY THIS SCRIPT, ON ANY rsync. .git is moved out of
+#    reach entirely, and the site-identity files are saved and restored around the copy. On a
+#    GNU rsync this is a no-op (it never deleted them); on openrsync it is the whole fix. The
+#    EXCLUDES are untouched — they still stop THIS repo's copies travelling, which is the
+#    hazard the header is about, and that half always worked.
+# ══════════════════════════════════════════════════════════════════════════════════════════
+PROTECTED=(CNAME robots.txt sitemap.xml)
+KEEP="$WORK/keep"; mkdir -p "$KEEP"
+for f in "${PROTECTED[@]}"; do
+  [ -e "$WORK/staging/$f" ] && cp -p "$WORK/staging/$f" "$KEEP/$f"
+done
+# out of the tree, so --delete cannot see it whatever this rsync believes about excludes
+mv "$WORK/staging/.git" "$WORK/gitdir"
+
 MSYS_NO_PATHCONV=1 rsync -a --delete "${EXCLUDES[@]}" "$(rsync_path "$SRC")/" "$(rsync_path "$WORK")/staging/"
+
+mv "$WORK/gitdir" "$WORK/staging/.git"
+for f in "${PROTECTED[@]}"; do
+  [ -e "$KEEP/$f" ] && cp -p "$KEEP/$f" "$WORK/staging/$f"
+done
+
+# THE ROBOTS GUARD, fail-closed like the CNAME one below it. The preview must stay out of search
+# — this repo's robots.txt says `Allow: /` and points a sitemap at the live domain, and a preview
+# indexed as duplicate content competes with the real game. Until today nothing verified that the
+# preview's own copy survived a deploy; the restore above is why it does, and this is the check
+# that says so out loud rather than trusting it.
+if [ ! -s "$WORK/staging/robots.txt" ] || ! grep -qi "disallow:[[:space:]]*/" "$WORK/staging/robots.txt"; then
+  echo "FATAL: staging robots.txt is missing or no longer disallows crawling." >&2
+  echo "       The preview would be indexed as duplicate content against the live" >&2
+  echo "       game. Restore it; do not proceed." >&2
+  exit 1
+fi
+echo "    guard passed: staging robots.txt still disallows crawling"
 
 # --- THE GUARD. Never remove; this is the whole reason the script exists. ---
 #

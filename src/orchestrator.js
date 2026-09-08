@@ -67,7 +67,7 @@
 // every time (harmless, and needed so a genuine re-entry still sees the current room state).
 
 import { appState } from "./state/index.js";
-import { pilotMsg, pilotSee } from "./ui/pilot.js";
+import { pilotSpeaks } from "./ui/pilot.js";
 import { pingVisit, pingStart, pingFin, usageGid } from "./ui/usage.js";
 import { Game, roundCfg, rollStorm } from "./engine/index.js";
 import { applyResult } from "./engine/bakeoff.js";
@@ -77,7 +77,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -108,7 +108,7 @@ import {
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
-  reachable, pickCell, localAsk, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
+  reachable, pickCell, localAsk, pilotGate, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
@@ -1043,18 +1043,22 @@ export async function recipeDraftNet(){
      THE ONE LADDER THAT ADDS A LINE WHERE THE GAME SAYS NOTHING TODAY. It earns the exception
      because the answer to the question is "look down there", and nothing currently points down
      there. Its bottom rung is SILENCE rather than today's copy, so a veteran's game is still
-     byte-identical — pilotMsg() returns "" and this whole block does nothing.
+     byte-identical — pilotSpeaks() is false at the bottom rung and this whole block does nothing.
      AND THE CAPTAINS BOX FLASHES ONCE as the line lands: a sentence saying `below` and a box that
      blinks are the same instruction twice, and the second one works without being read. */
   if(!appState.replaying)for(const player of appState.game.players){
     if(player.strategy!=="human"||!decisionIsLocal(player.idx))continue;
-    const line=pilotMsg("recipe.stowed","");
-    pilotSee("recipe.stowed");
-    if(!line)break;
+    /* ⭐ NOW A CARD THE CAPTAIN DISMISSES, not a narration that takes itself away — his item 4.
+       ASKED BEFORE ANYTHING IS SPENT: pilotSpeaks() decides whether this moment is worth
+       interrupting at all, so a veteran never flashes the captains box for a line nobody is
+       going to read.
+       THE PER-SEAT `variants` ARGUMENT IS GONE WITH THE flash(), and that is a correction rather
+       than a loss: it existed to send a name-less copy of this line to the OTHER seats' screens,
+       which is a per-device tutorial line being broadcast to devices that did not ask for it and
+       may be further along their own ladders. pilotGate is local by construction. */
+    if(!pilotSpeaks("recipe.stowed"))break;
     flashCaptainsBox();
-    await flash(line.replace("{name}",pn(player.idx)),undefined,undefined,
-      [{seat:player.idx,html:line.replace("{name}","")
-        .replace(/^Yer recipe's stowed below, /,"Yer recipe's stowed below — ")}]);
+    await pilotGate("recipe.stowed",t=>t.replace("{name}",pn(player.idx)));
     break;                       // one showing per device: the box is the same box for all seats
   }
 }
@@ -1435,11 +1439,12 @@ export async function runLiveNet(){
        is unchanged (900ms) because narration holds are derived from reading speed with a ceiling
        the game already tunes — a longer line cannot hold longer than that ceiling. */
     let header=describe(appState.game.events[appState.game.events.length-1]).txt;
-    if(appState.game.stormNow&&!appState.replaying){
-      const learn=pilotMsg("storm.hit","");
-      pilotSee("storm.hit");
-      if(learn)header+=`<br><span class="apSubInline">${learn}</span>`;
-    }
+    /* ⭐ THE STORM LESSON GETS ITS OWN CARD, AHEAD OF THE ROUND HEADER — his item 4, and this was
+       the worst offender of the three. The rung used to be appended to `header`, which flashes
+       for NINE HUNDRED MILLISECONDS: one sentence explaining a rule that moves every ship on the
+       board, gone in under a second, on the round it first happens. Now the parrot says it, the
+       captain taps Aye aye, and THEN the round announces itself at its usual pace. */
+    if(appState.game.stormNow&&!appState.replaying)await pilotGate("storm.hit");
     // @copy adhoc.round.header
     await flash(header,900);
     // v2 rule 7: one storm for the whole table, before anybody acts.
@@ -1754,12 +1759,6 @@ export async function consumeEvent(e){
   }
   applyActiveSeat(e.p);
   syncLogLines();
-  $("scrub").max=Math.max(0,appState.game.events.length-1);
-  stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
-  await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
-  await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
-  render();
-  spawnPops(e,boardCell());
   /* AUDIO-01/D-07: the per-event sound moment, every tier — and THE ONE PLACE the whole game turns
      an event into a sound, host and guest alike. That is why the seat answer is computed HERE and
      handed down: both clients run this same line and each answers for ITSELF, so the your-turn bell
@@ -1768,8 +1767,35 @@ export async function consumeEvent(e){
      ⚠ THIS LINE USED TO SAY "no isLocalTo gate". There is one now, for the bell alone — see
      LOCAL_ONLY_SOUND_EVENTS in src/ui/audio.js. Every other cue stays audible to the whole table.
      decisionIsLocal() rather than a bare seat compare, because it also answers TRUE on a shared
-     device in pass-and-play, where the player whose turn it is IS at this browser. */
+     device in pass-and-play, where the player whose turn it is IS at this browser.
+
+     ⭐ IT SITS HERE, ABOVE THE ANIMATIONS, AND THAT POSITION IS THE WHOLE POINT. Wyatt, 2026-09-07
+     playtest (sound sheet item 13): "Sailing sound should happen at the BEGINNING of a sail
+     animation — it currently happens at the end. This should be applied to ALL players."
+     It did, and this line's POSITION was the entire cause. Four lines below are
+     `await animateRimSweepIfAny(e)` and `await animateSailRoute(e)` — the rim sweep and the
+     square-by-square walk. Both are awaited, so every sound in the game used to be dispatched only
+     once the boat had finished moving: the ship glide is SHIP_GLIDE_MS (700) per square, so a
+     three-square sail landed its own sail cue about two seconds after it started.
+
+     THE FIX IS ONE LINE MOVED, NONE ADDED — the same shape as his item-9 dock fix (see the note in
+     src/ui/flow.js's dock handler): "THE EVENT-TO-SOUND MAP IS UNTOUCHED... The map was never what
+     was wrong — the MOMENT was. A second trigger would fire the cue twice, which is a worse defect
+     than a late one." Still exactly one call, still the one dispatcher, so "applied to ALL players"
+     is structural rather than something a second tier has to remember.
+
+     WHAT ELSE MOVES WITH IT, deliberately: the storm bed now starts as the camera pulls back
+     instead of after the sweep has finished sweeping, and fadeStorm() (inside playForEvent, on
+     newround/end) retires the previous storm before the new round's animation rather than after.
+     Both are the same correction. What does NOT move is spawnPops() — coins should land on the
+     square the boat arrives at, so the pops stay below, after the walk. */
   playForEvent(e, decisionIsLocal(e.p));
+  $("scrub").max=Math.max(0,appState.game.events.length-1);
+  stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
+  await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
+  await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
+  render();
+  spawnPops(e,boardCell());
   if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
 }
 
@@ -2632,23 +2658,45 @@ export function leaveGame(){netLeaveRoom();clearSession();clearSoloState();locat
    A hard refresh changed nothing because the same one-shot failed the same way.
 
    Now the listeners STAY until audioRunning() is true. Every real tap the player makes is another
-   attempt, inside a real gesture, which is the only kind Safari accepts. They unhook themselves the
-   moment sound is genuinely working, so the steady state is identical to before. */
-function unlockAudioOnce(){
-  initAudio().catch(()=>{});
-  // Not synchronous: initAudio()'s resume() resolves a tick later, so asking right now would always
-  // say "not running" and never unhook. Ask after it has had a chance to land.
-  setTimeout(()=>{
-    if(!audioRunning())return;                       // still blocked — keep listening for the next tap
-    document.removeEventListener("pointerdown",unlockAudioOnce);
-    document.removeEventListener("keydown",unlockAudioOnce);
-  },350);
+   attempt, inside a real gesture, which is the only kind Safari accepts. */
+/* ⭐ AND NOW THEY NEVER UNHOOK AT ALL — Wyatt, 2026-09-07 playtest (item 10): "after refreshing the
+   page multiple times, starting different games in staging, exiting games, and restarting new ones,
+   the sound fully stops playing at all. i'm using safari. this has to be fixed."
+
+   THE UNHOOK WAS THE BUG, AND IT WAS MINE. Yesterday's fix stopped the listeners giving up after
+   ONE attempt — a real improvement — but it still removed them permanently the moment audio was
+   first confirmed running. That treats "the context woke once" as "the context is awake for good",
+   and this file's own comment four paragraphs up says why that is false: "Safari suspends
+   aggressively — another tab taking audio focus, a Private window, a window switch, the system
+   sleeping." So the page spent its listeners on the first success and had nothing left for the
+   fifth suspension. His sequence — refresh, start, exit, restart, repeatedly — is a machine for
+   producing suspensions, which is why it took him a whole evening of play to reach it and why it
+   then stayed dead until a reload.
+
+   HIS OWN CLUES ARE THE CONFIRMATION, and both are explained by exactly this: "when I click a link,
+   and that link opens in a new safari tab, the sound comes back" and "when i reopened the pastry
+   pirates tab, the sound came back". Those are visibilitychange firing — the ONE wake path that
+   was still attached. Nothing he did inside the game could wake it any more, because the listeners
+   that would have were gone.
+
+   SO THE STEADY STATE IS NOW: armed for the life of the page, and free when sound is fine. The
+   guard is a property read on an object we already hold, on pointerdown/keydown only — not a
+   per-frame cost, and cheaper than the setTimeout it replaces. A listener that costs nothing while
+   idle should never have been optimised away. */
+function unlockAudio(){
+  if(audioRunning())return;              // already audible: nothing to do, and nothing to unhook
+  initAudio().catch(()=>{});             // idempotent — returns immediately once the graph exists
+  /* NOT via initAudio(): it returns at its first line once `ctx` exists, so on every gesture after
+     the first it reached no wake at all. wakeCtx() is the door, and it must be called from HERE
+     because Safari only honours resume() from inside a user-gesture call stack. */
+  wakeCtx();
 }
 export function wireLobby(){
-  /* NOT {once:true} — see unlockAudioOnce's own note. A single shot is what left Safari silent for
-     a whole page session. These unhook themselves once audio is confirmed running. */
-  document.addEventListener("pointerdown",unlockAudioOnce);
-  document.addEventListener("keydown",unlockAudioOnce);
+  /* NOT {once:true}, and never removed — see unlockAudio's own note. A single shot left Safari
+     silent for a whole page session; unhooking on first success left it silent for the rest of an
+     evening. These stay for the life of the page and cost a boolean read per tap. */
+  document.addEventListener("pointerdown",unlockAudio);
+  document.addEventListener("keydown",unlockAudio);
   $("btnCreate").onclick=()=>{createRoom();};
   $("btnJoin").onclick=()=>{joinRoom();};
   $("btnStart").onclick=()=>{$("startConfirmModal").style.display="flex";};

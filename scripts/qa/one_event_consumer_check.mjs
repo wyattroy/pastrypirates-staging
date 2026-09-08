@@ -41,10 +41,23 @@ function fnBody(src, name) {
 
 /* 1. the consumer exists and holds the WHOLE drawing sequence, in the guest's proven order */
 {
-  const body = fnBody(orch, "consumeEvent");
+  /* ⚠ STRIPPED, AND THAT IS NOT A TIDY-UP. This block used to index into the RAW body, and
+     consumeEvent() is one of the most heavily commented functions in the project — a comment that
+     merely NAMES a later step (they all do: "both are awaited", "spawnPops stays below") lands an
+     earlier index for it than its real call site and the order check silently reads the prose
+     instead of the code. Section 3 below already stripped for exactly this reason; section 1 did
+     not, which meant the one gate guarding the drawing ORDER was the one that could be fooled
+     about it. Measured 2026-09-07 while moving playForEvent: the raw body reported
+     spawnPops-before-playForEvent when the code says the opposite. */
+  const body = strip(fnBody(orch, "consumeEvent") || "");
   if (!body) fail("consumeEvent() does not exist in src/orchestrator.js");
   else {
-    const SEQ = ["applyActiveSeat(", "syncLogLines(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playForEvent(", "applyEndMeta("];
+    /* ⭐ SOUND MOVED TO THE TOP, 2026-09-07. Wyatt: "Sailing sound should happen at the BEGINNING
+       of a sail animation — it currently happens at the end. This should be applied to ALL
+       players." playForEvent() sat AFTER the two awaited animations, so every cue in the game was
+       dispatched once the boat had stopped moving. It now sits above them and this order pins it.
+       The pops stay below the walk on purpose — coins land where the boat arrives. */
+    const SEQ = ["applyActiveSeat(", "syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "applyEndMeta("];
     let last = -1, ordered = true;
     for (const step of SEQ) {
       const at = body.indexOf(step);
@@ -52,7 +65,14 @@ function fnBody(src, name) {
       if (at < last) { fail(`consumeEvent(): ${step}) appears out of order — the guest's animate-before-render ordering is load-bearing`); ordered = false; }
       last = at;
     }
-    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (seat → log → sweep → render → pops → sound → end-meta)");
+    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (seat → log → SOUND → sweep → render → pops → end-meta)");
+    /* The specific regression his playtest caught, asserted on its own so a future reorder fails
+       with the reason rather than with "out of order". */
+    const iSound = body.indexOf("playForEvent("), iSail = body.indexOf("animateSailRoute(");
+    if (iSound >= 0 && iSail >= 0 && iSound < iSail)
+      pass("the sound is dispatched BEFORE the sail walk is awaited — his item 13, structurally");
+    else
+      fail("playForEvent() is below animateSailRoute() again — every cue in the game will land after the boat has finished moving, which is the defect Wyatt reported on 2026-09-07");
   }
 }
 

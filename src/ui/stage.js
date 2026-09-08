@@ -22,7 +22,7 @@ import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
 import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
-import { showCourseFor, paintMarks, clearCourse } from "./course.js";
+import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
 
 const $ = id => document.getElementById(id);
 const AR = { N: "↑", S: "↓", E: "→", W: "←" };
@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@bd68862c";
+const PP4_STAMP = "2026.09.07.3-staging@0eb01898";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1304,6 +1304,33 @@ function pillTick(){
   if (p.style.display !== want) p.style.display = want;
 }
 
+/* ═══════════════ POLLY SPEAKS ═══════════════
+   His item 9's little box. Deliberately NOT stageFlash and NOT the narration channel: it is the
+   parrot switch reporting on itself, it must appear even while a prompt is up, and it is named
+   `polly` rather than `narr` at his explicit instruction so the two can never be confused in the
+   code. One element, created on first use and reused after that — a toggle that gets pressed
+   repeatedly must not litter the DOM.
+   THE REFLOW POKE IS LOAD-BEARING: without it, pressing the chip twice quickly re-adds a class
+   the element already has, no transition fires, and the second press looks like it did nothing —
+   which is the exact complaint this whole item exists to fix. */
+let pollyTimer = null;
+function pollySay(text){
+  let el = document.getElementById("pp4Polly");
+  if (!el){
+    el = document.createElement("div");
+    el.id = "pp4Polly";
+    el.setAttribute("role", "status");     // announced by a screen reader without stealing focus
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.remove("show");
+  void el.offsetWidth;                      // restart the fade on a repeat press
+  el.classList.add("show");
+  if (pollyTimer) clearTimeout(pollyTimer);
+  pollyTimer = setTimeout(() => { el.classList.remove("show"); }, 1900);
+}
+
 /* THE PARROT CHIP'S OWN STATE, in one place. It is the only control in the ribbon whose look
    depends on something stored rather than on the live game, so it is synced on the toggle and at
    build time rather than every ribbonTick — a per-frame localStorage read to draw an opacity would
@@ -2132,6 +2159,7 @@ function mountRecipeStack(ap){
 
   let front = 0;
   const row = cards[0].parentElement;
+
   const paint = () => {
     cards.forEach((c, i) => {
       const isFront = i === front;
@@ -2141,23 +2169,60 @@ function mountRecipeStack(ap){
          screen reader as a choosable recipe that cannot be reached, and the sea trial's structural
          check found it exactly that way on four legs — "clickable covered by something else".
          pointer-events:none already stopped the mouse; these stop the keyboard and the reader. */
+      /* THE BACK CARD IS SEEN BUT NEVER TAPPED — see the v4 note in index.html. It keeps its art
+         and its title (his 6.3) and stays out of the tab order and the accessibility tree, because
+         a <button> behind another <button> is what failed the sea trial's structural check twice.
+         What answers a tap on it is .pp4RcPeek below, which covers only the sliver that shows. */
       c.setAttribute("aria-hidden", String(!isFront));
       c.tabIndex = isFront ? 0 : -1;
     });
     chartFrontRecipe(cards[front]);
   };
-  const step = (d) => { front = (front + d + cards.length) % cards.length; paint(); };
 
-  row.querySelectorAll(".pp4RcArrow").forEach(a => a.remove());
-  for (const [cls, d, label] of [["prev", -1, "Previous recipe"], ["next", 1, "Next recipe"]]){
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "pp4RcArrow " + cls; b.setAttribute("aria-label", label);
-    b.textContent = cls === "prev" ? "‹" : "›";
-    // stopPropagation, or the arrow's click also reaches recipeGuard's document listener and
-    // counts as a tap on the card underneath — which would select a recipe the captain was only
-    // flicking past.
-    b.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); step(d); });
-    row.appendChild(b);
+  /* ⭐ THE SWAP — his 6.2 ("animate when swapping to look like they're switching front to back")
+     and his 6.7 ("Tapping the back card should trigger the two to animatedly swap. It should also
+     'cancel' the Bake this! state for the front card. Clicking the swap arrow should have the same
+     effect").
+     ONE FUNCTION FOR ALL THREE WAYS IN — the circle, the sliver and the swipe — so they cannot
+     drift and none of them can forget to cancel the pending bake. `swapping` guards a double tap
+     mid-animation, which would otherwise leave the row wearing .rcSwapping forever. */
+  const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SWAP_MS = REDUCED ? 0 : 220;
+  let swapping = false;
+  const swap = () => {
+    if (swapping || cards.length < 2) return;
+    swapping = true;
+    resetRecipeFocus();                      // his 6.7: a pending "Bake this!" is cancelled
+    if (SWAP_MS) row.classList.add("rcSwapping");
+    setTimeout(() => {
+      row.classList.remove("rcSwapping");
+      front = (front + 1) % cards.length;
+      paint();
+      swapping = false;
+    }, SWAP_MS);
+  };
+
+  row.querySelectorAll(".pp4RcArrow, .pp4RcSwap, .pp4RcPeek").forEach(a => a.remove());
+  {
+    /* stopPropagation on both, or the click also reaches recipeGuard's document listener and
+       counts as a tap on the card underneath — which would CHOOSE a recipe the captain was only
+       flicking past. That was true of the old arrows and is just as true of these. */
+    const stop = (fn) => (e) => { e.preventDefault(); e.stopPropagation(); fn(); };
+    const sw = document.createElement("button");
+    sw.type = "button"; sw.className = "pp4RcSwap";
+    sw.setAttribute("aria-label", "Show the other recipe");
+    sw.textContent = "↩";                                   // his 6.5, in a round circle
+    sw.addEventListener("click", stop(swap));
+    row.appendChild(sw);
+
+    /* The sliver of the back card, made tappable. aria-hidden and out of the tab order because the
+       circle above is the SAME action already announced and reachable — two tab stops and two
+       announcements for one swap is worse than one. */
+    const pk = document.createElement("button");
+    pk.type = "button"; pk.className = "pp4RcPeek";
+    pk.setAttribute("aria-hidden", "true"); pk.tabIndex = -1;
+    pk.addEventListener("click", stop(swap));
+    row.appendChild(pk);
   }
 
   /* THE SWIPE. Pointer events, not touch events, so a trackpad drag and a finger are one path.
@@ -2171,7 +2236,9 @@ function mountRecipeStack(ap){
     if (Math.abs(dx) < 34 || Math.abs(dx) <= Math.abs(dy)) return;
     // a real swipe is not a tap: stop it before recipeGuard reads it as one
     e.preventDefault(); e.stopPropagation();
-    step(dx < 0 ? 1 : -1);
+    /* Either direction swaps: there are exactly two recipes, so a swipe has no "next" to be
+       distinct from a "previous" — the same reasoning that turned two arrows into one circle. */
+    swap();
   }, true);
   row.addEventListener("pointercancel", () => { live = false; });
   paint();
@@ -2188,7 +2255,18 @@ function chartFrontRecipe(card){
   else paintMarks(ids.map(i => (g.dockOf && g.dockOf[i]) || (g.islandOf && g.islandOf[i])).filter(Boolean), cellPx());
 }
 
-function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); clearCourse(); }
+function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); forgetCourse(); }
+/* Put the picker back to "nothing chosen yet" — his 6.7. It exists because THREE things carry the
+   selected state and all three have to go together: the module's `focusBtn`, the card's .pp4Focus
+   outline, and the "Bake this!" pill. recipeGuard's own second-tap branch already did exactly this
+   inline; the swap needs it too, so it lives in one place rather than being written twice and
+   drifting the first time one of the three gains a fourth sibling. */
+function resetRecipeFocus(){
+  if (!focusBtn) return;
+  focusBtn = null;
+  clearGlow(); clearBake();
+  document.querySelectorAll("#actionPanel .apBtn.pp4Focus").forEach(x => x.classList.remove("pp4Focus"));
+}
 function clearBake(){ document.querySelectorAll(".pp4Bake").forEach(e => e.remove()); }
 
 /* ========== the trade-wind ride preview (playtest 20, Mando's three lost turns) ========== */
@@ -2303,21 +2381,28 @@ function buildStage(){
        whole turn — a toggle that does not visibly do anything is worse than no toggle. Switching
        ON does not draw a course here on purpose: the guide belongs to a prompt, and it arrives with
        the next one rather than appearing over whatever is on screen now. */
-    if (!on) clearCourse();
-    // @copy misc.pilot.toggle — DRAFT COPY, his to rewrite.
-    // It speaks through stageFlash, i.e. the narration box the game already talks from. Nothing
-    // in this feature is a tooltip: he killed a hover tooltip for the Muse button on 2026-08-27
-    // ("don't build the tooltip, ignore this and let the idea go") and that ruling is respected
-    // rather than argued with.
-    /* ⚠ NOT WHILE A PROMPT IS UP. Measured on the posed pair at 320px: the toggle's line drew
-       straight over the sail prompt's own helper line and half of each was unreadable — two boxes
-       in one place, which is the collision the narration channel exists to prevent.
-       The chip dims either way, so the control is never silent; the sentence is a courtesy and it
-       waits for a moment that has room for it. */
-    const promptUp = !!document.querySelector("#actionPanel .apMsg");
-    if (S.active && !promptUp)
-      stageFlash(on ? "🦜 Yer parrot's watchin' — he'll start from the top."
-                    : "🦜 Yer parrot settles down. Fair winds, captain.");
+    /* ⭐ THE TOGGLE ANSWERS IN BOTH DIRECTIONS NOW — Wyatt, 2026-09-07 playtest item 9: "when i
+       click parrot on again, the dotted line doesn't return — it should though! re-enabling parrot
+       should immediately restore all the hint state."
+       The comment that stood here defended the old behaviour ("the guide belongs to a prompt, and
+       it arrives with the next one rather than appearing over whatever is on screen now"). That
+       was my call and he has overruled it, for the reason that killed the original one-way
+       version: a control that visibly does nothing when you press it reads as broken. redrawCourse
+       re-derives the tour from the LIVE game, so what comes back is where the captain must go now.
+       The WORDS still arrive with the next prompt — pilotToggle() has just put every ladder back
+       to rung 0 — and that half was never the complaint. */
+    if (on) redrawCourse(); else clearCourse();
+    /* ⭐ POLLY SAYS WHICH WAY THE SWITCH WENT, AND SHE SAYS IT EVERY TIME.
+       His item 9, second half: "when parrot is enabled/disabled, there should be a little helper
+       box (it should look like a narration box but we can call it something different so you don't
+       get confused in the code) that says 'Polly's helping!' when on, and 'Polly's not helping'".
+       ⚠ THIS REPLACES A stageFlash THAT WAS SUPPRESSED WHENEVER A PROMPT WAS UP. That suppression
+       was real and measured — at 320px the toggle's line drew straight over the sail prompt's own
+       helper line and half of each was unreadable — but it meant the control was silent at exactly
+       the moment he was most likely to press it. Polly gets her own element and her own place
+       (pinned under the ribbon, never in the narration column), so there is nothing left to
+       collide with and the suppression can go. Named `polly`, not `narr`, at his instruction. */
+    pollySay(on ? "🦜 Polly's helping!" : "🦜 Polly's not helping");
   };
   syncHelpChip();
   // FAST-FORWARD (Wyatt's spec, 2026-08-12): ONE tap arms ONE skip — everything paces instantly
@@ -3097,8 +3182,35 @@ function promptTick(force){
       return r.height > 0 ? Math.round(r.top) : null;
     })();
     const top = capTop != null ? capTop : Math.round(vhPx() * 0.45);
-    box.style.left = "8px"; box.style.top = top + "px";
-    box.style.width = (vwPx() - 16) + "px";
+    box.style.top = top + "px";
+    /* ⭐ AND ON A WIDE SCREEN IT MOVES OFF THE BOARD, ONTO THE CAPTAINS COLUMN — Wyatt, 2026-09-07
+       playtest item 26: "In all three, they should hover over the captains box — in desktop
+       currently they do not."
+       WHY HE IS RIGHT, AND IT IS THIS SHEET'S OWN DESIGN: the picker exists so "the sea it asks you
+       to read stays visible above the cards" (playtest 10 item 1, the note at the top of this
+       block) — you choose a recipe by looking at where its docks are on the water. On a phone the
+       captains box sits BELOW the board, so covering it leaves the sea clear and the design works.
+       On desktop the captains box moved to a right-hand column and the picker stayed centred over
+       the board, so it covered the one thing it is meant to leave visible. MEASURED at 1280x900:
+       white panel 110..774, board underneath it, captains column 884..1266 untouched.
+       THE TEST IS THE CAPTAINS BOX'S OWN GEOMETRY, not a width breakpoint — if it is inset from
+       the left edge it is a column beside the board, and if it is not it is the full-width strip
+       under the board. One measurement from the renderer, never arithmetic of mine (the same rule
+       the capTop anchor above follows). The 12px of bleed either side is what lets the stack's
+       358px row sit inside a 382px column without clipping the swap circle. */
+    const capBeside = (() => {
+      const cap = $("pp4Cap");
+      if (!cap) return null;
+      const r = cap.getBoundingClientRect();
+      return (r.width > 0 && r.left > 40 && r.width < vwPx() * 0.75) ? r : null;
+    })();
+    if (capBeside){
+      box.style.left = Math.round(capBeside.left - 12) + "px";
+      box.style.width = Math.round(capBeside.width + 24) + "px";
+    } else {
+      box.style.left = "8px";
+      box.style.width = (vwPx() - 16) + "px";
+    }
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
        playtest 21 (Wyatt), items 2 and 4. They used to be a stacked pair of pills wedged in the gap
        between the board and the sheet, where the sea one sat nowhere near the sea it names and the

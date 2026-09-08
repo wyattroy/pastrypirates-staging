@@ -142,7 +142,11 @@ strays.length
 /* 6 — his tuned numbers survive as named constants a human can find and change. */
 const wants = [
   ["AMBIENCE_SEA", 0.596], ["AMBIENCE_GULL", 0.168], ["AMBIENCE_CREAK", 1.122],
-  ["AMBIENCE_GULL_MEAN_SEC", 10], ["AMBIENCE_CREAK_MEAN_SEC", 13],
+  /* ⭐ REVERSED BY HIS EARS, 2026-09-07 playtest sound sheet item 3: "Creaks should be every 8
+     seconds; gulls every 14 seconds." That overrides the 10/13 he dialled in the tuner the same
+     day — the tuner was a slider, the playtest was a game. The later ruling wins, and the older
+     pair is written here rather than deleted so nobody restores it from the tuner artifact. */
+  ["AMBIENCE_GULL_MEAN_SEC", 14], ["AMBIENCE_CREAK_MEAN_SEC", 8],
   ["AMBIENCE_SPREAD", 0.7], ["AMBIENCE_LIVELINESS", 0.35],
 ];
 const wrong = wants.filter(([k, v]) => {

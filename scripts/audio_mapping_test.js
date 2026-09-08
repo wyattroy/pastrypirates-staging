@@ -415,11 +415,22 @@ checkTrue(`STORM_FADE_SEC (${STORM_FADE_SEC}) is greater than 0`, STORM_FADE_SEC
    invisible to every runtime check that reads the finished object, which is why the second case
    below reads the SOURCE. */
 
-check("anchorHold plays fishing, not storm — DEFECT-1/2's regression guard", EVENT_SOUND.anchorHold, "fishing");
+/* ⭐ THIS GUARD NOW PINS THE INVARIANT INSTEAD OF THE LITERAL — 2026-09-07.
+   Wyatt's playtest (sound sheet item 13): "Remove the movement sounds (sail and anchor) from the
+   storm movements — they're confusing and distracting." `anchorHold` is a ship riding out the
+   weather, so it went SILENT.
+   THE DEFECT THIS GUARD EXISTS FOR IS UNCHANGED AND STILL GUARDED. DEFECT-1/2 was `anchorHold`
+   resolving to the STORM stem — an 8-second bed at ~3x level, once per anchoring ship, that
+   fadeStorm() could not retire. Silence is strictly further from that than "fishing" was. Pinning
+   the literal "fishing" would have made this gate block his ruling while claiming to protect
+   against a defect his ruling cannot cause, so it asserts the real rule: never a storm stem. */
+check("anchorHold is silent — his 2026-09-07 ruling on storm movement sounds", EVENT_SOUND.anchorHold, null);
+check("anchorHold is NOT the storm stem — DEFECT-1/2's actual regression guard",
+  EVENT_SOUND.anchorHold === "storm", false);
 checkTrue("fishing is actually reachable — some event maps to it",
   Object.values(EVENT_SOUND).includes("fishing"));
 check("anchorHold does NOT land on the master bus with a storm stem",
-  (soundForEvent({ t: "anchorHold" }) || {}).name, "fishing");
+  ((soundForEvent({ t: "anchorHold" }) || {}).name === "storm"), false);
 
 /* AND THE DUPLICATE KEY ITSELF, read from the SOURCE — the finished object cannot show it, because
    by then the loser is already gone. This is the only case here that could have caught the

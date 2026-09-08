@@ -888,6 +888,53 @@ worked example) that a person runs when they want it.
 
 ---
 
+### 8e. THE SAME FAULT, ONE STEP EARLIER: the page you never looked at
+
+**Earned the same afternoon, by the session that wrote §8d's other half, and it is the one that
+would have cost Wyatt the most.** A playtest checklist was published to him TWICE and **it did not
+render at all** — no items, no Pass buttons, nowhere to write. It was found only when that session
+went back to build a second sheet on top of the first.
+
+**THE BUG WAS A SPLICE BOUNDED BY THE WRONG TOKEN.** The edit read
+
+```js
+old = s[s.index(' {note:"…the sea trial'):s.rindex('];')]     // ← rindex
+```
+
+`];` terminates the `DATA` array — and also appears inside `buildNotes()` further down. `rindex`
+found the LAST one, so the replacement silently swallowed the storage key, the whole render loop
+and half the note builder. Nothing threw. The file still parsed. `grep` for `const KEY=` returned
+nothing and that was the first sign.
+
+> **BOUND A SPLICE WITH A MARKER SEARCHED FORWARD FROM A KNOWN START, AND ASSERT IT IS UNIQUE.**
+> `s.index(end, start)` rather than `s.rindex(end)`, plus `assert s.count(start) == 1`. The other
+> session's equivalent edit survived only because it happened to use a forward search — its own
+> words: *"that is luck as much as care; rindex would have done to me exactly what it did to you."*
+
+**AND THE REASON IT REACHED HIM IS SIMPLER THAN THE BUG: THE PAGE WAS PUBLISHED WITHOUT EVER BEING
+LOADED.** Every requirement in the checklist rule was satisfied — build stamp, per-item URLs, his
+decisions marked, an already-known list — and the artifact was still worthless, which is that
+rule's own stated lesson arriving by a new road.
+
+> **A PAGE WHOSE WHOLE JOB IS TO BE USABLE GETS RENDERED BEFORE IT IS HANDED OVER** — and the
+> machinery EXERCISED, not just drawn. Count what a browser actually produces, then tap one
+> control and confirm the state moved:
+>
+> ```
+> 29 items · 29 Pass buttons · 29 note boxes · 29 links · no JS errors
+> tapped Passed → counter 0/29 → 1/29 · item took .pass · note persisted to localStorage
+> ```
+>
+> Both sheets that afternoon were checked this way afterwards. Both were sound. Neither session
+> knew that until it looked.
+
+**⚠ ONE PHANTOM TO NOT CHASE WHILE DOING THIS.** Served from a plain `python3 -m http.server`, a
+UTF-8 page renders `â€"` for every em dash and `Â·` for every middot — **that is the server sending
+no charset, not the file.** Decode the file as UTF-8 to confirm it is clean; the Artifact wrapper
+supplies the header, so the published page is fine. Chasing it costs an hour and there is nothing
+there.
+
+
 ## 9. Never verify against production
 
 `playpastrypirates.com` serves whatever last merged to `main`. It can never prove anything about

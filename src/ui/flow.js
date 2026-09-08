@@ -72,9 +72,9 @@ import {
 import { passGate, requireName, showStep, openNameModal, confirmName, wireNameModal, setNameWarning } from "./lobby.js";
 import { playBakeoffLive } from "./bakeoff.js";
 import { netHandlers } from "./handlers.js";
-import { pilotLine, pilotMsg, pilotSee, pilotRung, pilotDepth, pilotFirstTime,
+import { pilotLine, pilotMsg, pilotSee, pilotSpeaks, pilotRung, pilotDepth, pilotFirstTime,
   pilotStartFromTheTop, pilotSkipToVeteran, pilotDecayOnLaunch, pilotApplyUrlFlag } from "./pilot.js";
-import { showCourseFor, clearCourse } from "./course.js";
+import { showCourseFor, clearCourse, forgetCourse } from "./course.js";
 
 const $=id=>document.getElementById(id);
 // ⏩ fast-forward: every flow beat (storm steps, rim sweeps, bot beats, battle pauses) collapses
@@ -607,7 +607,10 @@ export function renderPickPrompt(spec,answer){
   clearSailWindow();
   const svg=$("board"),hs=[];
   appState.currentPrompt=spec;
-  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;clearCourse();};
+  /* forgetCourse, not clearCourse: this prompt is OVER, so there is nothing for the parrot to
+     restore. Keeping the memory here would let a later toggle redraw a course for a sail that has
+     already been made. */
+  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;forgetCourse();};
   const done=v=>{teardown();answer(v);};
   const cellPx=boardCell();
   /* ITEM 21: the yellow flashing square UNDER the captain's own boat — "to indicate that they may
@@ -662,7 +665,10 @@ export function renderPickPrompt(spec,answer){
   const who=appState.game&&appState.game.players?appState.game.players[seat]:null;
   if(teaching&&who&&spec.pos)
     showCourseFor(appState.game,{...who,pos:spec.pos},svg,cellPx);
-  else clearCourse();
+  /* forgetCourse: the ladder has reached its bottom rung, so this captain is done being guided
+     and a toggle must not resurrect it. (Toggling the parrot ON puts every ladder back to rung 0,
+     which makes the NEXT prompt teach again — that path is untouched.) */
+  else forgetCourse();
   pilotSee("sail.pick");
   $("apStay").onclick=()=>done(null);
   /* THE CAMERA REQUEST RIDES WITH THE SQUARES — rule 23's converge move, and the missing half of a
@@ -1188,6 +1194,52 @@ export function publishNow(){
   if(h.onEvents)h.onEvents();
 }
 const _rodeSweep=new WeakSet();
+/* ══════════════════════ THE PARROT'S OWN BOX — "🦜 Aye aye" ══════════════════════
+   Wyatt, 2026-09-07 playtest item 4, after sailing into the rim: "there is a problem with the
+   design of our tutorial narrations — they disappear too quickly to read AND understand. Can we
+   put an action prompt button below all tutorial ladder narrations > 0 with the image of the
+   parrot and the words 'Aye aye'? that way the player has time to read and digest the
+   information." His pick, from three shapes offered: A GATE BEFORE THE PROMPT.
+
+   ⭐ WHICH MOMENTS GET THIS, AND WHY IT IS NOT ALL OF THEM. I measured every one of the seven
+   Pilot moments before choosing, because "disappear" is a property of the SLOT, not the ladder:
+
+     RIDES flash() — a timed narration that auto-advances, so it genuinely vanishes:
+       rim.sweep       · the default reading-speed hold
+       recipe.stowed   · the default reading-speed hold
+       storm.hit       · appended to the round header, which flashes for NINE HUNDRED
+                         MILLISECONDS. One sentence about a rule that moves every ship on the
+                         board, on screen for under a second. That is his complaint, exactly.
+
+     RIDES A PROMPT CARD that waits for the player and cannot vanish:
+       sail.pick · recipe.draft · act.menu/attack/trade/muse · dock.buy
+
+   So the three that vanish are gated and the four that wait are left where they are. His own
+   words are "all tutorial ladder NARRATIONS", and the narrations are precisely these three.
+   GATING THE OTHER FOUR WOULD COST SOMETHING REAL: the wind rule would leave the screen on which
+   ye are choosing a square, and he passed that screen twice in this same playtest (items 3, 18).
+   IF HE WANTS THEM GATED TOO IT IS ONE LINE PER SITE — this decision is on his sheet, marked as
+   mine to be overruled.
+
+   NO NEW MECHANISM: it is localAsk, the game's one prompt, with one circle. So it dims the board,
+   reveals top-to-bottom, obeys reduce-motion and answers the back button like every other card.
+   NOTHING REACHES THE WIRE — localAsk resolves a promise, and the Pilot is per device
+   (docs/INTENDED-BEHAVIOUR.md). A veteran never reaches this function at all: pilotSpeaks() is
+   false at the bottom rung, so the byte-identical guarantee is untouched.
+
+   `tweak` exists for recipe.stowed's one substitution ({name}) and is applied to the rung text
+   before it is drawn. */
+export async function pilotGate(id,tweak){
+  if(!pilotSpeaks(id))return false;
+  const line=pilotLine(id,null);
+  const text=tweak?tweak(line.msg||""):(line.msg||"");
+  if(!text)return false;
+  /* SEEN BEFORE SHOWN, deliberately. The count must advance even if this voyage ends mid-card —
+     otherwise a captain who quits during a lesson meets the same lesson forever. */
+  pilotSee(id);
+  await localAsk(text,[{label:"🦜 Aye aye",value:0,cls:"primary ahoyGlow",stage:true}],null,line.sub||null);
+  return true;
+}
 export async function animateRimSweepIfAny(ev){
   const g=appState.game;
   if(!g||appState.replaying)return false;
@@ -1217,9 +1269,8 @@ export async function animateRimSweepIfAny(ev){
      sweep this DEVICE witnesses, whoever is aboard. The count is per device either way, and
      nothing here rides the wire. */
   if(rode){
-    const learn=pilotMsg("rim.sweep","");
-    pilotSee("rim.sweep");
-    if(learn)await flash(learn);
+    /* WAS `await flash(learn)` — a reading-speed narration that took itself away. His item 4. */
+    await pilotGate("rim.sweep");
   }
   return rode;
 }
@@ -3064,26 +3115,32 @@ export async function botTurn(player){
    the standing top-to-bottom reveal order — and it is deliberately NOT passed to
    onRemoteDraftPrompt: a rung is per device, so a remote seat's own device supplies its own. The
    host composing one for a guest is the exact thing the Pilot exists to avoid. */
-export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce,subFor}){
+/* `localOptsFor` is OPTIONAL and follows subFor's rule for the same reason: it is answered by the
+   device in front of the player, and it is deliberately NOT passed to onRemoteDraftPrompt. The
+   Pilot's fork ("do ye know how to play?") is per device — a first-time guest must be able to ask
+   for help the veteran host does not need — so the host must never compose a guest's buttons.
+   A remote seat keeps `optsFor`, which is the ordinary card everybody shares. */
+export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce,subFor,localOptsFor}){
   const sub=seat=>subFor?(subFor(seat)||null):null;
+  const localOpts=seat=>(localOptsFor?(localOptsFor(seat)||null):null)||optsFor(seat);
   const results={};
   if(appState.passAndPlay){
     if(isPublic){
       // ONE DEVICE, ONE SHOWING — the table reads it together, off one screen.
-      results[seats[0]]=await localAsk(msgFor(seats[0]),optsFor(seats[0]),null,sub(seats[0]));
+      results[seats[0]]=await localAsk(msgFor(seats[0]),localOpts(seats[0]),null,sub(seats[0]));
       return results;
     }
     // one device, secret options: draft in turn, each behind the pass-the-device screen
     for(const seat of seats){
       await passGate(seat);
       applyActiveSeat(seat);
-      results[seat]=await localAsk(msgFor(seat),optsFor(seat),null,sub(seat));
+      results[seat]=await localAsk(msgFor(seat),localOpts(seat),null,sub(seat));
     }
     return results;
   }
   if(announce)netHandlers().onBroadcast(announce.html,announce.variants,{wait:true});
   await Promise.all(seats.map(seat=>{
-    if(decisionIsLocal(seat))return localAsk(msgFor(seat),optsFor(seat),null,sub(seat)).then(i=>{
+    if(decisionIsLocal(seat))return localAsk(msgFor(seat),localOpts(seat),null,sub(seat)).then(i=>{
       results[seat]=i;
       if(waitMsg)showNarration(waitMsg,{wait:true}); // item 19: no deadline on a wait line
     });
@@ -3107,7 +3164,11 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
    NOBODY IS LEFT OUT BY THE DELETION: every browser at the table owns a human seat (a bot seat has
    no browser), and the barrier walks every human seat. There is no spectator this broadcast was
    the only delivery for. */
-export async function netIntroBarrier(msg,btnLabel){
+/* `localOpts` — the buttons THIS device sees instead of the single dismiss circle, and the reason
+   the return value now matters. Used by exactly one caller: showAhoyIntro, so that the Pilot's
+   fork can live at the bottom of the Ahoy card rather than in a second box in front of it
+   (Wyatt, 2026-09-07 playtest item 2). Everyone else passes nothing and gets the card unchanged. */
+export async function netIntroBarrier(msg,btnLabel,localOpts){
   if(appState.replaying)return;
   // /4 playtest 12: the two intro barriers (ahoy + turn order) play CENTER STAGE — board dimmed,
   // message and button centred — instead of a bubble at the top and a lone circle mid-sea
@@ -3121,7 +3182,18 @@ export async function netIntroBarrier(msg,btnLabel){
   // FORK 5 IS THE PUBLIC CASE — one showing for a shared device (Wyatt 2026-08-08), every human
   // concurrently when each has their own screen. The whole pass-and-play/networked branch pair that
   // stood here lives in draftDispatch now, where fork 4 shares it.
-  await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg});
+  /* WHICH SEAT ANSWERED ON THIS DEVICE — learned from the dispatcher rather than re-derived.
+     `localOptsFor` is called by draftDispatch for local seats ONLY (that is its whole purpose), so
+     noting the seat as it goes past is the dispatcher's own answer about locality, not a second
+     opinion formed here.
+     ⚠ THE FIRST DRAFT ASKED decisionIsLocal() DIRECTLY AND THE MODE-FORK GATE CAUGHT IT — flow.js
+     14/13, "1 NEW fork(s). Every one of these is a place two captains can see different games."
+     It was right to: a file whose job is to draw had grown a fresh conditional on who is playing,
+     and the honest fix is not a bigger baseline but not needing to ask. */
+  let mine=null;
+  const results=await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg,
+    localOptsFor:localOpts?(seat=>{ if(mine==null)mine=seat; return localOpts; }):null});
+  return mine==null?undefined:results[mine];
 }
 // the opening backstory/context message — stays up until every human player actually reads it
 // and clicks through, rather than auto-advancing on a timer like every other narration
@@ -3191,17 +3263,37 @@ export async function showAhoyIntro(){
      host refresh re-runs this whole path — and a localAsk here would put a card on screen and wait
      for a tap that is never coming, hanging the rebuild. The fork inherits the same guard rather
      than relying on nobody noticing. */
-  if(!appState.replaying&&pilotFirstTime()){
-    // @copy misc.introbarrier.pilotfork — DRAFT COPY, his to rewrite.
-    const knows=await localAsk(`🦜 Do ye know how to play?`,[
-      {label:"Yaargh!",value:0,cls:"primary",stage:true},
-      {label:"Nah",value:1,cls:"primary",stage:true},
-    ]);
-    if(knows===1)pilotStartFromTheTop(); else pilotSkipToVeteran();
-  }
+  /* ⭐ ONE CARD, NOT TWO — Wyatt, 2026-09-07 playtest item 2: "This should not be its own box —
+     this should be written at the bottom of the box that says 'Ahoy! Choose a recipe, gather each
+     ingredient, then sail home first to win!' ... the buttons should say '⚓️ Yarrgh!' or '🦜 Nah'".
+
+     A first-time captain used to meet TWO stage cards back to back before the game began, saying
+     two different things, each needing its own tap. The question now rides the bottom of the Ahoy
+     card and its two circles ARE that card's dismiss — so a first voyage opens with one card and
+     one tap, and a veteran's opens exactly as it did before.
+
+     THE ANSWER STAYS ON THIS DEVICE. The buttons go down `localOpts`, which draftDispatch
+     deliberately withholds from onRemoteDraftPrompt for the same reason it withholds `subFor`:
+     the Pilot is per device (docs/INTENDED-BEHAVIOUR.md, "🦜 THE TUTORIAL IS PER DEVICE"), so a
+     remote seat's card keeps the ordinary single circle and that seat's own browser answers for
+     itself. Nothing about this reaches the wire, draws an RNG, or emits an event.
+
+     ASKED BEFORE, SET AFTER: pilotFirstTime() is read while the card is still being composed and
+     the rung is written once the barrier releases, so the read can never see its own write. */
+  const asking=!appState.replaying&&pilotFirstTime();
+  // @copy misc.introbarrier.pilotfork — his words, 2026-09-07.
+  const cardMsg=asking?`${msg}<br><br>Do ye know how to play?`:msg;
+  const forkOpts=asking?[
+    {label:"⚓️ Yarrgh!",value:0,cls:"primary ahoyGlow",stage:true},
+    {label:"🦜 Nah",value:1,cls:"primary ahoyGlow",stage:true},
+  ]:null;
   // NARR-01/D-25 (Wyatt-approved 2026-07-29): button trimmed to just "Arrgh!" — icon kept (D-16).
   // @copy misc.introbarrier.ahoy
-  await netIntroBarrier(msg,"⚓ Arrgh!");
+  const knows=await netIntroBarrier(cardMsg,"⚓ Arrgh!",forkOpts);
+  /* "Nah" (value 1) is the captain who wants teaching — so it starts at the TOP of every ladder.
+     Anything else, including a barrier that resolved with no answer, skips to veteran: the safe
+     failure here is the game a veteran already knows, never a tutorial nobody asked for. */
+  if(asking){ if(knows===1)pilotStartFromTheTop(); else pilotSkipToVeteran(); }
 }
 // right after the Ahoy intro closes: announce who won the flip for first mover, and cheer up
 // everyone sailing later by pointing out the coin they get in exchange for waiting. Stays up

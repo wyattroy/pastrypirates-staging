@@ -508,8 +508,15 @@ function rulesFacts(cfg){
   return {recipeSize:cfg.recipeSize,startCoins:cfg.startCoins,
     sailRange:SAIL_RANGE,sailUpwind:SAIL_RANGE_UPWIND,stormPush:STORM_PUSH,
     dockHeads:cfg.dockHeads,dockTails:cfg.dockTails,
-    crateBase:cfg.crateBase,
-    // the worked price ladder: first crate off a full shelf, the next, and the last one
+    /* ⚠ `crateBase` IS NOT HERE ANY MORE — Wyatt's playtest item 23, 2026-09-07. The rules used to
+       state the FORMULA ("a crate costs 6🌕 minus however many are left on that island") and then
+       work it through; his rewrite drops the formula and keeps only the three worked prices, which
+       carry the same information without asking a reader to do arithmetic. This object is the list
+       of numbers the page PROMISES to state, and rules_page_check fails on any entry the page does
+       not carry — so a fact the rules no longer claim has to leave it, or the gate is asserting a
+       promise nobody made. cfg.crateBase itself is untouched and still derives all three prices
+       on the line below; only the claim is gone. */
+    // the worked price ladder: first ingredient off a full island, the next, and the last one
     priceFirst:cfg.crateBase-cfg.crates,priceNext:Math.min(cfg.crateBase-cfg.crates+1,cfg.crateBase-1),priceLast:cfg.crateBase-1,
     powder:cfg.powder,refire:cfg.refire,callBounty:cfg.callBounty,passCoin:cfg.passCoin,
     blackMarket:cfg.blackMarket,bakeRewatch:BAKE_REWATCH_COST};

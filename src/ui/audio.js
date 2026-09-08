@@ -125,8 +125,13 @@ const AMBIENCE_FILES = [
 const AMBIENCE_SEA = 0.596;              // -4.5 dB — the bed everything else sits on
 const AMBIENCE_GULL = 0.168;             // -15.5 dB — well down; raw, the gulls land 12 dB ABOVE the sea
 const AMBIENCE_CREAK = 1.122;            // +1.0 dB — raw, the creaks sit 6 dB UNDER it
-const AMBIENCE_GULL_MEAN_SEC = 10;       // average wait between cries
-const AMBIENCE_CREAK_MEAN_SEC = 13;      // average wait between groans of the hull
+/* ⭐ HIS EARS, 2026-09-07 playtest (sound sheet item 3), and they REVERSE the pair he dialled in
+   the tuner an hour earlier: "Creaks should be every 8 seconds; gulls every 14 seconds." The hull
+   is now the near sound and the birds the far one, which is what a deck actually sounds like.
+   These are MEAN waits, not intervals — ambSchedule draws an exponential gap around them, so
+   "every 8 seconds" is a rhythm you feel rather than a beat you can count. */
+const AMBIENCE_GULL_MEAN_SEC = 14;       // average wait between cries
+const AMBIENCE_CREAK_MEAN_SEC = 8;       // average wait between groans of the hull
 const AMBIENCE_SPREAD = 0.7;             // how far to port/starboard a scattered clip may land
 const AMBIENCE_LIVELINESS = 0.35;        // how much each hit shifts in loudness and pitch
 
@@ -136,17 +141,32 @@ const AMBIENCE_LIVELINESS = 0.35;        // how much each hit shifts in loudness
    sound button — Music+SFX -> SFX only -> mute — which is a new feature with its own consistency
    sweep, not a sound swap. Handoff items 4 and 6. */
 const MUSIC_LEVEL = 0.141;               // -17.0 dB
-const MUSIC_PAN = -0.7;                  // 70% to port. His choice; worth a headphone check.
+/* ⚠ THE HEADPHONE CHECK HAPPENED AND IT FAILED. He asked for it twice in one playtest, from two
+   different sheets: "the music should be less panned left — bring it back to center more" and
+   "Move fiddle more to the middle. It sounds weirdly panned in headphones."
+   -0.7 was judged on SPEAKERS in the tuner, where a hard pan reads as width. In headphones it
+   reads as a fiddle strapped to your left ear. -0.15 keeps the song off the centre line — so it
+   still sits beside the gulls and creaks rather than on top of them — without the lopsidedness.
+   THIS IS MY GUESS AT "more to the middle", not his number. It is on his taste sheet. */
+const MUSIC_PAN = -0.15;                 // 15% to port — enough to leave centre clear, not enough to notice
 
 /* "Out on the Ocean", Fiddlers Plus — credited on the Credits page by his instruction, 2026-09-07.
-   34.5s, mono, 540 KB. NOT in SFX_FILES for the same reason the bed is not: initAudio() awaits
-   that whole array. Mono is not an accident worth fixing — a mono source is exactly what pans
-   cleanly, and MUSIC_PAN moves all of it.
-   ⚠ THIS IS A CUT OF THE FULL MASTER, NOT HIS OWN "short 1" EDIT. His edit is on Drive and could
-   not be reached (the Chrome extension was not connected, and the Drive connector returns base64
-   into the session rather than to disk). The important part: MUSIC_LEVEL and MUSIC_PAN above were
-   judged BY HIM against this exact audio in the tuner, so his numbers mean what he heard. Swapping
-   in his edit later is one file and no code. */
+   ⭐ THIS IS NOW HIS OWN EDIT, 214.1s (3:34), mono, 2.1 MB. He handed the file over directly:
+   "out on the ocean fiddlers plus short is in /notes". It replaces the 34.5s cut that made him
+   write "currently, only 35ish seconds of the song play... the full song should run".
+
+   WHY HIS DIALLED LEVEL STILL MEANS WHAT HE HEARD. MUSIC_LEVEL and MUSIC_PAN were judged in the
+   tuner against the OLD cut, so a swap could silently move the mix. Measured rather than assumed
+   (ffmpeg ebur128): the old cut is -17.8 LUFS integrated, his edit -17.5 — 0.3 dB apart, which is
+   under the threshold of audibility. No re-levelling, and none is hiding in here for later.
+
+   2.1 MB is four times the old file and that is FINE, load-bearingly so: it is not in SFX_FILES,
+   for the same reason the bed is not — initAudio() awaits that whole array, so a music bed in it
+   silences every sound effect in the game until the song has downloaded. It arrives on its own
+   path (initAmbience) and fades in whenever it gets here.
+
+   Mono is not an accident worth fixing — a mono source is exactly what pans cleanly, and MUSIC_PAN
+   moves all of it. */
 const MUSIC_FILE = "music-ocean";
 
 /* ⭐ THE SONG WAITS A MINUTE BEFORE IT COMES ROUND AGAIN. Wyatt, 2026-09-07: "the song shouldn't
@@ -243,14 +263,28 @@ const BATTLE_ENGAGE_SOUND = "battle-swords";
 const EVENT_SOUND = {
   // D-01 (sailing); D-04 (wind pushes your boat — your ship moved, just not by choice); D-21 (a
   // gale blows you off the dock — the identical case as windmove)
-  sail: "ship-move", windmove: "ship-move", blownOut: "ship-move",
+  /* ⭐ THE STORM NO LONGER MOVES YOU WITH A SAIL SOUND. Wyatt, 2026-09-07 playtest (sound sheet
+     item 13): "Remove the movement sounds (sail and anchor) from the storm movements — they're
+     confusing and distracting."
+     WHY HE IS RIGHT AND THIS IS NOT A LOSS. `ship-move` is the sound of a captain CHOOSING to
+     sail. `windmove` and `blownOut` are the weather doing it TO them, and a storm round fires one
+     per affected ship — so a four-ship storm played the deliberate-sail cue four times for moves
+     nobody made. The storm's own bed (which now runs under the whole round, see soundForEvent)
+     is the weather's voice; these were four small ships talking over it. */
+  sail: "ship-move", windmove: null, blownOut: null,
   // D-01/D-04: a crate changing hands, whether docking or trading
   dock: "store-ingredient", trade: "store-ingredient",
   // D-01; D-04 (fleeing/dodging — the clash happened, you just left it). NOT the battle's own
   // start/end — see the `battle: null` entry below.
   battleflee: "battle-swords", dodge: "battle-swords",
   // D-01 (fishing); D-03 (dropping anchor in a storm); D-21 (the anchor holding — same family)
-  fish: "fishing", anchor: "fishing", anchorHold: "fishing",
+  /* `anchorHold` is the storm case of the same instruction above — a ship riding the weather out.
+     ⚠ IT IS NOT ALLOWED TO BECOME "storm" AGAIN. That exact line was DEFECT-1 and DEFECT-2 in
+     docs/AUDIO.md (an 8-second bed at ~3x level, once per anchoring ship, unfadeable). Going
+     SILENT is strictly further from that defect than "fishing" was, and the guard in
+     scripts/audio_mapping_test.js now pins the invariant that actually matters — never a storm
+     stem — rather than the literal it used to pin. */
+  fish: "fishing", anchor: "fishing", anchorHold: null,
   // D-04: running aground / shipwrecked both borrow storm
   // v2.1: nothing runs aground any more — the storm keeps its own cue via `newround`
   shipwrecked: "storm",
@@ -287,9 +321,14 @@ const EVENT_SOUND = {
   // is per player, so three captains anchoring in one storm stacked three of them on top of the
   // storm cue that had already played, and fadeStorm() could retire none of them (stormNode is only
   // set on the newround path). Deleting one line fixed both. DO NOT RE-ADD IT.
-  // the ocean look and a blown-into-berth rescue are moments, but quiet ones — the narration and
-  // the board already carry them
-  pass: null,
+  /* ⭐ MUSE IS THE ANCHOR GOING DOWN. Wyatt, 2026-09-07 playtest (sound sheet item 13): "Add the
+     anchor sound to 'muse' action, played when muse is clicked."
+     `pass` IS Muse — the radial builds it as `{label: museFace, value: "pass"}` (src/ui/flow.js)
+     and the ladders key it as `act.muse`. So the cue goes in this map rather than on the button's
+     click handler: one dispatcher means the sound arrives the same way on every tier, the whole
+     table hears it (D-07), and there is no second code path to drift. It rides "fishing", which
+     is already the anchor family — `anchor` above is the same stem. */
+  pass: "fishing",
   // a battle that ends with nobody hit has no hit to sound; the paid re-fire is covered by the
   // flip that follows it
   battlenull: null, refire: null,
@@ -326,7 +365,19 @@ const LOCAL_ONLY_SOUND_EVENTS = new Set(["turn"]);
  * and this file imports nothing by design (leaf tier) — so the answer is handed to playForEvent
  * by its single caller instead. That keeps the whole map assertable under plain Node. */
 function soundForEvent(e) {
-  if (e.t === "newround" && e.storm) return { name: "storm", bus: "storm" };
+  /* ⭐ THE STORM IS WEATHER NOW, NOT A DOORBELL. Wyatt, 2026-09-07 playtest (sound sheet item 13):
+     "I thought there was a longer storm track — what happened to that? it should play on top of
+     the ambience."
+     MEASURED ANSWER, because it is the honest one: there has never been a longer file. storm.mp3
+     is 8.0 seconds and it is the ONLY storm audio in any commit in this repo's history. What he
+     remembers as longer is almost certainly DEFECT-1/2, where three anchoring ships stacked three
+     unfadeable copies of it at ~3x level.
+     HIS RULING, given the measurement: "Loop the 8s one under the whole storm round." So the cue
+     stops being a one-shot announcement and becomes a bed that runs from the moment the storm
+     arrives until fadeStorm() retires it on the next `newround` or `end` — which is exactly the
+     lifetime the storm itself has. STORM_VOLUME (0.35) already puts it under the short sounds, and
+     it rides the ambience rather than replacing it: two buses, both into masterGain. */
+  if (e.t === "newround" && e.storm) return { name: "storm", bus: "storm", loop: true };
   const name = EVENT_SOUND[e.t];
   if (!name) return null;
   const out = { name, bus: "master" };
@@ -592,7 +643,23 @@ function play(name, opts) {
   const gain = ctx.createGain();
   gain.gain.value = SFX_VOLUME[name] != null ? SFX_VOLUME[name] : 1;
   src.connect(gain).connect(bus);
-  src.start();
+  /* opts.loop — a cue that runs until something retires it, rather than a one-shot. Only the storm
+     asks for this today (soundForEvent), and fadeStorm() is what ends it.
+     THE LOOP POINTS ARE MEASURED, NOT 0-TO-DURATION, and it is the same ambLoopPoints() the sea
+     bed uses rather than a second copy: docs/AUDIO.md §3 — "MP3 pads a sliver of silence onto both
+     ends of every file, so a naive MP3 loop clicks each time it comes round." An 8-second storm
+     looping across a whole round would come round often enough for that click to become the most
+     audible thing in the mix. (ambLoopPoints is declared further down the file; function
+     declarations hoist, and keeping it beside the bed it was written for beats moving it.) */
+  if (opts && opts.loop) {
+    const lp = ambLoopPoints(src.buffer);
+    src.loop = true;
+    src.loopStart = lp.start;
+    src.loopEnd = lp.end;
+    src.start(0, lp.start);
+  } else {
+    src.start();
+  }
   return { src, gain };
 }
 
@@ -869,7 +936,26 @@ function musicStop() {
    THE TWO ANSWERS DIFFER BY EXACTLY ONE TERM. The sea plays whenever sound is on at all; the music
    additionally needs the full mode. That single difference IS the middle position of his three-way
    switch, expressed once. */
+/* ⭐ THE BEDS WAKE THE CONTEXT, TOO — Wyatt, 2026-09-07 playtest (item 10): "after refreshing the
+   page multiple times, starting different games in staging, exiting games, and restarting new
+   ones, the sound fully stops playing at all... i'm using safari", and the Chrome half of the same
+   note: "the game loaded automatically but the sound switch said 'sound blocked by your browser'
+   until I refreshed."
+
+   WHY THE SEA AND THE SONG WERE THE TWO SOUNDS THIS COULD HAPPEN TO. play() has woken the context
+   on every cue since 0bda3be7 — but the sea and the music do not go through play(). They build
+   their own source nodes (ambStart, musicPlayOnce), because they are continuous and play() is a
+   one-shot primitive. So the two sounds a player hears FIRST, before touching anything, were the
+   only two with no wake on their path at all. Start a game into a suspended context and the bed
+   ran silently forever with nothing to notice.
+
+   His Chrome clue is the proof: Chrome resumes happily OUTSIDE a gesture, so on Chrome this one
+   line is the whole fix — the game auto-resumed a saved solo voyage with no tap anywhere, and
+   nothing asked the context to wake. On Safari a resume outside a gesture is refused, so this is
+   necessary but not sufficient there; the always-armed gesture listener in src/orchestrator.js is
+   the other half. Two browsers, two halves, one door each. */
 function syncBeds() {
+  wakeCtx();
   const soundOn = ambWanted && !isMuted();
   if (soundOn && ambBuffers["ocean-loop"]) ambStart(); else ambStop();
   if (soundOn && musicOn() && ambBuffers[MUSIC_FILE]) musicStart(); else musicStop();
@@ -949,7 +1035,7 @@ function playForEvent(e, isLocalSeat) {
      — silence is the safe failure here, not sound. */
   if (s.localOnly && isLocalSeat !== true) return;
   const bus = s.bus === "storm" ? stormGain : masterGain;
-  const node = play(s.name, { bus });
+  const node = play(s.name, { bus, loop: !!s.loop });
   if (s.bus === "storm") stormNode = node || null;
 }
 
@@ -996,6 +1082,11 @@ function playBattleEngage() {
 
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
+  /* wakeCtx is exported for ONE caller: the gesture listener in src/orchestrator.js. Safari only
+     honours resume() inside a user-gesture call stack, and initAudio() cannot be that caller —
+     it returns immediately once `ctx` exists, so every gesture after the first reached no wake at
+     all. That is precisely how a page could end up permanently silent. */
+  wakeCtx,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

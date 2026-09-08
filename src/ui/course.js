@@ -35,10 +35,27 @@ import { appState } from "../state/index.js";
    came back to tighter dashes with a little jitter and a far higher minimum separation, and 0.85
    is the number that guarantees no two dashes touch where a route folds back over itself. This
    one is later and wins. */
+/* ⭐ HIS SECOND PASS, pasted out of the Course Tuner on 2026-09-07 (playtest item 7) and replacing
+   the 2026-09-03 block. What changed and what it does to the picture, so the diff reads as a
+   decision rather than a pile of numbers:
+     len   8   -> 5     shorter dashes
+     gap   7   -> 5.5   and closer together — a finer, denser dotted line
+     thk   2.6 -> 2.2   drawn lighter
+     ang   7   -> 0     dashes now sit square to the course; no per-dash angle jitter at all
+     jit   0.02-> 0     and no positional wobble either — the wander is the WAVES only now
+     a2/f2 .05/.85 -> .06/.84   the second wave a touch deeper and slower
+     rnd   14  -> 11    a different draw of the same deterministic hash
+     sep   0.85-> 0.12  the minimum-separation cull all but switched off, which is what lets
+                        dashes this short sit this close without being thinned out
+   ⚠ pd AND ps ARE DESCRIPTIVE, NOT WIRED, and that is now written down instead of implied. The
+   marker's pulse is CSS, and since his item 19 it is the game's ONE shared attention keyframe
+   (pp4Grow in index.html) rather than a private copy that happened to agree with these two numbers.
+   They are kept because the tuner emits them and a block that round-trips is worth more than two
+   fewer keys — but nothing reads them, so changing them here changes nothing on screen. */
 export const COURSE = {
-  len: 8, gap: 7, thk: 2.6, ang: 7,
-  a1: 0.13, f1: 0.3, a2: 0.05, f2: 0.85, jit: 0.02, rnd: 14,
-  o0: 0.98, o1: 0.42, sep: 0.85, clp: 0.34,
+  len: 5, gap: 5.5, thk: 2.2, ang: 0,
+  a1: 0.13, f1: 0.3, a2: 0.06, f2: 0.84, jit: 0, rnd: 11,
+  o0: 0.98, o1: 0.42, sep: 0.12, clp: 0.34,
   mk: 0.5, pd: 0.15, ps: 1.2, mark: "x",
 };
 
@@ -319,11 +336,48 @@ export function courseHost(){
   return h;
 }
 
-/** Remove everything this module drew. Safe to call when nothing is up. */
+/* ══════════════════ WHAT WAS LAST DRAWN, SO IT CAN COME BACK ══════════════════
+   Wyatt, 2026-09-07 playtest item 9: "when i am about to sail and parrot is on, i can see the
+   dotted line on the board. if i then click it off, the dotted line disappears. this is good. But
+   when i click parrot on again, the dotted line doesn't return — it should though! re-enabling
+   parrot should immediately restore all the hint state."
+
+   THAT WAS A DELIBERATE DECISION OF MINE AND HE HAS OVERRULED IT. The toggle's own comment in
+   src/ui/stage.js said: "Switching ON does not draw a course here on purpose: the guide belongs to
+   a prompt, and it arrives with the next one." Reasonable on paper; from the seat it means the
+   control does nothing when you press it, which is the same complaint that made OFF clear the
+   course instantly in the first place. A toggle must answer in both directions.
+
+   SO THE MODULE REMEMBERS ITS LAST REQUEST — the arguments, never the drawn nodes, so a restore
+   re-derives the tour from the live game rather than re-hanging stale SVG. Two ways to erase:
+     clearCourse()  — take the drawing off the board, KEEP the memory (the parrot going quiet)
+     forgetCourse() — the moment itself is over, so there is nothing to come back to (prompt
+                      teardown, the ladder reaching its bottom rung)
+   Getting those two the wrong way round is the whole risk here, so they are named for what they
+   mean rather than for what they do to the DOM. */
+let lastRequest = null;
+
+/** Remove everything this module drew. Safe to call when nothing is up.
+ *  KEEPS the memory — see redrawCourse(). */
 export function clearCourse(){
   document.querySelectorAll(".pp4Course").forEach(e => e.remove());
   const h = document.getElementById(HOST_ID);
   if (h) h.textContent = "";
+}
+
+/** Erase, and forget there was ever anything to redraw. For teardowns. */
+export function forgetCourse(){
+  lastRequest = null;
+  clearCourse();
+}
+
+/** Put back whatever was last asked for, if anything. Returns true if it drew.
+ *  Re-derives the tour from the CURRENT game state, so a restore after a few turns shows where
+ *  the captain must go now — not a photograph of where they were told to go before. */
+export function redrawCourse(){
+  const r = lastRequest;
+  if (!r) return false;
+  return !!showCourseFor(r.game, r.player, r.svg, r.cellPx, r.ings);
 }
 
 /**
@@ -408,5 +462,8 @@ export function showCourseFor(game, player, svg, cellPx, ingsOverride){
   const tour = chartTour(game || appState.game, player, ingsOverride);
   if (!tour){ clearCourse(); return null; }
   drawCourse(svg, cellPx, tour);
+  /* Stashed AFTER the draw succeeds, so a moment that had no course to show never becomes the
+     thing a later restore puts back. */
+  lastRequest = { game, player, svg, cellPx, ings: ingsOverride };
   return tour;
 }
