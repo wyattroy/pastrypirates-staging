@@ -70,7 +70,12 @@ const M = `JSON.stringify((()=>{
     panelBg:bg(ap), askBg:bg(ask), peekBg:bg(peek), backBg:bg(back), swapBg:bg(sw),
     swapRotate:sw&&sw.querySelector('svg')?getComputedStyle(sw.querySelector('svg')).transform:null,
     boardHidden:cover(R(ap),R(brd)), panelWiderThanBox:(R(ap)&&R(box))?(R(ap).w-R(box).w):null,
-    cursor:box?getComputedStyle(box).cursor:null};
+    cursor:box?getComputedStyle(box).cursor:null,
+    boxDisplay:box?getComputedStyle(box).display:null,
+    boxAlign:box?getComputedStyle(box).alignItems:null,
+    boxDir:box?getComputedStyle(box).flexDirection:null,
+    askCentred:(()=>{const b=R(box),a=R(ask);if(!b||!a)return null;
+      return {leftGap:a.l-b.l, rightGap:b.r-a.r};})()};
 })())`;
 
 const go = async () => {
@@ -105,7 +110,8 @@ try {
     say(`   ...island squares under it    : ${m.helpOverIslandCells}   (must be 0; grid=${m.gridN}, viewBox=${m.viewBox})`);
     say(` 7 arrow transform               : ${m.swapRotate}   (rotate(180deg) = matrix(-1,0,0,-1,0,0))`);
     say(` 5 cursor on the sheet           : ${m.cursor}`);
-    say(`   box ${JSON.stringify(m.box)}`);
+    say(`   box ${JSON.stringify(m.box)}  display=${m.boxDisplay} dir=${m.boxDir} align=${m.boxAlign}`);
+    say(`   ask centred in the sheet? ${JSON.stringify(m.askCentred)}   (equal gaps = centred)`);
     say(`   PANEL ${JSON.stringify(m.panel)}   panel wider than box by ${m.panelWiderThanBox}px`);
     say(`   board ${JSON.stringify(m.board)}   panel hides ${m.boardHidden==null?'?':(m.boardHidden*100).toFixed(1)+'%'} of it`);
     if (s.name === "desktop"){
@@ -120,13 +126,51 @@ try {
         say(`   back  ${h.backBg}`);
         say(`   swap  ${h.swapBg}`);
       }
-      // ── item 5: does it actually drag?
+      /* ⭐ THE STILL PRESS IS TESTED FIRST, ON THE PARKED SHEET.
+         ⚠ IT USED TO RUN AFTER THE DRAG AND REPORTED A FALSE FAILURE: the drag deliberately ends
+         with the sheet clamped hard against the bottom edge, which puts the card's own centre BELOW
+         the viewport, so the press landed on nothing. The test was measuring its own setup. This is the half the drag could silently break:
+         if the slop threshold were 0, or the click-swallower fired on every release, tapping a
+         card would stop selecting it and the picker would be unusable. */
+      const cd = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]');const r=c.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})())`));
+      await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:cd.x,y:cd.y,button:"left",buttons:1,clickCount:1});
+      await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:cd.x,y:cd.y,button:"left",buttons:0,clickCount:1});
+      await sleep(800);
+      const chose = await C.ev(`!!document.querySelector('#actionPanel .apBtn.pp4Focus') || !!document.querySelector('.pp4Bake')`);
+      say(`   a STILL press still chooses the recipe: ${chose}   (the slop threshold's whole job)`);
+
+      // ── item 5 + item 1: does it drag, and does it drag FROM A CARD?
+      // instrumented, because a bare "moved=false" does not say whether the press was even heard
+      await C.ev(`(()=>{window.__dc={down:0,move:0,up:0};const b=document.getElementById('pp4Prompt');
+        b.addEventListener('pointerdown',()=>__dc.down++,true);
+        b.addEventListener('pointermove',()=>__dc.move++,true);
+        b.addEventListener('pointerup',()=>__dc.up++,true);
+        b.addEventListener('gotpointercapture',()=>window.__dcCap=1,true);
+        b.addEventListener('lostpointercapture',()=>window.__dcCap=0,true);})()`);
       const before = JSON.parse(await C.ev(M));
-      const ax = before.ask.l + 40, ay = before.ask.t + 12;
-      await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:ax,y:ay,button:"left",clickCount:1});
-      await C.send("Input.dispatchMouseEvent",{type:"mouseMoved",x:ax-260,y:ay+300,button:"left"});
-      await sleep(260);
-      await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:ax-260,y:ay+300,button:"left",clickCount:1});
+      say(`   ask rect ${JSON.stringify(before.ask)}  (item 4: must hug its words, not the sheet's ${before.box.w}px)`);
+      // GRAB THE CARD ITSELF — his item 1
+      const card = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]');if(!c)return null;const r=c.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})())`));
+      const ax = card ? card.x : before.ask.l + 40, ay = card ? card.y : before.ask.t + 12;
+      say(`   grabbing the FRONT CARD at ${ax},${ay}`);
+      await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:ax,y:ay,button:"left",buttons:1,clickCount:1});
+      // several small moves, like a real hand: one 300px jump can be coalesced or dropped, and it
+      // also tells us nothing about whether the drag-slop threshold is behaving
+      for (let i=1;i<=10;i++){
+        /* ⚠ buttons:1 IS LOAD-BEARING. `button:"left"` alone names WHICH button the event concerns;
+           `buttons` is the bitmask of what is currently HELD. Without it Chrome treats each move as
+           a button-up move, and the run measured exactly one delivered pointermove out of ten — a
+           drag that looked broken in the probe and was fine in the product. */
+        await C.send("Input.dispatchMouseEvent",{type:"mouseMoved",x:Math.round(ax-26*i),y:Math.round(ay+30*i),button:"left",buttons:1});
+        await sleep(90);
+        // READ THE BOX AFTER EVERY STEP — "it moved" and "it tracks" are different claims, and a
+        // drag that takes the first move and then stops looks like a pass in a before/after test
+        const now = await C.ev(`(()=>{const b=document.getElementById('pp4Prompt');return b.style.left+","+b.style.top})()`);
+        say(`     move ${i} -> pointer ${Math.round(ax-26*i)},${Math.round(ay+30*i)}   sheet ${now}   captured=${await C.ev(`!!(window.__dcCap)`)}`);
+      }
+      await sleep(200);
+      say(`   pointer events heard by the sheet: ${await C.ev(`JSON.stringify(window.__dc)`)}`);
+      await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:Math.round(ax-260),y:Math.round(ay+300),button:"left",buttons:0,clickCount:1});
       await sleep(700);
       const after = JSON.parse(await C.ev(M));
       say(`\n ── 5 DRAG: from ${JSON.stringify([before.box.l,before.box.t])} to ${JSON.stringify([after.box.l,after.box.t])}  moved=${after.box.l!==before.box.l||after.box.t!==before.box.t}`);

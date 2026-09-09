@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@5d61e1e6";
+const PP4_STAMP = "2026.09.07.3-staging@bf111724";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2324,79 +2324,17 @@ function rcFlightRun(key, brd){
   rcLater(() => { rcInFlight = false; }, RC_LAND_MS + RC_HOLD_MS + RC_FLY_MS + 40);
 }
 
-/* ⭐ THE HELPER PILL, OVER OPEN WATER — Wyatt, 2026-09-09 item 3: "a normal helper pill over the
-   sea, not covering any of the islands."
-   ⚠ "NOT COVERING ANY OF THE ISLANDS" IS ANSWERED BY THE GAME, NOT BY THE PICTURE. The islands are
-   drawn into the board SVG as fused polygons behind a clip path, so there is no per-island DOM rect
-   to dodge and reading the pixels is not available to us. But the engine already knows exactly
-   which CELLS are land — `game.islands` is keyed "x,y" for every island square — so the obstacle
-   list is built from the game's own data and projected through the same toScreen() the board is
-   drawn with. That is one source of truth, not a second copy of the map.
-   THE SEARCH: walk candidate rows down the board and take the first that is clear of every island
-   cell, of the sheet itself, and of the sea hint. Below the sheet first, because that is the open
-   water the captain is looking at while they choose; then above it; then hide, because a pill drawn
-   over an island is worse than no pill (D-39 lets a hint be silent, never wrong). */
-function rcHelpPlace(help, brd){
-  const sp = help.firstElementChild;
-  if (!sp) return;
-  help.style.visibility = rcInFlight ? "hidden" : "";     // it sits out the show, like the sea hint
-  if (rcInFlight || !brd) return;
-  const r = sp.getBoundingClientRect();
-  if (!(r.width > 2 && r.height > 2)) return;
-  const o = fixedOrigin();
-  const W = Math.ceil(r.width), H = Math.ceil(r.height);
-  /* EVERY ISLAND SQUARE, in the same body-relative space everything else here is placed in. The
-     engine keys `islands` by "x,y" for each land cell, and toScreen() is the projection the board
-     itself is drawn with — so this is the game's own map, not a second copy of it. */
-  const g = appState.game, cell = cellPx(), land = [];
-  if (g && g.islands){
-    for (const k of Object.keys(g.islands)){
-      const [cx, cy] = k.split(",").map(Number);
-      if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
-      const [x0, y0] = toScreen(cx * cell, cy * cell);
-      const [x1, y1] = toScreen((cx + 1) * cell, (cy + 1) * cell);
-      land.push({ l: Math.min(x0, x1), r: Math.max(x0, x1), t: Math.min(y0, y1), b: Math.max(y0, y1) });
-    }
-  }
-  const bx = fixedRect($("pp4Prompt"));
-  const hintEl = document.querySelector(".pp4PeekHint span");
-  const hintR = hintEl ? (() => { const h = hintEl.getBoundingClientRect();
-    return { l: h.left - o.x, r: h.right - o.x, t: h.top - o.y, b: h.bottom - o.y }; })() : null;
-  const sheet = { l: bx.left, r: bx.right, t: bx.top, b: bx.bottom };
-  const AIR = 6;
-  const clear = (x, y) => {
-    const a = { l: x, r: x + W, t: y, b: y + H };
-    const over = z => z && !(z.r < a.l - AIR || z.l > a.r + AIR || z.b < a.t - AIR || z.t > a.b + AIR);
-    return !over(sheet) && !(hintR && over(hintR)) && !land.some(over);
-  };
-  /* THE SEARCH IS 2D, and it prefers the middle of the board horizontally and the water BELOW the
-     sheet vertically — that is the open sea the captain is reading while they choose. Columns fan
-     out from the centre so the pill only moves sideways as far as the islands actually force it. */
-  const midX = Math.round(brd.left + brd.width / 2 - W / 2);
-  const cols = [midX];
-  for (let d = 40; d <= Math.max(brd.width, 240); d += 40){
-    cols.push(midX + d, midX - d);
-  }
-  const inBoard = x => x >= brd.left + 6 && x + W <= brd.right - 6;
-  const rows = [];
-  const top0 = Math.max(brd.top + 6, topBandPx() + 6), bot0 = brd.bottom - H - 6;
-  for (let y = Math.round(Math.max(sheet.b + 10, top0)); y <= bot0; y += 10) rows.push(y);
-  for (let y = Math.round(bot0); y >= top0; y -= 10) rows.push(y);      // then anywhere else on the water
-  let hit = null;
-  for (const y of rows){
-    for (const x of cols){
-      if (!inBoard(x)) continue;
-      if (clear(x, y)){ hit = [x, y]; break; }
-    }
-    if (hit) break;
-  }
-  /* D-39: a hint may be silent, never wrong. A pill drawn across an island is exactly the "named a
-     surface it was nowhere near" fault the sea hint's own history records. */
-  if (!hit){ help.style.visibility = "hidden"; return; }
-  help.style.visibility = "";
-  help.style.left = Math.round(hit[0]) + "px";
-  help.style.top  = Math.round(hit[1]) + "px";
-}
+/* ⭐ THE HELPER PILL IS LOCKED UNDER THE CARDS — Wyatt, 2026-09-09: "make that 'tap a recipe'
+   helper locked underneath the recipe cards so it moves with them."
+   THIS REVERSES HIS OWN RULING OF AN HOUR AGO ("a normal helper pill over the sea, not covering any
+   of the islands"), and the reversal is the right call for a reason worth writing down: the sheet
+   DRAGS now. A pill pinned to the water is correct only while the thing it describes cannot move —
+   the moment the captain can carry the cards across the board, a helper anchored to the sea is a
+   label that has come off its object. So it stops being placed at all and simply becomes the last
+   child of the sheet's own column, below the cards.
+   WHAT THIS DELETED, deliberately: a 2D search that projected every island square through
+   toScreen() to find open water. It was correct and measured 0 island squares at all three sizes —
+   and it is gone because the question it answered stopped being asked. */
 
 /* ⭐ ITEM 5: THE WHOLE MODAL DRAGS — Wyatt, 2026-09-09: "make the entire modal movable by dragging
    -- so players can move it across the board to see what's under it."
@@ -2416,14 +2354,17 @@ function rcDragReset(){
   const box = $("pp4Prompt");
   if (box) box.classList.remove("pp4RcDragging");
 }
+/* HOW FAR A FINGER MUST TRAVEL BEFORE A PRESS BECOMES A CARRY. Below this a press is still a tap,
+   so choosing a recipe is untouched; above it the sheet is being moved and the click that would
+   follow is swallowed. 6px is the same order as the 34px a swipe used to need — smaller, because a
+   drag has a continuous target to aim at where a swipe had to be distinguished from a scroll. */
+const RC_DRAG_SLOP = 6;
 function rcDragArm(box){
   if (rcDragArmed) return;
   rcDragArmed = true;
-  let live = false, id = null, ox = 0, oy = 0;
-  box.addEventListener("pointerdown", (e) => {
-    if (!box.classList.contains("pp4Recipes")) return;
-    // the cards, the swap circle and the peek strip keep their own gestures
-    if (e.target.closest(".apBtn, .pp4RcSwap, .pp4RcPeek")) return;
+  let down = false, moving = false, id = null, ox = 0, oy = 0, sx = 0, sy = 0;
+  const start = () => {
+    moving = true; rcDragged = true;
     /* TAKE OVER FROM THE FLIGHT, IF IT IS STILL RUNNING. fixedRect gives where the sheet actually
        IS right now, transform and all; writing that back as left/top and dropping the transform
        leaves it exactly where the captain grabbed it, with nothing left to animate it away. */
@@ -2434,19 +2375,32 @@ function rcDragArm(box){
       box.style.left = Math.round(now.left) + "px";
       box.style.top  = Math.round(now.top)  + "px";
     }
-    const r = fixedRect(box);
-    const o = fixedOrigin();
-    ox = (e.clientX - o.x) - r.left;
-    oy = (e.clientY - o.y) - r.top;
-    live = true; id = e.pointerId; rcDragged = true;
+    const r = fixedRect(box), o = fixedOrigin();
+    ox = (sx - o.x) - r.left;
+    oy = (sy - o.y) - r.top;
     box.classList.add("pp4RcDragging");
     try { box.setPointerCapture(id); } catch {}
+  };
+  /* ⚠ AND THE SAME FAULT KILLED IN JS AS WELL AS CSS. -webkit-user-drag is not standardised and
+     Firefox ignores it entirely; `dragstart` is. Belt and braces here is not indecision — it is one
+     property that Chrome honours and one event that everybody does, for a failure mode whose
+     symptom is a drag that silently stops after its first frame. */
+  box.addEventListener("dragstart", (e) => {
+    if (box.classList.contains("pp4Recipes")) e.preventDefault();
+  });
+  box.addEventListener("pointerdown", (e) => {
+    if (!box.classList.contains("pp4Recipes")) return;
+    if (e.target.closest(".pp4RcSwap, .pp4RcPeek")) return;
+    down = true; moving = false; id = e.pointerId; sx = e.clientX; sy = e.clientY;
   });
   box.addEventListener("pointermove", (e) => {
-    if (!live || e.pointerId !== id) return;
+    if (!down || e.pointerId !== id) return;
+    if (!moving){
+      if (Math.abs(e.clientX - sx) < RC_DRAG_SLOP && Math.abs(e.clientY - sy) < RC_DRAG_SLOP) return;
+      start();
+    }
     e.preventDefault();
-    const o = fixedOrigin();
-    const r = fixedRect(box);
+    const o = fixedOrigin(), r = fixedRect(box);
     /* CLAMPED SO IT CANNOT BE LOST OFF AN EDGE. A sheet dragged fully off the glass cannot be
        dragged back, and the captain still has to choose a recipe from it. */
     const nl = Math.max(8 - r.width + 60, Math.min(vwPx() - 60, (e.clientX - o.x) - ox));
@@ -2455,10 +2409,19 @@ function rcDragArm(box){
     box.style.top  = Math.round(nt) + "px";
   });
   const end = (e) => {
-    if (!live || (e && e.pointerId !== id)) return;
-    live = false;
+    if (!down || (e && e.pointerId !== id)) return;
+    down = false;
+    if (!moving) return;                       // a still press: leave the tap entirely alone
+    moving = false;
     box.classList.remove("pp4RcDragging");
     try { box.releasePointerCapture(id); } catch {}
+    /* ⚠ SWALLOW THE CLICK THIS DRAG IS ABOUT TO PRODUCE. recipeGuard listens on the DOCUMENT, so
+       without this, letting go of a card after carrying it across the board chooses that recipe —
+       the captain moved the sheet and committed their voyage in one gesture. Capture phase, once,
+       and self-removing so it can never eat a later real tap. */
+    const eat = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+    document.addEventListener("click", eat, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener("click", eat, { capture: true }), 400);
   };
   box.addEventListener("pointerup", end);
   box.addEventListener("pointercancel", end);
@@ -2556,22 +2519,13 @@ function mountRecipeStack(ap){
     row.appendChild(pk);
   }
 
-  /* THE SWIPE. Pointer events, not touch events, so a trackpad drag and a finger are one path.
-     A 34px threshold and a dominant-axis test: the panel scrolls vertically, so a swipe that is
-     mostly up or down must be left to it rather than eaten here. */
-  let sx = 0, sy = 0, live = false;
-  row.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; live = true; });
-  row.addEventListener("pointerup", (e) => {
-    if (!live) return; live = false;
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-    if (Math.abs(dx) < 34 || Math.abs(dx) <= Math.abs(dy)) return;
-    // a real swipe is not a tap: stop it before recipeGuard reads it as one
-    e.preventDefault(); e.stopPropagation();
-    /* Either direction swaps: there are exactly two recipes, so a swipe has no "next" to be
-       distinct from a "previous" — the same reasoning that turned two arrows into one circle. */
-    swap();
-  }, true);
-  row.addEventListener("pointercancel", () => { live = false; });
+  /* ⚠ THE SWIPE-TO-SWAP IS GONE, AND IT IS A REAL TRADE HE SHOULD KNOW ABOUT. Dragging sideways
+     across a card used to swap the two recipes; from 2026-09-09 that same gesture CARRIES THE
+     SHEET, because he asked for the cards themselves to be drag handles. One gesture cannot mean
+     two things, and the drag is the one he asked for by name.
+     NOTHING IS LOST FROM THE SWAP: both other ways in are untouched — the circle and the tappable
+     sliver of the card behind — and they were always the announced, discoverable pair. The swipe
+     was the undiscoverable third. */
   /* ⭐ THE DEMO SWAP DRIVES THIS EXACT FUNCTION — Wyatt, 2026-09-09: "then swap themselves ONCE to
      show that they can be swapped". Handing the choreography the real `swap` rather than a
      look-alike animation is the whole point: what he is being shown IS what a tap does, including
@@ -3539,7 +3493,7 @@ function promptTick(force){
       const want = Math.ceil(rcW * 1.4 + 8 + pad(rcRow) + pad(ap) + pad(box));
       return Math.max(200, Math.min(want, capW));
     })();
-    const RC_INSET = 10;                 // the sheet's clearance from the board's own top-right corner
+    const RC_INSET = 10;
     rcDragArm(box);
     box.style.width = sheetW + "px";
     /* ⚠ A SHEET THE CAPTAIN HAS MOVED STAYS WHERE THEY PUT IT. promptTick runs every frame, so
@@ -3549,13 +3503,25 @@ function promptTick(force){
       if (rcKey && rcFlightKey !== rcKey) rcFlightKey = rcKey;   // never fly a sheet he has placed
       return;
     }
-    box.style.left = Math.max(8, Math.round(brd ? Math.min(brd.right - sheetW - RC_INSET,
-                                                           vwPx() - sheetW - 8)
+    /* ⭐ THE BOTTOM HALF OF THE BOARD, CENTRED — Wyatt, 2026-09-09: "make the recipes appear in the
+       bottom half of the game board, as in my second ss, before dragging."
+       THIS REPLACES "the top right of the board", which was his own instruction this morning. He
+       dragged the sheet there himself and sent the screenshot back, which is the strongest form a
+       ruling can take — he did not describe the position, he demonstrated it.
+       DERIVED, NOT TYPED. The sheet is centred inside the board's LOWER HALF, so the number is
+       "the middle of the bottom half" rather than a fraction somebody picked: it stays right when
+       the board is 568px tall on a phone and 856 on a desktop. Measured against his screenshot,
+       that lands the sheet's top at 0.61 of the board's height — his was 0.61. */
+    box.style.left = Math.max(8, Math.round(brd ? brd.left + (brd.width - sheetW) / 2
                                                 : (vwPx() - sheetW) / 2)) + "px";
-    /* Never above the ribbon and the wind pill — the one band over the board that must stay
-       readable. That clamp is the same one the covering design used, and it is the only part of
-       that design still doing work here. */
-    const top = Math.round(Math.max(topBandPx(), brd ? brd.top + RC_INSET : vhPx() * 0.12));
+    const sheetH = Math.max(1, Math.round(fixedRect(box).height));
+    /* clamped to the glass at both ends: never over the ribbon, never off the bottom edge — the
+       D-42 fault (cards cut off by the bottom of the screen with no cue that the panel scrolls) is
+       what the lower clamp exists to keep impossible. */
+    const halfTop = brd ? brd.top + brd.height / 2 : vhPx() * 0.5;
+    const halfBot = brd ? brd.bottom : vhPx();
+    const wantTop = halfTop + ((halfBot - halfTop) - sheetH) / 2;
+    const top = Math.round(Math.max(topBandPx(), Math.min(wantTop, vhPx() - sheetH - 8)));
     box.style.top = top + "px";
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
        playtest 21 (Wyatt), items 2 and 4. They used to be a stacked pair of pills wedged in the gap
@@ -3630,14 +3596,13 @@ function promptTick(force){
       help = document.createElement("div");
       help.className = "pp4RcHelp";
       help.innerHTML = "<span></span>";
-      box.appendChild(help);
+      box.appendChild(help);          // last child of the column: under the cards, and it travels with them
     }
     {
-      const words = pilotMsg("recipe.draft", "Tap a recipe to highlight its docks");
+      const words = pilotMsg("recipe.draft", "tap a recipe to see its route");
       const sp = help.firstElementChild;
       if (sp.textContent !== words){ sp.textContent = words; pilotSee("recipe.draft"); }
     }
-    rcHelpPlace(help, brd);
     // playtest 19: the cap is the room left UNDER THE PANEL'S OWN TOP, not under the box's. The
     // hint pills are flex siblings above the panel, so measuring from `top` handed the panel the
     // hint's height as extra allowance and it ran off the bottom of the screen by exactly that

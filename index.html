@@ -2344,13 +2344,34 @@
      THE STACK IS A COLUMN so the cream ask sits ABOVE the white panel rather than beside it —
      #pp4Prompt is display:flex, and its default row direction is what once crushed a stray hint
      pill into a one-word strip (see the teardown note in stage.js). */
-  #pp4Prompt.pp4Recipes { flex-direction:column; align-items:center; gap:7px; }
+  /* ⚠ THE SHEET IS A BLOCK, NOT A FLEXBOX, AND THIS RULE USED TO PRETEND OTHERWISE.
+     MEASURED: getComputedStyle(#pp4Prompt).display === "block" while the picker is up. Two places
+     write that property — stage.js:3245 sets "flex" when the box is first shown, and the tick at
+     stage.js:3389 sets "block" on EVERY FRAME after — so the second one wins for the whole life of
+     the prompt. `flex-direction:column`, `align-items:center` and `gap` were all inert; the
+     children stacked because block layout stacks, and hugged the left edge because block layout
+     does that too. It read as working and was doing nothing.
+     THE FIX IS TO STOP LYING, NOT TO ADD A THIRD WRITER. Block layout centres with auto side
+     margins (which .pp4RcAsk and .pp4RcHelp now use) and spaces with real margins, both of which
+     work here without touching a property two other places already fight over. */
+  #pp4Prompt.pp4Recipes .pp4RcAsk { margin-bottom:7px; }
+  #pp4Prompt.pp4Recipes .pp4RcHelp { margin-top:7px; }
   /* ⭐ ITEM 5: THE SHEET IS A THING YOU CAN PICK UP. The grab cursor is the whole affordance on a
      desktop — without it nothing says the modal moves. touch-action:none on the ask box stops a
      phone treating the drag as a page scroll; the cards keep pan-y so their swipe still works. */
-  #pp4Prompt.pp4Recipes { cursor:grab; }
+  /* ⚠ THE NATIVE IMAGE DRAG HAD TO BE TURNED OFF, AND IT IS NOT A TIDY-UP — it broke item 1
+     outright. The recipe cards are built around <img> art, and in Chrome pressing an image and
+     moving starts the browser's OWN drag-and-drop: it fires dragstart, tears down the pointer
+     stream, and neither pointermove nor pointerup is ever delivered again. TRACED, step by step,
+     with the sheet's position read after each of ten dispatched moves: the sheet took the FIRST
+     move (255,578 -> 229,608) and then froze for all nine that followed, gotpointercapture never
+     fired, and pointerup never arrived. A before/after test would have called that a passing drag.
+     So: no native drag anywhere in the sheet, and no text selection either — dragging a card used
+     to sweep a blue selection across its title, which reads as broken even when nothing is. */
+  #pp4Prompt.pp4Recipes { cursor:grab; -webkit-user-select:none; user-select:none; }
+  #pp4Prompt.pp4Recipes img, #pp4Prompt.pp4Recipes .apBtn {
+    -webkit-user-drag:none; user-drag:none; }
   #pp4Prompt.pp4Recipes.pp4RcDragging { cursor:grabbing; }
-  #pp4Prompt.pp4Recipes.pp4RcDragging #actionPanel { pointer-events:none; }
   .pp4RcAsk { touch-action:none; }
   /* the cards are not handles — they keep their own gestures and their own cursor */
   #pp4Prompt.pp4Recipes .apBtn, #pp4Prompt.pp4Recipes .pp4RcSwap,
@@ -2370,9 +2391,24 @@
      outline, 13px radius, the same drop shadow. It was cream on cream a moment ago and he was
      right — with the panel behind it gone (item 1) a cream label floating on the sea reads as a
      stray sticker, where a narration box reads as the game talking to you. */
+  /* ⚠ width:max-content, AND IT IS NOT BELT-AND-BRACES — Wyatt, 2026-09-09 item 4: "make the
+     '{player}, pick your recipe' box the correct width (see ss, it's not dynamically adjusting for
+     length)". MEASURED at 1280: the ask reported 374px, byte-identical to #pp4Prompt's own width,
+     for a sentence that needs about 210 — so it was being stretched to the box rather than hugging
+     its words, and a short name and a long one produced the same box.
+     The container is a column flexbox with align-items:center, which SHOULD shrink-wrap it; it did
+     not, and rather than keep hunting the cascade for a rule that outranks it, the honest fix is to
+     state the intent on the element itself. max-content IS the intent: this box is exactly as wide
+     as what it says. */
   .pp4RcAsk { background:#fffdf2; border:2px solid #177; border-radius:13px; color:#1f2d33;
     font-weight:700; font-size:14px; line-height:1.45; text-align:center;
-    padding:9px 14px; max-width:100%; box-sizing:border-box;
+    padding:9px 14px; width:max-content; max-width:100%; box-sizing:border-box;
+    /* ⚠ AUTO MARGINS, BECAUSE THE PARENT IS A BLOCK. The ask measured flush against the sheet's
+       left edge (gaps 0 / 187 at 1280) under a rule that said align-items:center — and the reason
+       is that #pp4Prompt's computed display is `block`, not flex (see the note by the .pp4RcAsk
+       margin rule above). Auto side margins are how a block child centres, and once this box is
+       max-content wide there is free space either side for them to absorb. Verified: 93 / 93. */
+    margin-left:auto; margin-right:auto;
     box-shadow:0 8px 26px rgba(0,0,0,.33); }
   /* the captain's own colour, the same one the ribbon and the captains box give them */
   .pp4RcAsk .pp4RcWho { font-weight:800; }
@@ -2390,12 +2426,12 @@
   /* ⭐ ITEM 3: THE HELPER LINE IS A PILL OVER OPEN SEA. Wyatt: "Put the helper text in a normal
      helper pill over the sea, not covering any of the islands." Same pill the sea hint already
      wears — one helper look in this game, not two. stage.js places it (see rcHelpPlace). */
-  /* ⚠ NOT `left:0;right:0` WITH justify-content:center, WHICH IS WHAT THIS WAS. That centres the
-     pill in whatever the containing block turns out to be — measured at 1280 it landed centred on
-     442 rather than on the viewport's 640 — so the pill had exactly one possible column and sat on
-     two island squares because nothing could move it sideways. stage.js now places it in BOTH axes
-     (see rcHelpPlace), which is what "not covering any of the islands" actually requires. */
-  .pp4RcHelp { position:fixed; z-index:29; pointer-events:none; width:max-content; max-width:92%; }
+  /* ⚠ IT IS NOT POSITIONED ANY MORE. It was position:fixed and placed by a 2D search that dodged
+     every island; from 2026-09-09 it is simply the last child of the sheet's own column, because he
+     asked for it to be "locked underneath the recipe cards so it moves with them" — and the sheet
+     moves now. A pill pinned to the water is right only while the thing it labels cannot travel. */
+  .pp4RcHelp { pointer-events:none; width:max-content; max-width:100%;
+    margin-left:auto; margin-right:auto; }
   .pp4RcHelp span { background:rgba(9,42,52,.86); color:#fffdf2; font-size:12px; font-style:italic;
     border-radius:999px; padding:4px 13px; width:max-content; max-width:92%;
     box-shadow:0 4px 14px rgba(0,0,0,.3); }

@@ -106,9 +106,14 @@ export const LADDERS = {
      I get to defend; it is his ruling being broken by my own copy. The dropped clause (every
      captain's hold sits below) is not lost: recipe.stowed says it a moment later, at the instant
      the hold actually appears, which is where it belongs. */
+  /* ⭐ HIS WORDS, 2026-09-09: "change 'Tap a recipe to highlight its docks' to 'tap a recipe to see
+     its route'". THE WHOLE LADDER MOVES WITH IT — a rung still saying "docks" would teach a
+     different noun for the same picture, which is the drift this ladder exists to prevent. And the
+     lowercase is his, typed inside his own quotes; the pill is small italic text where it reads
+     as a whisper rather than a heading. */
   "recipe.draft": [
-    "Tap a recipe to chart its docks — those five are what ye must gather.",
-    "Tap a recipe to chart its docks.",
+    "tap a recipe to see its route — those five docks are what ye must gather.",
+    "tap a recipe to see its route.",
     null,
   ],
 
