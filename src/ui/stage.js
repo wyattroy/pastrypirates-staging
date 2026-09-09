@@ -17,7 +17,7 @@
 import { appState } from "../state/index.js";
 import { boardShipEls, setFlipCoin } from "./board.js";
 import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, refreshNameMarquees,
-  waitLineIsSelfAddressed } from "./util.js";
+  waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
 import { showsThinkingIndicator } from "../shared/visibility.js";
@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@2d676cd1";
+const PP4_STAMP = "2026.09.07.3-staging@3584c949";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -585,7 +585,11 @@ function peekHintTick(box){
   if (!sr || !(sr.width > 0 && sr.height > 0)){ hint.style.top = foot + "px"; return; }
   // everything the hint must not sit on: every control, the question itself, and any narration
   // box that is already talking. One list, so a floater added later is covered by adding it here.
-  const busy = [...box.querySelectorAll(".apBtn, .apSliderWrap, .apMsg, .apSub"),
+  /* .pp4RcAsk joins the list the moment it exists — this comment's own promise, kept. Without it
+     the hint pill drew straight across the cream box on BOTH phone and desktop, hiding the captain's
+     name and half of "pick which recipe you want to bake" (seen in the 2026-09-09 parked shots, not
+     reported by any number). It is exactly the fault the five judge findings above describe. */
+  const busy = [...box.querySelectorAll(".apBtn, .apSliderWrap, .apMsg, .apSub, .pp4RcAsk"),
                 ...document.querySelectorAll(".sailCell, .pp4Bub")]
     .map(e => swellRect(e, e.getBoundingClientRect()))    // the PEAK box — see swellRect's note
     .filter(r => r.width > 2 && r.height > 2 && r.right > sr.left && r.left < sr.right);
@@ -2194,6 +2198,132 @@ function recipeGuard(){
    course to be for: "that Dotted course should appear during the recipe choice phase to help them
    make a decision." Comparing two recipes is then comparing two VOYAGES. */
 let rcKey = null;
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   THE PICKER'S FLIGHT — Wyatt, 2026-09-09, verbatim:
+
+     "the challenge is that we need BOTH the player to be able to see the board to make their
+      decision about which recipe to choose, AND the player to notice the recipe cards and not be
+      distracted by the board. I actually think what we want is for the recipe cards to appear over
+      the very middle of the board, then swap themselves ONCE to show that they can be swapped,
+      then after about 0.5 seconds they should move up to the top right of the board to reveal most
+      of the gameboard with the dotted line map fully visible; and there should be a small cream box
+      above them that explains '{player}, pick which recipe you want to bake'"
+
+   THIS REPLACES "cover the captains box" (his 2026-09-08 note and playtest r7). That design bought
+   noticeability with AREA — it sat on top of a thing you have to read. This one buys it with TIME:
+   the cards land in the middle where they cannot be missed, teach their own gesture, and then
+   leave. Nothing is permanently covered, so the tension he named actually resolves instead of
+   being traded from one side to the other.
+
+   ANCHORED TO THE DRAWN BOARD (`#board`, the SVG), never to #boardwrap and never to a viewport
+   fraction. #boardwrap is TALLER than the board — a trap the design this replaces paid for once
+   already, and it is the same trap here. "The middle of the board" and "the top right of the
+   board" are both questions only the drawn board's own rect can answer, and it answers them
+   identically at all three sizes with no breakpoint.
+
+   ONE TIMELINE, ONE OWNER. Every timer lives in rcFlightTimers and is cleared by rcFlightStop(),
+   which the picker's teardown calls — a half-run flight that outlives its picker would apply a
+   transform to whatever prompt came next.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+let rcSwapFn = null;         // the live stack's own swap(), handed over by mountRecipeStack
+let rcFlightKey = null;      // the rcKey this flight belongs to — one flight per picker, ever
+let rcFlightTimers = [];
+/* ⚠ TRUE FOR THE WHOLE TIMELINE, INCLUDING THE 620ms THE TRANSFORM IS TRANSITIONING BACK TO NONE.
+   `box.style.transform` CANNOT stand in for this and the difference is a real bug: releasing the
+   flight sets the inline transform to "", so the property reads empty while the box is still
+   visibly halfway across the board. Everything downstream in promptTick measures the box with
+   getBoundingClientRect(), which reports where it is PAINTED — so for those 620ms the panel's
+   maxHeight, the does-it-fit lift and the hint's dodge list would all be computed against the
+   middle of the board and then written back as the parked geometry. That is the
+   two-answers-for-one-number fault this picker has already paid for twice. */
+let rcInFlight = false;
+
+/* HIS "about 0.5 seconds" is the beat AFTER the swap, which is what he wrote. The beat BEFORE it
+   is mine and it is not the same number: the cards need to be seen as cards before they are seen
+   moving, or the swap reads as the arrival still settling rather than as a demonstration. */
+const RC_LAND_MS  = 420;     // land in the middle, be still, be looked at
+const RC_HOLD_MS  = 500;     // his "about 0.5 seconds" — after the swap, before the flight
+const RC_FLY_MS   = 620;     // the flight itself; matches the CSS transition on #pp4Prompt exactly
+
+function rcFlightStop(){
+  rcFlightTimers.forEach(clearTimeout);
+  rcFlightTimers = [];
+  rcInFlight = false;
+}
+/* Put the box back to plain parked geometry. Called on teardown AND before every fresh flight, so
+   a picker that opens while the last one is still in the air cannot inherit its transform. */
+function rcFlightReset(){
+  rcFlightStop();
+  rcFlightKey = null;
+  const box = $("pp4Prompt");
+  if (box){ box.style.transform = ""; box.classList.remove("pp4RcHold"); }
+}
+const rcLater = (fn, ms) => { rcFlightTimers.push(setTimeout(fn, ms)); };
+
+/* The drawn board's rect, or null while it has no size yet (the first frames of a stage, and every
+   frame of a game that has not charted a board at all). Every caller treats null as "place it
+   parked and skip the show" rather than guessing a number. */
+/* ⚠ IN THE SAME COORDINATE SPACE `#pp4Prompt.style.left` IS WRITTEN IN — which on desktop is NOT
+   the viewport. body carries the item-22 width cap with `margin:0 auto`, so a position:fixed child
+   resolves `left` against body's SHIFTED box while getBoundingClientRect() keeps answering in true
+   viewport coordinates. Mixing the two is the exact fault that stacked the radial fan's four
+   buttons in one corner at 7am (docs/HARD-WON-LESSONS.md), and it bit this block too: the first run
+   of the flying picker measured the board with a raw gBCR and parked the sheet 4px PAST the board's
+   right edge on desktop, while reading correct on phone (where the cap never engages and the shift
+   is zero). fixedRect() is that shift, already written and already tested.
+   AND THAT IS WHY THE GLASS-EDGE CLAMP BELOW USES vwPx(), reversing the warning left by the design
+   this replaces ("it uses window.innerWidth, NOT vwPx()"). That warning was right for code that had
+   viewport-absolute numbers in its hands; here every number is body-relative, and in body-relative
+   space vwPx() IS the right-hand edge. One space, consistently — which is also what lets the
+   after-the-fact overflow nudge that used to sit here be deleted rather than kept. */
+function boardDrawnRect(){
+  const b = svgEl();
+  if (!b) return null;
+  const r = fixedRect(b);
+  return (r.width > 2 && r.height > 2) ? r : null;
+}
+
+/* ⭐ THE SHOW. Called ONCE per picker, with the box already sitting at its parked geometry.
+   dx/dy are measured here, from the box's own rect, because the parked place is set by four
+   different clamps above and re-deriving it would be a second answer to a question already
+   answered (rule 23). */
+function rcFlightRun(key, brd){
+  const box = $("pp4Prompt");
+  if (!box || !brd) return;
+  rcFlightReset();
+  rcFlightKey = key;
+
+  const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (REDUCED) return;                     // parked, immediately, and no demo swap: the show IS motion
+
+  /* ⚠ fixedRect, NOT gBCR — `brd` arrives in body-relative space (see boardDrawnRect) and a delta
+     between two different coordinate spaces is off by exactly the item-22 shift. Both sides in one
+     space or neither. */
+  const r = fixedRect(box);
+  if (r.width < 2 || r.height < 2) { rcFlightKey = null; return; }   // not laid out yet — try next tick
+  const dx = Math.round((brd.left + brd.width  / 2) - (r.left + r.width  / 2));
+  const dy = Math.round((brd.top  + brd.height / 2) - (r.top  + r.height / 2));
+  if (!dx && !dy) return;                  // parked IS the middle (a board smaller than the sheet)
+
+  /* HELD, WITH NO TRANSITION. .pp4RcHold kills the transform transition for exactly this write, so
+     the box appears in the middle instead of visibly sliding there from the top right — which is
+     the whole flight played backwards, and was what the first attempt did. */
+  box.classList.add("pp4RcHold");
+  box.style.transform = `translate(${dx}px, ${dy}px)`;
+  void box.offsetWidth;                    // the browser must SEE the held state before it is released
+  box.classList.remove("pp4RcHold");
+
+  rcInFlight = true;
+  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, RC_LAND_MS);
+  rcLater(() => {
+    const b2 = $("pp4Prompt");
+    if (b2) b2.style.transform = "";        // release: the CSS transition IS the flight
+  }, RC_LAND_MS + RC_HOLD_MS);
+  // the box is only back under the tick's measuring tape once it has actually LANDED
+  rcLater(() => { rcInFlight = false; }, RC_LAND_MS + RC_HOLD_MS + RC_FLY_MS + 40);
+}
+
 function mountRecipeStack(ap){
   const cards = [...ap.querySelectorAll(".apBtn")].filter(b => b.querySelector(".recipeList"));
   if (cards.length < 2){ rcKey = null; return; }
@@ -2302,6 +2432,12 @@ function mountRecipeStack(ap){
     swap();
   }, true);
   row.addEventListener("pointercancel", () => { live = false; });
+  /* ⭐ THE DEMO SWAP DRIVES THIS EXACT FUNCTION — Wyatt, 2026-09-09: "then swap themselves ONCE to
+     show that they can be swapped". Handing the choreography the real `swap` rather than a
+     look-alike animation is the whole point: what he is being shown IS what a tap does, including
+     the cancel-the-pending-bake and re-chart-the-course that come with it. A second, cosmetic
+     version of this would be two things kept in step by nothing. */
+  rcSwapFn = swap;
   paint();
 }
 
@@ -3191,8 +3327,10 @@ function promptTick(force){
     // stale .pp4PeekHint left in the box becomes a FLEX SIBLING of the panel on the next centre
     // stage, crushing the message into a one-word-wide strip (Wyatt's 2:10 screenshot)
     box.classList.remove("radial", "pp4Center", "pp4Recipes");
+    rcFlightReset();
     S.radKey = null;
     const h0 = box.querySelector(".pp4PeekHint"); if (h0) h0.remove();
+    const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove();
     if (ap.style.maxHeight) ap.style.maxHeight = "";
   if (ap.style.minHeight) ap.style.minHeight = "";
     if (box.style.paddingBottom) box.style.paddingBottom = "";
@@ -3229,84 +3367,46 @@ function promptTick(force){
        The 844 emulation hid it completely, which is D-42's whole point.
        The lift itself is applied after the cards exist and can be measured — see the note by the
        maxHeight cap below. This stays the STARTING point, so nothing changes on a tall screen. */
-    /* ── R4: THE CARDS MOVE UP, TO JUST BELOW THE BOARD ────────────────────────────────────────
-       Wyatt: "they are too low down the screen. I want them to be higher up on the screen, so that
-       they're kind of just below the bottom of the board."
-       ⚠ THE TRAP, WRITTEN DOWN SO IT IS NOT PAID FOR TWICE: #boardwrap is TALLER than the drawn
-       board, so anchoring to ITS bottom puts the card BELOW the captains box. The captains box's
-       own top IS "just below the drawn board" — it is the element already sitting there — so that
-       is what this reads. One measurement, from the renderer, never arithmetic of mine.
-       The 0.45-of-the-viewport fallback stays for the case where the box has not been laid out
-       yet; it is what shipped before, so nothing regresses when the measurement is unavailable. */
-    const capTop = (() => {
-      const cap = $("pp4Cap");
-      if (!cap) return null;
-      const r = cap.getBoundingClientRect();
-      return r.height > 0 ? Math.round(r.top) : null;
+    /* ── ⭐ THE PARKED PLACE: THE TOP RIGHT OF THE DRAWN BOARD ────────────────────────────────
+       Wyatt, 2026-09-09: "they should move up to the top right of the board to reveal most of the
+       gameboard with the dotted line map fully visible."
+       ⚠ THE TRAP, KEPT FROM THE DESIGN THIS REPLACES BECAUSE IT IS STILL LIVE: #boardwrap is
+       TALLER than the drawn board, so anchoring to IT would park the sheet above the water with a
+       band of nothing under it. svgEl() is the board that is actually drawn, and its rect is the
+       only thing that can answer "the top right of the board" — at every size, with no breakpoint.
+       WHY THE PARKED PLACE IS THE LAYOUT and the middle is a transform: everything downstream in
+       this block measures the box (the panel's maxHeight, the peek hint's dodge list, the overflow
+       nudge). Measuring a box that is mid-flight gives a different answer every frame, which is
+       exactly the two-answers-for-one-number fault the old picker paid for twice. */
+    const brd = boardDrawnRect();
+    /* THE SHEET'S WIDTH IS DERIVED FROM THE STACK IT HAS TO HOLD (rule 9), never typed. The row
+       declares its own geometry in --rcW and needs `card x 1.4 + 8` for card-plus-two-peeks; the
+       panel and the box each add their own padding, read from the renderer rather than guessed.
+       Capped to the board, then to the glass — on a phone the board is nearly the full width, so
+       "top right of the board" and "the full width" converge, which is correct rather than a
+       special case. */
+    const rcRow = ap.querySelector(".apBtns");
+    const sheetW = (() => {
+      const capW = Math.min(brd ? Math.round(brd.width) : vwPx() - 16, vwPx() - 16);
+      if (!rcRow) return capW;
+      const rs = getComputedStyle(rcRow);
+      const rcW = parseFloat(rs.getPropertyValue("--rcW")) || 250;
+      const pad = (el) => { const c = getComputedStyle(el);
+        return (parseFloat(c.paddingLeft) || 0) + (parseFloat(c.paddingRight) || 0)
+             + (parseFloat(c.borderLeftWidth) || 0) + (parseFloat(c.borderRightWidth) || 0); };
+      const want = Math.ceil(rcW * 1.4 + 8 + pad(rcRow) + pad(ap) + pad(box));
+      return Math.max(200, Math.min(want, capW));
     })();
-    /* ⭐ IT RIDES UP ONTO THE BOARD NOW, AND IT COVERS THE CAPTAINS BOX WHOLE.
-       Three of his notes are one instruction, and this line plus the min-height below is all of it:
-         item 26 follow-up : "In tablet/phone, this should entirely cover the captain's box."
-         item 29 follow-up : "Show me option 2 with the cards hovering over the bottom of the board
-                              -- that way, if they cover a little bit of the important gameplay
-                              it's okay."
-         2026-09-08, desktop: "the recipe picker is hard to see and awkward to find. can you make it
-                              overlap the board slightly, take up much more vertical space, and
-                              entirely cover up the captain's box?"
-       ANCHORED TO THE CAPTAINS BOX ITSELF, never to a viewport fraction, so the SAME two lines
-       produce the right answer at all three sizes: on a phone that box is the full-width strip
-       under the board, on desktop it is the right-hand column. Cover it and overlap whatever the
-       board's near edge happens to be — no breakpoint, no second rule.
-       The lift is clamped to topBandPx() so the sheet can never climb over the ribbon and the wind
-       pill, which is the one thing above the board that must stay readable. */
-    const capR = (() => {
-      const cap = $("pp4Cap");
-      if (!cap) return null;
-      const r = cap.getBoundingClientRect();
-      return r.height > 0 ? r : null;
-    })();
-    const CAP_OVERLAP_PX = 44;         // how far the sheet climbs onto the board — his "slightly"
-    const top = capR ? Math.max(topBandPx(), Math.round(capR.top - CAP_OVERLAP_PX))
-                     : (capTop != null ? capTop : Math.round(vhPx() * 0.45));
+    const RC_INSET = 10;                 // the sheet's clearance from the board's own top-right corner
+    box.style.width = sheetW + "px";
+    box.style.left = Math.max(8, Math.round(brd ? Math.min(brd.right - sheetW - RC_INSET,
+                                                           vwPx() - sheetW - 8)
+                                                : (vwPx() - sheetW) / 2)) + "px";
+    /* Never above the ribbon and the wind pill — the one band over the board that must stay
+       readable. That clamp is the same one the covering design used, and it is the only part of
+       that design still doing work here. */
+    const top = Math.round(Math.max(topBandPx(), brd ? brd.top + RC_INSET : vhPx() * 0.12));
     box.style.top = top + "px";
-    /* ⭐ AND ON A WIDE SCREEN IT MOVES OFF THE BOARD, ONTO THE CAPTAINS COLUMN — Wyatt, 2026-09-07
-       playtest item 26: "In all three, they should hover over the captains box — in desktop
-       currently they do not."
-       WHY HE IS RIGHT, AND IT IS THIS SHEET'S OWN DESIGN: the picker exists so "the sea it asks you
-       to read stays visible above the cards" (playtest 10 item 1, the note at the top of this
-       block) — you choose a recipe by looking at where its docks are on the water. On a phone the
-       captains box sits BELOW the board, so covering it leaves the sea clear and the design works.
-       On desktop the captains box moved to a right-hand column and the picker stayed centred over
-       the board, so it covered the one thing it is meant to leave visible. MEASURED at 1280x900:
-       white panel 110..774, board underneath it, captains column 884..1266 untouched.
-       THE TEST IS THE CAPTAINS BOX'S OWN GEOMETRY, not a width breakpoint — if it is inset from
-       the left edge it is a column beside the board, and if it is not it is the full-width strip
-       under the board. One measurement from the renderer, never arithmetic of mine (the same rule
-       the capTop anchor above follows). The 12px of bleed either side is what lets the stack's
-       358px row sit inside a 382px column without clipping the swap circle. */
-    const capBeside = (() => {
-      const cap = $("pp4Cap");
-      if (!cap) return null;
-      const r = cap.getBoundingClientRect();
-      return (r.width > 0 && r.left > 40 && r.width < vwPx() * 0.75) ? r : null;
-    })();
-    if (capBeside){
-      box.style.left = Math.round(capBeside.left - 12) + "px";
-      box.style.width = Math.round(capBeside.width + 24) + "px";
-      /* ⚠ THEN MEASURE, BECAUSE THE PANEL IS NOT THE BOX. Measured at 1280x900: box 872..1278
-         (correct, inside the screen) but #actionPanel 886..1292 — the panel is as wide as the box
-         and sits 14px inside it, so it ends 14px further right than the box does and ran off the
-         screen. Nudge the whole sheet left by whatever actually overflows.
-         ⚠ AND IT USES window.innerWidth, NOT vwPx(). My first attempt clamped with vwPx() and made
-         it far worse — the sheet ended up at 930..1594. vwPx() is the STAGE's own width (it
-         returned 1632 on a 1280 screen), not the viewport. When the question is "does this fit on
-         the glass", only the glass can answer. */
-      const over = Math.round(ap.getBoundingClientRect().right - (window.innerWidth - 8));
-      if (over > 0) box.style.left = Math.max(8, Math.round(capBeside.left - 12 - over)) + "px";
-    } else {
-      box.style.left = "8px";
-      box.style.width = (vwPx() - 16) + "px";
-    }
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
        playtest 21 (Wyatt), items 2 and 4. They used to be a stacked pair of pills wedged in the gap
        between the board and the sheet, where the sea one sat nowhere near the sea it names and the
@@ -3317,6 +3417,29 @@ function promptTick(force){
                                         cards it describes.
        The recipe line goes after .apMsg and before .apBtns, which is its VISUAL position — so the
        top-to-bottom reveal rule carries it for free: back, message, this, cards. */
+    /* ⭐ THE CREAM BOX ABOVE THE CARDS — Wyatt, 2026-09-09: "there should be a small cream box
+       above them that explains '{player}, pick which recipe you want to bake'".
+       IT NAMES THE CAPTAIN BEING ASKED, not the captain holding the phone — the same seat the
+       course chart uses (S.activeSeat, falling back to the game's current seat), so on a shared
+       device the box and the dotted line on the water always agree about whose turn this is.
+       pname() is the game's one name-resolver and it escapes what it returns, which is why this is
+       written as HTML rather than textContent: a captain who typed their own name gets it back
+       byte-identically, and a captain who typed markup does not get to render it. */
+    const askSeat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
+    let ask = box.querySelector(".pp4RcAsk");
+    if (!ask){
+      ask = document.createElement("div");
+      ask.className = "pp4RcAsk";
+      box.insertBefore(ask, ap);
+    }
+    {
+      const askHtml = `${pname(askSeat ?? 0)}, pick which recipe you want to bake`;
+      if (ask.dataset.rcAsk !== askHtml){ ask.dataset.rcAsk = askHtml; ask.innerHTML = emojify(askHtml); }
+    }
+    /* THE SEA HINT SITS OUT THE SHOW. peekHintTick() places this pill by dodging whatever else is
+       on screen, and the sheet is one of its obstacles — during the flight it would chase a moving
+       box around the board. It is also teaching a gesture the captain cannot use yet. */
+    if (hint) hint.style.visibility = rcInFlight ? "hidden" : "";
     if (!hint){
       hint = document.createElement("div"); hint.className = "pp4PeekHint";
       hint.innerHTML = `<span>${peekHintText()}</span>`;   // D-40: one sentence, device-correct verb
@@ -3354,7 +3477,12 @@ function promptTick(force){
     // hint pills are flex siblings above the panel, so measuring from `top` handed the panel the
     // hint's height as extra allowance and it ran off the bottom of the screen by exactly that
     // much — 47px, seen when slow-loading art made the cards tall enough to reach the cap.
-    const apTop = ap.getBoundingClientRect().top;
+    /* ⚠ EVERYTHING FROM HERE READS THE BOX'S PAINTED POSITION, so it is skipped while the box is
+       in the air — see the rcInFlight note where it is declared. The values it would have written
+       were already written correctly on the tick the flight STARTED (the flight is armed at the
+       very end of this same block, after every clamp has run), so skipping is not deferring a
+       decision: it is refusing to overwrite a right answer with a wrong one. */
+    const apTop = rcInFlight ? -1 : ap.getBoundingClientRect().top;
     /* LIFT THE WHOLE BOX IF THE CARDS DO NOT FIT UNDER IT (D-42's find, see the note at `top`).
        Measure what the panel actually wants — scrollHeight is the content's own height, produced by
        the renderer rather than by any arithmetic here — and if the starting 45% cannot hold it,
@@ -3373,21 +3501,41 @@ function promptTick(force){
     const capFrom = apTop2 > 0 ? apTop2 : top;
     const maxH = Math.max(160, vhPx() - capFrom - 8);
     ap.style.maxHeight = maxH + "px";
-    /* ⭐ AND IT REACHES THE BOTTOM OF THE CAPTAINS BOX — the "entirely cover" and "much more
-       vertical space" halves of the same instruction. Derived from where that box actually ENDS
-       rather than from a typed height, so it stays true when the captains panel grows a row.
-       Clamped to the maxHeight above, which is the screen's own limit: asking for more than the
-       viewport can hold would put the sheet's own bottom off-screen, which is the D-42 fault this
-       block already exists to avoid. */
-    if (capR){
-      const wantH = Math.round(capR.bottom - (apTop2 > 0 ? apTop2 : top));
-      ap.style.minHeight = Math.max(0, Math.min(wantH, maxH)) + "px";
-    } else {
-      ap.style.minHeight = "";
+    /* ⭐ NO FORCED HEIGHT ANY MORE. The old design stretched the sheet down to the captains box's
+       own bottom, because "entirely cover the captain's box" was the instruction. The flying picker
+       covers nothing on purpose, so a height that big would be blank cream over the sea — the
+       emptiness a CEO review measured at ~44% of the sheet. It is as tall as the cards are.
+       maxHeight above still stands: that is the screen's limit, not a look. */
+    ap.style.minHeight = "";
+    /* ⭐ AND THEN, ONCE PER PICKER, THE SHOW RUNS — his three beats, in order: land in the middle,
+       swap once, fly to the corner. Fired from HERE, at the end of the placement pass, because the
+       flight measures the parked box and the parked box is only correct once every clamp above has
+       been applied (the lift, the width, the overflow nudge). Keyed to rcKey, so a picker that
+       simply re-ticks costs nothing and the NEXT captain's picker gets its own flight. */
+    if (rcKey && rcFlightKey !== rcKey) rcFlightRun(rcKey, brd);
+    /* ⭐ AND THE REVEAL'S HEIGHT PIN IS RELEASED ONCE THE ART HAS LANDED.
+       MEASURED at 390x844: the white sheet ran 132..445 while its content ended at 346 — 99px of
+       blank cream under the card. The cause is not this block: runHeightSequence (panel.js) pins
+       #apGrid's row to the height it measured so the typewriter cannot type into a box that is
+       still the old size, and releases it to max-content on settle. For the recipe picker that
+       measurement happens BEFORE the two recipe thumbnails have decoded, so the pin holds a height
+       the card no longer needs, and the row never shrinks back.
+       IT WAS ALWAYS THERE — the design this replaces forced the sheet to the captains box's own
+       bottom, which was taller still, so the pin was never the binding constraint and nobody saw
+       it. Removing the forced height is what exposed it.
+       RELEASED ONLY WHEN THE ART IS ACTUALLY IN (every img complete) AND THE SHOW IS OVER, which is
+       long past the ~180ms the pin exists to cover — so the clipping fault it guards against
+       (Wyatt's P3/P5, "the 2nd line is cut off during writing") stays impossible. */
+    const grid = $("apGrid");
+    if (grid && !rcInFlight && /px$/.test(grid.style.gridTemplateRows || "")){
+      const imgs = [...ap.querySelectorAll(".recipeCard img")];
+      if (imgs.length && imgs.every(i => i.complete)) grid.style.gridTemplateRows = "max-content";
     }
     return;
   }
   if (hint) hint.remove();
+  { const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove(); }
+  rcFlightReset();          // no picker, no flight — a transform must never outlive the box it moved
   ap.style.maxHeight = "";
   ap.style.minHeight = "";
   // N4 radial: choices bloom around the ship, right where the eyes are (the plan's own words).
