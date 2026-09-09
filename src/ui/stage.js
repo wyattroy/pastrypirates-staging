@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@70dce3c4";
+const PP4_STAMP = "2026.09.07.3-staging@4dd8a89a";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2359,6 +2359,24 @@ function rcDragReset(){
    follow is swallowed. 6px is the same order as the 34px a swipe used to need — smaller, because a
    drag has a continuous target to aim at where a swipe had to be distinguished from a scroll. */
 const RC_DRAG_SLOP = 6;
+/* ⭐ THE PICKER'S CHROME, TAKEN DOWN IN ONE PLACE — Wyatt, 2026-09-09: "look what happens after
+   choosing a recipe". The ask box and the helper pill were both left standing on the board, under
+   the narration that replaced them: "wyargh, pick yer recipe:" still asking a question he had just
+   answered, and "tap a recipe to see its route" still pointing at cards that were gone.
+   ⚠ THE CAUSE IS THAT THE TEARDOWN EXISTED THREE TIMES AND THE PATH THAT MATTERED HAD NONE OF THEM.
+   promptTick has three exits: the empty-panel branch (had a copy), the radial fall-through (had a
+   copy), and CENTRE STAGE — `if (ap.dataset.pp4Stage) { enterCenterStage(); return; }` — which
+   returns before either. "Yer recipe's stowed below…" is centre-staged, so it is precisely the
+   prompt that follows a recipe choice and precisely the one that skipped the cleanup.
+   Two copies kept in step by nothing is rule 23; three copies and a hole is what it looks like when
+   nobody notices. Now there is one function, and it runs before ANY of those exits can be taken. */
+function rcChromeTeardown(box){
+  const a0 = box.querySelector(".pp4RcAsk");  if (a0) a0.remove();
+  const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
+  rcFlightReset();        // a transform must never outlive the box it moved
+  rcDragReset();          // nor a dragged position the sheet it belonged to
+}
+
 function rcDragArm(box){
   if (rcDragArmed) return;
   rcDragArmed = true;
@@ -3421,12 +3439,9 @@ function promptTick(force){
     // stale .pp4PeekHint left in the box becomes a FLEX SIBLING of the panel on the next centre
     // stage, crushing the message into a one-word-wide strip (Wyatt's 2:10 screenshot)
     box.classList.remove("radial", "pp4Center", "pp4Recipes");
-    rcFlightReset();
-    rcDragReset();
     S.radKey = null;
     const h0 = box.querySelector(".pp4PeekHint"); if (h0) h0.remove();
-    const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove();
-    const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
+    rcChromeTeardown(box);
     if (ap.style.maxHeight) ap.style.maxHeight = "";
   if (ap.style.minHeight) ap.style.minHeight = "";
     if (box.style.paddingBottom) box.style.paddingBottom = "";
@@ -3438,6 +3453,12 @@ function promptTick(force){
   // (never through localAsk), it must stay staged through the verdict reveal, and keying off the
   // content means the stage ends at the exact moment the next narration replaces it — no window
   // where the shell could flash back to the old card style (playtest 16).
+  /* ⚠ BEFORE THE CENTRE-STAGE RETURN, NOT AFTER IT. This one line is the whole fix for the picker
+     chrome outliving the picker — see rcChromeTeardown. It asks the panel what it is holding rather
+     than trusting a flag, which is the same test the picker itself is switched on by four lines
+     down, so the two can never disagree about whether a picker is up. */
+  const hasRecipes = !!ap.querySelector(".recipeList");
+  if (!hasRecipes) rcChromeTeardown(box);
   if (ap.dataset.pp4Stage || ap.querySelector(".bko")){
     enterCenterStage();
     return;
@@ -3447,7 +3468,7 @@ function promptTick(force){
   // playtest 10 item 1: the recipe chooser becomes a BOTTOM sheet — the sea it asks you to read
   // stays visible above the cards, holding a finger on the sea peeks behind them (the gesture
   // that already works on every card), and a hint line teaches it. Draft copy — Wyatt's to rewrite.
-  const recipes = !!ap.querySelector(".recipeList");
+  const recipes = hasRecipes;
   box.classList.toggle("pp4Recipes", recipes);
   let hint = box.querySelector(".pp4PeekHint");
   if (recipes) mountRecipeStack(ap);
@@ -3599,7 +3620,7 @@ function promptTick(force){
       box.appendChild(help);          // last child of the column: under the cards, and it travels with them
     }
     {
-      const words = pilotMsg("recipe.draft", "tap a recipe to see its route");
+      const words = pilotMsg("recipe.draft", "Tap a recipe to see its route");
       const sp = help.firstElementChild;
       if (sp.textContent !== words){ sp.textContent = words; pilotSee("recipe.draft"); }
     }
@@ -3664,10 +3685,7 @@ function promptTick(force){
     return;
   }
   if (hint) hint.remove();
-  { const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove();
-    const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove(); }
-  rcFlightReset();          // no picker, no flight — a transform must never outlive the box it moved
-  rcDragReset();
+  // (the picker's own chrome is already down — rcChromeTeardown ran above, before every exit)
   ap.style.maxHeight = "";
   ap.style.minHeight = "";
   // N4 radial: choices bloom around the ship, right where the eyes are (the plan's own words).

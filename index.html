@@ -2411,7 +2411,19 @@
     margin-left:auto; margin-right:auto;
     box-shadow:0 8px 26px rgba(0,0,0,.33); }
   /* the captain's own colour, the same one the ribbon and the captains box give them */
-  .pp4RcAsk .pp4RcWho { font-weight:800; }
+  /* ⭐ ONE LINE — Wyatt, 2026-09-09: "'{player}, pick yer recipe' should be on one line."
+     width:max-content already asks for that, but max-width:100% overrules it the moment the box is
+     narrower than the sentence, and the box he photographed was the ORPHANED one left standing
+     after a recipe was chosen (see rcChromeTeardown) — by then #pp4Prompt had been re-sized for the
+     radial fan and the ask was wrapping inside 245px. nowrap makes the intent explicit rather than
+     leaving it to whatever width the box happens to have. */
+  .pp4RcAsk { white-space:nowrap; }
+  /* AND A VERY LONG NAME ELLIPSISES INSTEAD OF PUSHING THE SENTENCE OFF THE GLASS. With nowrap and
+     nothing else, a captain who typed forty characters would shove "pick yer recipe:" past the
+     edge — the sentence is the part that has to survive, so the NAME is what gives way. 45% is of
+     the ask's own box, so it holds at 339px of phone and 374 of desktop alike. */
+  .pp4RcAsk .pp4RcWho { font-weight:800; display:inline-block; max-width:45%;
+    overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
   .pp4RcAsk img { width:16px; height:16px; vertical-align:-3px; }
   /* ⭐ ITEM 1: NO CARD BEHIND THE CARDS. Wyatt: "remove the cream card behind the two recipes."
      The recipe cards are already parchment cards with their own edge and shadow — a second card

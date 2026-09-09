@@ -110,10 +110,11 @@ export const LADDERS = {
      its route'". THE WHOLE LADDER MOVES WITH IT — a rung still saying "docks" would teach a
      different noun for the same picture, which is the drift this ladder exists to prevent. And the
      lowercase is his, typed inside his own quotes; the pill is small italic text where it reads
-     as a whisper rather than a heading. */
+     as a whisper rather than a heading. CAPITALISED on his second look, 2026-09-09 — the lowercase
+     was mine, read back off the quotes in his message rather than asked about. */
   "recipe.draft": [
-    "tap a recipe to see its route — those five docks are what ye must gather.",
-    "tap a recipe to see its route.",
+    "Tap a recipe to see its route — those five docks are what ye must gather.",
+    "Tap a recipe to see its route.",
     null,
   ],
 

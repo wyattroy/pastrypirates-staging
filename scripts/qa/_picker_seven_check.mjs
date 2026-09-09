@@ -139,6 +139,7 @@ try {
       const chose = await C.ev(`!!document.querySelector('#actionPanel .apBtn.pp4Focus') || !!document.querySelector('.pp4Bake')`);
       say(`   a STILL press still chooses the recipe: ${chose}   (the slop threshold's whole job)`);
 
+
       // ── item 5 + item 1: does it drag, and does it drag FROM A CARD?
       // instrumented, because a bare "moved=false" does not say whether the press was even heard
       await C.ev(`(()=>{window.__dc={down:0,move:0,up:0};const b=document.getElementById('pp4Prompt');
@@ -178,6 +179,47 @@ try {
       await sleep(900);
       const stay = JSON.parse(await C.ev(M));
       say(`   ...and it STAYS after a second: ${stay.box.l===after.box.l&&stay.box.t===after.box.t}`);
+      /* ⚠ ON A FRESH PICKER, because the drag above deliberately ends with the sheet clamped hard
+         against the bottom edge — the card's own centre is then off the glass and the two taps land
+         on nothing. Measured that way it reported "ask box left behind: YES" while the panel still
+         read "choose yer recipe" and two recipe lists were still mounted: the picker had never been
+         dismissed at all, so the chrome was correctly present and the probe was grading its own
+         wreckage. A test that has just broken the state cannot then measure it. */
+      await go();
+
+      /* ⚠ THE COMMIT GOES LAST, AND HAS TO. It ENDS the picker — every later assertion would be
+         reading a sheet that no longer exists, which is how this probe crashed on `ask rect null`
+         the first time it was written. The drag left the sheet clamped at the bottom edge, so the
+         card is re-found from its live rect rather than from anything measured before. */
+      /* ⭐ AND THEN COMMIT IT, WHICH IS THE STATE WYATT PHOTOGRAPHED. A recipe card takes TWO taps
+         (docs/DRIVING-THE-GAME.md 3c): the first charts its route, the second bakes it. What
+         follows is a CENTRE-STAGED narration — and centre stage is the one exit from promptTick
+         that used to skip the picker's teardown, so the ask box and the helper pill were left
+         standing on the board under it. */
+      const cd2 = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]');if(!c)return null;const r=c.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(Math.min(r.top+r.height/2, innerHeight-12))}})())`));
+      if (cd2){
+        await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:cd2.x,y:cd2.y,button:"left",buttons:1,clickCount:1});
+        await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:cd2.x,y:cd2.y,button:"left",buttons:0,clickCount:1});
+        await sleep(700);
+        await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:cd2.x,y:cd2.y,button:"left",buttons:1,clickCount:1});
+        await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:cd2.x,y:cd2.y,button:"left",buttons:0,clickCount:1});
+      }
+      await sleep(2800);
+      const chosen = JSON.parse(await C.ev(`JSON.stringify((()=>{
+        const R=e=>{if(!e)return null;const r=e.getBoundingClientRect();
+          return {l:Math.round(r.left),t:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height)}};
+        const ap=document.getElementById('actionPanel');
+        return {ask:R(document.querySelector('.pp4RcAsk')), help:R(document.querySelector('.pp4RcHelp')),
+          hint:R(document.querySelector('.pp4PeekHint')),
+          staged:!!(ap&&ap.dataset.pp4Stage), cards:document.querySelectorAll('#actionPanel .recipeList').length,
+          says:(ap?ap.textContent:'').replace(/\s+/g,' ').trim().slice(0,64)};
+      })())`));
+      await shot("after-choosing-desktop.png");
+      say(`\n ── AFTER CHOOSING A RECIPE (his 2026-09-09 screenshot) ──`);
+      say(`   panel now says   ${JSON.stringify(chosen.says)}   centre-staged=${chosen.staged} recipeLists=${chosen.cards}`);
+      say(`   ask box left behind?    ${chosen.ask ? "YES -> " + JSON.stringify(chosen.ask) : "no (removed)"}`);
+      say(`   helper pill left behind? ${chosen.help ? "YES -> " + JSON.stringify(chosen.help) : "no (removed)"}`);
+
     }
   }
   say(`\nshots -> ${OUT}`);
