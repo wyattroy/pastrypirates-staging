@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@3584c949";
+const PP4_STAMP = "2026.09.07.3-staging@5d61e1e6";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2324,6 +2324,146 @@ function rcFlightRun(key, brd){
   rcLater(() => { rcInFlight = false; }, RC_LAND_MS + RC_HOLD_MS + RC_FLY_MS + 40);
 }
 
+/* ⭐ THE HELPER PILL, OVER OPEN WATER — Wyatt, 2026-09-09 item 3: "a normal helper pill over the
+   sea, not covering any of the islands."
+   ⚠ "NOT COVERING ANY OF THE ISLANDS" IS ANSWERED BY THE GAME, NOT BY THE PICTURE. The islands are
+   drawn into the board SVG as fused polygons behind a clip path, so there is no per-island DOM rect
+   to dodge and reading the pixels is not available to us. But the engine already knows exactly
+   which CELLS are land — `game.islands` is keyed "x,y" for every island square — so the obstacle
+   list is built from the game's own data and projected through the same toScreen() the board is
+   drawn with. That is one source of truth, not a second copy of the map.
+   THE SEARCH: walk candidate rows down the board and take the first that is clear of every island
+   cell, of the sheet itself, and of the sea hint. Below the sheet first, because that is the open
+   water the captain is looking at while they choose; then above it; then hide, because a pill drawn
+   over an island is worse than no pill (D-39 lets a hint be silent, never wrong). */
+function rcHelpPlace(help, brd){
+  const sp = help.firstElementChild;
+  if (!sp) return;
+  help.style.visibility = rcInFlight ? "hidden" : "";     // it sits out the show, like the sea hint
+  if (rcInFlight || !brd) return;
+  const r = sp.getBoundingClientRect();
+  if (!(r.width > 2 && r.height > 2)) return;
+  const o = fixedOrigin();
+  const W = Math.ceil(r.width), H = Math.ceil(r.height);
+  /* EVERY ISLAND SQUARE, in the same body-relative space everything else here is placed in. The
+     engine keys `islands` by "x,y" for each land cell, and toScreen() is the projection the board
+     itself is drawn with — so this is the game's own map, not a second copy of it. */
+  const g = appState.game, cell = cellPx(), land = [];
+  if (g && g.islands){
+    for (const k of Object.keys(g.islands)){
+      const [cx, cy] = k.split(",").map(Number);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+      const [x0, y0] = toScreen(cx * cell, cy * cell);
+      const [x1, y1] = toScreen((cx + 1) * cell, (cy + 1) * cell);
+      land.push({ l: Math.min(x0, x1), r: Math.max(x0, x1), t: Math.min(y0, y1), b: Math.max(y0, y1) });
+    }
+  }
+  const bx = fixedRect($("pp4Prompt"));
+  const hintEl = document.querySelector(".pp4PeekHint span");
+  const hintR = hintEl ? (() => { const h = hintEl.getBoundingClientRect();
+    return { l: h.left - o.x, r: h.right - o.x, t: h.top - o.y, b: h.bottom - o.y }; })() : null;
+  const sheet = { l: bx.left, r: bx.right, t: bx.top, b: bx.bottom };
+  const AIR = 6;
+  const clear = (x, y) => {
+    const a = { l: x, r: x + W, t: y, b: y + H };
+    const over = z => z && !(z.r < a.l - AIR || z.l > a.r + AIR || z.b < a.t - AIR || z.t > a.b + AIR);
+    return !over(sheet) && !(hintR && over(hintR)) && !land.some(over);
+  };
+  /* THE SEARCH IS 2D, and it prefers the middle of the board horizontally and the water BELOW the
+     sheet vertically — that is the open sea the captain is reading while they choose. Columns fan
+     out from the centre so the pill only moves sideways as far as the islands actually force it. */
+  const midX = Math.round(brd.left + brd.width / 2 - W / 2);
+  const cols = [midX];
+  for (let d = 40; d <= Math.max(brd.width, 240); d += 40){
+    cols.push(midX + d, midX - d);
+  }
+  const inBoard = x => x >= brd.left + 6 && x + W <= brd.right - 6;
+  const rows = [];
+  const top0 = Math.max(brd.top + 6, topBandPx() + 6), bot0 = brd.bottom - H - 6;
+  for (let y = Math.round(Math.max(sheet.b + 10, top0)); y <= bot0; y += 10) rows.push(y);
+  for (let y = Math.round(bot0); y >= top0; y -= 10) rows.push(y);      // then anywhere else on the water
+  let hit = null;
+  for (const y of rows){
+    for (const x of cols){
+      if (!inBoard(x)) continue;
+      if (clear(x, y)){ hit = [x, y]; break; }
+    }
+    if (hit) break;
+  }
+  /* D-39: a hint may be silent, never wrong. A pill drawn across an island is exactly the "named a
+     surface it was nowhere near" fault the sea hint's own history records. */
+  if (!hit){ help.style.visibility = "hidden"; return; }
+  help.style.visibility = "";
+  help.style.left = Math.round(hit[0]) + "px";
+  help.style.top  = Math.round(hit[1]) + "px";
+}
+
+/* ⭐ ITEM 5: THE WHOLE MODAL DRAGS — Wyatt, 2026-09-09: "make the entire modal movable by dragging
+   -- so players can move it across the board to see what's under it."
+   IT MOVES `left`/`top`, NEVER A TRANSFORM. The flight already owns the transform, and two writers
+   on one property is the fault this file keeps paying for (rule 23). Grabbing mid-flight therefore
+   ENDS the flight and pins the sheet where it visually is, which is also the honest behaviour: the
+   captain has taken over, so the show stops rather than yanking the sheet out of their hand.
+   ONCE DRAGGED, THE TICK STOPS PLACING IT (rcDragged) — a captain who moved the sheet to see what
+   is under it would otherwise watch it snap back on the next frame.
+   THE CARDS AND THE CIRCLE ARE NOT HANDLES. A drag that starts on a recipe card is the swipe that
+   swaps them, and one that starts on the swap circle is a tap; only the ask box, the panel's own
+   background and the gaps between things move the sheet. */
+let rcDragged = false;
+let rcDragArmed = false;
+function rcDragReset(){
+  rcDragged = false;
+  const box = $("pp4Prompt");
+  if (box) box.classList.remove("pp4RcDragging");
+}
+function rcDragArm(box){
+  if (rcDragArmed) return;
+  rcDragArmed = true;
+  let live = false, id = null, ox = 0, oy = 0;
+  box.addEventListener("pointerdown", (e) => {
+    if (!box.classList.contains("pp4Recipes")) return;
+    // the cards, the swap circle and the peek strip keep their own gestures
+    if (e.target.closest(".apBtn, .pp4RcSwap, .pp4RcPeek")) return;
+    /* TAKE OVER FROM THE FLIGHT, IF IT IS STILL RUNNING. fixedRect gives where the sheet actually
+       IS right now, transform and all; writing that back as left/top and dropping the transform
+       leaves it exactly where the captain grabbed it, with nothing left to animate it away. */
+    if (rcInFlight){
+      const now = fixedRect(box);
+      rcFlightStop();
+      box.style.transform = "";
+      box.style.left = Math.round(now.left) + "px";
+      box.style.top  = Math.round(now.top)  + "px";
+    }
+    const r = fixedRect(box);
+    const o = fixedOrigin();
+    ox = (e.clientX - o.x) - r.left;
+    oy = (e.clientY - o.y) - r.top;
+    live = true; id = e.pointerId; rcDragged = true;
+    box.classList.add("pp4RcDragging");
+    try { box.setPointerCapture(id); } catch {}
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!live || e.pointerId !== id) return;
+    e.preventDefault();
+    const o = fixedOrigin();
+    const r = fixedRect(box);
+    /* CLAMPED SO IT CANNOT BE LOST OFF AN EDGE. A sheet dragged fully off the glass cannot be
+       dragged back, and the captain still has to choose a recipe from it. */
+    const nl = Math.max(8 - r.width + 60, Math.min(vwPx() - 60, (e.clientX - o.x) - ox));
+    const nt = Math.max(topBandPx(), Math.min(vhPx() - 60, (e.clientY - o.y) - oy));
+    box.style.left = Math.round(nl) + "px";
+    box.style.top  = Math.round(nt) + "px";
+  });
+  const end = (e) => {
+    if (!live || (e && e.pointerId !== id)) return;
+    live = false;
+    box.classList.remove("pp4RcDragging");
+    try { box.releasePointerCapture(id); } catch {}
+  };
+  box.addEventListener("pointerup", end);
+  box.addEventListener("pointercancel", end);
+}
+
 function mountRecipeStack(ap){
   const cards = [...ap.querySelectorAll(".apBtn")].filter(b => b.querySelector(".recipeList"));
   if (cards.length < 2){ rcKey = null; return; }
@@ -3328,9 +3468,11 @@ function promptTick(force){
     // stage, crushing the message into a one-word-wide strip (Wyatt's 2:10 screenshot)
     box.classList.remove("radial", "pp4Center", "pp4Recipes");
     rcFlightReset();
+    rcDragReset();
     S.radKey = null;
     const h0 = box.querySelector(".pp4PeekHint"); if (h0) h0.remove();
     const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove();
+    const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
     if (ap.style.maxHeight) ap.style.maxHeight = "";
   if (ap.style.minHeight) ap.style.minHeight = "";
     if (box.style.paddingBottom) box.style.paddingBottom = "";
@@ -3398,7 +3540,15 @@ function promptTick(force){
       return Math.max(200, Math.min(want, capW));
     })();
     const RC_INSET = 10;                 // the sheet's clearance from the board's own top-right corner
+    rcDragArm(box);
     box.style.width = sheetW + "px";
+    /* ⚠ A SHEET THE CAPTAIN HAS MOVED STAYS WHERE THEY PUT IT. promptTick runs every frame, so
+       without this the drag would be undone on the very next one — the sheet would follow the
+       finger and snap home the instant it was released. Cleared with the picker. */
+    if (rcDragged){
+      if (rcKey && rcFlightKey !== rcKey) rcFlightKey = rcKey;   // never fly a sheet he has placed
+      return;
+    }
     box.style.left = Math.max(8, Math.round(brd ? Math.min(brd.right - sheetW - RC_INSET,
                                                            vwPx() - sheetW - 8)
                                                 : (vwPx() - sheetW) / 2)) + "px";
@@ -3433,7 +3583,13 @@ function promptTick(force){
       box.insertBefore(ask, ap);
     }
     {
-      const askHtml = `${pname(askSeat ?? 0)}, pick which recipe you want to bake`;
+      /* ⭐ ITEM 2 + ITEM 6, 2026-09-09. His shorter line, and his own colour on his own name:
+         "shorten the text: '{player}, pick yer recipe:'" and "including the colored playername".
+         HEXCOL is the seat palette every other surface names a captain in — the ribbon, the
+         captains box, the narration bubbles — so the box agrees with all of them by using the same
+         array rather than a colour chosen here. */
+      const who = askSeat ?? 0;
+      const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span>, pick yer recipe:`;
       if (ask.dataset.rcAsk !== askHtml){ ask.dataset.rcAsk = askHtml; ask.innerHTML = emojify(askHtml); }
     }
     /* THE SEA HINT SITS OUT THE SHOW. peekHintTick() places this pill by dodging whatever else is
@@ -3465,14 +3621,23 @@ function promptTick(force){
        looking at the screenshot, not by a gate.
        The shipped wording is passed IN, so at the bottom rung this element renders exactly the
        string it always did. */
-    const msg = ap.querySelector(".apMsg");
-    if (msg && !ap.querySelector(".pp4RecipeHint")){
-      const rh = document.createElement("div");
-      rh.className = "pp4RecipeHint";
-      rh.textContent = pilotMsg("recipe.draft", "Tap a recipe to highlight its docks");
-      pilotSee("recipe.draft");
-      msg.insertAdjacentElement("afterend", rh);
+    /* ⭐ ITEM 3, 2026-09-09: "Put the helper text in a normal helper pill over the sea, not covering
+       any of the islands." It used to sit inside the card, under the ask — and with the card behind
+       the recipes gone (item 1) there is no longer a surface for it to sit on. It is now the same
+       pill the sea hint wears, placed over open water. */
+    let help = box.querySelector(".pp4RcHelp");
+    if (!help){
+      help = document.createElement("div");
+      help.className = "pp4RcHelp";
+      help.innerHTML = "<span></span>";
+      box.appendChild(help);
     }
+    {
+      const words = pilotMsg("recipe.draft", "Tap a recipe to highlight its docks");
+      const sp = help.firstElementChild;
+      if (sp.textContent !== words){ sp.textContent = words; pilotSee("recipe.draft"); }
+    }
+    rcHelpPlace(help, brd);
     // playtest 19: the cap is the room left UNDER THE PANEL'S OWN TOP, not under the box's. The
     // hint pills are flex siblings above the panel, so measuring from `top` handed the panel the
     // hint's height as extra allowance and it ran off the bottom of the screen by exactly that
@@ -3534,8 +3699,10 @@ function promptTick(force){
     return;
   }
   if (hint) hint.remove();
-  { const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove(); }
+  { const a0 = box.querySelector(".pp4RcAsk"); if (a0) a0.remove();
+    const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove(); }
   rcFlightReset();          // no picker, no flight — a transform must never outlive the box it moved
+  rcDragReset();
   ap.style.maxHeight = "";
   ap.style.minHeight = "";
   // N4 radial: choices bloom around the ship, right where the eyes are (the plan's own words).

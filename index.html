@@ -2345,6 +2345,16 @@
      #pp4Prompt is display:flex, and its default row direction is what once crushed a stray hint
      pill into a one-word strip (see the teardown note in stage.js). */
   #pp4Prompt.pp4Recipes { flex-direction:column; align-items:center; gap:7px; }
+  /* ⭐ ITEM 5: THE SHEET IS A THING YOU CAN PICK UP. The grab cursor is the whole affordance on a
+     desktop — without it nothing says the modal moves. touch-action:none on the ask box stops a
+     phone treating the drag as a page scroll; the cards keep pan-y so their swipe still works. */
+  #pp4Prompt.pp4Recipes { cursor:grab; }
+  #pp4Prompt.pp4Recipes.pp4RcDragging { cursor:grabbing; }
+  #pp4Prompt.pp4Recipes.pp4RcDragging #actionPanel { pointer-events:none; }
+  .pp4RcAsk { touch-action:none; }
+  /* the cards are not handles — they keep their own gestures and their own cursor */
+  #pp4Prompt.pp4Recipes .apBtn, #pp4Prompt.pp4Recipes .pp4RcSwap,
+  #pp4Prompt.pp4Recipes .pp4RcPeek { cursor:pointer; }
   /* ⭐ ONE ASK, NOT TWO. The panel's own line already said "Wyatt, choose yer recipe:" and the cream
      box says "Wyatt, pick which recipe you want to bake" — the same question, in two voices, 40px
      apart. Seen in the parked shot; no measurement would have caught it, because both elements were
@@ -2353,16 +2363,42 @@
      Hidden rather than removed: .apMsg is built by the prompt spec and is the anchor the recipe
      helper line is inserted after (see the insertAdjacentElement in promptTick). */
   #pp4Prompt.pp4Recipes #actionPanel .apMsg { display:none; }
-  /* THE CREAM BOX. Cream because he said cream — the white panel below it is the game's mint
-     narration card, and a second mint box would read as one tall box with a seam in it rather than
-     as a label sitting on top of the cards. --parch2 is the parchment the modals already use, so
-     this is the game's own cream and not a new one. */
-  .pp4RcAsk { background:linear-gradient(170deg, #fffdf4, var(--parch2));
-    border:2px solid var(--teal); border-radius:11px; color:var(--ink);
-    font-weight:800; font-size:13.5px; line-height:1.35; text-align:center;
-    padding:7px 14px; max-width:100%; box-sizing:border-box;
-    box-shadow:0 6px 18px rgba(0,0,0,.28); pointer-events:none; }
+  /* ⭐ THE ASK IS A NARRATION BOX — Wyatt, 2026-09-09 item 6: "use the standard styling of a
+     narration box for '{player}, pick yer recipe' including the colored playername, white box,
+     colored outline."
+     SO IT BORROWS .pp4Bub's OWN VALUES rather than inventing a third look: #fffdf2 on a 2px #177
+     outline, 13px radius, the same drop shadow. It was cream on cream a moment ago and he was
+     right — with the panel behind it gone (item 1) a cream label floating on the sea reads as a
+     stray sticker, where a narration box reads as the game talking to you. */
+  .pp4RcAsk { background:#fffdf2; border:2px solid #177; border-radius:13px; color:#1f2d33;
+    font-weight:700; font-size:14px; line-height:1.45; text-align:center;
+    padding:9px 14px; max-width:100%; box-sizing:border-box;
+    box-shadow:0 8px 26px rgba(0,0,0,.33); }
+  /* the captain's own colour, the same one the ribbon and the captains box give them */
+  .pp4RcAsk .pp4RcWho { font-weight:800; }
   .pp4RcAsk img { width:16px; height:16px; vertical-align:-3px; }
+  /* ⭐ ITEM 1: NO CARD BEHIND THE CARDS. Wyatt: "remove the cream card behind the two recipes."
+     The recipe cards are already parchment cards with their own edge and shadow — a second card
+     behind them was a frame around a picture that is itself framed. With the ask now carrying the
+     narration-box look and the helper line moved out to the sea (item 3), the panel has nothing
+     left to hold, so it stops being a surface entirely and the cards sit on the water.
+     ⚠ padding:0 2px, NOT 0. The swap circle is absolutely positioned to stick out past the back
+     card's edge, and #actionPanel keeps overflow-y:auto (which makes overflow-x clip): with zero
+     side padding the circle is sliced by the panel's own edge. */
+  #pp4Prompt.pp4Recipes #actionPanel {
+    background:none; border:none; box-shadow:none; padding:0 2px; }
+  /* ⭐ ITEM 3: THE HELPER LINE IS A PILL OVER OPEN SEA. Wyatt: "Put the helper text in a normal
+     helper pill over the sea, not covering any of the islands." Same pill the sea hint already
+     wears — one helper look in this game, not two. stage.js places it (see rcHelpPlace). */
+  /* ⚠ NOT `left:0;right:0` WITH justify-content:center, WHICH IS WHAT THIS WAS. That centres the
+     pill in whatever the containing block turns out to be — measured at 1280 it landed centred on
+     442 rather than on the viewport's 640 — so the pill had exactly one possible column and sat on
+     two island squares because nothing could move it sideways. stage.js now places it in BOTH axes
+     (see rcHelpPlace), which is what "not covering any of the islands" actually requires. */
+  .pp4RcHelp { position:fixed; z-index:29; pointer-events:none; width:max-content; max-width:92%; }
+  .pp4RcHelp span { background:rgba(9,42,52,.86); color:#fffdf2; font-size:12px; font-style:italic;
+    border-radius:999px; padding:4px 13px; width:max-content; max-width:92%;
+    box-shadow:0 4px 14px rgba(0,0,0,.3); }
   /* THE FLIGHT ITSELF IS A TRANSFORM AND NOTHING ELSE. The box's LAYOUT is already at its parked
      place; the transform is what holds it over the middle of the board until the show is over. So
      nothing reflows mid-flight, the browser composites it, and the parked geometry stays the one
@@ -2707,6 +2743,20 @@
      around a card that is not the one being chosen. The swap CIRCLE is the announced, focusable
      control and it keeps its ring below — which is exactly the half he asked to keep. */
   .pp4RcPeek:focus, .pp4RcPeek:focus-visible { outline:none; }
+  /* ⭐ AND THE HOVER, WHICH IS THE ONE HE ACTUALLY SAW — Wyatt, 2026-09-09 item 4: "remove the
+     yellow highlighting of the back card (see ss) but keep the button highlightable on hover."
+     ⚠ THE SOURCE IS A GLOBAL RULE, NOT ANYTHING IN THIS BLOCK: `button:hover { background:#fdea6d }`
+     at the top of this file paints EVERY <button> bright yellow on hover, and .pp4RcPeek is a real
+     <button> sized to the back card's visible sliver — so hovering the card behind laid a solid
+     yellow slab over it. MEASURED: computed background rgb(253,234,109) on hover, against
+     rgba(0,0,0,0) at rest.
+     ⚠ AND IT IS WHY THE 2026-09-08 FIX DID NOT TAKE. He reported this same yellow a day earlier and
+     the rule directly above was written for it — but that one only quiets :focus. The strip was
+     never focused; it was hovered. A fix aimed at the wrong pseudo-class looks identical in the
+     diff and does nothing on the screen, which is why this one is measured rather than reasoned.
+     THE CIRCLE KEEPS ITS YELLOW — his "(keep it on the button)", said on both days. It is the
+     announced control; the strip is scenery that happens to be tappable. */
+  .pp4RcPeek:hover { background:transparent; }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { position:relative; transform:none; opacity:1; z-index:2; }
   /* ⭐ ONE ROUND SWAP CIRCLE, NOT TWO SQUARE ARROWS — his 6.5: "the left/right buttons should be
      replaced with one button that hovers 10 px to the right of the back card's edge that has a ↩
@@ -2741,7 +2791,10 @@
      BASELINE inside a line box, and no amount of flex centring moves a glyph off its own baseline
      — it looked low because it WAS low. An SVG has no baseline; it is a box, and a box centres.
      It also renders identically on every platform, which a character never does. */
-  .pp4RcSwap svg { display:block; width:60%; height:60%; }
+  /* ⭐ ITEM 7: "flip your arrow svg 180 in the button" (Wyatt, 2026-09-09). Rotated in CSS rather
+     than by re-authoring the path, so the drawing stays the one return-arrow this file describes
+     and there is one place to change if he wants it back. */
+  .pp4RcSwap svg { display:block; width:60%; height:60%; transform:rotate(180deg); }
   .pp4RcSwap:active { background:#e0951a; transform:translateY(-50%) scale(.92); }
   /* THE SWAP ITSELF — his 6.2: "The cards should animate when swapping to look like they're
      switching front to back." One class, added for the length of the move and removed after, so
