@@ -238,10 +238,34 @@ if (!musicFile) {
 }
 
 const gap = (audio.match(/const\s+MUSIC_GAP_SEC\s*=\s*(\d+)/) || [])[1];
-gap === "60"
-  ? ok("MUSIC_GAP_SEC is 60 — the minute he asked for before the song comes round again")
-  : bad(`MUSIC_GAP_SEC is ${gap === undefined ? "not declared" : gap} — it must be 60. His words: ` +
-        `"the song shouldn't immediately restart after it finishes— it should wait a minute."`);
+/* ⭐ THREE MINUTES, 2026-09-08 — his third and latest ruling on this number. 120 (2026-09-06) ->
+   60 (2026-09-07) -> 180, and the newest wins: "I want a bigger pause between the song plays --
+   make it 3 minutes". The older two are named here so a future reader who finds one of them on an
+   older page can see it was superseded rather than lost. */
+gap === "180"
+  ? ok("MUSIC_GAP_SEC is 180 — the three minutes he asked for before the song comes round again")
+  : bad(`MUSIC_GAP_SEC is ${gap === undefined ? "not declared" : gap} — it must be 180. His words: ` +
+        `"I want a bigger pause between the song plays -- make it 3 minutes."`);
+
+/* AND THE SONG IS IMMEDIATE WHEN MUSIC COMES BACK ON — the other half of the same ruling: "reset
+   that 3 minutes when someone cycles through the sound playback (so if they get back to 'sound on
+   - with music' the song starts up immediately)". This is a PROPERTY of the two functions rather
+   than a feature that was added, so it is asserted rather than trusted: musicStop() must clear the
+   pending timer, and musicStart() must play at once instead of waiting for one. If either drifts,
+   a captain who cycles the sound control gets up to three minutes of silence and no way to know
+   why. */
+{
+  const stop = (audio.match(/function musicStop\(\)\s*\{[\s\S]*?\n\}/) || [""])[0];
+  const start = (audio.match(/function musicStart\(\)\s*\{[\s\S]*?\n\}/) || [""])[0];
+  /musicTimer\s*\)\s*\{\s*clearTimeout\(musicTimer\)/.test(stop)
+    ? ok("musicStop() clears the pending gap timer, so the wait does not survive a mode change")
+    : bad("musicStop() does not clear musicTimer — cycling the sound control would leave the old " +
+          "three-minute wait running, and the song would not come back when he asked for it");
+  /musicPlayOnce\(\)/.test(start)
+    ? ok("musicStart() plays at once — cycling back to sound+music starts the song immediately")
+    : bad("musicStart() does not call musicPlayOnce() directly — turning music back on would wait " +
+          "out a fresh gap instead of playing, which is exactly what he ruled against");
+}
 
 /* A LOOPING music source would defeat the gap entirely, and it is the obvious thing to reach for. */
 /musicSrc\s*\.\s*loop\s*=\s*true/.test(audio)

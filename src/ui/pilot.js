@@ -127,7 +127,9 @@ export const LADDERS = {
 
   // ---- the trade winds, taught the first time the rim actually carries somebody
   "rim.sweep": [
-    "The rim runs clockwise — sail into the trade winds and they carry ye clean across the sea.",
+    // ⭐ HIS WORDS, 2026-09-08, replacing my draft — it names the rim, the direction AND where ye
+    // end up, which the old line left ye to work out from a moving picture.
+    "Sail into the trade winds along the rim and they'll carry ye clockwise to the next whirlpool",
     null,
   ],
 

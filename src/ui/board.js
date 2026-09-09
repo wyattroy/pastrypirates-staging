@@ -2394,6 +2394,8 @@ export function flipSpinLeftMs(){
 // battle scoreboard's per-fighter result circles, a separate use of the same .coin styles).
 export function setFlipCoin(state){
   const el=$("flipCoinWrap");if(!el)return;
+  // see ceremonyHoldsTheCoin() below — only a BLANKING is deferred, never a face and never a spin
+  if(state==="wait"&&ceremonyHoldsTheCoin())return;
   // IDEMPOTENT for "spin", because the tap now paints it and broadcastFlip repaints it a beat
   // later (setFlipActive below) — re-entering the state ye are already in must not re-play the
   // sound, or every flip is heard twice.
@@ -2413,6 +2415,24 @@ export function setFlipCoin(state){
   // guard that stops broadcastFlip's repaint a beat later restarting the timer under the tap.
   else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";if(!wasSpin){flipSpinAt=performance.now();startFlipSpinSound();}}
   else{el.classList.add("wait");el.textContent="";}
+}
+/* ⭐ THE VEIL TAKES THE FACE AWAY, NOTHING ELSE DOES — Wyatt, 2026-09-08: "the coin result is
+   removed from the flippenator before the stage is removed, making it look like a coin just
+   disappeared", and then his ruling on the fix: "just don't clear the coin's face at all — let the
+   veil coming down clear it."
+
+   IT WAS TWO CLOCKS DISAGREEING, and the arithmetic is the whole bug:
+     the battle flow holds the landed face  FLIP_LAND_HOLD_MS = 800ms, then calls broadcastFlip("wait")
+     the ceremony holds the veil up         CER_REVEAL_MS    = 1100ms, then tears down
+   So for 300ms the stage stood there with a blank coin on it. Shortening the veil would have fixed
+   the symptom and left two clocks to drift; his answer removes one of them instead.
+
+   SO WHILE A CEREMONY IS STANDING, A CLEAR IS THE CEREMONY'S TO MAKE. cerTeardown() does it as the
+   veil leaves, so the face is on screen for every frame the stage is. A landed face is NOT
+   suppressed here — only the blanking — so nothing can hide a result. And the wire write in
+   broadcastFlip() is untouched: a guest with no veil of its own still resets normally. */
+function ceremonyHoldsTheCoin(){
+  return typeof document !== "undefined" && document.body && document.body.classList.contains("pp4Cer");
 }
 export function setFlipActive(onClick){
   const el=$("flipCoinWrap");if(!el)return;

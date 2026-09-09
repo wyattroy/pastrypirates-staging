@@ -77,7 +77,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -1792,8 +1792,8 @@ export async function consumeEvent(e){
   playForEvent(e, decisionIsLocal(e.p));
   $("scrub").max=Math.max(0,appState.game.events.length-1);
   stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
-  await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
-  await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakSet of ridden events), so a host call site that already awaited the ride makes this a no-op.
+  await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
+  await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
   render();
   spawnPops(e,boardCell());
   if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
@@ -2686,6 +2686,7 @@ export function leaveGame(){netLeaveRoom();clearSession();clearSoloState();locat
 function unlockAudio(){
   if(audioRunning())return;              // already audible: nothing to do, and nothing to unhook
   initAudio().catch(()=>{});             // idempotent — returns immediately once the graph exists
+  kickAudioSession();                    // his 2026-09-08 Safari note — see the comment in audio.js
   /* NOT via initAudio(): it returns at its first line once `ctx` exists, so on every gesture after
      the first it reached no wake at all. wakeCtx() is the door, and it must be called from HERE
      because Safari only honours resume() from inside a user-gesture call stack. */

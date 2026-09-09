@@ -64,7 +64,13 @@ const subj = {};
   if (!m) missed("src/engine/index.js has no sailPath( — the engine's legal-path search. Re-anchor this gate; do not delete it.");
   subj.sailPath = `src/engine/index.js:${lineOf(engine, m.index + 1)}`;
 
-  const w = flow.match(/export\s+async\s+function\s+animateSailRoute\s*\(/);
+  /* ⚠ `async` IS OPTIONAL HERE NOW. On 2026-09-08 animateSailRoute became a synchronous wrapper
+     that RETURNS the in-flight ride's promise (a WeakMap, so a second caller joins the walk rather
+     than racing past it — his sheet item s4), with the walk itself in animateSailRoutePlay. This
+     regex demanded the `async` keyword and so reported that the walker "is not in flow.js at all",
+     which is both false and far more alarming than the change that caused it. What this assertion
+     is actually about is that flow.js OWNS the walker; the keyword was never the subject. */
+  const w = flow.match(/export\s+(?:async\s+)?function\s+animateSailRoute\s*\(/);
   if (!w) missed("src/ui/flow.js has no animateSailRoute( — the only code that walks a route square by square.");
   subj.walker = `src/ui/flow.js:${lineOf(flow, w.index)}`;
 
@@ -222,7 +228,7 @@ const ROUTE_KEY = /\b(route|path|legs|via|squares|waypoints)\b/;
   for (const rel of files) {
     const src = strip(fs.readFileSync(path.join(TREE, rel), "utf8"));
     for (const m of src.matchAll(/(?<!function\s)animateSailRoute\s*\(/g)) {
-      if (/export\s+async\s+function\s+animateSailRoute/.test(src.slice(Math.max(0, m.index - 40), m.index + 20))) continue;
+      if (/export\s+(?:async\s+)?function\s+animateSailRoute/.test(src.slice(Math.max(0, m.index - 40), m.index + 20))) continue;
       callers.add(rel);
     }
   }

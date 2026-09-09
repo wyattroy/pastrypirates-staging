@@ -417,8 +417,22 @@ export function checkRimSweepArrivesAndRestores(root) {
      must build a curve. Every one of those is a named failure below, and the one-ride COUNT further
      down is what stops the extraction quietly becoming two rides that drift apart — which is D-55's
      failure class one layer up from where D-55 happened. */
+  /* ⚠ IT MATCHES FOUR DECLARATION SHAPES, NOT ONE. This searched for the literal
+     `export async function <name>` and nothing else, so it went blind the moment the guard stopped
+     being async — which happened on 2026-09-08, when animateRimSweepIfAny became a synchronous
+     wrapper that RETURNS the in-flight ride's promise (a WeakMap, so a second caller joins the ride
+     instead of racing past it — his sheet item s4). The gate then reported the function "is not in
+     flow.js at all", which was false and would have read as a much bigger fault than it was.
+     The extracted ride is not exported either, so both halves of this assertion needed the wider
+     match. ANTI-VACUITY IS UNCHANGED: a name that matches none of the four still returns null and
+     still fails loudly below. */
   const sliceBody = (name) => {
-    const start = live.indexOf(`export async function ${name}`);
+    let start = -1;
+    for (const decl of [`export async function ${name}`, `export function ${name}`,
+                        `async function ${name}`, `function ${name}`]) {
+      start = live.indexOf(decl);
+      if (start >= 0) break;
+    }
     if (start < 0) return null;
     const open = live.indexOf("{", start);
     let depth = 0;
@@ -452,11 +466,33 @@ export function checkRimSweepArrivesAndRestores(root) {
       fail(res, `PARITY-SWEEPARRIVE: animateRimSweepIfAny reaches ${called.length} different rides (${called.join(", ")}). Two rides is two chances to disagree about how a boat crosses the ring — exactly the fork D-55 recorded one layer down. One ride, entered from wherever you like.`);
       return res;
     }
+    /* ⚠ FOLLOW THE CHAIN, NOT ONE HOP. This assumed the guard delegated STRAIGHT to the ride, and
+       on 2026-09-08 a third link appeared between them: the guard became a synchronous wrapper that
+       returns the in-flight ride's promise (so a second caller joins the sweep instead of racing
+       past it), and the old guard body moved into animateRimSweepPlay. The gate then landed on the
+       middle link and reported "does not build a rimSweepCurve", which is true of that link and
+       says nothing about the ride. Walk down until the curve is found.
+       BOUNDED AT FOUR HOPS and it still fails loudly if the curve is never reached — the
+       anti-vacuity rule this whole block is built on is unchanged: not finding it is a FAILURE, not
+       a pass. A cycle cannot spin here because each hop must be a NEW name. */
+    const seen = new Set(["animateRimSweepIfAny"]);
     rideName = called[0];
-    body = sliceBody(rideName);
-    if (body === null) {
-      fail(res, `PARITY-SWEEPARRIVE: animateRimSweepIfAny delegates to ${rideName}(), which is not an \`export async function\` in ${FLOW_REL} (or its body could not be brace-matched). Re-anchor this gate rather than deleting the assertion.`);
-      return res;
+    for (let hop = 0; hop < 4; hop++) {
+      body = sliceBody(rideName);
+      if (body === null) {
+        fail(res, `PARITY-SWEEPARRIVE: the chain from animateRimSweepIfAny reaches ${rideName}(), which is not a function this gate can brace-match in ${FLOW_REL}. Re-anchor this gate rather than deleting the assertion.`);
+        return res;
+      }
+      if (body.indexOf("rimSweepCurve(") >= 0) break;
+      seen.add(rideName);
+      const next = [...new Set(
+        [...body.matchAll(/\b(animateRimSweep[A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1])
+      )].filter((n) => !seen.has(n));
+      if (next.length !== 1) {
+        fail(res, `PARITY-SWEEPARRIVE: ${rideName}() neither builds a rimSweepCurve nor delegates to exactly one further animateRimSweep* (found ${next.length}: ${next.join(", ") || "none"}). One ride, entered from wherever you like — two is two chances to disagree about how a boat crosses the ring.`);
+        return res;
+      }
+      rideName = next[0];
     }
   }
 

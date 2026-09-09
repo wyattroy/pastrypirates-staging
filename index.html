@@ -2503,6 +2503,16 @@
      with empty screen below it. Measured, not guessed: row bottom 732 against panel bottom 679.
      One card in flow means the row is exactly as tall as the card the captain is looking at, and
      every height the panel computes downstream is honest. */
+  /* ⭐ THE SHEET IS TALLER NOW, SO THE STACK SITS IN THE MIDDLE OF IT.
+     He asked for "much more vertical space" and for the sheet to cover the captains box outright.
+     On a phone that box is 368px tall against ~220px of content, so covering it necessarily leaves
+     room over — and content pinned to the top of a tall box reads as a box that failed to fill,
+     not as a deliberate one. Centring the whole group makes the height look chosen.
+     ONLY WHEN THE PICKER IS UP (`.pp4Recipes`): every other prompt still lays out from the top,
+     which is what the top-to-bottom reveal order depends on. */
+  body.pp4Stage #pp4Prompt.pp4Recipes #actionPanel {
+    display:flex; flex-direction:column; justify-content:center; }
+
   /* ⭐ THE STACK REBUILT — Wyatt's playtest item 6, 2026-09-07, eight numbered changes.
      ⚠ WHY THE CARD WAS JAMMED LEFT (his 6.8: "the cards should be centered within the white box;
      not left justified"). `margin:0 auto` was here all along and could never work: the row is
@@ -2582,7 +2592,22 @@
   }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
     width:var(--rcW); max-width:250px; min-width:0; box-sizing:border-box; margin:0 auto;
-    padding:6px 6px 8px; transition:transform .22s cubic-bezier(.2,.9,.3,1.05), opacity .22s; }
+    /* ⭐ QUICKER, AND NO OVERSHOOT — Wyatt, 2026-09-08: "This animation is functional, but clumsy
+       and stutters. Make it smoother and quicker." The old curve's final control point was 1.05,
+       i.e. it deliberately overshot and settled back; on a card that is also changing depth that
+       reads as a wobble rather than as spring. A plain ease-out at 150ms trades positions in one
+       clean move. */
+    padding:6px 6px 8px; transition:transform .15s cubic-bezier(.22,.61,.36,1), opacity .15s; }
+  /* ⭐ THE COMMIT FRAME CARRIES NO TRANSITION, AND THIS IS THE "PAUSE" HE SAW.
+     His words: "currently it looks like the front card moves to right, then pauses before moving
+     behind. Remove that pause so that the cards trade positions quicker and smoother."
+     It was ONE animation played TWICE. `.rcSwapping` sends each card toward the other's place over
+     150ms; then the swap commits by exchanging data-rcpos, which changes each card's target
+     transform again — and with the transition still live they animated a SECOND time, from where
+     they had just arrived back to where they now belonged. The gap between the two runs is the
+     pause. Suppressing the transition for the single frame in which the swap is committed makes
+     the exchange land exactly where the animation left off, so there is nothing to play twice. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList).rcSnap .apBtn { transition:none; }
   /* the card behind, sized to the front one by its own inset rather than by a typed height.
      pointer-events:none is load-bearing: without it the hidden card is still a tap target over the
      visible one's edge, and the wrong recipe gets chosen. */
@@ -2631,7 +2656,12 @@
     padding:0; -webkit-tap-highlight-color:transparent;
     top:10px; height:calc(100% - 18px);
     left:calc(50% + var(--rcW) / 2); width:var(--rcPeek); }
-  .pp4RcPeek:focus-visible { outline:3px solid #f5a623; outline-offset:2px; border-radius:6px; }
+  /* ⭐ NO GOLD RING ON THE CARD BEHIND — Wyatt, 2026-09-08: "also remove the bright yellow hover
+     helper from the back card (keep it on the button)." This strip is invisible by design (it only
+     exists so the visible sliver can be tapped), so a focus ring on it draws a bright rectangle
+     around a card that is not the one being chosen. The swap CIRCLE is the announced, focusable
+     control and it keeps its ring below — which is exactly the half he asked to keep. */
+  .pp4RcPeek:focus, .pp4RcPeek:focus-visible { outline:none; }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { position:relative; transform:none; opacity:1; z-index:2; }
   /* ⭐ ONE ROUND SWAP CIRCLE, NOT TWO SQUARE ARROWS — his 6.5: "the left/right buttons should be
      replaced with one button that hovers 10 px to the right of the back card's edge that has a ↩
@@ -2647,16 +2677,26 @@
      invisible on cream — measured as correctly placed and impossible to see, which is the whole
      reason to look at the picture as well as the numbers.) */
   .pp4RcSwap { position:absolute; top:50%; z-index:5;
-    /* TUCKED JUST INSIDE THE BACK CARD'S EDGE — its right edge and the card's coincide. This is
-       the only placement that fits at 390px: centred ON the edge needs 192px of room to the right
-       of the card's centre and there are 181; this needs 175. One placement at every width beats
-       a circle that jumps to a different spot on a phone (his item 26 asks for exactly that). */
-    left:calc(50% + var(--rcW) / 2 + var(--rcPeek) - var(--rcSwap));
+    /* ⭐ CENTRED ON THE PEEK ITSELF — Wyatt, 2026-09-08: "Put this arrow centered on the portion of
+       the back card that is visible -- currently it touches the right edge; instead, center it on
+       that back card's 20% peek."
+       So the circle's own centre sits at half a card plus half a peek from the stack's centre —
+       which is the middle of the sliver, by construction, at every width. It also FITS more easily
+       than the old placement did: it needs `card/2 + peek/2 + swap/2` = 150+17 = 167px of room
+       against 161px at 390px (card 225 there, so 112+22+17 = 152). No breakpoint, one placement. */
+    left:calc(50% + var(--rcW) / 2 + var(--rcPeek) / 2 - var(--rcSwap) / 2);
     transform:translateY(-50%);
     width:var(--rcSwap); height:var(--rcSwap); display:flex; align-items:center;
     justify-content:center; border:2px solid #c9821a; border-radius:50%; background:#f5a623;
-    color:#3a2600; font-size:19px; font-weight:800; line-height:1; cursor:pointer; padding:0;
+    color:#3a2600; line-height:0; cursor:pointer; padding:0;
     box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  /* ⭐ A DRAWN ARROW, NOT A TYPED ONE — his 6.5 follow-up: "also within the button itself, center
+     the arrow on the button (it is not vertically centered), and draw your own svg so you don't
+     rely on emojis." Both halves are the same cause: "↩" is a text glyph, so it sits on a
+     BASELINE inside a line box, and no amount of flex centring moves a glyph off its own baseline
+     — it looked low because it WAS low. An SVG has no baseline; it is a box, and a box centres.
+     It also renders identically on every platform, which a character never does. */
+  .pp4RcSwap svg { display:block; width:60%; height:60%; }
   .pp4RcSwap:active { background:#e0951a; transform:translateY(-50%) scale(.92); }
   /* THE SWAP ITSELF — his 6.2: "The cards should animate when swapping to look like they're
      switching front to back." One class, added for the length of the move and removed after, so
@@ -2914,6 +2954,13 @@
     box-shadow:0 6px 18px rgba(0,0,25,.3); pointer-events:none;
     opacity:0; transition:opacity .18s ease; }
   #pp4Polly.show { opacity:1; }
+  /* ⭐ THE BIRD IS THE POINT, SO GIVE HER ROOM — Wyatt, 2026-09-08: "Polly is too small on the Aye
+     aye button -- make the bird bigger!" `.narrIcon`'s 18px is a footnote size: right inside a
+     sentence, lost on a full-stage circle and lost in her own box. Sized per surface rather than by
+     raising .narrIcon globally, which would grow every icon in every narration line in the game. */
+  #pp4Polly .narrIcon { width:26px; height:26px; vertical-align:-7px; margin-right:3px; }
+  .apBtn.pp4AyeAye .narrIcon { width:38px; height:38px; vertical-align:-11px; margin-right:5px; }
+  #pp4Help .narrIcon { width:16px; height:16px; vertical-align:-3px; margin:0; }
   @media (prefers-reduced-motion: reduce) { #pp4Polly { transition:none; } }
   /* THE RIBBON FITS AT 320px. Measured before a line of the tutorial existed: the row is clean at
      430/390/360 and runs 21px off the edge at 320 once the ? is added — red-proofed both ways, so

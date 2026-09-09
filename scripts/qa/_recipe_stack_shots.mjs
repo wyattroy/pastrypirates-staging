@@ -76,6 +76,8 @@ const MEASURE = `JSON.stringify((()=>{
   return {vw:innerWidth, cards:cards.length, pos:cards.map(c=>c.dataset.rcpos||'-'),
     backDisplay: back?getComputedStyle(back).display:'(none present)',
     front:fr, back:br, row:rr, captains:cr, panel:R(ap),
+    promptBox: R(document.getElementById('pp4Prompt')),
+    boxInline: (()=>{const b=document.getElementById('pp4Prompt');return b?{l:b.style.left,w:b.style.width,t:b.style.top}:null})(),
     panelOverflowY: ap? (ap.scrollHeight>ap.clientHeight) : null,
     backVisibleFrac, centred, overlapsCaptains,
     swap:R(document.querySelector('.pp4RcSwap')), peek:R(document.querySelector('.pp4RcPeek')),
@@ -121,6 +123,7 @@ try {
     say(`   back card visible fraction : ${m.backVisibleFrac}   (he wants ~0.20 — "80% overlapped")`);
     say(`   centred in its row?        : ${JSON.stringify(m.centred)}   (equal gaps = centred)`);
     say(`   overlaps the captains box? : ${m.overlapsCaptains}   (he wants TRUE at all three)`);
+    say(`   promptBox ${JSON.stringify(m.promptBox)}  inline=${JSON.stringify(m.boxInline)}`);
     say(`   panel  ${JSON.stringify(m.panel)}  scrolls=${m.panelOverflowY}`);
     say(`   swap circle  ${JSON.stringify(m.swap)}`);
     if(m.swap&&m.panel) say(`   circle inside the WHITE BOX? ${m.swap.r <= m.panel.r}  (box right ${m.panel.r}, circle right ${m.swap.r})`);
@@ -139,6 +142,35 @@ try {
   say(`   front ${JSON.stringify(sel.front)}`);
   say(`   row   ${JSON.stringify(sel.row)}   panel ${JSON.stringify(sel.panel)} scrolls=${sel.panelOverflowY}`);
   say(`   "Bake this!" ${JSON.stringify(sel.bake)}   (item 6.6: over the MIDDLE of the card, and the card's height must not change)`);
+  /* AND THE SAIL PROMPT, for his item t2: "This is legible, but it's painted over a sailing square
+     in a bad way." — the helper line under the sail question. */
+  await metrics(SIZES[0]); await sleep(700);
+  for (let i=0;i<40;i++){
+    if (await C.ev(`!!document.querySelector('.sailCell')`)) break;
+    await C.ev(`(()=>{const c=document.getElementById('flipCoinWrap');
+      if(c&&c.classList.contains('active')&&c.onclick){c.onclick();return 1}
+      const b=[...document.querySelectorAll('#actionPanel .apBtn')].filter(x=>!/back|←|‹/i.test(x.textContent)&&x.offsetParent)[0];
+      if(b){b.click();return 2} return 0;})()`);
+    await sleep(500);
+  }
+  await sleep(1600);
+  await shot("30-sail-prompt-phone.png");
+  const sail = JSON.parse(await C.ev(`JSON.stringify((()=>{
+    const R=e=>{if(!e)return null;const r=e.getBoundingClientRect();
+      return {l:Math.round(r.left),t:Math.round(r.top),w:Math.round(r.width),h:Math.round(r.height),b:Math.round(r.bottom),r:Math.round(r.right)};};
+    const sub=document.querySelector('#actionPanel .apSub');
+    const cells=[...document.querySelectorAll('.sailCell')].map(R);
+    let over=0;
+    if(sub){const s=R(sub);
+      for(const c of cells){ if(!(c.r<s.l||c.l>s.r||c.b<s.t||c.t>s.b)) over++; }}
+    return {sub:R(sub), subText:(sub?sub.textContent:'').slice(0,70), cells:cells.length, overlapping:over,
+            msg:(document.querySelector('#actionPanel .apMsg')||{}).textContent||''};
+  })())`));
+  say(`\n── the sail prompt (his t2) ──`);
+  say(`   message  ${JSON.stringify(sail.msg.slice(0,60))}`);
+  say(`   helper   ${JSON.stringify(sail.subText)}`);
+  say(`   helper box ${JSON.stringify(sail.sub)}`);
+  say(`   gold squares on the board: ${sail.cells}   OVERLAPPING the helper: ${sail.overlapping}`);
   say(`\nshots -> ${OUT}`);
 } catch (e) {
   console.log("PROBE FAILED:", e.message);

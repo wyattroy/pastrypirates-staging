@@ -1193,7 +1193,7 @@ export function publishNow(){
   const h=netHandlers();
   if(h.onEvents)h.onEvents();
 }
-const _rodeSweep=new WeakSet();
+const _rodeSweep=new WeakMap();   // event -> the sweep's promise; a second caller JOINS it
 /* ══════════════════════ THE PARROT'S OWN BOX — "🦜 Aye aye" ══════════════════════
    Wyatt, 2026-09-07 playtest item 4, after sailing into the rim: "there is a problem with the
    design of our tutorial narrations — they disappear too quickly to read AND understand. Can we
@@ -1237,15 +1237,25 @@ export async function pilotGate(id,tweak){
   /* SEEN BEFORE SHOWN, deliberately. The count must advance even if this voyage ends mid-card —
      otherwise a captain who quits during a lesson meets the same lesson forever. */
   pilotSee(id);
-  await localAsk(text,[{label:"🦜 Aye aye",value:0,cls:"primary ahoyGlow",stage:true}],null,line.sub||null);
+  // `pp4AyeAye` exists only to size the bird — Wyatt, 2026-09-08: "Polly is too small on the Aye
+  // aye button -- make the bird bigger!" The parrot itself was already the game art (emojify maps
+  // 🦜 to assets/icons/parrot.png and panel() runs it over every prompt); it was arriving at
+  // .narrIcon's 18px, which is a footnote size on a full-stage circle.
+  await localAsk(text,[{label:"🦜 Aye aye",value:0,cls:"primary ahoyGlow pp4AyeAye",stage:true}],null,line.sub||null);
   return true;
 }
-export async function animateRimSweepIfAny(ev){
+export function animateRimSweepIfAny(ev){
   const g=appState.game;
-  if(!g||appState.replaying)return false;
-  if(!ev||ev.t!=="tradewind")return false;
-  if(_rodeSweep.has(ev))return false;
-  _rodeSweep.add(ev);
+  if(!g||appState.replaying)return Promise.resolve(false);
+  if(!ev||ev.t!=="tradewind")return Promise.resolve(false);
+  const inflight=_rodeSweep.get(ev);
+  if(inflight)return inflight;              // JOIN the ride, never skip it
+  const p=animateRimSweepPlay(ev);
+  _rodeSweep.set(ev,p);
+  return p;
+}
+async function animateRimSweepPlay(ev){
+  const g=appState.game;
   const i=g.events.indexOf(ev);
   if(i<1)return false;
   const prev=g.events[i-1];
@@ -1439,7 +1449,12 @@ const routeTick=(ms)=>appState.replaying?Promise.resolve():(Promise.race([
    new Game, so "Play again" in the same page load silently dropped the ride for whichever sail
    landed on the index the last voyage finished on (W7b case C). A fresh voyage's events are fresh
    objects, so this cannot happen and there is no frontier for anyone to remember to reset. */
-const _rodeRoute=new WeakSet();
+/* ⭐ A SECOND CALLER JOINS THE RIDE; IT NO LONGER RACES PAST IT. This was a WeakSet and the guard
+   `return false`d — so whichever call site arrived second simply carried on while the boat was
+   still moving. A WeakMap of event -> the ride's own promise makes re-entry mean "wait for the ride
+   already in progress", which is what every caller actually wanted. See the note on the bot's sail
+   below (his sheet item s4) for the timing this unlocks. */
+const _rodeRoute=new WeakMap();
 /* ============================================================================
    L4 — THE PERFORMER. Plays a storyboard; decides nothing.
    ============================================================================
@@ -1477,9 +1492,9 @@ export async function playStoryboard(beats){
   return played;
 }
 
-export async function animateSailRoute(ev){
+export function animateSailRoute(ev){
   const g=appState.game;
-  if(!g||appState.replaying)return false;
+  if(!g||appState.replaying)return Promise.resolve(false);
   /* ANY EVENT CARRYING A BAKED ROUTE, not one event name. This used to demand t==="sail", which
      is a second place that has to be told about every move a boat makes — and it had already been
      missed once: a ship fleeing a battle sails on average 3.93 squares, 13.3% of them straight
@@ -1487,9 +1502,14 @@ export async function animateSailRoute(ev){
      The presentation lane IS the test: Game.bakeDraw only ever produces draw.route for a move it
      could vouch for (the route must land exactly on the pos baked beside it), so an event that
      carries one is by construction a move worth walking. */
-  if(!ev)return false;
-  if(_rodeRoute.has(ev))return false;
-  _rodeRoute.add(ev);
+  if(!ev)return Promise.resolve(false);
+  const inflight=_rodeRoute.get(ev);
+  if(inflight)return inflight;              // JOIN the ride, never skip it
+  const p=animateSailRoutePlay(ev);
+  _rodeRoute.set(ev,p);
+  return p;
+}
+async function animateSailRoutePlay(ev){
   /* THE DECISION TO RIDE NOW LIVES IN present() — src/shared/storyboard.js, L3, pure and gated.
      What used to be three lines of policy here (does it carry a baked route? is it long enough to
      have a corner?) is the same three lines there, moved verbatim so that converting this kind
@@ -2666,9 +2686,30 @@ export async function humanAct(player,sailCtx){
          the length of THIS captain's own animation. Publish, then ride: nothing about what is
          drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
          liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      publishNow();await animateSailRoute(evSail);liveRender();
+      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
+         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
+         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
+         CONCURRENTLY with the sail sound."
+         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
+         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
+         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
+         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
+         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
+         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
+         AudioBufferSourceNode.start and names each sound by its buffer duration):
+             11169ms ship-move   11171ms coin-flip     (+2ms)
+             21051ms ship-move   21052ms coin-flip     (+1ms)
+             30934ms ship-move   30936ms fishing       (+2ms)
+         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
+         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
+         fires the sound this instant and starts the ride. The await below then JOINS that ride
+         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
+         keeps this turn paced behind the glide. The old comment here warned that putting
+         liveRender first would let the turn "run on past" the ride; that was true of a guard that
+         skipped, and is not true of one that joins. */
+      publishNow();liveRender();await animateSailRoute(evSail);
       const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}}
+      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}}
     await humanAct(player,sailCtx);return;
   }
   if(v==="pass"){
@@ -2799,9 +2840,30 @@ export async function humanTurn(player){
          the length of THIS captain's own animation. Publish, then ride: nothing about what is
          drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
          liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      publishNow();await animateSailRoute(evSail);liveRender();
+      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
+         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
+         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
+         CONCURRENTLY with the sail sound."
+         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
+         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
+         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
+         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
+         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
+         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
+         AudioBufferSourceNode.start and names each sound by its buffer duration):
+             11169ms ship-move   11171ms coin-flip     (+2ms)
+             21051ms ship-move   21052ms coin-flip     (+1ms)
+             30934ms ship-move   30936ms fishing       (+2ms)
+         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
+         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
+         fires the sound this instant and starts the ride. The await below then JOINS that ride
+         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
+         keeps this turn paced behind the glide. The old comment here warned that putting
+         liveRender first would let the turn "run on past" the ride; that was true of a guard that
+         skipped, and is not true of one that joins. */
+      publishNow();liveRender();await animateSailRoute(evSail);
       const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}
+      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}
       // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
       // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
       else if(appState.game.onRim(player.pos))await flash(`🌀 ${pn(player.idx)} rides at the head o' the current — she's got nowhere to carry ye from here.`);
@@ -3007,10 +3069,31 @@ export async function botTurn(player){
          the length of THIS captain's own animation. Publish, then ride: nothing about what is
          drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
          liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      publishNow();await animateSailRoute(evSail);liveRender();
+      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
+         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
+         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
+         CONCURRENTLY with the sail sound."
+         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
+         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
+         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
+         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
+         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
+         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
+         AudioBufferSourceNode.start and names each sound by its buffer duration):
+             11169ms ship-move   11171ms coin-flip     (+2ms)
+             21051ms ship-move   21052ms coin-flip     (+1ms)
+             30934ms ship-move   30936ms fishing       (+2ms)
+         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
+         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
+         fires the sound this instant and starts the ride. The await below then JOINS that ride
+         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
+         keeps this turn paced behind the glide. The old comment here warned that putting
+         liveRender first would let the turn "run on past" the ride; that was true of a guard that
+         skipped, and is not true of one that joins. */
+      publishNow();liveRender();await animateSailRoute(evSail);
       await botBeat();
       const evWind=g.tradewind(player);
-      if(evWind){publishNow();await animateRimSweepIfAny(evWind);liveRender();await narrateLastEvent();}}
+      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}}
     // G18: a boxed-in bot escapes through the rim, exactly as the engine's own takeTurn does.
     // rimEscape() records its own events (windmove, then tradewind's sweep line).
     /* rimEscape returns whether the ship escaped, not the event, so the sweep it just pushed is
