@@ -55,7 +55,12 @@ try {
         const btns = await C.ev(`JSON.stringify([...document.querySelectorAll('#actionPanel .apBtn')].map(b=>({t:b.textContent.trim().slice(0,22),vis:!!b.offsetParent})))`);
         say(`   [${i}] ${n}: ${JSON.stringify(txt)}  btns=${btns}`);
       }
-      await C.ev(`(()=>{const b=[...document.querySelectorAll('#actionPanel .apBtn')].filter(x=>x.offsetParent&&!x.querySelector('.recipeList')).filter(x=>!/back|←|‹/i.test(x.textContent))[0];if(b){b.click();return 1}return 0})()`);
+      await C.ev(`(()=>{const bs=[...document.querySelectorAll('#actionPanel .apBtn')].filter(x=>x.offsetParent&&!x.querySelector('.recipeList')).filter(x=>!/back|←|‹/i.test(x.textContent));
+      /* ⚠ PREFER "Nah" — the Pilot's fork. The first version took the first visible button, which
+         on the host is "Yarrgh!" = I already know how to play = the tutorial OFF. It then reported
+         that neither device saw a tutorial line, which was true and meaningless: the probe had
+         turned the feature off in its own setup. */
+      const pick=bs.find(x=>/nah/i.test(x.textContent))||bs[0];if(pick){pick.click();return 1}return 0})()`);
     }
     await sleep(700);
     const hR = await H.ev(`!!document.querySelector('#actionPanel .recipeList')`);
@@ -80,7 +85,25 @@ try {
   say(`  the two boxes wear different captain colours: ${diffColour ? "PASS" : "FAIL — same colour on both"}`);
   if (!diffColour) bad++;
 
-  say(`\n${bad === 0 ? "PASS — each device names its own captain" : "FAIL — " + bad + " problem(s)"}`);
+  /* ── AND THE "STOWED" LINE MUST REACH BOTH DEVICES ────────────────────────────────────────
+     Wyatt: "only the host saw the help message about where the recipe was stored, even though
+     polly was helping on guest." It used to be spoken inside recipeDraftNet(), which runs in the
+     HOST's turn loop — so a guest could never reach it. It is now driven by the engine's own
+     recipeSet event, through the one consumer both sides drain. */
+  for (const [C,n] of [[H,"host"],[G,"guest"]]) {
+    await C.ev(`(()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]')||document.querySelector('#actionPanel .apBtn');if(c)c.click();return 1})()`);
+    await sleep(700);
+    await C.ev(`(()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]')||document.querySelector('#actionPanel .apBtn');if(c)c.click();return 1})()`);
+  }
+  await sleep(6000);
+  for (const [C,n] of [[H,"host"],[G,"guest"]]) {
+    const t = await C.ev(`(()=>{const p=document.getElementById('actionPanel');return (p?p.textContent:'').replace(/\\s+/g,' ')})()`);
+    const got = /stowed below/i.test(t);
+    if (!got) bad++;
+    say(`  ${n} sees "yer recipe's stowed below": ${got ? "PASS" : "FAIL"}   panel=${JSON.stringify(t.slice(0,70))}`);
+  }
+
+  say(`\n${bad === 0 ? "PASS — each device names its own captain, and each hears where its recipe went" : "FAIL — " + bad + " problem(s)"}`);
   process.exitCode = bad === 0 ? 0 : 1;
 } catch (e) {
   say("PROBE FAILED:", e.message);

@@ -1037,10 +1037,12 @@ export async function recipeDraftNet(){
       msgFor:i=>msgFor(byIdx[i]),optsFor:i=>optsFor(byIdx[i]),waitMsg:draftWait,announce});
     for(const player of pending){picks[player.idx]=results[player.idx];logDecision(results[player.idx]);}
   }
-  appState.game.players.forEach(player=>{if(player.recipeChoices)player.recipe=player.recipeChoices[picks[player.idx]];});
+  // THROUGH THE ENGINE, so the choice becomes an event both sides drain — see Game.setRecipe.
+  appState.game.players.forEach(player=>{if(player.recipeChoices)appState.game.setRecipe(player,player.recipeChoices[picks[player.idx]]);});
   if(appState.db&&appState.room&&!appState.replaying)await netSetRecipes(appState.db,appState.room,picks,netFail("recipe picks"));
   if(!appState.replaying)updateRecipeBanner();
-  liveRender();
+  await liveRender();                       // drain the recipeSet event(s) this choice just produced
+  if(stowedGate){ const g=stowedGate; stowedGate=null; await g; }   // let it be read before sailing on
   /* ── "WHERE DID MY RECIPE GO?" — his own ask, 2026-09-02 ────────────────────────────────────
      THE ONE LADDER THAT ADDS A LINE WHERE THE GAME SAYS NOTHING TODAY. It earns the exception
      because the answer to the question is "look down there", and nothing currently points down
@@ -1688,15 +1690,16 @@ export function remoteDraftPrompt(seat,msg,opts,waitMsg){
     wid=netWatchDraftResponse(appState.db,appState.room,seat,cb,"draftResponse:"+id);
   });
 }
+/* The "yer recipe's stowed below" card, once it exists. consumeEvent creates it on whichever
+   device the recipe belongs to; recipeDraftNet awaits it so the host's loop does not sail on before
+   it has been read. Null on a guest's own timeline, which is correct: nothing there to pace. */
+let stowedGate=null;
 export function watchDraftPrompt(){
   netWatchDraftPrompt(appState.db,appState.room,appState.mySeat,snap=>{
     const player=snap.val();
     if(!player){return;}
     const cls=player.classes||[];
     const grid=cls.some(c=>c)?" recipes":"";
-    // ONLY THE RECIPE DRAFT speaks the stowed line — this same wire channel also carries the Ahoy
-    // and turn-order barriers, and "yer recipe's stowed below" after tapping "Nah" would be a lie.
-    const recipesOnCard=!!grid;
     /* ⭐ THE GUEST'S SEAM SAYS WHO IT IS FOR, TOO — Wyatt, 2026-09-09, crew: "guest's recipe choice
        narration box says '{host name}, pick yer recipe' in the host's color... fix this
        ARCHITECTURALLY not with a bad patch."
@@ -1731,24 +1734,8 @@ export function watchDraftPrompt(){
         delete $("actionPanel").dataset.pp4Stage;
         panel("");
         if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line
-        /* ⭐ AND THE GUEST HEARS "WHERE DID MY RECIPE GO?" ANSWERED — Wyatt, same report: "only the
-           host saw the help message about where the recipe was stored, even though polly was
-           helping on guest."
-           ⚠ WHY IT COULD NEVER HAVE REACHED THEM. That line is spoken inside recipeDraftNet(), and
-           recipeDraftNet() runs in the HOST's turn loop — a guest never executes a line of it. A
-           per-device tutorial beat living in the host's loop can only ever reach the host.
-           IT IS NOT BROADCAST, AND IT MUST NOT BE: the rung a captain is on is counted per device
-           (that is the Pilot's whole design), so the host has no business composing this for
-           anyone. The guest speaks it on its OWN seam, at the moment its own recipe is chosen —
-           which is if anything the better moment, since it lands while they wait for the crew.
-           ⚠ AND IT IS DELIBERATELY NOT A NEW ENGINE EVENT. That would have been the tidy answer and
-           it is the wrong one here: changing what the engine emits invalidates the determinism
-           corpus and forces a gated re-record (CLAUDE.md — prefer UI-tier fixes). Nothing about a
-           tutorial line belongs in the lockstep stream. */
-        if(recipesOnCard&&pilotSpeaks("recipe.stowed")){
-          flashCaptainsBox();
-          pilotGate("recipe.stowed",t=>t.replace("{name}",pn(appState.mySeat))).catch(()=>{});
-        }
+        // (the "yer recipe's stowed below" line is NOT spoken here — it belongs to the recipeSet
+        // event, in the one consumer, where every device reaches it. See consumeEvent.)
       };
     });
     });
@@ -1794,6 +1781,30 @@ export async function consumeEvent(e){
     if(e.t==="newround"){appState.game.windNext=e.next;appState.game.stormNext=e.nextStorm;}
   }
   applyActiveSeat(e.p);
+  /* ⭐ "WHERE DID MY RECIPE GO?" NOW ANSWERS ITSELF ON EVERY DEVICE — Wyatt, 2026-09-09: "only the
+     host saw the help message about where the recipe was stored, even though polly was helping on
+     guest."
+     ⚠ THE OLD PLACEMENT WAS THE BUG, NOT A DETAIL. That line lived in recipeDraftNet(), which runs
+     in the HOST's turn loop — a guest never executes a line of it. I first "fixed" it by speaking it
+     on the guest's own wire seam, which is a second copy of a decision and exactly the patch he told
+     me to stop writing. It is one line, here, in the one event consumer, and each device answers for
+     ITSELF because pilotSpeaks() counts rungs per device. Host, guest, solo and pass-play all reach
+     this same line, which is the whole point of there being one consumer. */
+  // the captains box has been hidden while it was empty (his item 4); a chosen recipe is what
+  // fills it, and that is this event — so the one consumer tells the stage, on every device.
+  if(e.t==="recipeSet"&&window.__pp4&&window.__pp4.recipePicked)window.__pp4.recipePicked();
+  if(e.t==="recipeSet"&&decisionIsLocal(e.p)&&!appState.replaying&&pilotSpeaks("recipe.stowed")){
+    flashCaptainsBox();
+    /* ⚠ CREATED HERE, AWAITED BY THE FLOW — and the difference matters, measured. Awaiting it here
+       would block the EVENT DRAIN, which on a guest is the whole game's feed; not pacing it at all
+       let the turn-order draw paint straight over the card two seconds later, which is what the
+       crew probe caught on the first attempt (both devices: "The crew draws lots for sailing
+       order…" where the stowed line should have been).
+       So the CONSUMER makes the card — one place, every device — and the HOST's loop waits for it
+       (see recipeDraftNet), because pacing the game is the flow's job and a guest has no flow to
+       pace. A guest simply reads it while it waits for the crew. */
+    stowedGate=pilotGate("recipe.stowed",t=>t.replace("{name}",pn(e.p))).catch(()=>{});
+  }
   syncLogLines();
   /* AUDIO-01/D-07: the per-event sound moment, every tier — and THE ONE PLACE the whole game turns
      an event into a sound, host and guest alike. That is why the seat answer is computed HERE and
@@ -2662,7 +2673,8 @@ export function watchRecipes(){
     Object.entries(picks).forEach(([key,pk])=>{
       if(pk==null)return; // not-yet-picked seat — either absent (object form) or null-padded (array form)
       const i=+key;
-      if(appState.game.players[i]&&appState.game.players[i].recipeChoices)appState.game.players[i].recipe=appState.game.players[i].recipeChoices[pk];
+      // the recovery path uses the same door, or a restored voyage would emit no recipeSet at all
+      if(appState.game.players[i]&&appState.game.players[i].recipeChoices)appState.game.setRecipe(appState.game.players[i],appState.game.players[i].recipeChoices[pk]);
     });
     updateRecipeBanner();
     if(appState.game.events.length)render();

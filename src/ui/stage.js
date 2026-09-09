@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@e959b0d8";
+const PP4_STAMP = "2026.09.07.3-staging@6ffafcb9";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2242,9 +2242,16 @@ let rcInFlight = false;
 /* HIS "about 0.5 seconds" is the beat AFTER the swap, which is what he wrote. The beat BEFORE it
    is mine and it is not the same number: the cards need to be seen as cards before they are seen
    moving, or the swap reads as the arrival still settling rather than as a demonstration. */
-const RC_LAND_MS  = 420;     // land in the middle, be still, be looked at
+/* ⭐ HIS NUMBERS NOW, NOT MINE — Wyatt, 2026-09-09, after watching it: "They do exactly what you
+   say they should, it just feels glitchy. 1. can you have them fade in slower. 2. can you have them
+   swap with each other after 1 second? 3. when they move down the board, Can you ease in their
+   movement?"
+   THE DIAGNOSIS UNDERNEATH HIS THREE POINTS IS ONE THING: every beat started abruptly. The cards
+   appeared in a frame, the swap fired before the eye had settled, and the flight began at full
+   speed. "Glitchy" is what a correct sequence with no ease-in looks like. */
+const RC_LAND_MS  = 1000;    // his "swap with each other after 1 second" (was 420 — my number)
 const RC_HOLD_MS  = 500;     // his "about 0.5 seconds" — after the swap, before the flight
-const RC_FLY_MS   = 620;     // the flight itself; matches the CSS transition on #pp4Prompt exactly
+const RC_FLY_MS   = 760;     // the flight; matches the CSS transition on #pp4Prompt exactly
 
 function rcFlightStop(){
   rcFlightTimers.forEach(clearTimeout);
@@ -2336,114 +2343,29 @@ function rcFlightRun(key, brd){
    toScreen() to find open water. It was correct and measured 0 island squares at all three sizes —
    and it is gone because the question it answered stopped being asked. */
 
-/* ⭐ ITEM 5: THE WHOLE MODAL DRAGS — Wyatt, 2026-09-09: "make the entire modal movable by dragging
-   -- so players can move it across the board to see what's under it."
-   IT MOVES `left`/`top`, NEVER A TRANSFORM. The flight already owns the transform, and two writers
-   on one property is the fault this file keeps paying for (rule 23). Grabbing mid-flight therefore
-   ENDS the flight and pins the sheet where it visually is, which is also the honest behaviour: the
-   captain has taken over, so the show stops rather than yanking the sheet out of their hand.
-   ONCE DRAGGED, THE TICK STOPS PLACING IT (rcDragged) — a captain who moved the sheet to see what
-   is under it would otherwise watch it snap back on the next frame.
-   THE CARDS AND THE CIRCLE ARE NOT HANDLES. A drag that starts on a recipe card is the swipe that
-   swaps them, and one that starts on the swap circle is a tap; only the ask box, the panel's own
-   background and the gaps between things move the sheet. */
-let rcDragged = false;
-let rcDragArmed = false;
-function rcDragReset(){
-  rcDragged = false;
-  const box = $("pp4Prompt");
-  if (box) box.classList.remove("pp4RcDragging");
-}
-/* HOW FAR A FINGER MUST TRAVEL BEFORE A PRESS BECOMES A CARRY. Below this a press is still a tap,
-   so choosing a recipe is untouched; above it the sheet is being moved and the click that would
-   follow is swallowed. 6px is the same order as the 34px a swipe used to need — smaller, because a
-   drag has a continuous target to aim at where a swipe had to be distinguished from a scroll. */
-const RC_DRAG_SLOP = 6;
 /* ⭐ THE PICKER'S CHROME, TAKEN DOWN IN ONE PLACE — Wyatt, 2026-09-09: "look what happens after
    choosing a recipe". The ask box and the helper pill were both left standing on the board, under
-   the narration that replaced them: "wyargh, pick yer recipe:" still asking a question he had just
-   answered, and "tap a recipe to see its route" still pointing at cards that were gone.
-   ⚠ THE CAUSE IS THAT THE TEARDOWN EXISTED THREE TIMES AND THE PATH THAT MATTERED HAD NONE OF THEM.
-   promptTick has three exits: the empty-panel branch (had a copy), the radial fall-through (had a
-   copy), and CENTRE STAGE — `if (ap.dataset.pp4Stage) { enterCenterStage(); return; }` — which
-   returns before either. "Yer recipe's stowed below…" is centre-staged, so it is precisely the
-   prompt that follows a recipe choice and precisely the one that skipped the cleanup.
-   Two copies kept in step by nothing is rule 23; three copies and a hole is what it looks like when
-   nobody notices. Now there is one function, and it runs before ANY of those exits can be taken. */
+   the narration that replaced them.
+   ⚠ THE CAUSE WAS THAT THE TEARDOWN EXISTED THREE TIMES AND THE PATH THAT MATTERED HAD NONE OF
+   THEM. promptTick has three exits: the empty-panel branch (had a copy), the radial fall-through
+   (had a copy), and CENTRE STAGE — which returns before either, and is exactly the exit a recipe
+   choice takes. One function now, called before ANY of those exits can be taken. */
 function rcChromeTeardown(box){
   const a0 = box.querySelector(".pp4RcAsk");  if (a0) a0.remove();
   const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
   rcFlightReset();        // a transform must never outlive the box it moved
-  rcDragReset();          // nor a dragged position the sheet it belonged to
 }
 
-function rcDragArm(box){
-  if (rcDragArmed) return;
-  rcDragArmed = true;
-  let down = false, moving = false, id = null, ox = 0, oy = 0, sx = 0, sy = 0;
-  const start = () => {
-    moving = true; rcDragged = true;
-    /* TAKE OVER FROM THE FLIGHT, IF IT IS STILL RUNNING. fixedRect gives where the sheet actually
-       IS right now, transform and all; writing that back as left/top and dropping the transform
-       leaves it exactly where the captain grabbed it, with nothing left to animate it away. */
-    if (rcInFlight){
-      const now = fixedRect(box);
-      rcFlightStop();
-      box.style.transform = "";
-      box.style.left = Math.round(now.left) + "px";
-      box.style.top  = Math.round(now.top)  + "px";
-    }
-    const r = fixedRect(box), o = fixedOrigin();
-    ox = (sx - o.x) - r.left;
-    oy = (sy - o.y) - r.top;
-    box.classList.add("pp4RcDragging");
-    try { box.setPointerCapture(id); } catch {}
-  };
-  /* ⚠ AND THE SAME FAULT KILLED IN JS AS WELL AS CSS. -webkit-user-drag is not standardised and
-     Firefox ignores it entirely; `dragstart` is. Belt and braces here is not indecision — it is one
-     property that Chrome honours and one event that everybody does, for a failure mode whose
-     symptom is a drag that silently stops after its first frame. */
-  box.addEventListener("dragstart", (e) => {
-    if (box.classList.contains("pp4Recipes")) e.preventDefault();
-  });
-  box.addEventListener("pointerdown", (e) => {
-    if (!box.classList.contains("pp4Recipes")) return;
-    if (e.target.closest(".pp4RcSwap, .pp4RcPeek")) return;
-    down = true; moving = false; id = e.pointerId; sx = e.clientX; sy = e.clientY;
-  });
-  box.addEventListener("pointermove", (e) => {
-    if (!down || e.pointerId !== id) return;
-    if (!moving){
-      if (Math.abs(e.clientX - sx) < RC_DRAG_SLOP && Math.abs(e.clientY - sy) < RC_DRAG_SLOP) return;
-      start();
-    }
-    e.preventDefault();
-    const o = fixedOrigin(), r = fixedRect(box);
-    /* CLAMPED SO IT CANNOT BE LOST OFF AN EDGE. A sheet dragged fully off the glass cannot be
-       dragged back, and the captain still has to choose a recipe from it. */
-    const nl = Math.max(8 - r.width + 60, Math.min(vwPx() - 60, (e.clientX - o.x) - ox));
-    const nt = Math.max(topBandPx(), Math.min(vhPx() - 60, (e.clientY - o.y) - oy));
-    box.style.left = Math.round(nl) + "px";
-    box.style.top  = Math.round(nt) + "px";
-  });
-  const end = (e) => {
-    if (!down || (e && e.pointerId !== id)) return;
-    down = false;
-    if (!moving) return;                       // a still press: leave the tap entirely alone
-    moving = false;
-    box.classList.remove("pp4RcDragging");
-    try { box.releasePointerCapture(id); } catch {}
-    /* ⚠ SWALLOW THE CLICK THIS DRAG IS ABOUT TO PRODUCE. recipeGuard listens on the DOCUMENT, so
-       without this, letting go of a card after carrying it across the board chooses that recipe —
-       the captain moved the sheet and committed their voyage in one gesture. Capture phase, once,
-       and self-removing so it can never eat a later real tap. */
-    const eat = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
-    document.addEventListener("click", eat, { capture: true, once: true });
-    setTimeout(() => document.removeEventListener("click", eat, { capture: true }), 400);
-  };
-  box.addEventListener("pointerup", end);
-  box.addEventListener("pointercancel", end);
-}
+/* ⚠ THE DRAG IS GONE, ON PURPOSE, AND THIS NOTE IS ALL THAT SURVIVES IT — 2026-09-09.
+   For one evening the whole sheet could be picked up and carried across the board, because it sat
+   ON the board and he needed to see what was under it. Then it moved to where the captains box
+   sits, over nothing, and he said: "Now that the recipes aren't blocking the board, remove the
+   dragging behavior, and restore the swiping to swap behavior."
+   ⭐ WHEN THE REASON FOR A FEATURE IS REMOVED, REMOVE THE FEATURE. Keeping it would have cost the
+   swipe (one gesture cannot mean two things), left a slop threshold and a click-swallower alive to
+   be maintained, and left a grab cursor promising something pointless. About 70 lines deleted —
+   the native-image-drag fix went with them, which is worth knowing if a drag ever comes back:
+   pressing a card's <img> starts Chrome's own drag-and-drop and kills the pointer stream. */
 
 function mountRecipeStack(ap){
   const cards = [...ap.querySelectorAll(".apBtn")].filter(b => b.querySelector(".recipeList"));
@@ -2537,13 +2459,28 @@ function mountRecipeStack(ap){
     row.appendChild(pk);
   }
 
-  /* ⚠ THE SWIPE-TO-SWAP IS GONE, AND IT IS A REAL TRADE HE SHOULD KNOW ABOUT. Dragging sideways
-     across a card used to swap the two recipes; from 2026-09-09 that same gesture CARRIES THE
-     SHEET, because he asked for the cards themselves to be drag handles. One gesture cannot mean
-     two things, and the drag is the one he asked for by name.
-     NOTHING IS LOST FROM THE SWAP: both other ways in are untouched — the circle and the tappable
-     sliver of the card behind — and they were always the announced, discoverable pair. The swipe
-     was the undiscoverable third. */
+  /* ⭐ THE SWIPE IS BACK, AND THE DRAG IS GONE — Wyatt, 2026-09-09: "Now that the recipes aren't
+     blocking the board, remove the dragging behavior, and restore the swiping to swap behavior."
+     HE IS RIGHT AND THE REASON IS WORTH KEEPING: dragging existed so he could see what the sheet was
+     covering. Once the sheet sits where the captains box does — over nothing — there is nothing to
+     look under, so the drag is a gesture solving a problem that no longer exists, and it was
+     costing the swipe. When the reason for a feature is removed, remove the feature.
+     THE SWIPE. Pointer events, not touch events, so a trackpad drag and a finger are one path.
+     A 34px threshold and a dominant-axis test: the panel scrolls vertically, so a swipe that is
+     mostly up or down must be left to it rather than eaten here. */
+  let sx = 0, sy = 0, live = false;
+  row.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; live = true; });
+  row.addEventListener("pointerup", (e) => {
+    if (!live) return; live = false;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) < 34 || Math.abs(dx) <= Math.abs(dy)) return;
+    // a real swipe is not a tap: stop it before recipeGuard reads it as one
+    e.preventDefault(); e.stopPropagation();
+    /* Either direction swaps: there are exactly two recipes, so a swipe has no "next" to be
+       distinct from a "previous" — the same reasoning that turned two arrows into one circle. */
+    swap();
+  }, true);
+  row.addEventListener("pointercancel", () => { live = false; });
   /* ⭐ THE DEMO SWAP DRIVES THIS EXACT FUNCTION — Wyatt, 2026-09-09: "then swap themselves ONCE to
      show that they can be swapped". Handing the choreography the real `swap` rather than a
      look-alike animation is the whole point: what he is being shown IS what a tap does, including
@@ -2863,6 +2800,7 @@ function buildStage(){
   wireEovDrag();   // item 8 (D-14): the end-of-voyage card's pull-to-park gesture
   camFull();
   S.active = true;
+  S.recipePicked = false;      // a new voyage starts with an empty captains box again (capEmptyTick)
   computeStageGeometry();   // D-31: size the stage before the first paint, not after
   if (!S.geomBound){
     S.geomBound = true;
@@ -3373,9 +3311,34 @@ function peekHintLast(){
   if (!box.classList.contains("radial") && !already) return;
   peekHintTick(box);
 }
+/* ⭐ AN EMPTY CAPTAINS BOX SHOWS NOTHING, SO IT SHOWS NOTHING — Wyatt, 2026-09-09, item 4 of seven:
+   "for this whole section of the pre-game where the captain's box is empty, hide it — from
+    desktop/tablet/mobile. make it appear after the recipe has been selected."
+   THE TEST IS THE GAME'S OWN FACT, not a screen state and not a flag: is there a captain holding a
+   recipe yet? Before the draft resolves the answer is no for everyone, which is precisely "the box
+   is empty" — so this cannot get stuck on, cannot disagree with what is drawn, and needs nobody to
+   remember to turn it back on.
+   ⚠ visibility, NOT display. The picker anchors itself to this box's rect (see the placement in
+   promptTick), and display:none would collapse the layout and take the target with it. Hidden-but-
+   laid-out is what lets the sheet sit exactly in the space the box will occupy. */
+function capEmptyTick(){
+  const cap = $("pp4Cap");
+  if (!cap) return;
+  /* ⚠ "HAS A RECIPE" IS NOT THE TEST, AND I TRIED IT FIRST. Every captain already holds a `recipe`
+     before the draft even opens — measured, all four seats, while the picker was still on screen:
+     `recipeChoices` is the PAIR to choose between and `recipe` is seeded from it. So that test was
+     true from the first frame and the box never hid once.
+     THE HONEST SIGNAL IS THE ONE WE JUST BUILT: the engine's `recipeSet` event, which fires at the
+     exact moment he named — "make it appear after the recipe has been selected". It is raised by the
+     one event consumer (so host, guest, solo and pass-play all get it identically) and cleared when
+     a voyage begins, so it cannot carry over into the next game. */
+  const want = (appState.game && !S.recipePicked) ? "hidden" : "";
+  if (cap.style.visibility !== want) cap.style.visibility = want;
+}
 function promptTick(force){
   const box = $("pp4Prompt"), ap = $("actionPanel");
   if (!box || !ap) return;
+  capEmptyTick();
   // AT PORT: this loop keeps running (it is the shared stage rAF, not per-game), and it owns
   // box.style.display. Without this it re-shows the prompt one frame after hideStageLayer() hides
   // it — T-12's second half. Returning early leaves the hidden display exactly as set.
@@ -3515,34 +3478,54 @@ function promptTick(force){
       return Math.max(200, Math.min(want, capW));
     })();
     const RC_INSET = 10;
-    rcDragArm(box);
     box.style.width = sheetW + "px";
-    /* ⚠ A SHEET THE CAPTAIN HAS MOVED STAYS WHERE THEY PUT IT. promptTick runs every frame, so
-       without this the drag would be undone on the very next one — the sheet would follow the
-       finger and snap home the instant it was released. Cleared with the picker. */
-    if (rcDragged){
-      if (rcKey && rcFlightKey !== rcKey) rcFlightKey = rcKey;   // never fly a sheet he has placed
-      return;
+    /* ⭐ IT SITS WHERE THE CAPTAINS BOX SITS, AND THE CAPTAINS BOX GETS OUT OF THE WAY — Wyatt,
+       2026-09-09, items 4 and 5 of seven:
+         "for this whole section of the pre-game where the captain's box is empty, hide it — from
+          desktop/tablet/mobile. make it appear after the recipe has been selected."
+         "make the recipe picker appear in the space where the captains box usually is (but now, is
+          invisible)."
+       ⭐ THIS DISSOLVES THE TENSION THAT HAS COST THREE DESIGNS. Every previous placement traded
+       one thing against another — cover the captains box, or cover the board, or sit in the gap
+       between them. There was never a fourth option because the captains box was always THERE. It
+       is empty during the draft (nobody holds anything yet), so it is showing nothing at the one
+       moment its space is worth the most. Hide it and the argument disappears: the sheet covers
+       NOTHING, and the whole board stays clear.
+       ⚠ visibility:hidden, NOT display:none, AND THAT IS THE WHOLE MECHANISM. A hidden box keeps
+       its rect, so the picker can be anchored to the exact space the box would have occupied —
+       measured from the renderer, never arithmetic of mine (the same rule every anchor in this file
+       follows). display:none would collapse the layout and take the target with it.
+       WHEN IT COMES BACK is a GAME fact, not a screen state: the moment any captain holds a recipe.
+       That is literally "the box is no longer empty", so it needs no flag and cannot get stuck. */
+    const capR = (() => {
+      const cap = $("pp4Cap");
+      if (!cap) return null;
+      const r = fixedRect(cap);
+      return (r.width > 2 && r.height > 2) ? r : null;
+    })();
+    /* ⚠ `top` IS FUNCTION-SCOPED AND HAS TO BE. Code further down this block reads it (the panel's
+       maxHeight falls back to it when the panel has no rect yet), and my first version declared it
+       with `const` inside each branch — which left the later read hitting a temporal dead zone and
+       threw "Cannot access 'top' before initialization" on the very first tick. The picker rendered
+       its cards and then #pp4Prompt was never given a display, so the whole sheet was invisible
+       while the panel underneath was perfectly correct. Caught by reading window.onerror, not by
+       any gate: node --check passes a TDZ every time. */
+    let top;
+    if (capR){
+      const w = Math.min(sheetW, Math.round(capR.width));
+      box.style.width = w + "px";
+      box.style.left = Math.round(capR.left + (capR.width - w) / 2) + "px";
+      const sheetH = Math.max(1, Math.round(fixedRect(box).height));
+      top = Math.round(Math.max(topBandPx(),
+        Math.min(capR.top + (capR.height - sheetH) / 2, vhPx() - sheetH - 8)));
+    } else {
+      // no captains box laid out yet — centre on the board and let the next tick place it properly
+      box.style.left = Math.max(8, Math.round(brd ? brd.left + (brd.width - sheetW) / 2
+                                                  : (vwPx() - sheetW) / 2)) + "px";
+      const sheetH = Math.max(1, Math.round(fixedRect(box).height));
+      top = Math.round(Math.max(topBandPx(), brd ? brd.top + brd.height / 2 - sheetH / 2
+                                                 : vhPx() * 0.4));
     }
-    /* ⭐ THE BOTTOM HALF OF THE BOARD, CENTRED — Wyatt, 2026-09-09: "make the recipes appear in the
-       bottom half of the game board, as in my second ss, before dragging."
-       THIS REPLACES "the top right of the board", which was his own instruction this morning. He
-       dragged the sheet there himself and sent the screenshot back, which is the strongest form a
-       ruling can take — he did not describe the position, he demonstrated it.
-       DERIVED, NOT TYPED. The sheet is centred inside the board's LOWER HALF, so the number is
-       "the middle of the bottom half" rather than a fraction somebody picked: it stays right when
-       the board is 568px tall on a phone and 856 on a desktop. Measured against his screenshot,
-       that lands the sheet's top at 0.61 of the board's height — his was 0.61. */
-    box.style.left = Math.max(8, Math.round(brd ? brd.left + (brd.width - sheetW) / 2
-                                                : (vwPx() - sheetW) / 2)) + "px";
-    const sheetH = Math.max(1, Math.round(fixedRect(box).height));
-    /* clamped to the glass at both ends: never over the ribbon, never off the bottom edge — the
-       D-42 fault (cards cut off by the bottom of the screen with no cue that the panel scrolls) is
-       what the lower clamp exists to keep impossible. */
-    const halfTop = brd ? brd.top + brd.height / 2 : vhPx() * 0.5;
-    const halfBot = brd ? brd.bottom : vhPx();
-    const wantTop = halfTop + ((halfBot - halfTop) - sheetH) / 2;
-    const top = Math.round(Math.max(topBandPx(), Math.min(wantTop, vhPx() - sheetH - 8)));
     box.style.top = top + "px";
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
        playtest 21 (Wyatt), items 2 and 4. They used to be a stacked pair of pills wedged in the gap
@@ -4941,6 +4924,8 @@ export function initStage(){
     flip: flipArmed,
     // turnSerial: bumps whenever the wheel changes hands — the pill-lock and placement memo key
     // on it, so a NEW turn re-anchors the ask pill and an ongoing one never moves it (playtest 15)
+    // the captains box stops hiding the instant a recipe is actually chosen — see capEmptyTick
+    recipePicked: () => { S.recipePicked = true; },
     actor: seat => { if (S.activeSeat !== seat) S.turnSerial = (S.turnSerial || 0) + 1; S.activeSeat = seat; },
     // a rim ride spans the whole board — pull out so the sweep never plays off screen; the
     // narration that follows glides the camera back down to the ship at its whirlpool

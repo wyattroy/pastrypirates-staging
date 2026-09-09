@@ -316,6 +316,26 @@ class Game{
   flip(p){p.flips++;const h=this.r()<.5;if(h)p.heads++;return h;}
   key(c){return c[0]+","+c[1];}
   isIsland(c){return this.islands[c]!==undefined;}
+  /* ⭐ CHOOSING A RECIPE IS A GAME FACT, SO THE ENGINE OWNS IT — Wyatt, 2026-09-09:
+       "there is NO DETERMINISM CORPUS currently so STOP DOING BAD LAZY SHITTY PATCH CODE... fix
+        the engine, you silly claude!!! This is cheap now!"
+     He is right on both halves, and I checked before agreeing. `npm test` does NOT run
+     determinism_baseline.js --verify; it fails 31 of 31 seeds today; and .planning/BACKLOG.md says
+     in its own words that "the promoted game NEVER HAD A CORPUS" — the fixtures belong to the
+     frozen classic engine. So the reason I gave for patching around the engine — that a new event
+     would invalidate the corpus — was FALSE for the engine I am working in. CLAUDE.md still asserts
+     it as a live constraint, which is why I believed it without running it. Both are corrected.
+
+     WHAT THIS REPLACES: the orchestrator assigned `player.recipe` directly and then had to tell
+     each device about it separately — which is exactly why only the HOST ever saw the "yer recipe's
+     stowed below" line. A fact the engine never emitted could not reach a guest through the one
+     path both sides drain.
+     THE RULE IT RESTORES: the engine says what HAPPENED; one consumer decides what that looks like.
+     Nothing about who is host, who is guest, or who is a bot appears here. */
+  setRecipe(p,recipe){
+    p.recipe=recipe;
+    this.ev({t:"recipeSet",p:p.idx,recipe});
+  }
   ev(o){if(!this.record)return;o.round=this.round;o.wind=this.windNow;o.storm=this.stormNow;o.wind2=this.windNow2;
     // `baking` rides in the snapshot so the board can render a captain's out-of-play state from the
     // EVENT rather than from live state — which is what keeps the scrubber honest when you drag it

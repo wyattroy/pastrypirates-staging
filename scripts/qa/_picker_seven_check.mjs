@@ -140,45 +140,10 @@ try {
       say(`   a STILL press still chooses the recipe: ${chose}   (the slop threshold's whole job)`);
 
 
-      // ── item 5 + item 1: does it drag, and does it drag FROM A CARD?
-      // instrumented, because a bare "moved=false" does not say whether the press was even heard
-      await C.ev(`(()=>{window.__dc={down:0,move:0,up:0};const b=document.getElementById('pp4Prompt');
-        b.addEventListener('pointerdown',()=>__dc.down++,true);
-        b.addEventListener('pointermove',()=>__dc.move++,true);
-        b.addEventListener('pointerup',()=>__dc.up++,true);
-        b.addEventListener('gotpointercapture',()=>window.__dcCap=1,true);
-        b.addEventListener('lostpointercapture',()=>window.__dcCap=0,true);})()`);
-      const before = JSON.parse(await C.ev(M));
-      say(`   ask rect ${JSON.stringify(before.ask)}  (item 4: must hug its words, not the sheet's ${before.box.w}px)`);
-      // GRAB THE CARD ITSELF — his item 1
-      const card = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('#actionPanel .apBtn[data-rcpos="front"]');if(!c)return null;const r=c.getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})())`));
-      const ax = card ? card.x : before.ask.l + 40, ay = card ? card.y : before.ask.t + 12;
-      say(`   grabbing the FRONT CARD at ${ax},${ay}`);
-      await C.send("Input.dispatchMouseEvent",{type:"mousePressed",x:ax,y:ay,button:"left",buttons:1,clickCount:1});
-      // several small moves, like a real hand: one 300px jump can be coalesced or dropped, and it
-      // also tells us nothing about whether the drag-slop threshold is behaving
-      for (let i=1;i<=10;i++){
-        /* ⚠ buttons:1 IS LOAD-BEARING. `button:"left"` alone names WHICH button the event concerns;
-           `buttons` is the bitmask of what is currently HELD. Without it Chrome treats each move as
-           a button-up move, and the run measured exactly one delivered pointermove out of ten — a
-           drag that looked broken in the probe and was fine in the product. */
-        await C.send("Input.dispatchMouseEvent",{type:"mouseMoved",x:Math.round(ax-26*i),y:Math.round(ay+30*i),button:"left",buttons:1});
-        await sleep(90);
-        // READ THE BOX AFTER EVERY STEP — "it moved" and "it tracks" are different claims, and a
-        // drag that takes the first move and then stops looks like a pass in a before/after test
-        const now = await C.ev(`(()=>{const b=document.getElementById('pp4Prompt');return b.style.left+","+b.style.top})()`);
-        say(`     move ${i} -> pointer ${Math.round(ax-26*i)},${Math.round(ay+30*i)}   sheet ${now}   captured=${await C.ev(`!!(window.__dcCap)`)}`);
-      }
-      await sleep(200);
-      say(`   pointer events heard by the sheet: ${await C.ev(`JSON.stringify(window.__dc)`)}`);
-      await C.send("Input.dispatchMouseEvent",{type:"mouseReleased",x:Math.round(ax-260),y:Math.round(ay+300),button:"left",buttons:0,clickCount:1});
-      await sleep(700);
-      const after = JSON.parse(await C.ev(M));
-      say(`\n ── 5 DRAG: from ${JSON.stringify([before.box.l,before.box.t])} to ${JSON.stringify([after.box.l,after.box.t])}  moved=${after.box.l!==before.box.l||after.box.t!==before.box.t}`);
-      await shot("dragged-desktop.png");
-      await sleep(900);
-      const stay = JSON.parse(await C.ev(M));
-      say(`   ...and it STAYS after a second: ${stay.box.l===after.box.l&&stay.box.t===after.box.t}`);
+      /* THE DRAG CHECK IS GONE WITH THE DRAG — Wyatt removed the feature on 2026-09-09 once the
+         sheet stopped covering the board ("remove the dragging behavior, and restore the swiping to
+         swap behavior"). A test for a deleted feature is worse than no test: it goes red for the
+         right reason and trains the reader to ignore it. */
       /* ⚠ ON A FRESH PICKER, because the drag above deliberately ends with the sheet clamped hard
          against the bottom edge — the card's own centre is then off the glass and the two taps land
          on nothing. Measured that way it reported "ask box left behind: YES" while the panel still

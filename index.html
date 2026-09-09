@@ -2365,20 +2365,10 @@
   /* ⭐ ITEM 5: THE SHEET IS A THING YOU CAN PICK UP. The grab cursor is the whole affordance on a
      desktop — without it nothing says the modal moves. touch-action:none on the ask box stops a
      phone treating the drag as a page scroll; the cards keep pan-y so their swipe still works. */
-  /* ⚠ THE NATIVE IMAGE DRAG HAD TO BE TURNED OFF, AND IT IS NOT A TIDY-UP — it broke item 1
-     outright. The recipe cards are built around <img> art, and in Chrome pressing an image and
-     moving starts the browser's OWN drag-and-drop: it fires dragstart, tears down the pointer
-     stream, and neither pointermove nor pointerup is ever delivered again. TRACED, step by step,
-     with the sheet's position read after each of ten dispatched moves: the sheet took the FIRST
-     move (255,578 -> 229,608) and then froze for all nine that followed, gotpointercapture never
-     fired, and pointerup never arrived. A before/after test would have called that a passing drag.
-     So: no native drag anywhere in the sheet, and no text selection either — dragging a card used
-     to sweep a blue selection across its title, which reads as broken even when nothing is. */
-  #pp4Prompt.pp4Recipes { cursor:grab; -webkit-user-select:none; user-select:none; }
-  #pp4Prompt.pp4Recipes img, #pp4Prompt.pp4Recipes .apBtn {
-    -webkit-user-drag:none; user-drag:none; }
-  #pp4Prompt.pp4Recipes.pp4RcDragging { cursor:grabbing; }
-  .pp4RcAsk { touch-action:none; }
+  /* NO TEXT SELECTION ON THE SHEET. Swiping a card used to sweep a blue selection across its
+     title, which reads as broken even when nothing is. (The -webkit-user-drag rules that lived here
+     went with the drag itself on 2026-09-09 — see stage.js.) */
+  #pp4Prompt.pp4Recipes { -webkit-user-select:none; user-select:none; }
   /* the cards are not handles — they keep their own gestures and their own cursor */
   #pp4Prompt.pp4Recipes .apBtn, #pp4Prompt.pp4Recipes .pp4RcSwap,
   #pp4Prompt.pp4Recipes .pp4RcPeek { cursor:pointer; }
@@ -2459,7 +2449,15 @@
      the rest of promptTick measures (the cap, the hint, the panel's own maxHeight) — measuring a
      moving box is how the old picker got two answers for one number.
      .pp4RcFly is the HELD state, applied with no transition; removing it is the flight. */
-  #pp4Prompt.pp4Recipes { transition:opacity .16s, transform .62s cubic-bezier(.3,.78,.36,1); }
+  /* ⭐ HIS ①  AND ③ , 2026-09-09: "can you have them fade in slower" and "when they move down the
+     board, Can you ease in their movement?"
+     THE OPACITY was .16s — the game's standard prompt fade, right for a card that replaces another
+     card and wrong for one that arrives over open water with nothing before it. 520ms is a thing
+     appearing rather than a thing switching.
+     THE CURVE was cubic-bezier(.3,.78,.36,1): a fast start that decelerates, which is why he read
+     the move as abrupt even though it was smooth. .55,0,.28,1 leaves slowly and arrives slowly —
+     ease in AND out — which is what "glitchy" was asking for. */
+  #pp4Prompt.pp4Recipes { transition:opacity .52s ease, transform .76s cubic-bezier(.55,0,.28,1); }
   #pp4Prompt.pp4Recipes.pp4RcHold { transition:opacity .16s; }
   @media (prefers-reduced-motion: reduce) {
     #pp4Prompt.pp4Recipes { transition:opacity .16s; }
@@ -3263,6 +3261,19 @@
   #btnConfirmStart:not(:disabled),
   #btnStartPassPlay:not(:disabled) {
     animation: pp4Glow 1.1s ease-in-out infinite; }
+
+  /* ⭐ HIS ⑥ : "Make the attention-getting orange gradient larger." --pp4GlowR is the ring's reach,
+     and it is a token precisely so one surface can want a different one (the flip ceremony already
+     does). A recipe card is the biggest thing this animation is ever put on, so the game's 10px
+     reads as a hairline on it; 22px is the same gesture at the card's own scale. Scoped to the
+     front card alone — every other control keeps the ring it has.
+     ⚠ AND IT SITS AFTER THAT RULE, NOT INSIDE IT. My first attempt put it one line above
+     `body.pp4Stage … [data-rcpos="front"]:not(.pp4Focus),` — which is the SECOND line of the
+     selector list beginning `#flipCoinWrap.active,` thirty lines up. Dropping a braced rule there
+     split the list in half, and the flip coin and the Ahoy card silently lost their pulse
+     altogether. The attention-vocabulary gate failed the same minute — which is precisely the
+     "KEEP THEM" warning written at the head of that block, earning itself again. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn[data-rcpos="front"] { --pp4GlowR: 22px; }
 
   /* THE GROW — over the live board, the buttons asking for your answer visibly swell.
      Scale ONLY, no ring: the golden ring belongs to the stage (his pick: "strong grow, no ring").
