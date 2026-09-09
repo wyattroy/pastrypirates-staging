@@ -1690,57 +1690,56 @@ export function remoteDraftPrompt(seat,msg,opts,waitMsg){
     wid=netWatchDraftResponse(appState.db,appState.room,seat,cb,"draftResponse:"+id);
   });
 }
+let lastDraftId=null;
+export function watchDraftPrompt(){
+  netWatchDraftPrompt(appState.db,appState.room,appState.mySeat,snap=>{
+    const player=snap.val();
+    if(!player){lastDraftId=null;return;}
+    /* ⚠ ONE RENDER PER PROMPT, not one per snapshot. The hand-rolled version re-drew on every
+       Firebase callback, which was harmless when it was only markup. localAsk returns a PROMISE, so
+       re-drawing would leave an orphan pending for every snapshot that arrived — the guest would
+       answer once and several dead promises would still be holding a torn-down panel. Keyed on the
+       prompt's own id, which the host already stamps. */
+    if(player.id!=null&&player.id===lastDraftId&&document.querySelector("#actionPanel .apBtn"))return;
+    lastDraftId=player.id!=null?player.id:null;
+    if(!player.stage)delete $("actionPanel").dataset.pp4Stage;
+    /* ⭐ ONE RENDERER — Wyatt, 2026-09-09: "No second renderers! We need one renderer. Why is the
+       guest using a second renderer?"
+       ⚠ BECAUSE IT WAS HAND-ROLLED, AND THAT IS THE WHOLE FAULT HE CAUGHT TWICE. What stood here
+       built `<div class="apMsg">…<div class="apBtns recipes">` itself and re-derived the SAME rule
+       renderAskPrompt uses one file away (`opts.some(o => o.cls)` -> " recipes"). Two renderers for
+       one card: so when I taught one of them to say whose card it is, every local mode went green
+       and the guest still named the host.
+       ⭐ THE SANCTIONED HOST/GUEST DIFFERENCE IS WHO COMPUTES, NOT WHO DRAWS. So the guest now calls
+       the very same localAsk() the host calls, and the ONLY thing it does differently is what it
+       does with the answer: the host resolves it locally, the guest puts it on the wire. That is
+       Rule A stated in code rather than in a comment.
+       WHAT THE GUEST INHERITS FOR FREE by no longer having its own copy: the back button, greyed
+       options that explain themselves when tapped, per-seat colours, the slider, the flip-coin
+       path, the pp4Stage handling, and the teardown that clears the stamp AND the panel before
+       anything else. Every one of those was a thing the old copy either re-implemented or simply
+       did not have. */
+    raiseLocalPrompt(appState.mySeat,()=>
+      localAsk(player.msg,(player.labels||[]).map((l,i)=>({
+        label:l,
+        cls:(player.classes||[])[i],
+        short:(player.shorts||[])[i],
+        stage:!!player.stage,
+      }))).then(v=>{
+        /* THE ONE DIFFERENCE: the answer goes on the wire instead of into a local promise. `v` is a
+           bare index here (the draft channel carries no slider), and netSetDraftResponse wants the
+           same {id,choice} it always did. */
+        const choice=(v&&typeof v==="object")?v.i:v;
+        netSetDraftResponse(appState.db,appState.room,appState.mySeat,{id:player.id,choice},netFail("recipe response"));
+        // localAsk's done() has already cleared the stamp and the panel — see renderAskPrompt.
+        if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line
+      }));
+  });
+}
 /* The "yer recipe's stowed below" card, once it exists. consumeEvent creates it on whichever
    device the recipe belongs to; recipeDraftNet awaits it so the host's loop does not sail on before
    it has been read. Null on a guest's own timeline, which is correct: nothing there to pace. */
 let stowedGate=null;
-export function watchDraftPrompt(){
-  netWatchDraftPrompt(appState.db,appState.room,appState.mySeat,snap=>{
-    const player=snap.val();
-    if(!player){return;}
-    const cls=player.classes||[];
-    const grid=cls.some(c=>c)?" recipes":"";
-    /* ⭐ THE GUEST'S SEAM SAYS WHO IT IS FOR, TOO — Wyatt, 2026-09-09, crew: "guest's recipe choice
-       narration box says '{host name}, pick yer recipe' in the host's color... fix this
-       ARCHITECTURALLY not with a bad patch."
-       ⚠ THERE ARE TWO SEAMS THAT RAISE A LOCAL PROMPT AND ONLY ONE OF THEM WAS TALKING. The host,
-       pass-play and solo all come through draftDispatch, which now publishes the seat on every
-       path (see its note in flow.js). A GUEST DOES NOT PASS THROUGH IT AT ALL — the host sends the
-       prompt over the wire and this watcher renders it — so fixing the dispatcher alone left the
-       guest exactly as broken while looking fixed on every device I could test locally.
-       THE SEAT IS NOT IN DOUBT HERE: netWatchDraftPrompt is subscribed to appState.mySeat's own
-       slot, so this payload is BY CONSTRUCTION addressed to the captain at this device. Publishing
-       it means nothing downstream has to guess — and guessing is what named the host. */
-    raiseLocalPrompt(appState.mySeat, () => {
-    if(player.stage)$("actionPanel").dataset.pp4Stage="1";else delete $("actionPanel").dataset.pp4Stage;
-    // @copy prompt.net.draftrerender
-    // 02.1-03: the third copy of this markup is gone too. The draft channel's WIRE payload stays
-    // deliberately narrower (no disabled/why/seat/colors — a recipe card is never greyed); only
-    // its RENDERING stops duplicating the pattern, so a field it one day needs is already built.
-    panel(`<div class="apMsg">${player.msg}</div><div class="apBtns${grid}">`+
-      optionButtonsHTML((player.labels||[]).map((l,i)=>({i,label:l,cls:cls[i]})))+`</div>`,true);
-    const shorts=player.shorts||[];
-    $("actionPanel").querySelectorAll(".apBtn").forEach(b=>{
-      const i=+b.dataset.i;
-      if(shorts[i])b._shortHtml=shorts[i];
-      b.onclick=()=>{
-        netSetDraftResponse(appState.db,appState.room,appState.mySeat,{id:player.id,choice:i},netFail("recipe response"));
-        /* THE CARD WAS NEVER TORN DOWN — Wyatt, 2026-08-19: "the crew draws lots screen doesn't
-           disappear". The old line showed the waiting narration and left the panel standing,
-           because showNarration paints a floating bubble and does not touch #actionPanel. On the
-           opening Ahoy! that meant the card sat there for the rest of the voyage. localAsk's done()
-           clears the stamp AND the panel before anything else (flow.js:213) — mirrored here.
-           The teardown runs unconditionally now; the waiting line, if any, comes after it. */
-        delete $("actionPanel").dataset.pp4Stage;
-        panel("");
-        if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line
-        // (the "yer recipe's stowed below" line is NOT spoken here — it belongs to the recipeSet
-        // event, in the one consumer, where every device reaches it. See consumeEvent.)
-      };
-    });
-    });
-  });
-}
 // remote: render the game purely from the broadcast event feed
 /* ═════════ THE ONE EVENT CONSUMER (W1, 2026-08-28) ═════════
    Wyatt: "fix all the described architecture so both host and guest listen to one game activity

@@ -2366,9 +2366,19 @@
      desktop — without it nothing says the modal moves. touch-action:none on the ask box stops a
      phone treating the drag as a page scroll; the cards keep pan-y so their swipe still works. */
   /* NO TEXT SELECTION ON THE SHEET. Swiping a card used to sweep a blue selection across its
-     title, which reads as broken even when nothing is. (The -webkit-user-drag rules that lived here
-     went with the drag itself on 2026-09-09 — see stage.js.) */
+     title, which reads as broken even when nothing is.
+     ⚠ AND THE NATIVE IMAGE DRAG IS BACK OFF — I DELETED THIS GUARD BY MISTAKE AND HE FOUND IT IN
+     ONE PLAY. Wyatt, 2026-09-09: "swiping the TOP card doesn't work if i click on the artwork (it
+     grabs the artwork instead)." Exactly right, and exactly the fault I had already found and fixed
+     once: a recipe card is built around an <img>, so pressing the art and moving starts Chrome's
+     OWN drag-and-drop, which tears down the pointer stream — no pointermove, no pointerup, so the
+     swipe never completes. It was written for the sheet-drag; when the drag was deleted the same
+     evening, this went with it, and the swipe that REPLACED the drag needs it just as much.
+     THE LESSON, since this is twice now: a guard belongs to the GESTURE, not to the feature that
+     first needed it. Any pointer gesture that starts on card art needs this. */
   #pp4Prompt.pp4Recipes { -webkit-user-select:none; user-select:none; }
+  #pp4Prompt.pp4Recipes img, #pp4Prompt.pp4Recipes .apBtn {
+    -webkit-user-drag:none; user-drag:none; }
   /* the cards are not handles — they keep their own gestures and their own cursor */
   #pp4Prompt.pp4Recipes .apBtn, #pp4Prompt.pp4Recipes .pp4RcSwap,
   #pp4Prompt.pp4Recipes .pp4RcPeek { cursor:pointer; }
@@ -2704,6 +2714,8 @@
        — the box collapsed 362px -> 280px, `100%` collapsed with it, and the card went 250 -> 216
        under his thumb. A constant cannot do that. The row's own min-width below is what stops the
        BOX collapsing, so the circle keeps its place too. */
+    /* ⚠ HIS "50% BIGGER" IS NOT HERE, AND THE REASON IS ARITHMETIC — see the parked note in
+       stage.js. A 375px card needs ~553px of row; the captains column it now lives in has ~382. */
     --rcW: 250px;
     --rcPeek: calc(var(--rcW) * 0.2);      /* his 6.1: 80% overlapped, so 20% of the card shows */
     --rcGap: 10px;                          /* his 6.5: the circle sits 10px off the back card */
@@ -2724,7 +2736,12 @@
     body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 180px; }
   }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
-    width:var(--rcW); max-width:250px; min-width:0; box-sizing:border-box; margin:0 auto;
+    /* ⚠ max-width WAS 250px AND WOULD HAVE SILENTLY EATEN HIS ITEM 3. --rcW is now 375 on a desktop
+       and a hard 250 cap here would have clamped it straight back, leaving the card exactly the
+       size it was while every number in the CSS said otherwise — the worst kind of no-op. The cap
+       exists to stop the card outgrowing its row, which is what --rcW itself already governs, so it
+       tracks --rcW rather than naming a second number. */
+    width:var(--rcW); max-width:var(--rcW); min-width:0; box-sizing:border-box; margin:0 auto;
     /* ⭐ QUICKER, AND NO OVERSHOOT — Wyatt, 2026-09-08: "This animation is functional, but clumsy
        and stutters. Make it smoother and quicker." The old curve's final control point was 1.05,
        i.e. it deliberately overshot and settled back; on a card that is also changing depth that

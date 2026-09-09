@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@d8a4745f";
+const PP4_STAMP = "2026.09.07.3-staging@ff958b19";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2468,6 +2468,11 @@ function mountRecipeStack(ap){
      THE SWIPE. Pointer events, not touch events, so a trackpad drag and a finger are one path.
      A 34px threshold and a dominant-axis test: the panel scrolls vertically, so a swipe that is
      mostly up or down must be left to it rather than eaten here. */
+  /* ⚠ THE JS HALF OF THE SAME GUARD. -webkit-user-drag is non-standard and Firefox ignores it
+     entirely; `dragstart` is standard and every engine fires it. Both, because the symptom — a
+     swipe that dies after its first frame — looks like a broken gesture rather than a browser
+     feature, and cost a full debugging round the first time. */
+  row.addEventListener("dragstart", (e) => e.preventDefault());
   let sx = 0, sy = 0, live = false;
   row.addEventListener("pointerdown", (e) => { sx = e.clientX; sy = e.clientY; live = true; });
   row.addEventListener("pointerup", (e) => {
@@ -3466,6 +3471,17 @@ function promptTick(force){
        "top right of the board" and "the full width" converge, which is correct rather than a
        special case. */
     const rcRow = ap.querySelector(".apBtns");
+    /* ⚠ HIS ITEM 3 IS PARKED, WITH THE NUMBER — Wyatt, 2026-09-09: "in desktop Make the cards 50%
+       bigger." IT CANNOT BE TRUE AT THE SAME TIME AS HIS ITEM 5, and this is the arithmetic:
+       the stack needs `card x 1.4 + 8` — card plus a peek either side — and the captains column it
+       now sits in measures ~382px at 1280. That allows a card of (382 - 8 - padding) / 1.4 ≈ 250,
+       which is exactly what it already is. A 375px card wants ~553px of row.
+       ⚠ AND I TRIED TO DERIVE IT FROM THE PANEL FIRST, WHICH IS A MISTAKE THIS FILE ALREADY
+       DOCUMENTS twenty lines below ("attempt 2 — measure it once in JS... four sizes for one card").
+       #actionPanel is shrink-to-fit, so its width depends on the card, so sizing the card from the
+       panel is a loop. It measured 248px on a phone where 225 had been correct. Backed out.
+       THE CHOICE IS HIS, and it is a real one: keep the board completely clear (0.0% hidden), or let
+       the sheet reach left over the board and have the bigger cards. Parked in BACKLOG.md. */
     const sheetW = (() => {
       const capW = Math.min(brd ? Math.round(brd.width) : vwPx() - 16, vwPx() - 16);
       if (!rcRow) return capW;
@@ -3512,9 +3528,31 @@ function promptTick(force){
        any gate: node --check passes a TDZ every time. */
     let top;
     if (capR){
-      const w = Math.min(sheetW, Math.round(capR.width));
-      box.style.width = w + "px";
-      box.style.left = Math.round(capR.left + (capR.width - w) / 2) + "px";
+      /* ⭐ LEFT-ALIGNED WITH THE MENU BELOW IT — Wyatt, 2026-09-09, item 2, drawn as a red line down
+         his screenshot: "in desktop, the cards should be left-aligned with the board, in vertical
+         alignment with the menu options."
+         THE MENU IS THE THING TO ALIGN TO, not the captains box. #footerRow's own left edge is
+         where "Sound", "How to play" and the rest begin, and it is what his line was drawn through
+         — so the sheet reads as belonging to that column rather than floating in it. Measured from
+         the renderer, and it falls back to the captains box's left when the menu is not laid out
+         (on a phone the menu is elsewhere and the box IS the column). */
+      /* ⚠ ONLY WHEN THE CAPTAINS BOX IS A COLUMN BESIDE THE BOARD. His item 2 says "in DESKTOP the
+         cards should be left-aligned… in vertical alignment with the menu options" — on a phone the
+         menu is not a column and #footerRow's left is 0, which left-aligned the sheet to the screen
+         edge and undid the centring he had already approved. Measured: phone and tablet both jumped
+         to left:0 the moment this went in unguarded. */
+      const beside = capR.left > 40 && capR.width < vwPx() * 0.75;
+      const colL = (() => {
+        if (!beside) return null;
+        const f = $("footerRow");
+        if (!f || getComputedStyle(f).display === "none") return capR.left;
+        const r = fixedRect(f);
+        return (r.width > 2 && r.left > capR.left - 60 && r.left < capR.right) ? r.left : capR.left;
+      })();
+      const w = colL != null ? Math.round(Math.max(160, capR.right - colL))
+                             : Math.min(sheetW, Math.round(capR.width));
+      box.style.width = Math.min(w, Math.round(vwPx() - (colL != null ? colL : 0) - 8)) + "px";
+      box.style.left = Math.round(colL != null ? colL : capR.left + (capR.width - w) / 2) + "px";
       const sheetH = Math.max(1, Math.round(fixedRect(box).height));
       top = Math.round(Math.max(topBandPx(),
         Math.min(capR.top + (capR.height - sheetH) / 2, vhPx() - sheetH - 8)));
