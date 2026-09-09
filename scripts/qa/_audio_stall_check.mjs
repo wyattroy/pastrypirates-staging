@@ -139,7 +139,41 @@ try {
     say(`   ${moved ? "PASS — a gesture reached a context that claimed to be running" : "FAIL — the clock never restarted; no tap can recover it"}`);
   }
 
-  say(`\n${bad === 0 ? "PASS — no wolf cried, the bus recovers, and a real stall IS caught" : "FAIL — " + bad + " problem(s)"}`);
+  /* ── 4. THE STALL THAT resume() CANNOT FIX — his phone, after the screen was off a minute ────
+     Section 3 proves a recoverable stall recovers. His did NOT: the row said "stalled" and he
+     played several whole turns, tapping and sailing and flipping, in silence. Only closing the tab
+     helped — which is a fresh AudioContext.
+     So this reproduces the UNRECOVERABLE case: suspend the context, keep `state` claiming
+     "running", AND neuter resume() so it resolves without ever restarting the clock. Two gestures
+     must then produce a genuinely NEW context — identity-checked, because "the clock advanced" on
+     its own could be the old one waking up. */
+  if (captured) {
+    say("\n── 4. a stall resume() cannot fix: two taps must REBUILD the context ──");
+    await C.ev(`(async()=>{ window.__old = window.__ctx; await window.__ctx.suspend();
+      Object.defineProperty(window.__ctx,'state',{configurable:true,get:()=>'running'});
+      window.__ctx.resume = () => Promise.resolve();      // resolves, never restarts the clock
+      return 1; })()`);
+    await sleep(2500);
+    say(`   stalled again: diag=${await C.ev(DIAG)}`);
+    for (let i = 1; i <= 2; i++) {
+      await C.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 640, y: 500, button: "left", buttons: 1, clickCount: 1 });
+      await C.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 640, y: 500, button: "left", buttons: 0, clickCount: 1 });
+      await sleep(1800);
+      say(`     tap ${i}: rebuilt=${await C.ev(`window.__ctx !== window.__old`)} diag=${await C.ev(DIAG)}`);
+    }
+    await sleep(2500);
+    const fresh = await C.ev(`window.__ctx !== window.__old`);
+    const t0 = await C.ev(`window.__ctx.currentTime`);
+    await sleep(900);
+    const t1 = await C.ev(`window.__ctx.currentTime`);
+    const d4 = await C.ev(DIAG);
+    const ok4 = fresh && (t1 - t0) > 0.2 && (d4 === "ok" || d4 === "nomusic");
+    if (!ok4) bad++;
+    say(`   a NEW context was built: ${fresh} · its clock ${t0.toFixed(2)} -> ${t1.toFixed(2)} · row=${d4}`);
+    say(`   ${ok4 ? "PASS — two taps got his sound back without closing the tab" : "FAIL — he would still have to close the tab"}`);
+  }
+
+  say(`\n${bad === 0 ? "PASS — no wolf cried, the bus recovers, a real stall is caught, and an unrecoverable one rebuilds" : "FAIL — " + bad + " problem(s)"}`);
   process.exitCode = bad === 0 ? 0 : 1;
 } catch (e) {
   say("PROBE FAILED:", e.message);

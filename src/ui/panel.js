@@ -136,7 +136,7 @@ export function setClockUI(){
                    :diag==="nomusic"?"Sound on, music off. Tap to mute."
                    // the stalled state names itself here too, or the row and the label disagree at
                    // the one moment a player is actually looking for an explanation
-                   :diag==="stalled"?"Sound is on but yer browser has stalled it. Tap the board."
+                   :diag==="stalled"?"Sound is on but yer browser has stalled it. Tap the board twice."
                    :"Sound and music on. Tap to turn the music off.";
     setIf(muteEl,"title",muteLabel);
     setAttrIf(muteEl,"aria-label",muteLabel);

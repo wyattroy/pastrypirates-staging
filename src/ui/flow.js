@@ -262,6 +262,38 @@ export function renderAskPrompt(spec,answer){
     b.onclick=()=>done(sl?{i:+b.dataset.i,n:sl.ref.value}:+b.dataset.i);
   });
 }
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ⭐ THE ONE DOOR A LOCAL PROMPT COMES THROUGH — Wyatt, 2026-09-09.
+
+   He caught the guest's recipe picker naming the HOST, and when I described the fix as "both seams
+   must publish the same fact" he stopped me:
+
+     "This seems like sloppy architecture that's easy to mess up in future -- is there a better way
+      to do it in alignment with our design values (eg one central engine?)"
+
+   He is right and the rule is already written down: *when a second consumer of the same thing
+   appears, converge — never run two side by side.* Two seams each remembering to publish the seat
+   is two things kept in step by nothing, and the way I found out is that I fixed one of them,
+   watched every local mode go green, and shipped a guest that was still broken.
+
+   SO "WHO IS BEING ASKED" IS PUBLISHED IN EXACTLY ONE PLACE: here. A caller cannot raise a local
+   prompt without saying whose it is, because the seat is the first argument and the drawing is the
+   second. Forgetting is no longer possible; it would mean not calling this function at all.
+
+   ⚠ AND THE DEEPER DUPLICATION IS STILL THERE, NAMED HERE SO IT IS NOT LOST. The guest does not
+   merely publish its own seat — it hand-rolls its own copy of this renderer. watchDraftPrompt
+   (src/orchestrator.js) builds `<div class="apMsg">…<div class="apBtns recipes">` itself and
+   re-derives the SAME rule renderAskPrompt uses one line from here (`opts.some(o => o.cls)` ->
+   " recipes"). That is the actual root: two renderers for one card. Converging them means the
+   guest calling localAsk() and sending the resolved answer over the wire instead of resolving it
+   locally — which is the sanctioned host/guest difference (who computes), leaving one renderer.
+   It is a change to the network path and it wants the two-window rig and a fresh head, so it is
+   written down rather than attempted at the end of a long day. This door is the half that removes
+   the fault he actually hit; the other half is the one that stops it coming back in a new form. */
+export function raiseLocalPrompt(forSeat, draw){
+  applyActiveSeat(forSeat);
+  return draw();
+}
 export function localAsk(msg,opts,colors,sub,extra){
   // a decision is landing in front of the player — the ff skip is over; when a recap is owed it
   // plays FIRST and the prompt builds after it resolves (no bubble/pill overlap, his rule).
@@ -3168,23 +3200,47 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
   const sub=seat=>subFor?(subFor(seat)||null):null;
   const localOpts=seat=>(localOptsFor?(localOptsFor(seat)||null):null)||optsFor(seat);
   const results={};
+  /* ⭐ A LOCAL PROMPT IS ADDRESSED TO A SEAT, AND THIS DISPATCHER IS THE ONLY THING THAT KNOWS WHICH
+     — Wyatt, 2026-09-09, crew, two windows: "guest's recipe choice narration box says '{host name},
+     pick yer recipe' in the host's color... fix this ARCHITECTURALLY not with a bad patch. it seems
+     like you may have written sloppy code; if this was scoped right, the guest's name would appear."
+     He is right, and the sloppy code was mine but it was not in the picker. THE PICKER RE-DERIVED
+     the seat (`S.activeSeat ?? appState.curSeat`) because nothing told it — and on a guest neither
+     of those is the guest: `curSeat` is whoever's turn the ENGINE is on, and `S.activeSeat` still
+     held the last captain the camera pointed at, which is the host.
+     ⚠ THE ASYMMETRY IS THE BUG, AND IT WAS ALREADY VISIBLE HERE. The pass-play branch below calls
+     applyActiveSeat(seat) before asking; the simultaneous branch never did. Two branches of one
+     dispatcher disagreeing about whether "who is being asked" gets published is exactly the
+     one-display-path rule broken inside the function that exists to enforce it. Every local ask now
+     says who it is for, on every path, so no caller downstream has to guess — and the picker's own
+     derivation is deleted rather than corrected.
+     WHY IT IS SAFE ON A GUEST: applyActiveSeat only ever names a seat the game already has, and
+     during a simultaneous draft each device SHOULD be pointing at its own captain — that is what
+     every other surface (the ribbon, the camera) already assumes it means. */
+  const askLocal = (seat) => raiseLocalPrompt(seat, () => localAsk(msgFor(seat),localOpts(seat),null,sub(seat)));
   if(appState.passAndPlay){
     if(isPublic){
       // ONE DEVICE, ONE SHOWING — the table reads it together, off one screen.
-      results[seats[0]]=await localAsk(msgFor(seats[0]),localOpts(seats[0]),null,sub(seats[0]));
+      results[seats[0]]=await askLocal(seats[0]);
       return results;
     }
     // one device, secret options: draft in turn, each behind the pass-the-device screen
     for(const seat of seats){
       await passGate(seat);
+      /* ⚠ THE EXPLICIT CALL STAYS HERE EVEN THOUGH askLocal() ALSO MAKES IT, and that is not
+         belt-and-braces — it is a gate holding a decision. pass_play_handover_check asserts, in the
+         SOURCE, that the screen turns to the incoming captain only AFTER the device has changed
+         hands; hiding that call inside a helper made the ordering invisible to it and it failed the
+         same minute. applyActiveSeat only bumps turnSerial when the seat actually changes, so the
+         second call is free. A rule somebody can read is worth more than one fewer line. */
       applyActiveSeat(seat);
-      results[seat]=await localAsk(msgFor(seat),localOpts(seat),null,sub(seat));
+      results[seat]=await askLocal(seat);
     }
     return results;
   }
   if(announce)netHandlers().onBroadcast(announce.html,announce.variants,{wait:true});
   await Promise.all(seats.map(seat=>{
-    if(decisionIsLocal(seat))return localAsk(msgFor(seat),localOpts(seat),null,sub(seat)).then(i=>{
+    if(decisionIsLocal(seat))return askLocal(seat).then(i=>{
       results[seat]=i;
       if(waitMsg)showNarration(waitMsg,{wait:true}); // item 19: no deadline on a wait line
     });

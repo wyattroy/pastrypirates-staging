@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@b622c317";
+const PP4_STAMP = "2026.09.07.3-staging@e959b0d8";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -3562,20 +3562,33 @@ function promptTick(force){
        pname() is the game's one name-resolver and it escapes what it returns, which is why this is
        written as HTML rather than textContent: a captain who typed their own name gets it back
        byte-identically, and a captain who typed markup does not get to render it. */
-    const askSeat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
+    /* ⚠ NEVER appState.curSeat. That is whichever seat the ENGINE is on, which on a guest is the
+       HOST — and naming the host on the guest's own picker is exactly the bug Wyatt caught in crew
+       (see draftDispatch's note in flow.js, where the real fix lives). S.activeSeat is now
+       published by the dispatcher on EVERY local ask rather than only on the pass-play path, so it
+       is authoritative here.
+       ⚠ AND THERE IS NO FALLBACK AT ALL, WHICH THE MODE-FORK GATE IS RIGHT TO INSIST ON. My first
+       attempt fell back to appState.mySeat and the gate caught it the same minute: stage.js went
+       9 forks to 10, "a place two captains can see different games". It was also the wrong instinct
+       — a fallback here is a GUESS at somebody's identity, and guessing is what put the host's name
+       on the guest's screen in the first place. Both seams that raise a local prompt now publish
+       the seat before the panel is drawn, so this is never null in practice; if it somehow is, the
+       box simply does not appear for a tick. No name beats the wrong name. */
+    const askSeat = S.activeSeat;
     let ask = box.querySelector(".pp4RcAsk");
-    if (!ask){
+    if (askSeat == null){ if (ask) ask.remove(); ask = null; }
+    else if (!ask){
       ask = document.createElement("div");
       ask.className = "pp4RcAsk";
       box.insertBefore(ask, ap);
     }
-    {
+    if (ask){
       /* ⭐ ITEM 2 + ITEM 6, 2026-09-09. His shorter line, and his own colour on his own name:
          "shorten the text: '{player}, pick yer recipe:'" and "including the colored playername".
          HEXCOL is the seat palette every other surface names a captain in — the ribbon, the
          captains box, the narration bubbles — so the box agrees with all of them by using the same
          array rather than a colour chosen here. */
-      const who = askSeat ?? 0;
+      const who = askSeat;
       const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span>, pick yer recipe:`;
       if (ask.dataset.rcAsk !== askHtml){ ask.dataset.rcAsk = askHtml; ask.innerHTML = emojify(askHtml); }
     }

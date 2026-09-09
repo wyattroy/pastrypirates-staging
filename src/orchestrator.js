@@ -77,7 +77,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession, recoverAudio } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -124,7 +124,7 @@ import {
   optionButtonsHTML, backButtonHTML, // 02.1-03: the ONE button-row builder, shared with localAsk
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
-  decisionIsLocal, resolveOpt, applyActiveSeat, stepDelay, ask, pickNarrVariant,
+  decisionIsLocal, resolveOpt, applyActiveSeat, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
   sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
@@ -1694,6 +1694,21 @@ export function watchDraftPrompt(){
     if(!player){return;}
     const cls=player.classes||[];
     const grid=cls.some(c=>c)?" recipes":"";
+    // ONLY THE RECIPE DRAFT speaks the stowed line — this same wire channel also carries the Ahoy
+    // and turn-order barriers, and "yer recipe's stowed below" after tapping "Nah" would be a lie.
+    const recipesOnCard=!!grid;
+    /* ⭐ THE GUEST'S SEAM SAYS WHO IT IS FOR, TOO — Wyatt, 2026-09-09, crew: "guest's recipe choice
+       narration box says '{host name}, pick yer recipe' in the host's color... fix this
+       ARCHITECTURALLY not with a bad patch."
+       ⚠ THERE ARE TWO SEAMS THAT RAISE A LOCAL PROMPT AND ONLY ONE OF THEM WAS TALKING. The host,
+       pass-play and solo all come through draftDispatch, which now publishes the seat on every
+       path (see its note in flow.js). A GUEST DOES NOT PASS THROUGH IT AT ALL — the host sends the
+       prompt over the wire and this watcher renders it — so fixing the dispatcher alone left the
+       guest exactly as broken while looking fixed on every device I could test locally.
+       THE SEAT IS NOT IN DOUBT HERE: netWatchDraftPrompt is subscribed to appState.mySeat's own
+       slot, so this payload is BY CONSTRUCTION addressed to the captain at this device. Publishing
+       it means nothing downstream has to guess — and guessing is what named the host. */
+    raiseLocalPrompt(appState.mySeat, () => {
     if(player.stage)$("actionPanel").dataset.pp4Stage="1";else delete $("actionPanel").dataset.pp4Stage;
     // @copy prompt.net.draftrerender
     // 02.1-03: the third copy of this markup is gone too. The draft channel's WIRE payload stays
@@ -1716,7 +1731,26 @@ export function watchDraftPrompt(){
         delete $("actionPanel").dataset.pp4Stage;
         panel("");
         if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line
+        /* ⭐ AND THE GUEST HEARS "WHERE DID MY RECIPE GO?" ANSWERED — Wyatt, same report: "only the
+           host saw the help message about where the recipe was stored, even though polly was
+           helping on guest."
+           ⚠ WHY IT COULD NEVER HAVE REACHED THEM. That line is spoken inside recipeDraftNet(), and
+           recipeDraftNet() runs in the HOST's turn loop — a guest never executes a line of it. A
+           per-device tutorial beat living in the host's loop can only ever reach the host.
+           IT IS NOT BROADCAST, AND IT MUST NOT BE: the rung a captain is on is counted per device
+           (that is the Pilot's whole design), so the host has no business composing this for
+           anyone. The guest speaks it on its OWN seam, at the moment its own recipe is chosen —
+           which is if anything the better moment, since it lands while they wait for the crew.
+           ⚠ AND IT IS DELIBERATELY NOT A NEW ENGINE EVENT. That would have been the tidy answer and
+           it is the wrong one here: changing what the engine emits invalidates the determinism
+           corpus and forces a gated re-record (CLAUDE.md — prefer UI-tier fixes). Nothing about a
+           tutorial line belongs in the lockstep stream. */
+        if(recipesOnCard&&pilotSpeaks("recipe.stowed")){
+          flashCaptainsBox();
+          pilotGate("recipe.stowed",t=>t.replace("{name}",pn(appState.mySeat))).catch(()=>{});
+        }
       };
+    });
     });
   });
 }
@@ -2688,6 +2722,13 @@ export function leaveGame(){netLeaveRoom();clearSession();clearSoloState();locat
 function unlockAudio(){
   if(audioRunning())return;              // already audible: nothing to do, and nothing to unhook
   initAudio().catch(()=>{});             // idempotent — returns immediately once the graph exists
+  /* ⭐ A STALLED CONTEXT NEEDS MORE THAN A NUDGE — Wyatt, 2026-09-09, after locking his phone for a
+     minute: the row correctly read "stalled" and tapping through several whole turns changed
+     nothing. recoverAudio() escalates from HERE because both of its remedies need a real gesture:
+     the first re-claims the audio session Safari took when the screen went off (kickAudioSession
+     was one-shot and could never run again), the second throws the context away and builds a new
+     one — which is exactly what his own workaround, closing the tab, was doing by hand. */
+  recoverAudio();
   kickAudioSession();                    // his 2026-09-08 Safari note — see the comment in audio.js
   /* NOT via initAudio(): it returns at its first line once `ctx` exists, so on every gesture after
      the first it reached no wake at all. wakeCtx() is the door, and it must be called from HERE

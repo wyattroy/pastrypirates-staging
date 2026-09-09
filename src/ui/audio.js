@@ -693,6 +693,101 @@ function kickAudioSession() {
   } catch (e) { sessionKicked = false; }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ⭐ RECOVERING A LOST AUDIO SESSION — Wyatt, 2026-09-09, on his iPhone, and this is the SECOND
+   round on the same fault. The first round taught the game to NOTICE it; this one teaches it to get
+   out of it.
+
+     "i was playing the game in mobile safari and the sound worked, then i turned my phone screen
+      off for a minute (phone still on). the sound went away. when i reopened my phone, the game was
+      back up, but the sound was gone — and the note in the game says 'Sound: ON — yer browser
+      stalled it, tap the board.' but tapping the board doesn't unstall it; i've played multiple
+      turns now, tapping and sailing and flipping, with no sound. The only way I've found to
+      reliably fix this is to fully close the tab on my phone, open a new tab, and re-visit staging."
+
+   HIS SCREENSHOTS ARE THE DIAGNOSIS, and they are why this is not another guess. Safari's page menu
+   on a DIFFERENT tab offered him "Mute Other Tab — [STAGING] Pastry Pirates"; the tab switcher drew
+   a red speaker badge on the staging tab; the address bar carried the audio indicator. Safari was
+   certain the page was producing sound the entire time he heard nothing. Meanwhile the row he was
+   reading said "stalled", so the clock check added this morning was RIGHT — the context claimed to
+   run and its clock was frozen.
+
+   SO WHY DID TAPPING NOT HELP? Two reasons, and the first is a one-line oversight:
+
+     1. kickAudioSession() IS ONE-SHOT. `sessionKicked` is set true on the first successful play and
+        is only ever reset in a catch. Locking the phone TAKES the audio session away — and the
+        <audio> element is the only thing in this file that can claim it back (that is the whole
+        reason it exists, see its own note). After the first tap of the page's life, it could never
+        run again. resume() on its own does not reclaim a session; it only asks a context to run.
+     2. And when a context has been interrupted long enough, Safari will not give it back at all.
+        resume() resolves, or hangs, and the clock stays put.
+
+   HIS OWN WORKAROUND IS THE FIX, AND IT IS WORTH SAYING PLAINLY: closing the tab and opening a new
+   one builds a FRESH AudioContext. That is the strongest evidence available that the old context is
+   unrecoverable, and it is exactly what the note at kickAudioSession predicted a day ago — "if his
+   next voyage is silent again, the next thing to try is rebuilding the AudioContext outright."
+   His next voyage was silent. So we rebuild.
+
+   TWO TAPS, NOT ONE, AND NOT TWENTY. The first stalled gesture re-claims the session and asks the
+   context to resume, because that is cheap and it is enough for an ordinary tab-switch. The second
+   throws the context away and builds a new one, which is the thing that actually works and costs a
+   re-decode. Escalating on the SECOND gesture rather than the first means an ordinary recoverable
+   stall never pays for a rebuild, and a captain never has to tap more than twice.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+let stallGestures = 0;
+let rebuilding = false;
+/* CALLED ONLY FROM A REAL USER GESTURE (src/orchestrator.js's unlockAudio). Both remedies need one:
+   a media element may not play outside a gesture, and a new AudioContext constructed outside one
+   starts suspended with nothing able to wake it. */
+function recoverAudio() {
+  /* THE COUNTER IS CLEARED BY AUDIBLE SOUND, NOT BY TIME — so a page that has already been through
+     one unrecoverable stall rebuilds on the FIRST tap of the next one rather than the second. That
+     is deliberate: the cheap remedy has already been shown not to work on this device today. It
+     resets the moment a gesture lands while sound is actually running. Observed in the red proof,
+     where section 4 rebuilt on tap 1 because section 3 had already spent a gesture. */
+  if (!audioStalled()) { stallGestures = 0; return; }
+  stallGestures++;
+  /* THE SESSION FIRST. Cheap, and it is the whole fix for the common case of another app having
+     taken audio focus for a moment. Resetting the flag is the bug fix: without it this call has
+     been a no-op on every gesture after the first since the day it was written. */
+  sessionKicked = false;
+  kickAudioSession();
+  wakeCtx();
+  if (stallGestures >= 2) rebuildAudio();
+}
+/* THROW THE CONTEXT AWAY AND BUILD A NEW ONE — what closing the tab does, without losing the game.
+   ⚠ EVERY DECODED BUFFER BELONGS TO THE OLD CONTEXT and must go with it; an AudioBuffer decoded by
+   a closed context cannot be played by a new one. The mp3s themselves come back out of the HTTP
+   cache, so this costs a decode rather than a download. */
+function rebuildAudio() {
+  if (rebuilding) return;
+  rebuilding = true;
+  const wasWanted = ambWanted;
+  try { ambStop(); } catch (e) {}
+  try { musicStop(); } catch (e) {}
+  const old = ctx;
+  ctx = null; masterGain = null; stormGain = null;
+  ambBus = null; ambSeaGain = null; ambGullGain = null; ambCreakGain = null;
+  ambSeaSrc = null; ambLoading = null;
+  ambRunning = false; musicRunning = false;
+  musicSrc = null; musicGain = null; musicPanNode = null;
+  if (musicTimer) { clearTimeout(musicTimer); musicTimer = null; }
+  ambGen++;                                   // orphan every scatter timer still in flight
+  for (const k of Object.keys(ambTimers)) { clearTimeout(ambTimers[k]); delete ambTimers[k]; }
+  for (const k of Object.keys(buffers)) delete buffers[k];
+  for (const k of Object.keys(ambBuffers)) delete ambBuffers[k];
+  clkT = -1; clkWall = 0; clkVerdict = null;  // a new context's clock has its own history
+  resuming = false; sessionKicked = false; stallGestures = 0;
+  if (old && old.close) { try { old.close(); } catch (e) {} }
+  /* initAudio() is what constructs the context, and it must happen INSIDE this gesture's call
+     stack — so it is called synchronously here and only its loading is awaited. */
+  initAudio()
+    .then(() => { ambWanted = wasWanted; return wasWanted ? initAmbience() : null; })
+    .then(() => { syncBeds(); applyMasterGain(); })
+    .catch(() => {})
+    .finally(() => { rebuilding = false; });
+}
+
 let resuming = false;
 function wakeCtx() {
   /* ⚠ `ctx.state === "running"` USED TO END THIS FUNCTION, and that was the other half of the dead
@@ -1258,6 +1353,7 @@ function playBattleEngage() {
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
   kickAudioSession,
+  recoverAudio,
   /* wakeCtx is exported for ONE caller: the gesture listener in src/orchestrator.js. Safari only
      honours resume() inside a user-gesture call stack, and initAudio() cannot be that caller —
      it returns immediately once `ctx` exists, so every gesture after the first reached no wake at
