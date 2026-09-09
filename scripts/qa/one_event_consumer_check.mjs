@@ -102,6 +102,52 @@ function fnBody(src, name) {
   if (lOk) pass("liveRender(): no inline drawing beside the consumer");
 }
 
+/* ⭐ 3b. THE DISPLAY BELONGS TO THE CONSUMER — no turn loop may reach past the drain.
+      Wyatt, 2026-09-08: "All players, bot or human, are supposed to feed actions to an engine,
+      which feeds events back, which a different piece of code displays. Is that not what you built
+      here?" It is, and section 3 above already proves no drain draws for itself. This is the OTHER
+      half of the same claim, and until today it was untrue: seven call sites in the turn loops
+      awaited an animation DIRECTLY, beside their own liveRender(), because the drain was
+      fire-and-forget and a loop that must stay behind a moving boat had nothing else to wait on.
+      That is what let the ride and the drain get out of order for a year — the boat glided while
+      its event sat unread, so the sound landed as the boat ARRIVED.
+      liveRender() returns a promise now, so a turn loop awaits THE DRAIN. The rides have exactly
+      one caller left in the tree and it is consumeEvent. This assertion is what keeps it that way:
+      the next person who needs to wait for a boat must await the drain, not the picture. */
+{
+  const flow = strip(fs.readFileSync(path.join(REPO, "src/ui/flow.js"), "utf8"));
+  const consumer = strip(fnBody(orch, "consumeEvent") || "");
+  const orchAll = strip(orch);
+  const RIDES = ["animateSailRoute", "animateRimSweepIfAny"];
+  const calls = (src, name) => {
+    // a CALL, never the declaration: `function <name>(` is excluded by the lookbehind
+    const re = new RegExp(`(?<!function\\s)\\b${name}\\s*\\(`, "g");
+    return [...src.matchAll(re)].length;
+  };
+  let clean = true;
+  for (const ride of RIDES) {
+    const inFlow = calls(flow, ride);
+    if (inFlow > 0) {
+      fail(`src/ui/flow.js calls ${ride}() ${inFlow} time(s) outside its own declaration — a turn ` +
+           `loop is awaiting the PICTURE instead of the drain. Await liveRender() instead: it ` +
+           `returns a promise, and the one consumer owns the drawing.`);
+      clean = false;
+    }
+    const inOrch = calls(orchAll, ride), inConsumer = calls(consumer, ride);
+    if (inOrch !== inConsumer) {
+      fail(`src/orchestrator.js calls ${ride}() ${inOrch} time(s) but only ${inConsumer} of them ` +
+           `are inside consumeEvent — every ride must belong to the one consumer.`);
+      clean = false;
+    }
+    if (inConsumer < 1) {
+      fail(`consumeEvent never calls ${ride}() — ANTI-VACUITY: this assertion must not pass by ` +
+           `finding nothing anywhere.`);
+      clean = false;
+    }
+  }
+  if (clean) pass("the rides belong to consumeEvent alone — no turn loop reaches past the drain");
+}
+
 /* 4. Rule A holds: the local drain never reads its own write back. The consumer must not be
       reachable on the host FROM the Firebase callback — watchEvents' host-side no-op guard (or
       the attach-site fork that only attaches watchEvents on a guest) is what prevents the

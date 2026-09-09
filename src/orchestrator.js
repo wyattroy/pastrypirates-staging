@@ -780,14 +780,16 @@ async function asyncBattleRun(att,def){
           fled=true;
           appState.game.recordSkirmish(att,def,null);
           const evFlee=appState.game.ev({t:"battleflee",p:def.idx,a:att.idx,d:def.idx,rounds,downwind,route:fleeRoute}),evWind=dest?appState.game.tradewind(def):null;
-          /* W9: same shape, same fix as the storm sweep (src/ui/flow.js runStormLive). Both events
-             exist by now; the two rides below are this tier's own drawing and used to run BEFORE
-             the liveRender() underneath them, which is the only publisher — so the flee held every
-             other browser still for a full sail plus a rim ride. Publish, then ride. */
+          /* W9: the table is told BEFORE this tier draws — publishNow() is the broadcast half
+             only, so no other browser sits on a frozen board for the length of this flee.
+             ⭐ AND THEN IT WAITS ON THE DRAIN, not on the rides. Both events exist by now, and
+             consumeEvent walks each of them in order — the flee's own sail and the rim ride it
+             may trigger — while making their sounds first. This used to await the two rides
+             itself and drain afterwards, which is the same inversion the turn loops carried:
+             the boat moved while its event sat unread. One line, and the display is owned
+             entirely by the one consumer. */
           publishNow();
-          await animateSailRoute(evFlee);
-          if(evWind)await animateRimSweepIfAny(evWind);
-          liveRender();
+          await liveRender();
         }
       }
     }

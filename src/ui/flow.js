@@ -1667,9 +1667,11 @@ export async function runStormLive(dirKey){
            stormStep one statement above; the ride below takes ~1.4s, and until this line the only
            publisher was the liveRender() underneath it — so every other browser sat on a frozen
            board for exactly the length of the host's own animation. Publish, then ride. */
+        /* Same correction as the sail sites: the drain is awaitable now, so the storm's sweep is
+           consumed rather than reached past. The ride and the sound of it belong to consumeEvent;
+           this loop only has to WAIT. publishNow() still tells the table first (W9). */
         publishNow();
-        await animateRimSweepIfAny(g.events[g.events.length-1]);
-        liveRender();
+        await liveRender();
       }
       // stormStep records its own `blocked` event when a ship holds the square ahead.
       //
@@ -2675,41 +2677,27 @@ export async function humanAct(player,sailCtx){
       // the drawn line INCLUDES the square being left, so what lands on the wire is self-contained
       const route=[from,...appState.game.sailPath(player,dest,{throughRim:true})];
       player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route});
-      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
-         object the guest is handed, so both tiers walk identical code on an identical subject.
-         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
-         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
-         loop would stop waiting for the glide. */
-      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
-         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
-         tree, so awaiting the glide before it held every other browser's board still for exactly
-         the length of THIS captain's own animation. Publish, then ride: nothing about what is
-         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
-         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
-         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
-         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
-         CONCURRENTLY with the sail sound."
-         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
-         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
-         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
-         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
-         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
-         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
-         AudioBufferSourceNode.start and names each sound by its buffer duration):
-             11169ms ship-move   11171ms coin-flip     (+2ms)
-             21051ms ship-move   21052ms coin-flip     (+1ms)
-             30934ms ship-move   30936ms fishing       (+2ms)
-         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
-         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
-         fires the sound this instant and starts the ride. The await below then JOINS that ride
-         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
-         keeps this turn paced behind the glide. The old comment here warned that putting
-         liveRender first would let the turn "run on past" the ride; that was true of a guard that
-         skipped, and is not true of one that joins. */
-      publishNow();liveRender();await animateSailRoute(evSail);
+      /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
+         Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
+         are supposed to feed actions to an engine, which feeds events back, which a different piece
+         of code displays. Is that not what you built here?"
+         It is — playForEvent's only caller in the tree is consumeEvent, and consumeEvent's only two
+         producers are this drain and the guest's wire. But this line used to reach PAST the drain
+         and await the presentation itself (`liveRender(); await animateSailRoute(evSail)`), because
+         liveRender() was fire-and-forget and a turn loop that must stay behind a moving boat had
+         nothing else to wait on. That is orchestration holding a reference to the display for its
+         own pacing, and it is exactly what let the two get out of order: for a year the ride was
+         awaited BEFORE the drain, so the boat glided while its event sat unread and the sound
+         landed on arrival.
+         liveRender() returns a promise now (src/ui/panel.js), so the wait is on the DRAIN and the
+         consumer owns every pixel and every sound. Two lines became one, and the turn loop no
+         longer imports a walker at all.
+         WHAT HAS NOT CHANGED: publishNow() still tells the table BEFORE this tier draws anything
+         (W9 — it calls only the broadcast half, never the local drain), so no other browser is held
+         still for the length of this captain's own animation. */
+      publishNow();await liveRender();
       const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}}
+      if(evWind){publishNow();await liveRender();await narrateLastEvent();}}
     await humanAct(player,sailCtx);return;
   }
   if(v==="pass"){
@@ -2829,41 +2817,27 @@ export async function humanTurn(player){
       const fromSail=[...player.pos];
       const routeSail=[fromSail,...appState.game.sailPath(player,dest,{throughRim:true})];
       player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route:routeSail});
-      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
-         object the guest is handed, so both tiers walk identical code on an identical subject.
-         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
-         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
-         loop would stop waiting for the glide. */
-      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
-         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
-         tree, so awaiting the glide before it held every other browser's board still for exactly
-         the length of THIS captain's own animation. Publish, then ride: nothing about what is
-         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
-         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
-         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
-         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
-         CONCURRENTLY with the sail sound."
-         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
-         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
-         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
-         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
-         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
-         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
-         AudioBufferSourceNode.start and names each sound by its buffer duration):
-             11169ms ship-move   11171ms coin-flip     (+2ms)
-             21051ms ship-move   21052ms coin-flip     (+1ms)
-             30934ms ship-move   30936ms fishing       (+2ms)
-         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
-         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
-         fires the sound this instant and starts the ride. The await below then JOINS that ride
-         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
-         keeps this turn paced behind the glide. The old comment here warned that putting
-         liveRender first would let the turn "run on past" the ride; that was true of a guard that
-         skipped, and is not true of one that joins. */
-      publishNow();liveRender();await animateSailRoute(evSail);
+      /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
+         Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
+         are supposed to feed actions to an engine, which feeds events back, which a different piece
+         of code displays. Is that not what you built here?"
+         It is — playForEvent's only caller in the tree is consumeEvent, and consumeEvent's only two
+         producers are this drain and the guest's wire. But this line used to reach PAST the drain
+         and await the presentation itself (`liveRender(); await animateSailRoute(evSail)`), because
+         liveRender() was fire-and-forget and a turn loop that must stay behind a moving boat had
+         nothing else to wait on. That is orchestration holding a reference to the display for its
+         own pacing, and it is exactly what let the two get out of order: for a year the ride was
+         awaited BEFORE the drain, so the boat glided while its event sat unread and the sound
+         landed on arrival.
+         liveRender() returns a promise now (src/ui/panel.js), so the wait is on the DRAIN and the
+         consumer owns every pixel and every sound. Two lines became one, and the turn loop no
+         longer imports a walker at all.
+         WHAT HAS NOT CHANGED: publishNow() still tells the table BEFORE this tier draws anything
+         (W9 — it calls only the broadcast half, never the local drain), so no other browser is held
+         still for the length of this captain's own animation. */
+      publishNow();await liveRender();
       const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}
+      if(evWind){publishNow();await liveRender();await narrateLastEvent();}
       // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
       // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
       else if(appState.game.onRim(player.pos))await flash(`🌀 ${pn(player.idx)} rides at the head o' the current — she's got nowhere to carry ye from here.`);
@@ -3058,42 +3032,28 @@ export async function botTurn(player){
       // The route is now taken BEFORE the event, because it rides ON the event (Game.ev/bakeDraw).
       const route=[b,...g.sailPath(player,[...player.pos],{throughRim:false,from:b})];
       const evSail=g.ev({t:"sail",p:player.idx,route});
-      /* ANIMATE BEFORE liveRender(), which is the order consumeEvent draws in — off the SAME event
-         object the guest is handed, so both tiers walk identical code on an identical subject.
-         liveRender()'s drain then finds the ride already walked (re-entry guard) and its call is a
-         no-op. Putting liveRender first would hand the ride to that UNAWAITED drain, and this turn
-         loop would stop waiting for the glide. */
-      /* W9: THE TABLE IS TOLD BEFORE THIS TIER RIDES — same fault, same fix as the storm sweep
-         above and the battle flee (src/orchestrator.js). liveRender() is the ONLY publisher in the
-         tree, so awaiting the glide before it held every other browser's board still for exactly
-         the length of THIS captain's own animation. Publish, then ride: nothing about what is
-         drawn, or about who waits for it, moves. publishNow() calls only the broadcast half of
-         liveRender (src/ui/panel.js), never the local drain, so no ride is claimed by it. */
-      /* ⭐ DRAIN FIRST, THEN RIDE — Wyatt, 2026-09-08 (sheet item s4): "It should happen WHEN the
-         captain clicks a sail square/BEGINS to sail -- instead, it seems to happen after they have
-         started sailing/have arrived... also... the coin flip/anchor sounds of bot players happen
-         CONCURRENTLY with the sail sound."
-         BOTH HALVES WERE ONE FAULT AND IT IS THIS LINE'S ORDER. Yesterday's fix moved playForEvent
-         to the TOP of consumeEvent, which made a HUMAN's sail sound instant — measured twice at
-         0-1ms from the tap. A BOT never got that, because this path rode the glide and only THEN
-         called liveRender(), the drain that reaches consumeEvent at all. So on a bot's turn the
-         sail sound landed as the boat ARRIVED — and the dock coin, which comes next, followed it
-         by 1-2ms. Measured on a real voyage (scripts/qa/_sfx_timeline.mjs, which wraps
-         AudioBufferSourceNode.start and names each sound by its buffer duration):
-             11169ms ship-move   11171ms coin-flip     (+2ms)
-             21051ms ship-move   21052ms coin-flip     (+1ms)
-             30934ms ship-move   30936ms fishing       (+2ms)
-         liveRender() is synchronous and hands the event to consumeEvent fire-and-forget, and
-         playForEvent is the first thing consumeEvent does before any await — so calling it FIRST
-         fires the sound this instant and starts the ride. The await below then JOINS that ride
-         rather than starting a second one (see the WeakMap by animateSailRoute), which is what
-         keeps this turn paced behind the glide. The old comment here warned that putting
-         liveRender first would let the turn "run on past" the ride; that was true of a guard that
-         skipped, and is not true of one that joins. */
-      publishNow();liveRender();await animateSailRoute(evSail);
+      /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
+         Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
+         are supposed to feed actions to an engine, which feeds events back, which a different piece
+         of code displays. Is that not what you built here?"
+         It is — playForEvent's only caller in the tree is consumeEvent, and consumeEvent's only two
+         producers are this drain and the guest's wire. But this line used to reach PAST the drain
+         and await the presentation itself (`liveRender(); await animateSailRoute(evSail)`), because
+         liveRender() was fire-and-forget and a turn loop that must stay behind a moving boat had
+         nothing else to wait on. That is orchestration holding a reference to the display for its
+         own pacing, and it is exactly what let the two get out of order: for a year the ride was
+         awaited BEFORE the drain, so the boat glided while its event sat unread and the sound
+         landed on arrival.
+         liveRender() returns a promise now (src/ui/panel.js), so the wait is on the DRAIN and the
+         consumer owns every pixel and every sound. Two lines became one, and the turn loop no
+         longer imports a walker at all.
+         WHAT HAS NOT CHANGED: publishNow() still tells the table BEFORE this tier draws anything
+         (W9 — it calls only the broadcast half, never the local drain), so no other browser is held
+         still for the length of this captain's own animation. */
+      publishNow();await liveRender();
       await botBeat();
       const evWind=g.tradewind(player);
-      if(evWind){publishNow();liveRender();await animateRimSweepIfAny(evWind);await narrateLastEvent();}}
+      if(evWind){publishNow();await liveRender();await narrateLastEvent();}}
     // G18: a boxed-in bot escapes through the rim, exactly as the engine's own takeTurn does.
     // rimEscape() records its own events (windmove, then tradewind's sweep line).
     /* rimEscape returns whether the ship escaped, not the event, so the sweep it just pushed is
@@ -3101,7 +3061,8 @@ export async function botTurn(player){
        is a CONSUMER guessing which event it is drawing, and this is the EMITTER, one synchronous
        statement after its own emit with nothing awaited in between. If the escape found no head to
        sweep to, the top of the pile is the windmove and the call is a no-op by its own guard. */
-    else if(g.boxedIn(player)&&g.rimEscape(player)){publishNow();await animateRimSweepIfAny(g.events[g.events.length-1]);await botBeat();}
+    // the drain draws it and this loop waits on the drain — same shape as every other ride here
+    else if(g.boxedIn(player)&&g.rimEscape(player)){publishNow();await liveRender();await botBeat();}
   }
   if(!g.adjPort(player))player.dockedNow.clear();
   liveRender();

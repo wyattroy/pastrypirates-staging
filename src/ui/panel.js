@@ -143,10 +143,26 @@ export function setClockUI(){
   $("btnPlayAgain").style.display=appState.liveDone?"":"none";
 }
 
+/* ⭐ THE DRAIN HANDS BACK A PROMISE — Wyatt, 2026-09-08, reading the s4 fix: "All players, bot or
+   human, are supposed to feed actions to an engine, which feeds events back, which a different
+   piece of code displays. Is that not what you built here?"
+   IT IS, AND THIS IS THE LINE THAT MADE IT LOOK OTHERWISE. Because this drain was fire-and-forget,
+   a turn loop that needed to WAIT for a boat to finish moving could not wait on the drain — so it
+   reached past it and awaited the presentation directly (`await animateSailRoute(ev)` beside its
+   own liveRender()). That is the orchestration layer holding a reference to the display for its
+   own pacing, and it is what let the two get out of order in the first place.
+   Returning a promise removes the reason to reach past it: a caller that must stay behind the
+   animation now awaits THE DRAIN, and the consumer owns the drawing entirely.
+   ADDITIVE, WHICH IS WHY THIS IS SAFE ACROSS ~57 CALL SITES. The body is still fully synchronous
+   up to and including the moment every consumer is STARTED — that is what keeps a sail's sound
+   instant — and every existing caller simply ignores the return value, exactly as before.
+   AND IT CANNOT REJECT: each consumer keeps its own .catch(voyageAground), so the wreck screen
+   still surfaces a throw and `await liveRender()` never needs a try. */
+const DRAINED = Promise.resolve();
 export function liveRender(){
-  if(appState.replaying)return;          // during reload-replay we rebuild state silently, no render/broadcast
+  if(appState.replaying)return DRAINED;  // during reload-replay we rebuild state silently, no render/broadcast
   appState.evIdx=Math.max(0,appState.game.events.length-1);
-  if(!appState.game.events.length)return;
+  if(!appState.game.events.length)return DRAINED;
   const _nh=netHandlers();
   /* W1 (2026-08-28): THE HOST'S INLINE DRAWING IS GONE. The render/pops/sound lines that stood
      here were the second orchestration CLAUDE.md rule 23 names — the host drew from this loop
@@ -164,9 +180,14 @@ export function liveRender(){
      burst's earlier pops and sounds were skipped on the host alone) was the last divergence
      inside the one-consumer claim, flagged as Q-13 and closed by his (b). Start-in-order,
      interleave-at-awaits — the same semantics a guest has when a burst arrives. */
-  if(_nh.onConsumeEvent)while(appState.evConsumed<appState.game.events.length){
-    const e=appState.game.events[appState.evConsumed++];
-    _nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent"));
+  let drained=DRAINED;
+  if(_nh.onConsumeEvent){
+    const pending=[];
+    while(appState.evConsumed<appState.game.events.length){
+      const e=appState.game.events[appState.evConsumed++];
+      pending.push(_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent")));
+    }
+    if(pending.length)drained=Promise.all(pending).then(()=>{});
   }
   if(appState.isHost){
     // seam (D-07/criterion 1, RESEARCH Q1b edge 2): was a direct pushEvents() call — pushEvents
@@ -174,6 +195,7 @@ export function liveRender(){
     // bridge by src/main.js's setNetHandlers() call, formalized to a real src/net/ import in 11-06.
     if(_nh.onEvents)_nh.onEvents();       // broadcast the growing event feed to every other browser
   }
+  return drained;
 }
 // needsAction=true turns the panel yellow (this seat must decide something);
 // false (the default) is pale blue — informational only, nothing to click.
