@@ -491,6 +491,78 @@ function setMuted(v) {
    THE FIX IS THE RULE THE OTHER RAMP ALREADY FOLLOWS, plus one thing that ramp does not need:
    when the clock is NOT running there is nothing for a ramp to travel along, so the value is set
    OUTRIGHT. A ramp on a stopped clock is not a slow fade, it is no fade at all. */
+/* ⭐ THE CLOCK IS THE TRUTH, NOT ctx.state — Wyatt, 2026-09-09, on his phone:
+     "safari showed that the tab SHOULD be making sound; but no sound came out... i toggled it
+      through a full cycle. still no sound. then I reloaded... I left the page entirely and went to
+      youtube, played a video, heard sound, then retyped staging... STILL no sound. THEN, when i
+      clicked polly to toggle it off, the sound came on! ... now, when I tried to replicate the bug,
+      the sound works every time."
+
+   THE NOTE ABOVE THIS FUNCTION ALREADY DIAGNOSED THIS SHAPE ONCE and fixed half of it: a ramp
+   scheduled against a frozen clock never travels, so the master bus stays where it was. What it did
+   not question is the TEST — `ctx.state === "running"`. On Apple platforms those are not the same
+   claim. The file's own comment thirty lines up says the quiet part: **ctx.currentTime STOPS
+   ADVANCING while the context is suspended or `interrupted`** — so the clock, not the state string,
+   is what says whether a ramp can move at all. Safari can and does report `running` on a context
+   whose clock is not advancing, and every guard in this file trusted the string.
+
+   WHY THAT MATCHES EVERY STEP HE DESCRIBED, INCLUDING THE ONE THAT MAKES NO SENSE:
+     - He switched to another tab. document.hidden -> the master ramps toward 0. That lands.
+     - He came back. The ramp back to 1 is scheduled against a clock that is not moving, so the bus
+       stays at 0 while source nodes still start — which is exactly why Safari lit the tab's audio
+       indicator over silence.
+     - Cycling the sound toggle calls this function again: another ramp, same frozen clock, still 0.
+     - A tap could not help either, because unlockAudio() returns at its first line whenever the
+       state string says "running" (see orchestrator.js) — so the session kick and resume() were
+       both unreachable in precisely this state.
+     - THE PARROT. That button touches no audio at all, and it did not fix anything: when Safari's
+       clock eventually restarted on its own, the ramp still sitting in the queue finally travelled
+       and the bus climbed to 1. Whatever he happened to be pressing at that instant would look like
+       the cause. It also explains why it never reproduced.
+
+   ⚠ HONEST LIMIT, and it is the same one the session-kick note above carries: I could not reproduce
+   his state. This is reasoned from the code and from his sequence, not measured on a device. What
+   is NOT a hypothesis is the dead end itself — trusting a state string that this very file
+   documents as unreliable is wrong whether or not it is what silenced his phone.
+
+   WHEN IN DOUBT, SET. A ramp is a nicety worth 50ms; silence is a bug worth an evening. So the
+   value is landed outright unless we have POSITIVE evidence the clock is moving. */
+/* ⚠ TRI-STATE, AND THE THIRD VALUE IS THE WHOLE POINT: true / false / null for "cannot tell yet".
+   Two callers read this evidence and THEIR SAFE DEFAULTS ARE OPPOSITE, which a boolean cannot
+   express — collapsing "unknown" onto either one produces a real fault:
+     - applyMasterGain must SET rather than ramp unless it can see the clock move, because a ramp on
+       a stopped clock is silence forever.
+     - the diagnosis must NOT say "stalled" unless it can see the clock stopped, because a wrong
+       word on that row is exactly the thing that cost Wyatt an evening in the first place.
+   The first version of this returned a bare false while unproven, which meant a healthy game
+   reported "stalled" for the first half-second of every voyage. Caught before it shipped only by
+   asking what the default MEANT to each caller. */
+/* ⚠ AND READING IT MUST NOT CONSUME IT. The first version re-sampled on EVERY call — so the answer
+   depended on who had asked last. audioDiagnosis() (500ms panel tick), audioRunning() and wakeCtx()
+   all ask, often within the same millisecond; each one reset the pair, no two samples were ever
+   200ms apart, the verdict was permanently "cannot tell", and wakeCtx() therefore returned early on
+   a genuinely stalled context. MEASURED, and it is why this note exists rather than a tidier one:
+   with the detector working and the row correctly reading "stalled", a tap moved the clock 1.55 ->
+   1.55. Detection without recovery is a better-worded dead end, not a fix.
+   SO THERE IS ONE WRITER AND IT KEEPS THE OLDER SAMPLE until enough wall time has passed to judge
+   by; the verdict persists between reads. A frequent reader can no longer starve a slow question. */
+let clkT = -1, clkWall = 0, clkVerdict = null;
+function clockAdvancing() {
+  if (!ctx) return null;
+  const t = ctx.currentTime, w = Date.now();
+  if (clkT < 0) { clkT = t; clkWall = w; return clkVerdict; }
+  if (w - clkWall >= 200) {                          // enough wall time to judge by — and only then
+    clkVerdict = (t - clkT) > 0.05;
+    clkT = t; clkWall = w;
+  }
+  return clkVerdict;
+}
+/* The question the menu row could not ask: the context CLAIMS to run but its clock is frozen, so
+   nothing scheduled will ever play. Different from "blocked" (state says so and a tap fixes it)
+   and from "nosamples" (nothing decoded), and it needs a different sentence.
+   ONLY ON PROOF — `=== false`, never a falsy unknown. */
+function audioStalled() { return !!ctx && ctx.state === "running" && clockAdvancing() === false; }
+
 function applyMasterGain() {
   if (!ctx || !masterGain) return; // safe to call with no graph built yet
   const hidden = typeof document !== "undefined" && document.hidden;
@@ -499,8 +571,8 @@ function applyMasterGain() {
   const now = ctx.currentTime;
   g.cancelScheduledValues(now);          // nothing stale may survive this call
   g.setValueAtTime(g.value, now);        // anchor at where the gain ACTUALLY is
-  if (ctx.state === "running") g.setTargetAtTime(target, now, 0.05);
-  else g.value = target;                 // frozen clock: no ramp can travel, so land it now
+  if (ctx.state === "running" && clockAdvancing() === true) g.setTargetAtTime(target, now, 0.05);
+  else g.value = target;                 // frozen or unproven clock: no ramp can travel, land it now
 }
 
 async function loadOne(name) {
@@ -623,7 +695,12 @@ function kickAudioSession() {
 
 let resuming = false;
 function wakeCtx() {
-  if (!ctx || ctx.state === "running" || resuming) return;
+  /* ⚠ `ctx.state === "running"` USED TO END THIS FUNCTION, and that was the other half of the dead
+     end described at applyMasterGain: on a context that reports running while its clock is frozen,
+     resume() was never called again for the life of the page. audioStalled() is what lets a tap
+     reach a context that is lying about itself. */
+  if (!ctx || resuming) return;
+  if (ctx.state === "running" && !audioStalled()) return;
   resuming = true;
   /* THE FLAG MUST BE ABLE TO CLEAR ITSELF. Safari can leave resume()'s promise PENDING FOREVER
      when the context is `interrupted` — it neither resolves nor rejects. A flag cleared only by
@@ -635,7 +712,7 @@ function wakeCtx() {
 }
 /* Whether sound can ACTUALLY be heard right now — the question the unlock could not previously
    ask, which is why it gave up after one try. Exported for src/orchestrator.js's gesture unlock. */
-function audioRunning() { return !!ctx && ctx.state === "running"; }
+function audioRunning() { return !!ctx && ctx.state === "running" && !audioStalled(); }
 /* WHY THE GAME NOW SAYS THIS OUT LOUD. Wyatt spent an evening on "no sound in Safari" and I was
    wrong three times, because the screen showed exactly one word — "ON" — whether the engine was
    running, asleep, or had never loaded a single sample. He had no way to tell those apart and
@@ -653,6 +730,11 @@ function audioRunning() { return !!ctx && ctx.state === "running"; }
 function audioDiagnosis() {
   if (isMuted()) return "muted";
   if (!ctx || ctx.state !== "running") return "blocked";
+  /* THE STATE HE HAD NO WORD FOR. He spent an evening unable to tell me anything except "no
+     sound", because the row said "ON" throughout. A context whose clock has stopped is neither
+     blocked nor missing samples, and it is the one state where the honest advice is different:
+     tapping does help, but only because a tap now reaches resume() again. */
+  if (audioStalled()) return "stalled";
   if (!Object.keys(buffers).length) return "nosamples";
   /* THE THIRD SOUND-ON STATE, added here rather than beside the row. This function is already the
      single thing that decides what the menu says — panel.js's own comment: "ONE ATTRIBUTE CARRIES

@@ -134,6 +134,9 @@ export function setClockUI(){
        the treatment that works on touch as well as desktop (see MUTE-01 above). */
     const muteLabel=diag==="muted"?"Sound is off. Tap for sound and music."
                    :diag==="nomusic"?"Sound on, music off. Tap to mute."
+                   // the stalled state names itself here too, or the row and the label disagree at
+                   // the one moment a player is actually looking for an explanation
+                   :diag==="stalled"?"Sound is on but yer browser has stalled it. Tap the board."
                    :"Sound and music on. Tap to turn the music off.";
     setIf(muteEl,"title",muteLabel);
     setAttrIf(muteEl,"aria-label",muteLabel);
