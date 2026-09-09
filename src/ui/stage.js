@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@6ffafcb9";
+const PP4_STAMP = "2026.09.07.3-staging@d8a4745f";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -4178,11 +4178,25 @@ function promptTick(force){
           tries.push(Math.round(Math.max(floor, msgR.top - subH - 4)));
         }
         tries.push(Math.round(floor));
-        let best = home, bestHits = hits(home);
+        /* ⭐ AND IT DOES NOT LAND ON THE MESSAGE EITHER — Wyatt's 2026-09-09 phone screenshot,
+           DAY 4: the italic "Sailin' into the wind only gets ye half the distance." drawn straight
+           across "Wyargh: Tap a gold square to sail…", both lines unreadable. He did not name it;
+           it is in the picture.
+           ⚠ THE CAUSE IS THAT THIS SEARCH ONLY EVER COUNTED SQUARES. A candidate sitting on the
+           message scored zero — perfect — so it could and did win. The fix is not a new rule: it is
+           the rule the comment above already cites, applied. That obstacle table weights `.sailCell`
+           at 1000 and `.apMsg` at 40, meaning "cover the message before ye cover a square a captain
+           must hit, but do not cover either if there is anywhere else to be". Scoring both with
+           those same weights is what the paragraph above always claimed was happening. */
+        const SQUARE_W = 1000, MSG_W = 40;
+        const overMsg = t => (msgR && msgR.height > 0 &&
+          !(msgR.right < subL || msgR.left > subL + sw || msgR.bottom < t || msgR.top > t + subH)) ? 1 : 0;
+        const score = t => hits(t) * SQUARE_W + overMsg(t) * MSG_W;
+        let best = home, bestScore = score(home);
         for (const t of tries){
-          if (bestHits === 0) break;
-          const h = hits(t);
-          if (h < bestHits){ best = t; bestHits = h; }
+          if (bestScore === 0) break;
+          const sc = score(t);
+          if (sc < bestScore){ best = t; bestScore = sc; }
         }
         sub.style.top = best + "px";
       }

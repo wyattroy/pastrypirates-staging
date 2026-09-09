@@ -73,7 +73,8 @@ import { passGate, requireName, showStep, openNameModal, confirmName, wireNameMo
 import { playBakeoffLive } from "./bakeoff.js";
 import { netHandlers } from "./handlers.js";
 import { pilotLine, pilotMsg, pilotSee, pilotSpeaks, pilotRung, pilotDepth, pilotFirstTime,
-  pilotStartFromTheTop, pilotSkipToVeteran, pilotDecayOnLaunch, pilotApplyUrlFlag } from "./pilot.js";
+  pilotStartFromTheTop, pilotSkipToVeteran, pilotDecayOnLaunch, pilotApplyUrlFlag,
+  pilotIsOn } from "./pilot.js";
 import { showCourseFor, clearCourse, forgetCourse } from "./course.js";
 
 const $=id=>document.getElementById(id);
@@ -641,8 +642,14 @@ export function renderPickPrompt(spec,answer){
   appState.currentPrompt=spec;
   /* forgetCourse, not clearCourse: this prompt is OVER, so there is nothing for the parrot to
      restore. Keeping the memory here would let a later toggle redraw a course for a sail that has
-     already been made. */
-  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;forgetCourse();};
+     already been made.
+     ⚠ NOT WHILE POLLY IS ON — his 2026-09-09 ruling above. Wiping it here is the other half of why
+     the line "faded out": even with the draw condition widened, every prompt teardown took the
+     dashes off the water again, so the course flickered away between turns. With the parrot on, the
+     next prompt redraws it from the LIVE game anyway, so leaving it up is both correct and
+     continuous. */
+  const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;
+    if(!pilotIsOn())forgetCourse();};
   const done=v=>{teardown();answer(v);};
   const cellPx=boardCell();
   /* ITEM 21: the yellow flashing square UNDER the captain's own boat — "to indicate that they may
@@ -695,11 +702,18 @@ export function renderPickPrompt(spec,answer){
      SPEC carries — never this client's own players[].pos, which on a guest is a stale render
      shell (the same rule the stay square already follows). */
   const who=appState.game&&appState.game.players?appState.game.players[seat]:null;
-  if(teaching&&who&&spec.pos)
+  /* ⭐ WITH POLLY ON, THE COURSE IS DRAWN FOR THE WHOLE VOYAGE — Wyatt, 2026-09-09: "I think on
+     'Polly' mode, the dotted line should appear for the whole game, not fade out."
+     ⚠ THIS WIDENS THE CONDITION FROM `teaching` TO `pilotIsOn()`, AND THE TWO ARE NOT THE SAME.
+     `teaching` is "this rung still has words for ye" — it goes false the moment a ladder bottoms
+     out, which is by design for TEXT (the tutorial wears off rather than ending). The dotted course
+     is not text. It is a picture of where this recipe sends ye, and his ruling is that a captain who
+     has left the parrot on wants it every turn, not for the first three. So the words still decay
+     on their own ladder and the picture no longer decays with them. */
+  if(pilotIsOn()&&who&&spec.pos)
     showCourseFor(appState.game,{...who,pos:spec.pos},svg,cellPx);
-  /* forgetCourse: the ladder has reached its bottom rung, so this captain is done being guided
-     and a toggle must not resurrect it. (Toggling the parrot ON puts every ladder back to rung 0,
-     which makes the NEXT prompt teach again — that path is untouched.) */
+  /* forgetCourse only when the parrot is OFF: nothing left to restore, and a later toggle must not
+     resurrect a course for a sail already made. */
   else forgetCourse();
   pilotSee("sail.pick");
   $("apStay").onclick=()=>done(null);
