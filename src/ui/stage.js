@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@66091890";
+const PP4_STAMP = "2026.09.07.3-staging@709bf2a8";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2267,6 +2267,9 @@ let rcInFlight = false;
    THE DIAGNOSIS UNDERNEATH HIS THREE POINTS IS ONE THING: every beat started abruptly. The cards
    appeared in a frame, the swap fired before the eye had settled, and the flight began at full
    speed. "Glitchy" is what a correct sequence with no ease-in looks like. */
+/* His "50% bigger" as a ceiling rather than a target: 250 -> 375. The card only reaches it where
+   the captains column is wide enough to hold the stack, which is derived per window. */
+const RC_CARD_MAX = 375;
 const RC_LAND_MS  = 1000;    // his "swap with each other after 1 second" (was 420 — my number)
 const RC_HOLD_MS  = 500;     // his "about 0.5 seconds" — after the swap, before the flight
 const RC_FLY_MS   = 760;     // the flight; matches the CSS transition on #pp4Prompt exactly
@@ -3489,17 +3492,50 @@ function promptTick(force){
        "top right of the board" and "the full width" converge, which is correct rather than a
        special case. */
     const rcRow = ap.querySelector(".apBtns");
-    /* ⚠ HIS ITEM 3 IS PARKED, WITH THE NUMBER — Wyatt, 2026-09-09: "in desktop Make the cards 50%
-       bigger." IT CANNOT BE TRUE AT THE SAME TIME AS HIS ITEM 5, and this is the arithmetic:
-       the stack needs `card x 1.4 + 8` — card plus a peek either side — and the captains column it
-       now sits in measures ~382px at 1280. That allows a card of (382 - 8 - padding) / 1.4 ≈ 250,
-       which is exactly what it already is. A 375px card wants ~553px of row.
-       ⚠ AND I TRIED TO DERIVE IT FROM THE PANEL FIRST, WHICH IS A MISTAKE THIS FILE ALREADY
-       DOCUMENTS twenty lines below ("attempt 2 — measure it once in JS... four sizes for one card").
-       #actionPanel is shrink-to-fit, so its width depends on the card, so sizing the card from the
-       panel is a loop. It measured 248px on a phone where 225 had been correct. Backed out.
-       THE CHOICE IS HIS, and it is a real one: keep the board completely clear (0.0% hidden), or let
-       the sheet reach left over the board and have the bigger cards. Parked in BACKLOG.md. */
+    /* ⭐ THE CARD IS AS BIG AS ITS COLUMN ALLOWS — Wyatt, 2026-09-09 item 3, "in desktop Make the
+       cards 50% bigger", and I got this wrong twice before getting it right.
+
+       ⚠ MISTAKE ONE: I SIZED IT FROM THE PANEL. #actionPanel is shrink-to-fit, so its width depends
+       on the card, so sizing the card from it is a loop — this file documents that exact failure
+       twenty lines below ("attempt 2 — measure it once in JS... four sizes for one card"), and it
+       measured 248px on a phone where 225 was correct. Correctly backed out.
+
+       ⚠ MISTAKE TWO, AND IT IS THE ONE HE CAUGHT: I then declared the whole thing impossible and
+       quoted arithmetic to prove it — "the captains column is ~382px, so a 375px card cannot fit".
+       That 382 was measured on a 1280x900 EMULATION and stated as though it were a fact about his
+       screen. It is not. On his own window the column is closer to 550, which is exactly what he
+       was pointing at: "i don't understand your math -- there is SO much horizontal AND vertical
+       space here". A number measured on one viewport is not a constraint; it is one sample.
+
+       ⭐ THE COLUMN IS THE HONEST SOURCE, AND IT IS NOT CIRCULAR. #pp4Cap's width is decided by the
+       page layout and owes nothing to the card, so reading it cannot feed back — which is the whole
+       reason the panel could not be used and this can. Solve the stack's own arithmetic for the
+       card: it needs `card x 1.4 + 8` (card plus a peek either side, since the row centres), plus
+       the row's and the box's padding. Capped at his 375 so it never grows past what he asked for.
+
+       WHAT THIS GIVES, on the two windows I can measure: ~245 at 1280 (unchanged — the card was
+       already at its ceiling there, which is why my 382 sample fooled me) and ~365 on a 550px
+       column, which is his 50%. It also grows on any wider screen without another change, which a
+       typed 375 never would. */
+    if (rcRow){
+      const capNow = (() => { const c = $("pp4Cap"); if (!c) return null;
+        const r = fixedRect(c); return (r.width > 2) ? r : null; })();
+      const pad = el => { const c = getComputedStyle(el);
+        return (parseFloat(c.paddingLeft) || 0) + (parseFloat(c.paddingRight) || 0); };
+      /* ⚠ ONLY WHERE THE CAPTAINS BOX IS A COLUMN BESIDE THE BOARD. On a phone and a tablet it is
+         the FULL-WIDTH STRIP under the board, and its width is then no bound on the card at all —
+         measured, this handed a 390px phone a 237px card, overriding the 225 the media query below
+         sets. That 225 is not a preference: it is the width at which the card, its peek and the
+         swap circle still fit, worked out in the CSS three paragraphs above the query. An inline
+         style beats a media query, so deriving everywhere would have silently broken a constraint
+         somebody had already measured. */
+      const beside = capNow && capNow.left > 40 && capNow.width < vwPx() * 0.75;
+      const avail = beside ? Math.round(capNow.width - pad(rcRow) - pad(ap) - pad(box) - 4) : 0;
+      const want = avail > 140 ? Math.max(160, Math.min(RC_CARD_MAX, Math.floor((avail - 8) / 1.4))) : 0;
+      const now = parseFloat(rcRow.style.getPropertyValue("--rcW")) || 0;
+      if (want && Math.abs(want - now) > 1) rcRow.style.setProperty("--rcW", want + "px");
+      if (!want && now) rcRow.style.removeProperty("--rcW");   // no column to measure: back to the CSS
+    }
     const sheetW = (() => {
       const capW = Math.min(brd ? Math.round(brd.width) : vwPx() - 16, vwPx() - 16);
       if (!rcRow) return capW;

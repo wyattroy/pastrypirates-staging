@@ -21,7 +21,8 @@ const PORT = 8760 + (process.pid % 90), DBG = 9760 + (process.pid % 90);
 const url = serve(PORT);
 launch(DBG, path.join(REPO, `.tmp-seven-${process.pid}`));
 const C = await attach(DBG);
-const SIZES = [{ name:"desktop", w:1280, h:900, mobile:false },
+const SIZES = [{ name:"his-1920", w:1920, h:1080, mobile:false },
+               { name:"desktop", w:1280, h:900, mobile:false },
                { name:"tablet",  w:768,  h:1024, mobile:false },
                { name:"phone",   w:390,  h:844, mobile:true }];
 const metrics = s => C.send("Emulation.setDeviceMetricsOverride",{width:s.w,height:s.h,deviceScaleFactor:1,mobile:s.mobile});
@@ -71,6 +72,7 @@ const M = `JSON.stringify((()=>{
     swapRotate:sw&&sw.querySelector('svg')?getComputedStyle(sw.querySelector('svg')).transform:null,
     boardHidden:cover(R(ap),R(brd)), panelWiderThanBox:(R(ap)&&R(box))?(R(ap).w-R(box).w):null,
     cursor:box?getComputedStyle(box).cursor:null,
+    rcW:(()=>{const r=document.querySelector('#actionPanel .apBtns');return r?Math.round(parseFloat(getComputedStyle(r).getPropertyValue('--rcW'))||0):null})(),
     boxDisplay:box?getComputedStyle(box).display:null,
     boxAlign:box?getComputedStyle(box).alignItems:null,
     boxDir:box?getComputedStyle(box).flexDirection:null,
@@ -110,7 +112,8 @@ try {
     say(`   ...island squares under it    : ${m.helpOverIslandCells}   (must be 0; grid=${m.gridN}, viewBox=${m.viewBox})`);
     say(` 7 arrow transform               : ${m.swapRotate}   (rotate(180deg) = matrix(-1,0,0,-1,0,0))`);
     say(` 5 cursor on the sheet           : ${m.cursor}`);
-    say(`   box ${JSON.stringify(m.box)}  display=${m.boxDisplay} dir=${m.boxDir} align=${m.boxAlign}`);
+    say(`   box ${JSON.stringify(m.box)}`);
+    say(`   captains column ${JSON.stringify(m.captains)}  ·  CARD --rcW = ${m.rcW}px  ·  front card ${m.front?m.front.w:"?"}px`);
     say(`   ask centred in the sheet? ${JSON.stringify(m.askCentred)}   (equal gaps = centred)`);
     say(`   PANEL ${JSON.stringify(m.panel)}   panel wider than box by ${m.panelWiderThanBox}px`);
     say(`   board ${JSON.stringify(m.board)}   panel hides ${m.boardHidden==null?'?':(m.boardHidden*100).toFixed(1)+'%'} of it`);
