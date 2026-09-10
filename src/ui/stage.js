@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@709bf2a8";
+const PP4_STAMP = "2026.09.07.3-staging@ce67d7a9";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -3529,8 +3529,22 @@ function promptTick(force){
          swap circle still fit, worked out in the CSS three paragraphs above the query. An inline
          style beats a media query, so deriving everywhere would have silently broken a constraint
          somebody had already measured. */
-      const beside = capNow && capNow.left > 40 && capNow.width < vwPx() * 0.75;
-      const avail = beside ? Math.round(capNow.width - pad(rcRow) - pad(ap) - pad(box) - 4) : 0;
+      /* ⚠ "IS IT A COLUMN?" IS A STRUCTURAL QUESTION, NOT A SHAPE ONE — and my first test got it
+         wrong in the one mode I had not driven. `capNow.left > 40 && width < 75% of the glass` is a
+         heuristic about proportions, and pass-and-play's captains strip on a PHONE satisfies both:
+         it is inset and it is not very wide. So the card was derived up to 244px on a 390px screen
+         where the CSS had measured 225 as the ceiling, and the back card's peek ran off the right
+         edge — the sea trial caught it as `clickable off-screen: Vanilla Bean Crème Brûlé` on
+         passplay-phone, which is D-38's one unacceptable outcome: a control a captain cannot reach.
+         THE HONEST TEST IS WHERE THE BOX SITS RELATIVE TO THE BOARD. A column is beside the board;
+         a strip is below it. That is a fact about the layout, not a proportion, and it cannot be
+         satisfied by a narrow strip on a phone. */
+      const beside = capNow && brd && capNow.left >= brd.right - 4;
+      /* AND THE GLASS ALWAYS WINS, as a belt. Even a true column must not let the stack grow wider
+         than the screen can show — the note at the old overflow nudge says it plainly: when the
+         question is "does this fit on the glass", only the glass can answer. */
+      const room = beside ? Math.min(capNow.width, vwPx() - 16) : 0;
+      const avail = beside ? Math.round(room - pad(rcRow) - pad(ap) - pad(box) - 4) : 0;
       const want = avail > 140 ? Math.max(160, Math.min(RC_CARD_MAX, Math.floor((avail - 8) / 1.4))) : 0;
       const now = parseFloat(rcRow.style.getPropertyValue("--rcW")) || 0;
       if (want && Math.abs(want - now) > 1) rcRow.style.setProperty("--rcW", want + "px");

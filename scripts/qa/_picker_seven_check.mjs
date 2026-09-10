@@ -72,6 +72,13 @@ const M = `JSON.stringify((()=>{
     swapRotate:sw&&sw.querySelector('svg')?getComputedStyle(sw.querySelector('svg')).transform:null,
     boardHidden:cover(R(ap),R(brd)), panelWiderThanBox:(R(ap)&&R(box))?(R(ap).w-R(box).w):null,
     cursor:box?getComputedStyle(box).cursor:null,
+    /* ⭐ THE SEA TRIAL'S OWN QUESTION, asked here so it is not found two hours later:
+       is EVERY recipe card fully on the glass? It caught "clickable off-screen: Vanilla Bean Crème
+       Brûlé" on passplay-phone, which is D-38's one unacceptable outcome. */
+    offscreen:(()=>{const cs=[...document.querySelectorAll('#actionPanel .apBtn')].filter(b=>b.querySelector('.recipeList'));
+      return cs.map(c=>{const r=c.getBoundingClientRect();
+        return (r.left<-1||r.top<-1||r.right>innerWidth+1||r.bottom>innerHeight+1)
+          ?{l:Math.round(r.left),r:Math.round(r.right),vw:innerWidth}:null;}).filter(Boolean);})(),
     rcW:(()=>{const r=document.querySelector('#actionPanel .apBtns');return r?Math.round(parseFloat(getComputedStyle(r).getPropertyValue('--rcW'))||0):null})(),
     boxDisplay:box?getComputedStyle(box).display:null,
     boxAlign:box?getComputedStyle(box).alignItems:null,
@@ -113,7 +120,8 @@ try {
     say(` 7 arrow transform               : ${m.swapRotate}   (rotate(180deg) = matrix(-1,0,0,-1,0,0))`);
     say(` 5 cursor on the sheet           : ${m.cursor}`);
     say(`   box ${JSON.stringify(m.box)}`);
-    say(`   captains column ${JSON.stringify(m.captains)}  ·  CARD --rcW = ${m.rcW}px  ·  front card ${m.front?m.front.w:"?"}px`);
+    say(`   CARD --rcW = ${m.rcW}px`);
+    say(`   every card fully on the glass? ${m.offscreen.length===0?"YES":"NO — "+JSON.stringify(m.offscreen)}`);
     say(`   ask centred in the sheet? ${JSON.stringify(m.askCentred)}   (equal gaps = centred)`);
     say(`   PANEL ${JSON.stringify(m.panel)}   panel wider than box by ${m.panelWiderThanBox}px`);
     say(`   board ${JSON.stringify(m.board)}   panel hides ${m.boardHidden==null?'?':(m.boardHidden*100).toFixed(1)+'%'} of it`);

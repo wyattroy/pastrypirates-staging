@@ -1597,6 +1597,19 @@
       radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
       linear-gradient(160deg, #f7edd2, #ecd9ac);
     box-shadow: inset 0 0 24px rgba(120,80,35,.30), 0 2px 7px rgba(70,45,20,.22); }
+  /* ⭐ THE CARD IS THE TARGET; ITS CONTENTS ARE SCENERY. The sea trial failed every leg with
+     "clickable covered by something else: <recipe name> <- covered by .recipeTitle <div>" — the
+     structural check asks whether a clickable is the TOPMOST thing at its own centre, and a bigger
+     card put the title exactly there.
+     ⚠ IT IS NOT A FALSE POSITIVE, EVEN THOUGH THE CLICK STILL WORKED. This repo has already paid
+     twice for "something else is on top of the control" — the back card as a real <button> failed
+     the same check on four legs — and the rule it protects is D-38's: a control that is not the
+     thing under the finger is a control an automated eye, an assistive tool, or a stray listener
+     can miss. pointer-events:none makes the BUTTON what elementFromPoint returns, which is both
+     what the check wants and what was always true in spirit: nothing inside a recipe card is
+     separately clickable. */
+  .recipeCard > *, .recipeCard .recipeTitle, .recipeCard .recipeList,
+  .recipeCard .recipeThumb, .recipeCard img { pointer-events: none; }
   .recipeCard:hover { border-color: #8a6535;
     background:
       radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
@@ -2870,6 +2883,13 @@
      and there is one place to change if he wants it back. */
   .pp4RcSwap svg { display:block; width:60%; height:60%; transform:rotate(180deg); }
   .pp4RcSwap:active { background:#e0951a; transform:translateY(-50%) scale(.92); }
+  /* ⭐ AND IT SHOWS WHERE THE KEYBOARD IS. The circle is the one announced, focusable control on
+     this card — the peek strip beside it is deliberately out of the tab order — so a captain
+     tabbing to it had NO visible focus at all: the browser's default ring is suppressed by the
+     button reset at the top of this file, and nothing replaced it here. Flagged by a CEO review.
+     A teal ring rather than the game's gold, because gold on this card already means "tap me"
+     (the sail squares' gold, the Bake this! pill) and a focus ring is not an instruction. */
+  .pp4RcSwap:focus-visible { outline:3px solid #177; outline-offset:3px; }
   /* THE SWAP ITSELF — his 6.2: "The cards should animate when swapping to look like they're
      switching front to back." One class, added for the length of the move and removed after, so
      nothing is left on the element to go stale. The outgoing front card drops back and dims as the

@@ -1224,7 +1224,8 @@ export function stormCamForEvent(ev){
    can never double-send or reorder.
    WHY NOT SIMPLY MOVE liveRender() ABOVE THE RIDE — the tempting one-line version: liveRender's
    drain is FIRE-AND-FORGET (`_nh.onConsumeEvent(e).catch(...)`, deliberately not awaited, because
-   liveRender must stay synchronous for its 57 call sites). consumeEvent itself rides the sweep, and
+   liveRender's body must stay synchronous for EVERY call site — the count is not the point and a
+   number in a comment rots: it read "57" while the real figure passed 87). consumeEvent itself rides the sweep, and
    _rodeSweep below is idempotent — so draining first would make the call site's own `await` return
    false immediately, and the host would stop WAITING for the ride it is showing while a guest
    (whose watchEvents awaits consumeEvent serially) still waits. That trades a publish-order defect

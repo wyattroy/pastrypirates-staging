@@ -156,7 +156,9 @@ export function setClockUI(){
    own pacing, and it is what let the two get out of order in the first place.
    Returning a promise removes the reason to reach past it: a caller that must stay behind the
    animation now awaits THE DRAIN, and the consumer owns the drawing entirely.
-   ADDITIVE, WHICH IS WHY THIS IS SAFE ACROSS ~57 CALL SITES. The body is still fully synchronous
+   ADDITIVE, WHICH IS WHY IT IS SAFE AT EVERY CALL SITE — and there is deliberately no count here
+   any more. Three comments said "~57" while the real number passed 87; a tally in prose is a fact
+   nobody updates. What matters is the property: the body is still fully synchronous
    up to and including the moment every consumer is STARTED — that is what keeps a sail's sound
    instant — and every existing caller simply ignores the return value, exactly as before.
    AND IT CANNOT REJECT: each consumer keeps its own .catch(voyageAground), so the wreck screen
@@ -173,7 +175,10 @@ export function liveRender(){
      This is now the local DRAIN feeding the ONE consumer (consumeEvent, src/orchestrator.js,
      via the handler seam — panel.js is ui-tier and may never import the orchestrator). Rule A:
      the host consumes locally, never reading its own write back off Firebase.
-     Fire-and-forget WITH the aground catch: liveRender stays synchronous for its 57 call sites,
+     ⚠ AND IT NO LONGER "STAYS SYNCHRONOUS" IN THE SENSE THIS LINE ONCE MEANT: liveRender RETURNS A
+     PROMISE now (see above), so a caller may await the drain. What is still synchronous is the body
+     up to the moment the first consumer is started, which is what keeps a sail's own sound instant.
+     The aground catch is unchanged:
      and a throw inside the consumer must still surface the wreck screen rather than vanish as
      an unhandled rejection (the runLiveNet catch cannot see a detached promise). */
   /* A-13 (Wyatt: "host and guest parity is the #1 goal of this work. If we need to change the

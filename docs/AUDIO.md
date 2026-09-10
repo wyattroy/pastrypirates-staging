@@ -207,11 +207,18 @@ music"*). `sfx/music-ocean.mp3`, 34.5s, mono, 540 KB, at his `MUSIC_LEVEL` 0.141
 cleanly, and the pan moves all of it.
 
 **IT DOES NOT LOOP.** Wyatt: *"the song shouldn't immediately restart after it finishes— it should
-wait a minute."* So the track runs to its end, `onended` fires, and `MUSIC_GAP_SEC` (60) brings it
-back. A `loop = true` would make that constant dead code, which is what the gate checks for.
-⚠ **A minute, not two.** The handoff of 2026-09-06 recorded "2-minute gap"; **2026-09-07 is the
-later ruling and it wins.** Written down rather than quietly reconciled, so nobody restores 120
-from the older page believing it is live.
+wait a minute."* So the track runs to its end, `onended` fires, and `MUSIC_GAP_SEC` brings it back.
+A `loop = true` would make that constant dead code, which is what the gate checks for.
+
+⚠ **THE GAP IS 180 SECONDS — THREE MINUTES — AND THIS PARAGRAPH SAID 60 FOR TWO DAYS.** He asked for
+it longer on 2026-09-08 and the constant moved; this page did not, and a CEO review caught it. That
+matters more here than in most docs: CLAUDE.md sends the next session to read `docs/AUDIO.md`
+**first** before touching sound, so a stale number here is not a stale note, it is a briefing that
+is wrong. **Read `MUSIC_GAP_SEC` in `src/ui/audio.js` rather than trusting this sentence** — and if
+you change it, change this line in the same commit.
+
+*(History, so nobody restores an older value believing it is live: 2026-09-06 recorded a 2-minute
+gap · 2026-09-07 ruled 1 minute · 2026-09-08 ruled 3. Each supersedes the one above it.)*
 
 **THE SOUND CONTROL IS A THREE-WAY CYCLE:** sound+music → sound → mute → sound+music. `isMuted()`
 still means exactly what it always meant, so not one of its callers changed; what is new is that

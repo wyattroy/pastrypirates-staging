@@ -2288,8 +2288,24 @@ export function replayShortfall(rebuiltEvLen, priorEvLen, readFailed){
   if(shortfall > REPLAY_SHORTFALL_TOLERANCE) return {shortfall, incomplete:true, reason:"short-replay"};
   return {shortfall, incomplete:false, reason:"ok"};
 }
+/* THE WIRE EATS EMPTY ARRAYS, AND THIS IS THE ONE PLACE THAT PUTS THEM BACK. Firebase RTDB does
+   not store an empty array — it stores nothing — so a field written as `[]` on the host arrives on
+   a guest as `undefined`. `s.ing` above has always been repaired here for exactly that reason. */
+/* ⭐ THE STORM CRASH THAT KILLS CREW VOYAGES — open since Wyatt's 2026-08-21 handoff, named there
+   as "stormSummary reading .length of undefined", and it is this and nothing more.
+   stormSummaryEvent emits FIVE buckets (moved/held/shipHeld/blown/swept) and only emits at all when
+   at least one has somebody in it — so the others are `[]`, the wire drops them, and the narration
+   reaches `if(e.moved.length)` on a guest with e.moved undefined. IT CAN ONLY EVER HAPPEN IN CREW,
+   because a host reads the array it just built, in memory, and a solo game never crosses a wire.
+   That is why it survived four months of solo play and killed multiplayer.
+   ⚠ REPAIRED HERE RATHER THAN GUARDED AT THE READ. The narration reads five fields and the log line
+   reads them too; guarding each is five places to keep in step for one wire fact. STORM_BUCKETS is
+   asserted against the engine's own emit by storm_summary_buckets_check.mjs, so a sixth bucket
+   cannot be added there without this list being made to match. */
+export const STORM_BUCKETS=["moved","held","shipHeld","blown","swept"];
 export function fixEv(e){
   if(e.state)e.state.forEach(s=>{if(!s.ing)s.ing=[];if(!s.pos)s.pos=[0,0];});
   if(e.rounds)e.rounds=e.rounds.map(r=>[r&&r[0]?1:0,r&&r[1]?1:0,r&&r[2]?1:0,r&&r[3]||null]);
+  if(e.t==="stormSummary")for(const k of STORM_BUCKETS)if(!Array.isArray(e[k]))e[k]=[];
   return e;
 }
