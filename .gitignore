@@ -148,3 +148,6 @@ _scratch*/
 # SECOND source of truth for what the live game is (CLAUDE.md rule 23).
 _site/
 _site_stg/
+
+# the Stop hook's "have I summarised these commits yet" marker — per-machine, never shared
+.claude/hooks/.last-close

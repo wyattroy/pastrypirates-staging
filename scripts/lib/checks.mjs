@@ -262,10 +262,12 @@ export async function waitSettled(c, { sampleMs = 120, stableFor = 3, capMs = 26
   const t0 = Date.now();
   let last = null, same = 0, samples = 0;
   let deadline = t0 + capMs, grewTo = -1, pushed = 0;
-  /* WHICH HALF IS STILL MOVING — reported, not merely counted. "20 screens never stopped moving"
-     was the shape of this finding for two days and it is not actionable: it names a quantity, not a
-     cause. Geometry churn and text churn need opposite fixes, so the report has to tell them
-     apart. Costs one string split on the sample we already have. */
+  /* WHICH HALF IS STILL MOVING. ⚠ NOTHING REPORTS THIS ANY MORE — Wyatt dropped the unsettled-
+     screen finding from the sea trial on 2026-09-10 ("you can drop this entirely"; see the note in
+     leg_verdict.mjs for why he is right). It is still recorded on the sample because it costs one
+     string split and a session debugging a genuinely stuck screen will want it; it is NOT a finding
+     and must not become one again without him asking. The WAIT itself is load-bearing and stays:
+     every measurement in the trial depends on the screen having stopped first. */
   let churn = null;
   while (Date.now() < deadline && Date.now() - t0 < HARD_MS) {
     const now = await c.ev(SETTLE_PROBE);

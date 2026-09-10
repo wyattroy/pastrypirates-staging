@@ -179,30 +179,22 @@ export function legVerdict(rec) {
   if (judgeHoles) v.push(`${judgeHoles} screen(s) never judged — NOT cleared`);
   const motionOnly = rec.screens.reduce((n, s) => n + ((s.motionOnly || []).length), 0);
   if (motionOnly) v.push(`${motionOnly} observation(s) seen only DURING an animation — not failures, read them in the log`);
-  /* NAME THE CAUSE, NOT JUST THE COUNT — and checks.mjs already worked it out.
-     waitSettled() records WHICH half kept moving ("geometry", "text", or both) precisely because
-     the two need opposite fixes, and its own comment says the finding is "reported, not merely
-     counted... the report has to tell them apart". It was not: this line printed a bare number and
-     the cause was computed and thrown away. A comment describing what the code MEANT to do, while
-     the code did something else -- the exact trap CLAUDE.md's rule 6 is about.
-     Found 2026-09-01 with a real finding in hand: Safari's first two legs on the Razer each
-     reported unsettled screens, and there was no way to tell from the verdict whether the game was
-     still animating or the text was still painting. Also reports how long the worst one ran,
-     because a screen that hit the 12s runaway guard is a different problem from one that missed
-     the window by 200ms. */
-  const unsettledScreens = rec.screens.filter(s => s.settle && !s.settle.settled);
-  if (unsettledScreens.length) {
-    const causes = {};
-    for (const s of unsettledScreens) { const k = s.settle.churn || "unknown"; causes[k] = (causes[k] || 0) + 1; }
-    const why = Object.entries(causes).map(([k, n]) => `${n} ${k}`).join(", ");
-    const worst = Math.max(...unsettledScreens.map(s => s.settle.ms || 0));
-    const hardCapped = unsettledScreens.filter(s => s.settle.hardCap).length;
-    v.push(
-      `${unsettledScreens.length} screen(s) never stopped moving before being checked ` +
-      `(still moving: ${why}; longest wait ${(worst / 1000).toFixed(1)}s` +
-      (hardCapped ? `, ${hardCapped} hit the 12s runaway guard` : "") + ")"
-    );
-  }
+  /* ⛔ THE UNSETTLED-SCREEN FINDING IS GONE — Wyatt, 2026-09-10, ruling on it directly:
+       "There are no issues any more with the radial fans... you can drop this entirely from the
+        sea trial — i'm honestly confused by what you're even seeing. the boat is never moving when
+        the radial fans appear."
+     He is right and the finding was noise. Every screen it ever flagged was a `radial` — the
+     board's radial fan, whose churn was diagnosed on 2026-08-27 and lives in the backlog — and the
+     verdict re-reported that same known thing on every leg of every trial as though it were new,
+     which is the definition of a check that costs attention and buys nothing. Worse, I twice
+     offered a CAUSE for it that flattered whatever I had just built, rather than reading the entry
+     that already named it.
+     ⚠ WHAT STAYS, AND WHY IT MUST: `waitSettled()` in checks.mjs is untouched. It does two jobs
+     that happen to share a word — it WAITS for a screen to stop moving before anything is measured
+     on it, and it REPORTED what never stopped. Only the reporting is his to drop. Removing the
+     wait as well would let every other check in the trial fire mid-animation, which is precisely
+     how this session produced a card measured at 362px against a settled 365. The 12s runaway
+     guard stays with it, so a permanently churning screen still cannot hold a browser open. */
   if ((rec.queued || []).length) v.push(`vision pass DEFERRED for ${rec.queued.length} screen(s) — queued for a session, NOT cleared`);
   return v;
 }

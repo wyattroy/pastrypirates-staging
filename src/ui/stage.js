@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@f5b5091d";
+const PP4_STAMP = "2026.09.07.3-staging@cb9a79e2";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2256,6 +2256,9 @@ let rcFlightTimers = [];
    middle of the board and then written back as the parked geometry. That is the
    two-answers-for-one-number fault this picker has already paid for twice. */
 let rcInFlight = false;
+/* The live animations, so a picker that is torn down mid-show does not leave a fill:both animation
+   pinning the sheet somewhere the tick is no longer writing. */
+let rcAnims = [];
 
 /* HIS "about 0.5 seconds" is the beat AFTER the swap, which is what he wrote. The beat BEFORE it
    is mine and it is not the same number: the cards need to be seen as cards before they are seen
@@ -2270,13 +2273,28 @@ let rcInFlight = false;
 /* His "50% bigger" as a ceiling rather than a target: 250 -> 375. The card only reaches it where
    the captains column is wide enough to hold the stack, which is derived per window. */
 const RC_CARD_MAX = 375;
-const RC_LAND_MS  = 1000;    // his "swap with each other after 1 second" (was 420 — my number)
-const RC_HOLD_MS  = 500;     // his "about 0.5 seconds" — after the swap, before the flight
-const RC_FLY_MS   = 760;     // the flight; matches the CSS transition on #pp4Prompt exactly
+/* ⭐ EVERY ONE OF THESE IS HIS, DIALLED ON THE TUNER AND PASTED BACK — 2026-09-10. They replace
+   numbers I had guessed at, and the shape of what he chose is worth reading: a LONG entrance
+   (1160ms) that starts BIGGER than final and settles down through a small overshoot, a full second
+   of stillness, a swap more than twice as slow as mine, three-quarters of a second to look at the
+   result, and a flight that anticipates — pulls back before it goes — and overshoots on arrival.
+   He asked for "more game feel and weight"; what he picked is a heavier, slower, springier card
+   than anything I proposed. Do not tighten these back up without asking him. */
+const RC_FADE_MS  = 1160;    // the entrance
+const RC_FROM     = 1.25;    // starts 25% LARGER and settles down — his choice, not a typo
+const RC_OVER     = 1.03;    // and dips a little past 1 on the way
+const RC_LAND_MS  = 950;     // still, before the swap
+const RC_SWAP_MS  = 380;     // the swap itself
+const RC_HOLD_MS  = 750;     // still again, after it
+const RC_FLY_MS   = 1070;    // the flight; matches the CSS transition on #pp4Prompt exactly
+const RC_LEAN     = 0.09;    // how far it leans past the mark on the way
+const RC_SQUASH    = 0.11;   // and how much it squashes while travelling
 
 function rcFlightStop(){
   rcFlightTimers.forEach(clearTimeout);
   rcFlightTimers = [];
+  rcAnims.forEach(a => { try { a.cancel(); } catch (e) {} });
+  rcAnims = [];
   rcInFlight = false;
 }
 /* Put the box back to plain parked geometry. Called on teardown AND before every fresh flight, so
@@ -2285,7 +2303,7 @@ function rcFlightReset(){
   rcFlightStop();
   rcFlightKey = null;
   const box = $("pp4Prompt");
-  if (box){ box.style.transform = ""; box.classList.remove("pp4RcHold"); }
+  if (box) box.style.transform = "";   // (.pp4RcHold went with the CSS transition — see rcFlightRun)
 }
 const rcLater = (fn, ms) => { rcFlightTimers.push(setTimeout(fn, ms)); };
 
@@ -2334,22 +2352,54 @@ function rcFlightRun(key, brd){
   const dy = Math.round((brd.top  + brd.height / 2) - (r.top  + r.height / 2));
   if (!dx && !dy) return;                  // parked IS the middle (a board smaller than the sheet)
 
-  /* HELD, WITH NO TRANSITION. .pp4RcHold kills the transform transition for exactly this write, so
-     the box appears in the middle instead of visibly sliding there from the top right — which is
-     the whole flight played backwards, and was what the first attempt did. */
-  box.classList.add("pp4RcHold");
-  box.style.transform = `translate(${dx}px, ${dy}px)`;
-  void box.offsetWidth;                    // the browser must SEE the held state before it is released
-  box.classList.remove("pp4RcHold");
+  /* ⭐ DRIVEN BY THE WEB ANIMATIONS API, NOT BY A CSS TRANSITION — and that is what his tuner
+     numbers actually require. A transition can carry one value from A to B on one curve; it cannot
+     start a card at 125% and settle it through a 103% overshoot, and it cannot lean past the mark
+     and squash on the way. Those are keyframes, so they are written as keyframes.
+     IT ALSO REMOVES THE `.pp4RcHold` DANCE. That class existed to suppress the transition for one
+     write so the sheet APPEARED in the middle instead of visibly sliding there from the corner —
+     a workaround for a mechanism that is now gone: an animation simply starts where it starts. */
+  const ANIMS = [];
+  const hold = `translate(${dx}px, ${dy}px)`;
+
+  ANIMS.push(box.animate([
+    { opacity: 0, transform: `${hold} scale(${RC_FROM})`, offset: 0 },
+    { opacity: 1, transform: `${hold} scale(${RC_OVER})`, offset: .62 },
+    { opacity: 1, transform: `${hold} scale(1)`,          offset: 1 },
+  ], { duration: RC_FADE_MS, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" }));
+
+  /* AND IT HOLDS THERE. Without this the entrance's fill:both ends and the box snaps to its parked
+     place the instant the fade finishes — a second animation pinned to the same transform is what
+     keeps it over the middle of the board for his 950ms of stillness and the swap. */
+  ANIMS.push(box.animate([{ transform: hold }, { transform: hold }],
+    { duration: RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS, delay: RC_FADE_MS, fill: "both" }));
 
   rcInFlight = true;
-  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, RC_LAND_MS);
+  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, RC_FADE_MS + RC_LAND_MS);
+
   rcLater(() => {
     const b2 = $("pp4Prompt");
-    if (b2) b2.style.transform = "";        // release: the CSS transition IS the flight
-  }, RC_LAND_MS + RC_HOLD_MS);
-  // the box is only back under the tick's measuring tape once it has actually LANDED
-  rcLater(() => { rcInFlight = false; }, RC_LAND_MS + RC_HOLD_MS + RC_FLY_MS + 40);
+    if (!b2) return;
+    /* THE FLIGHT. His curve anticipates and overshoots on its own; the lean is an EXTRA push past
+       the mark at 72%, and the squash is the card stretching along its travel and thinning across
+       it — the two things that read as weight rather than as speed. */
+    const lx = Math.round(-dx * RC_LEAN), ly = Math.round(-dy * RC_LEAN);
+    ANIMS.push(b2.animate([
+      { transform: `${hold} scale(1,1)`, offset: 0 },
+      { transform: `translate(${lx}px, ${ly}px) scale(${1 + RC_SQUASH}, ${1 - RC_SQUASH})`, offset: .72 },
+      { transform: "translate(0px, 0px) scale(1,1)", offset: 1 },
+    ], { duration: RC_FLY_MS, easing: "cubic-bezier(.68,-.55,.27,1.55)", fill: "both" }));
+  }, RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS);
+
+  /* AND EVERYTHING IS CANCELLED WHEN THE SHOW ENDS, or a fill:both animation would hold the sheet
+     off its parked place for the rest of the voyage — the tick would keep writing left/top that
+     nothing on screen obeyed. rcFlightStop() clears the timers; this clears what they created. */
+  rcAnims = ANIMS;
+  rcLater(() => {
+    rcInFlight = false;
+    ANIMS.forEach(a => { try { a.cancel(); } catch (e) {} });
+    rcAnims = [];
+  }, RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS + RC_FLY_MS + 40);
 }
 
 /* ⭐ THE HELPER PILL IS LOCKED UNDER THE CARDS — Wyatt, 2026-09-09: "make that 'tap a recipe'
@@ -2430,7 +2480,9 @@ function mountRecipeStack(ap){
      drift and none of them can forget to cancel the pending bake. `swapping` guards a double tap
      mid-animation, which would otherwise leave the row wearing .rcSwapping forever. */
   const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const SWAP_MS = REDUCED ? 0 : 150;   // his "quicker"; matches the CSS transition exactly
+  /* HIS TUNER NUMBER (380ms) REPLACES THE 150 HE ASKED FOR ON 2026-09-08. Both are his; the later
+     one wins, and the CSS transition below is derived from it rather than typed twice. */
+  const SWAP_MS = REDUCED ? 0 : RC_SWAP_MS;
   let swapping = false;
   const swap = () => {
     if (swapping || cards.length < 2) return;
@@ -3594,7 +3646,26 @@ function promptTick(force){
        its cards and then #pp4Prompt was never given a display, so the whole sheet was invisible
        while the panel underneath was perfectly correct. Caught by reading window.onerror, not by
        any gate: node --check passes a TDZ every time. */
+    /* ⭐ THE RIGHT-HAND EDGE OF THE SCREEN, IN THE SPACE THESE COORDINATES LIVE IN — and this is
+       NOT vwPx(). On desktop the stopgap caps `body` to the BOARD (measured: 1036px at 1920, its
+       own box running gBCR 165→1201), while the captains column and the menu sit OUTSIDE that box
+       entirely, at 1215→1755. vwPx() answers "how wide is the capped stage", so clamping anything
+       that has to reach the menu against it forbids the whole right-hand column: the alignment
+       below computed a correct left of 976 and the clamp crushed it to 493, which is why the card
+       kept landing 468px left of the sound icon with the code apparently "in".
+       documentElement.clientWidth is the LAYOUT viewport (never Safari's pinched visual one — the
+       distinction vwPx() itself was written for), and fixedOrigin().x is the shift between that and
+       body-relative space, read the same way every other anchor in this file reads it. */
+    const glassR = (document.documentElement.clientWidth || vwPx()) - fixedOrigin().x;
     let top;
+    /* ⚠ FUNCTION-SCOPED FOR THE SAME REASON `top` IS, and I made the identical mistake two screens
+       below the comment that explains it. The sound-icon alignment reads `colL` AFTER this block
+       closes; declared `const` inside the branch it threw "colL is not defined" on every tick, so
+       #pp4Prompt was never given a display and the ENTIRE PICKER was invisible — cards, sheet and
+       all — on the branch. `node --check` passes it, all 109 gates pass it, and the seven-check
+       printed "every card fully on the glass? YES" while measuring a hidden element. Nothing but
+       loading the page and reading window.onerror finds this class of fault. */
+    let colL = null;
     if (capR){
       /* ⭐ LEFT-ALIGNED WITH THE MENU BELOW IT — Wyatt, 2026-09-09, item 2, drawn as a red line down
          his screenshot: "in desktop, the cards should be left-aligned with the board, in vertical
@@ -3610,7 +3681,7 @@ function promptTick(force){
          edge and undid the centring he had already approved. Measured: phone and tablet both jumped
          to left:0 the moment this went in unguarded. */
       const beside = capR.left > 40 && capR.width < vwPx() * 0.75;
-      const colL = (() => {
+      colL = (() => {
         if (!beside) return null;
         const f = $("footerRow");
         if (!f || getComputedStyle(f).display === "none") return capR.left;
@@ -3619,7 +3690,11 @@ function promptTick(force){
       })();
       const w = colL != null ? Math.round(Math.max(160, capR.right - colL))
                              : Math.min(sheetW, Math.round(capR.width));
-      box.style.width = Math.min(w, Math.round(vwPx() - (colL != null ? colL : 0) - 8)) + "px";
+      /* ⚠ SAME WRONG BOUND, one line apart: with vwPx()=1036 and a column at 1050 this computed
+         `1036 - 1050 - 8` = -22 and assigned `width:-22px`, which is invalid CSS the browser drops
+         on the floor — so the sheet silently fell back to its content width and the bug was
+         invisible. A clamp that can go negative is not clamping. */
+      box.style.width = Math.max(160, Math.min(w, Math.round(glassR - (colL != null ? colL : 0) - 8))) + "px";
       box.style.left = Math.round(colL != null ? colL : capR.left + (capR.width - w) / 2) + "px";
       const sheetH = Math.max(1, Math.round(fixedRect(box).height));
       top = Math.round(Math.max(topBandPx(),
@@ -3633,6 +3708,64 @@ function promptTick(force){
                                                  : vhPx() * 0.4));
     }
     box.style.top = top + "px";
+    /* ⭐ THE FRONT CARD'S LEFT EDGE LINES UP WITH THE SOUND ICON'S — Wyatt, 2026-09-10: "in desktop
+       widescreen the left pixel of the front card should be horizontally aligned with the left
+       pixel of the sound icon."
+       ⚠ IT IS THE CARD THAT MUST ALIGN, NOT THE SHEET, and that is why this cannot be done by
+       setting box.style.left alone: the card sits centred inside a row, inside a panel, inside the
+       box, and the sum of those insets is not a number worth deriving by hand. So the sheet is
+       placed first (above), the two rects are read from the renderer, and the box is shifted by the
+       difference — ONE correction, and it is stable by construction: moving the box moves the card
+       by exactly the same amount, so the second pass finds them already aligned rather than
+       oscillating. That is the difference between this and the panel-measuring loop that had to be
+       backed out yesterday — there the measured thing FED the thing being measured; here it does
+       not. Desktop-column only, where "the sound icon" is a thing beside the board at all. */
+    /* ⚠ GATED ON THE COLUMN, NOT ON `capR` — and `capR` is null exactly when this runs. The
+       captains box is EMPTY during the draft (that is the whole premise of hiding it), so it has a
+       real width and a height of ZERO, and capR's `height > 2` test rejects it. Placement therefore
+       falls to the board-centre branch, colL stays null, and this block never ran: measured, the
+       front card sat 468px left of the sound icon at 1920 with the code "in". The sizing code two
+       hundred lines up already had this right — it tests width only, and asks the STRUCTURAL
+       question (is the box beside the board, or a strip below it) rather than a shape one. Same
+       test here, because his ask is purely horizontal and must not disturb the vertical placement
+       he has already approved. */
+    const capCol = (() => {
+      const c = $("pp4Cap"); if (!c || !brd) return null;
+      const r = fixedRect(c);
+      return (r.width > 2 && r.left >= brd.right - 4) ? r : null;
+    })();
+    if (capCol){
+      /* THE ICON, NOT THE ROW. #btnMute is the whole menu line — "Sound: ON – blocked by yer
+         browser", 540px of it — and he said "the left pixel of the SOUND ICON". The glyph is the
+         <img class="narrIcon"> inside it; the row's own left differs from it by whatever padding
+         the row carries, so ask for the image and fall back to the row only if it is not there. */
+      const row = $("btnMute");
+      const icon = (row && row.querySelector("img.narrIcon")) || row;
+      /* ⚠ FOUND BY WHAT IT CONTAINS, NOT BY data-rcpos. The attribute selector matched a
+         ZERO-SIZED element and the alignment silently did nothing (measured: card rect 0,0,0 while
+         the icon read 1203,723). Whatever that element is, the card a captain looks at is the one
+         holding a .recipeList and having a real box — so ask for that. */
+      const front = [...ap.querySelectorAll(".apBtn")]
+        .filter(b => b.querySelector(".recipeList") && fixedRect(b).width > 2)
+        .sort((a, b) => fixedRect(a).left - fixedRect(b).left)[0];
+      /* the ROW's display, not the image's: an <img> inside a display:none row is itself
+         `inline`, so asking the image answers a different question than the one intended. */
+      if (icon && front && row && getComputedStyle(row).display !== "none"){
+        const iR = fixedRect(icon), fR = fixedRect(front);
+        if (iR.width > 2 && fR.width > 2){
+          const shift = Math.round(iR.left - fR.left);
+          if (Math.abs(shift) > 1){
+            const want = Math.round(parseFloat(box.style.left || 0) + shift);
+            /* never off the glass: the alignment is a preference, reachability is not.
+               ⚠ CLAMPED AGAINST THE PAINTED WIDTH, not `box.style.width` — the board-centre branch
+               above never assigns a width, so reading the inline style there measures 0 and the
+               clamp silently permits the sheet to leave the screen. */
+            const bw = Math.round(fixedRect(box).width) || 0;
+            box.style.left = Math.max(8 - fixedOrigin().x, Math.min(want, glassR - bw - 8)) + "px";
+          }
+        }
+      }
+    }
     /* THE TWO HINTS TEACH TWO DIFFERENT SURFACES, SO THEY LIVE ON THE SURFACE THEY TEACH.
        playtest 21 (Wyatt), items 2 and 4. They used to be a stacked pair of pills wedged in the gap
        between the board and the sheet, where the sea one sat nowhere near the sea it names and the

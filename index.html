@@ -2485,8 +2485,11 @@
      THE CURVE was cubic-bezier(.3,.78,.36,1): a fast start that decelerates, which is why he read
      the move as abrupt even though it was smooth. .55,0,.28,1 leaves slowly and arrives slowly —
      ease in AND out — which is what "glitchy" was asking for. */
-  #pp4Prompt.pp4Recipes { transition:opacity .52s ease, transform .76s cubic-bezier(.55,0,.28,1); }
-  #pp4Prompt.pp4Recipes.pp4RcHold { transition:opacity .16s; }
+  /* ⚠ NO TRANSITION ON THE SHEET ANY MORE. The whole show is keyframed in stage.js now, because
+     his tuner numbers need things a transition cannot say: a card that starts at 125% and settles
+     through a 103% overshoot, and a flight that leans past the mark and squashes on the way. A
+     transition left here would fight the animation for the same property. (.pp4RcHold went with
+     it — it existed only to suppress this transition for one write.) */
   @media (prefers-reduced-motion: reduce) {
     #pp4Prompt.pp4Recipes { transition:opacity .16s; }
   }
@@ -2765,7 +2768,15 @@
        i.e. it deliberately overshot and settled back; on a card that is also changing depth that
        reads as a wobble rather than as spring. A plain ease-out at 150ms trades positions in one
        clean move. */
-    padding:6px 6px 8px; transition:transform .15s cubic-bezier(.22,.61,.36,1), opacity .15s; }
+    /* ⭐ HIS 2026-09-10 SIZES. The card's transition is derived from RC_SWAP_MS in stage.js rather
+       than typed here — .38s IS his 380, and if he re-dials the swap only that constant moves. */
+    padding:9px 9px 12px; transition:transform .38s cubic-bezier(.22,.61,.36,1), opacity .38s; }
+  /* ⭐ "make the cards larger vertically by 50%" — a MIN-HEIGHT derived from the card's own width,
+     not a typed pixel count (rule 9). The card was landing near 0.58 of its width; 0.87 is that
+     plus half. Min rather than fixed, so a long recipe name still grows the card instead of being
+     clipped — which is the failure a fixed height would have shipped. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.recipeCard {
+    min-height: calc(var(--rcW) * 0.87); justify-content: center; }
   /* ⭐ THE COMMIT FRAME CARRIES NO TRANSITION, AND THIS IS THE "PAUSE" HE SAW.
      His words: "currently it looks like the front card moves to right, then pauses before moving
      behind. Remove that pause so that the cards trade positions quicker and smoother."
@@ -2954,6 +2965,15 @@
   body.pp4Stage #actionPanel .apBtn .recipeIcons .ri { width:100%; }
   body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img {
     width:100%; max-width:26px; height:auto; aspect-ratio:1; margin:0 auto; }
+  /* ⭐ HIS 2026-09-10 SIZES, AND THEY ARE SET WHERE THEY WIN. My first attempt put a
+     `transform: scale(1.5)` on the thumb and a width on `.recipeList img` a hundred lines EARLIER —
+     both out-ranked by the two rules directly above, which are more specific and come later. The
+     card would have looked untouched while the CSS claimed otherwise, which is the same silent
+     no-op the `max-width:250px` cap nearly shipped yesterday. Doubled and half-again from the
+     numbers those rules actually declare (26 -> 52, 54 -> 81), not from a guess at what is on
+     screen. */
+  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:52px; }
+  body.pp4Stage #actionPanel .apBtn .recipeThumb { height:81px; margin:0 auto 6px; }
   /* THE FOCUSED CARD RESERVES A STRIP FOR THE PILL, rather than the pill covering whatever is
      underneath it. Moving it off the artwork (O2) only pushed the problem onto the ingredient
      icons — a smaller crime, still a crime, and visible in the very next screenshot. The card

@@ -79,6 +79,21 @@ const M = `JSON.stringify((()=>{
       return cs.map(c=>{const r=c.getBoundingClientRect();
         return (r.left<-1||r.top<-1||r.right>innerWidth+1||r.bottom>innerHeight+1)
           ?{l:Math.round(r.left),r:Math.round(r.right),vw:innerWidth}:null;}).filter(Boolean);})(),
+    /* his 2026-09-10 alignment: the FRONT CARD's left pixel against the SOUND ICON's */
+    cardCount:[...document.querySelectorAll('#actionPanel .apBtn')].filter(b=>b.querySelector('.recipeList')&&b.getBoundingClientRect().width>2).length,
+    /* ⚠ THE ICON GLYPH, which is what he named and what stage.js aligns to. #btnMute is the whole
+       menu line — 540px of "Sound: ON – blocked by yer browser" — so measuring the row answered a
+       different question than the one asked, by however much padding the row carries. */
+    align:(()=>{const row=document.getElementById('btnMute');
+      const i=(row&&row.querySelector('img.narrIcon'))||row;
+      const f=[...document.querySelectorAll('#actionPanel .apBtn')]
+        .filter(b=>b.querySelector('.recipeList')&&b.getBoundingClientRect().width>2)
+        .sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left)[0];
+      if(!i||!f||!row||getComputedStyle(row).display==='none')return null;
+      const ir=i.getBoundingClientRect(), fr=f.getBoundingClientRect();
+      return {d:Math.round(fr.left-ir.left), icon:[Math.round(ir.left),Math.round(ir.top),Math.round(ir.width)],
+              card:[Math.round(fr.left),Math.round(fr.top),Math.round(fr.width)],
+              iconIn:(i.parentElement&&i.parentElement.id)||''};})(),
     rcW:(()=>{const r=document.querySelector('#actionPanel .apBtns');return r?Math.round(parseFloat(getComputedStyle(r).getPropertyValue('--rcW'))||0):null})(),
     boxDisplay:box?getComputedStyle(box).display:null,
     boxAlign:box?getComputedStyle(box).alignItems:null,
@@ -101,8 +116,41 @@ const go = async () => {
   await C.ev(`(()=>{const b=[...document.querySelectorAll('#actionPanel .apBtn')].find(x=>/nah/i.test(x.textContent));if(b)b.click()})()`);
   await sleep(900);
   await C.ev(`(()=>{const b=[...document.querySelectorAll('#actionPanel .apBtn')].find(x=>/start/i.test(x.textContent));if(b)b.click()})()`);
-  await waitFor(`!!document.querySelector('#actionPanel .recipeList')`); await sleep(3400);
+  /* ⚠ `.recipeList` EXISTING IS NOT THE PICKER BEING VISIBLE, and this probe graded four runs on
+     that mistake. `#pp4Prompt` is display:none for as long as #actionPanel carries `pendingStage`
+     (stage.js — "no popup until the camera and ships have stopped"), which on a fresh solo voyage
+     outlasts the 3400ms sleep that used to stand here. So EVERY card rect this probe printed was
+     [0,0,0,0], `offscreen` filtered an empty list and printed "every card fully on the glass? YES",
+     and `align` measured a card that was not on screen. Wait for a REAL RECT, then wait for the
+     flight to stop moving it. Never sleep at an animation; watch it settle. */
+  await waitFor(`!!document.querySelector('#actionPanel .recipeList')`);
+  await waitFor(`(()=>{const b=document.getElementById('pp4Prompt');return !!(b&&b.getBoundingClientRect().width>2)})()`, 26000);
+  await settle();
 };
+
+/* THE FLIGHT IS OVER WHEN ITS ANIMATIONS ARE GONE — asked of the browser, not inferred from a
+   stopwatch. Sampling positions was not enough: the picker deliberately STOPS twice on its way
+   (RC_LAND_MS then RC_HOLD_MS), so "unchanged for a while" is true mid-flight, and this probe
+   twice handed back a card that was still in the air (measured [776,419,362] — a 362px-wide card
+   whose settled width is 365, i.e. caught mid-squash). rcFlightRun cancels every animation it
+   created when the show ends, and a cancelled animation leaves getAnimations(), so an empty list
+   IS the landing. The rect check after it is a belt. */
+const settle = async (ms=16000) => {
+  await waitFor(`(()=>{const b=document.getElementById('pp4Prompt');
+    return !!b && b.getAnimations().length===0})()`, ms).catch(()=>{});
+  const read = () => C.ev(`(()=>{const c=[...document.querySelectorAll('#actionPanel .apBtn')]
+      .filter(b=>b.querySelector('.recipeList')&&b.getBoundingClientRect().width>2)
+      .sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left)[0];
+    if(!c)return 'none';const r=c.getBoundingClientRect();return Math.round(r.left)+','+Math.round(r.top)+','+Math.round(r.width)})()`);
+  let last=null, same=0;
+  for(let i=0;i<20;i++){
+    const v = await read();
+    if(v!=='none' && v===last){ if(++same>=2) return v; } else same=0;
+    last=v; await sleep(220);
+  }
+  return last;
+};
+
 const say = console.log;
 try {
   await metrics(SIZES[0]);
@@ -121,7 +169,10 @@ try {
     say(` 5 cursor on the sheet           : ${m.cursor}`);
     say(`   box ${JSON.stringify(m.box)}`);
     say(`   CARD --rcW = ${m.rcW}px`);
-    say(`   every card fully on the glass? ${m.offscreen.length===0?"YES":"NO — "+JSON.stringify(m.offscreen)}`);
+    /* "no cards" and "no cards off-screen" are DIFFERENT ANSWERS and this line printed the same
+       word for both for four runs. Say which one it is. */
+    say(`   every card fully on the glass? ${m.cardCount===0?"NO CARDS MEASURED — the picker was not up":(m.offscreen.length===0?`YES (${m.cardCount} cards)`:"NO — "+JSON.stringify(m.offscreen))}`);
+    say(`   align: ${JSON.stringify(m.align)}`);
     say(`   ask centred in the sheet? ${JSON.stringify(m.askCentred)}   (equal gaps = centred)`);
     say(`   PANEL ${JSON.stringify(m.panel)}   panel wider than box by ${m.panelWiderThanBox}px`);
     say(`   board ${JSON.stringify(m.board)}   panel hides ${m.boardHidden==null?'?':(m.boardHidden*100).toFixed(1)+'%'} of it`);
