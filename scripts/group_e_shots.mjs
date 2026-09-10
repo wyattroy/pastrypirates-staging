@@ -20,6 +20,7 @@
  * Headless, --mute-audio, bounded loops, own ports, and it kills what it started.
  */
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./lib/stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
@@ -34,8 +35,7 @@ const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}] `
 const procs = [];
 const killAll = () => {
   for (const p of procs) { try { p.kill("SIGKILL"); } catch {} }
-  try { execSync(`pkill -f "remote-debugging-port=${DBG}"`, { stdio: "ignore" }); } catch {}
-  try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
+  killProfile(prof);   /* scoped by profile, never by port — see killProfile */
 };
 process.on("exit", killAll);
 process.on("SIGINT", () => { killAll(); process.exit(1); });

@@ -124,3 +124,27 @@ export function reapOrphans(repoRoot, { dryRun = false } = {}) {
   }
   return { killed, spared, looked: true };
 }
+
+/* ⛔ THE ONLY SAFE WAY TO SWEEP A PROBE'S BROWSER — Wyatt, 2026-09-10: "will finally { killAll() }
+ * kill processes running in other claude sessions? it must not."
+ *
+ * IT COULD, IN SIX SCRIPTS, AND EVERY ONE CARRIED A COMMENT SAYING IT WAS SCOPED. They swept with
+ * `pkill -f "remote-debugging-port=<port>"`, and a port is not an identity: every probe picks one
+ * as `base + (process.pid % N)`, so two unrelated processes collide the moment their pids agree
+ * modulo N — and the bases overlap between probes as well (two start at 9790). The first session to
+ * finish killed whatever else had landed on the same number.
+ *
+ * A PROFILE DIRECTORY IS an identity: `<repo>/.tmp-<probe>-<pid>` names one run of one probe in one
+ * worktree. Another session cannot land on it even at the same pid modulo, and a different worktree
+ * cannot match it at all.
+ *
+ * (There is deliberately NO equivalent for the python http server. Its command line is
+ * `python -m http.server <port>` and nothing in it is unique — cwd is not in argv — so any pattern
+ * broad enough to find it is broad enough to kill somebody else's, including the one Wyatt runs on
+ * port 8000. Kill it as the child process it is.)
+ */
+export function killProfile(dir) {
+  if (!dir) return;
+  try { execFileSync("/bin/sh", ["-c", `pkill -f ${JSON.stringify("--user-data-dir=" + dir)}`], { stdio: "ignore" }); }
+  catch { /* nothing matched, which is the normal case */ }
+}

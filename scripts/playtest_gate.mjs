@@ -20,6 +20,7 @@
 //        [--dbg=9800] [--judge=on|off] [--model=claude-sonnet-5] [--max-min=35] [--parallel=2]
 // Exit 1 on any failure. Keeps every screenshot + a contact sheet per leg. Read them.
 import fs from "node:fs";
+import { killProfile } from "./lib/stray_probes.mjs";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
@@ -83,9 +84,12 @@ const JUDGE_BATCH = +arg("judge-batch", 5);
 fs.mkdirSync(OUT, { recursive: true });
 const T0 = Date.now();
 const log = (...a) => { const s = `[${((Date.now() - T0) / 1000 | 0) + ""}s] ` + a.join(" "); console.log(s); fs.appendFileSync(path.join(OUT, "log.txt"), s + "\n"); };
-const ownPorts = { dbg: new Set(), http: new Set() };
-const killAll = () => { for (const d of ownPorts.dbg) { try { execSync(`pkill -f "remote-debugging-port=${d}"`, { stdio: "ignore" }); } catch {} }
-  for (const h of ownPorts.http) { try { execSync(`pkill -f "http.server ${h}"`, { stdio: "ignore" }); } catch {} } };
+const ownPorts = { dbg: new Set(), http: new Set(), profiles: new Set() };
+/* ⛔ PROFILE, NEVER PORT — Wyatt, 2026-09-10: "it must not [kill other claude sessions]". A port is
+   not an identity: probes pick one as `base + pid % N` and the bases overlap, so two unrelated runs
+   collide the moment their pids agree modulo N. And `http.server <port>` matches ANY python server
+   on that number, including the one he keeps on 8000. Profiles are unique per run; see killProfile. */
+const killAll = () => { for (const d of ownPorts.profiles) killProfile(d); };
 process.on("exit", killAll); for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { killAll(); process.exit(1); });
 
 // ONE http server for the whole run (fresh port per gate invocation = fresh module cache). Legs
@@ -327,7 +331,6 @@ async function contactSheet(rec, tag, idx) {
     await c.send("Emulation.setDeviceMetricsOverride", { width: 1700, height: Math.max(400, Math.min(h || 0, 16000)), deviceScaleFactor: 1, mobile: false }); await sleep(400);
     await c.shot(path.join(OUT, `contact-${tag}.png`)); c.close();
     try { sheetSrv.kill("SIGKILL"); } catch {}
-    try { execSync(`pkill -f "http.server ${sheetPort}"`, { stdio: "ignore" }); } catch {}
     if (missing || !Array.isArray(widths) || widths.length !== tiles.length)
       log(`[${tag}] CONTACT SHEET INCOMPLETE: ${missing} of ${tiles.length} images did not load — DO NOT TRUST IT`);
     log(`[${tag}] contact sheet: ${path.join(OUT, `contact-${tag}.png`)}`);

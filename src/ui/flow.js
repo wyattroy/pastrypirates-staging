@@ -1646,12 +1646,29 @@ export async function animateSailRouteRun(seat,from,path){
    Humans and bots run the identical path here — there is no longer any per-player decision for
    them to diverge on. The rule itself lives in the engine (stormStep/noteStormOutcome); this
    function only animates it, square by square, so the board is never behind the narration. */
+/* ⭐ THE STORM LESSON IS RAISED BY THE CONSUMER AND PACED BY THE FLOW — Wyatt, playtest 2026-09-10,
+   item 15: "The storm helper tutorial polly line only appeared for Host -- have you ensured that
+   these are also drained from the engine?"
+   It was not, and the answer to his question is no: `pilotGate("storm.hit")` was called from
+   runLiveNet, which is the HOST'S round loop. A guest never runs that loop — it drains events — so
+   the line was host-only by construction, on a rule that moves every ship on the board.
+   Same shape as the "yer recipe's stowed" fix he already has: consumeEvent CREATES the card the
+   moment the `storm` event drains (one place, every device, each answering for itself through its
+   own tutorial ladder), and the HOST'S flow waits on it here — because pacing the game is the
+   flow's job and a guest has no flow to pace. Awaiting it in the drain instead would block the
+   event feed, which on a guest is the whole game.
+   ⚠ AND THE PLACE IS EXACT: after the storm event has been drawn and narrated, BEFORE the ship
+   loop below. That keeps his item-4 ordering — the parrot speaks, the captain taps Aye aye, and
+   only then does anything move — which is why the card cannot simply be awaited after the storm. */
+let stormGate=null;
+export function armStormGate(p){ stormGate=p; }
 export async function runStormLive(dirKey){
   const g=appState.game;
   const evStorm=g.ev({t:"storm",dir:dirKey,dist:STORM_PUSH});
   liveRender();
   stormCamForEvent(evStorm);
   await narrateLastEvent();
+  if(stormGate){ const gate=stormGate; stormGate=null; await gate; }
   // furthest downwind moves first, so the lead ship clears its square before the ship behind it
   // arrives — the engine owns that ordering too (rule 7b)
   for(const player of g.stormOrder(dirKey)){

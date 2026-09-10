@@ -61,8 +61,7 @@ fs.writeFileSync(htmlFile, html);
 // every <img> into a 404, which is what produced four identical screenshots of an error page.
 const srv = spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: DIR, stdio: "ignore" });
 const cleanup = () => { try { srv.kill("SIGKILL"); } catch {}
-  try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
-  try { execSync(`pkill -f "remote-debugging-port=${DBG}"`, { stdio: "ignore" }); } catch {} };
+ };
 process.on("exit", cleanup); for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => { cleanup(); process.exit(1); });
 await sleep(900);
 

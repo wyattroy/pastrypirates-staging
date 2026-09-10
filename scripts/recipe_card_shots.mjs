@@ -17,6 +17,7 @@
  * SOLO ONLY. Headless, muted, bounded loops, and it kills its own ports before it returns.
  */
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./lib/stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
@@ -31,8 +32,9 @@ const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}] `
 const procs = [];
 const kill = () => {
   for (const p of procs) { try { p.kill("SIGKILL"); } catch {} }
-  try { execSync(`pkill -f "remote-debugging-port=${DBG}"`, { stdio: "ignore" }); } catch {}
-  try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
+  /* scoped by PROFILE, never by port — a port is not an identity and `http.server <port>` matches
+     any python server on that number, Wyatt's own included. See killProfile. */
+  killProfile(prof);
 };
 process.on("exit", kill);
 process.on("SIGINT", () => { kill(); process.exit(1); });

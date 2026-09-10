@@ -217,7 +217,7 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
   const close = async () => {
     try { await context.close(); } catch {}
     if (srv) { try { srv.kill("SIGKILL"); } catch {}
-               try { execSync(`pkill -f "http.server ${httpPort}"`, { stdio: "ignore" }); } catch {} }
+ }
   };
   const handle = { W, H, httpPort, send, ev, shot, clickXY, type, nav, close, consoleErrs, sleep,
                    page: null, recoveries: 0, engine: "webkit" };

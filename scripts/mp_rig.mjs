@@ -37,7 +37,10 @@ fs.mkdirSync(SHOTS, { recursive: true });
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 export const log = (...a) => console.log(...a);
 const procs = [];
-const ports = { dbg: [], http: [] };   // so killAll() can scope its pkill to THIS rig's processes only
+const ports = { dbg: [], http: [] };   // recorded for attach()/diagnostics — NOT a kill scope, see killAll
+/* THE KILL SCOPE. A profile dir is `<repo>/.tmp-<probe>-<pid>`: unique to one run of one probe in
+   one worktree, and unguessable by another session. Ports are not identities — see killAll. */
+const profiles = [];
 
 export function serve(port) {
   const p = spawn(PYTHON, ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
@@ -98,7 +101,7 @@ export function launch(dbgPort, profile, { headless = true, url = "about:blank" 
   ];
   wireExit();
   const p = spawn(CHROME, args, { stdio: "ignore" });
-  procs.push(p); ports.dbg.push(dbgPort);
+  procs.push(p); ports.dbg.push(dbgPort); profiles.push(profile);
   return p;
 }
 
@@ -117,12 +120,28 @@ function wireExit() {
   process.on("unhandledRejection", (e) => { bye(); console.error(e); process.exit(1); });
 }
 
+/* ⛔ SCOPED BY PROFILE DIRECTORY, NEVER BY PORT — Wyatt, 2026-09-10: "will finally { killAll() }
+   kill processes running in other claude sessions? it must not."
+   IT COULD, AND THE OLD COMMENT HERE CLAIMED OTHERWISE. It said "SCOPED to this rig's own ports",
+   and a port is not an identity. Every probe picks its ports as `base + (process.pid % N)`, so two
+   different processes collide the moment their pids agree modulo N — and the bases OVERLAP across
+   probes as well (two of them start at 9790, one with %80 and one with %40). A session whose
+   browser happened to land on the same number was killed by somebody else's cleanup.
+   Worse, `pkill -f "http.server ${h}"` matches a plain port on ANY python server: Wyatt runs one on
+   8000, and a probe that ever picked 8000 would have taken it down with it.
+   THE PROFILE DIRECTORY IS THE IDENTITY. It is `<repo>/.tmp-<probe>-<pid>` — unique to one run of
+   one probe in one worktree, and it cannot be guessed into by another session even at the same pid
+   modulo. So: kill the children we actually spawned, then sweep anything still holding OUR profile.
+   Nothing here matches a port, and nothing here can reach another session's work. */
 export function killAll() {
   for (const p of procs) { try { p.kill("SIGKILL"); } catch {} }
-  // SCOPED to this rig's own ports — a bare `pkill -f remote-debugging-port` kills every other
-  // agent's probe on the machine (HARD-WON-LESSONS.md §8, paid for on 2026-08-21).
-  for (const d of ports.dbg) { try { execSync(`pkill -f "remote-debugging-port=${d}"`, { stdio: "ignore" }); } catch {} }
-  for (const h of ports.http) { try { execSync(`pkill -f "http.server ${h}"`, { stdio: "ignore" }); } catch {} }
+  for (const dir of profiles) {
+    if (!dir) continue;
+    try { execSync(`pkill -f ${JSON.stringify("--user-data-dir=" + dir)}`, { stdio: "ignore" }); } catch {}
+  }
+  /* The http server is a DIRECT CHILD and the loop above already SIGKILLed it. There is deliberately
+     no pkill fallback for it: its command line carries nothing unique (cwd is not in argv), so any
+     pattern broad enough to find it is broad enough to hit somebody else's server. */
 }
 
 export async function attach(dbgPort, { match = null } = {}) {

@@ -31,6 +31,7 @@
  * game's own r() behind a flag, restored the moment the flip lands. It is never done in a room.
  */
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./lib/stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { REPO, CHROME, LINUX_ARGS, gameURL, GAME_PATH, PYTHON } from "./lib/chrome.mjs";
@@ -64,8 +65,9 @@ const launch = (dbg, profile) => {
 };
 const killAll = () => {
   for (const p of procs) { try { p.kill("SIGKILL"); } catch {} }
-  for (const d of myDbg) { try { execSync(`pkill -f "remote-debugging-port=${d}"`, { stdio: "ignore" }); } catch {} }
-  for (const h of myHttp) { try { execSync(`pkill -f "http.server ${h}"`, { stdio: "ignore" }); } catch {} }
+  killProfile(profile);   /* scoped by profile, never by port — see killProfile */
+  for (const d of myDbg) { }
+  for (const h of myHttp) { }
 };
 process.on("exit", killAll);
 process.on("SIGINT", () => { killAll(); process.exit(1); });

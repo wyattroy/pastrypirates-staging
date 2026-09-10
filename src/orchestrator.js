@@ -108,7 +108,7 @@ import {
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
-  reachable, pickCell, localAsk, pilotGate, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
+  reachable, pickCell, localAsk, pilotGate, armStormGate, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay, startSinglePlayer,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
@@ -1498,7 +1498,9 @@ export async function runLiveNet(){
        for NINE HUNDRED MILLISECONDS: one sentence explaining a rule that moves every ship on the
        board, gone in under a second, on the round it first happens. Now the parrot says it, the
        captain taps Aye aye, and THEN the round announces itself at its usual pace. */
-    if(appState.game.stormNow&&!appState.replaying)await pilotGate("storm.hit");
+    /* (the storm lesson used to be spoken HERE, from the host's own loop — which is exactly why a
+       guest never heard it. It is raised by consumeEvent on the `storm` event now, and awaited
+       inside runStormLive; see armStormGate.) */
     // @copy adhoc.round.header
     await flash(header,900);
     // v2 rule 7: one storm for the whole table, before anybody acts.
@@ -1850,6 +1852,15 @@ export async function consumeEvent(e){
   if(e.t==="turnOrder"&&Array.isArray(e.order)&&e.order.length){
     appState.turnOrder=e.order.slice();
     buildPlayerRows();
+  }
+  /* ⭐ THE STORM LESSON, ON EVERY DEVICE — his item 15. The `storm` event is emitted before a
+     single ship is pushed, so this is the same moment the host used to speak at; the difference is
+     that a guest drains it too. CREATED, not awaited: awaiting here would block the event feed,
+     which on a guest is the whole game. runStormLive takes it and paces the host on it.
+     Each device still asks its OWN tutorial ladder — a captain who has seen this three times is
+     not shown it again, and that per-device part is correct and deliberate. */
+  if(e.t==="storm"&&!appState.replaying&&pilotSpeaks("storm.hit")){
+    armStormGate(pilotGate("storm.hit").catch(()=>{}));
   }
   if(e.t==="recipeSet"&&window.__pp4&&window.__pp4.recipePicked)window.__pp4.recipePicked();
   if(e.t==="recipeSet"&&decisionIsLocal(e.p)&&!appState.replaying&&pilotSpeaks("recipe.stowed")){

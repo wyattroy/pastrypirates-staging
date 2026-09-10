@@ -2783,13 +2783,31 @@
        clean move. */
     /* ⭐ HIS 2026-09-10 SIZES. The card's transition is derived from RC_SWAP_MS in stage.js rather
        than typed here — .38s IS his 380, and if he re-dials the swap only that constant moves. */
-    padding:9px 9px 12px; transition:transform .38s cubic-bezier(.22,.61,.36,1), opacity .38s; }
+    padding:6px 6px 8px; transition:transform .38s cubic-bezier(.22,.61,.36,1), opacity .38s; }
+  /* ⚠ THE ROOMIER PADDING IS PART OF HIS DESKTOP ASK AND WAS REACHING PHONES — caught by a CEO
+     review, 2026-09-10, after I claimed "below 901 the card is byte-for-byte what it was". It was
+     not: this line sat under a comment headed "HIS 2026-09-10 SIZES" with no width on it, so a
+     390px card came out 7-22px taller than before for a request that was never about phones. The
+     TRANSITION is deliberately not scoped — .38s is derived from RC_SWAP_MS and belongs to the swap
+     at every size. */
+  @media (min-width: 901px) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { padding:9px 9px 12px; }
+  }
   /* ⭐ "make the cards larger vertically by 50%" — a MIN-HEIGHT derived from the card's own width,
      not a typed pixel count (rule 9). The card was landing near 0.58 of its width; 0.87 is that
      plus half. Min rather than fixed, so a long recipe name still grows the card instead of being
      clipped — which is the failure a fixed height would have shipped. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.recipeCard {
-    min-height: calc(var(--rcW) * 0.87); justify-content: center; }
+  /* ⭐ DESKTOP ONLY — Wyatt, playtest 2026-09-10: "All the things I told you to change regarding
+     making the recipe image larger and the card taller were for DESKTOP — you changed the card's
+     look for mobile and tablet too."
+     He is right and I never checked. His asks arrived while we were both looking at a 1920 screen
+     and I wrote them into rules with no width on them at all, so a phone got a card half again as
+     tall for a request that was never about phones. 901px is the line: below it sits the tablet at
+     768 and every narrow window, which keep exactly the card they had. */
+  @media (min-width: 901px) {
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.recipeCard {
+      min-height: calc(var(--rcW) * 0.87); justify-content: center; }
+  }
   /* ⭐ THE COMMIT FRAME CARRIES NO TRANSITION, AND THIS IS THE "PAUSE" HE SAW.
      His words: "currently it looks like the front card moves to right, then pauses before moving
      behind. Remove that pause so that the cards trade positions quicker and smoother."
@@ -2952,6 +2970,45 @@
      Deleted rather than left inert — a rule that no longer applies is the next reader's wrong
      answer about why the layout works. */
   body.pp4Stage #actionPanel .apBtn .recipeTitle { font-size:12.5px; line-height:1.2; }
+  /* ⭐ THE TITLE RESERVES ITS LINES, OR THE SWAP JUMPS — the OTHER half of his 2026-09-10 item 1.
+     Fixing the artwork's aspect made two cards the same height at 1920 and 768, and the phone still
+     lurched: measured, 153px against 168px, with the whole difference in the TITLE — 39px for a
+     two-line name against 54px for a three-line one. Recipe names are not one length and a narrow
+     card wraps the long ones further, so which recipe is in FRONT decided how tall the card was.
+     This is the fault the retired subgrid block above used to cover. Its retirement note argued
+     that "one card at a time cannot fall out of step with a card that is not on screen" — true of a
+     static picker, and untrue the moment the cards SWAP, which is exactly what brings the other one
+     on screen. Reserving three lines is the version with no second element in it: no subgrid, no
+     @supports, and a two-line name simply sits in a three-line box.
+     ⚠ 54px IS MEASURED, NOT CHOSEN, and my first attempt at it was a guess that was WRONG IN BOTH
+     DIRECTIONS. I reserved `3 * 1.2em` = 45px on the theory that 39px was two lines; it is not.
+     Every one of the 21 names in RECIPE_BOOK was then rendered at each card width:
+         card 225 -> longest is 54px ("Spiced Cocoa Shortbread")
+         card 250 -> longest is 54px ("Molten Chocolate Lava Cake")
+         card 365 -> longest is 39px — every name fits on ONE line
+     A one-line title box is 39px (a 15px line plus its margins), so 54 is exactly two lines. My 45
+     sat between the two and reserved a line and a half, which is no line count at all.
+     ⚠ AND BELOW THE DESKTOP BREAKPOINT ONLY, because at 365 the measurement says every name is one
+     line — so desktop is already swap-stable and must not grow by 15px to fix a problem it does not
+     have. He has just told me those cards are too big.
+     A 22nd recipe with a longer name means re-running that measurement; it is in
+     scripts/qa/_recipe_title_lines.mjs so it does not have to be rebuilt from memory. */
+  /* ⛔ KEYED TO THE CARD, NOT THE VIEWPORT — and a CEO review caught why that matters, 2026-09-10.
+     I gated this on `max-width: 900px` and claimed "a swap cannot resize the stack at any size".
+     False: the 250px card is used whenever the captains box is NOT a side column, and that decision
+     reads window HEIGHT as well as width (src/ui/stage.js) — so a 950x800 window is "desktop" to a
+     media query and still gets a 250px card with no reservation. A 15px jump on every swap, live,
+     in exactly the shape he filmed.
+     The thing that decides whether a name wraps is the CARD'S width, so that is what the rule asks.
+     ⭐ 274px IS MEASURED, and the measurement is now wide enough to find the edge — the first
+     version sampled 225/250/365 and missed everything in between. All 21 names at nine widths
+     (scripts/qa/_recipe_title_lines.mjs): 54px at 225 and 250, and 39px — one line — at 275 and
+     every width above it. So the boundary is between 250 and 275, and the reservation is needed
+     below 275 and nowhere else. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.recipeCard { container-type: inline-size; }
+  @container (max-width: 274px) {
+    body.pp4Stage #actionPanel .apBtn .recipeTitle { min-height: 54px; }
+  }
   body.pp4Stage #actionPanel .apBtn .recipeThumb { height:54px; width:auto; display:block; margin:0 auto 2px; }
   body.pp4Stage #actionPanel .apBtn .recipeDesc { display:none; }
   /* playtest 21 item 5: every ingredient of both recipes has to be readable WITHOUT SCROLLING, now
@@ -2985,6 +3042,7 @@
      no-op the `max-width:250px` cap nearly shipped yesterday. Doubled and half-again from the
      numbers those rules actually declare (26 -> 52, 54 -> 81), not from a guess at what is on
      screen. */
+  @media (min-width: 901px) {
   body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:52px; }
   /* ⭐ THE ARTWORK FILLS THE CARD — Wyatt, playtest 2026-09-10: "there is far too much empty space
      at the top and bottom of the card, which would be solved if you made the recipe image bigger —
@@ -2999,8 +3057,52 @@
      artwork's own proportions instead of being asserted — which is why this cannot warp a pastry,
      and why a squarer future illustration simply makes a squarer card.
      `min-height` above stays as a FLOOR for a card whose art is unusually wide and short. */
+  /* ⛔ A FIXED ASPECT BOX, AND THIS IS THE JUMP HE FILMED — playtest 2026-09-10 item 1: "the cards
+     jump and jitter after they swap front to back, before they move down/off the gameboard."
+     I CAUSED IT WITH THE LINE BELOW, one item earlier. `height:auto` makes the card's height a
+     function of THAT PASTRY'S aspect ratio, and the pastries are not one shape: measured across
+     ALL 21 files in assets/pastries, they run from 1.049 (Mayan Cocoa Souffle) to 1.615 (Crispy
+     Cocoa Snaps), median 1.320. ⚠ THIS READ 1.515 FOR ONE COMMIT because I measured the first EIGHT
+     files and generalised to twenty-one; a CEO review caught it. The conclusion held and the number
+     in it did not, which is the next reader's wrong answer. At a 347px-wide thumb the extremes are
+     a 331px picture against a 215px one — so the instant the swap commits
+     and a different recipe becomes the front card, the card RESIZES by ~100px and the whole stack
+     lurches. His video is the proof twice over: the recipe swapping away is the Souffle, the
+     tallest of the twenty-one.
+     `aspect-ratio` fixes the BOX and `object-fit:contain` fits the picture inside it, so every card
+     is the same height whatever it holds and no pastry is ever stretched to make that true. 1.35 is
+     just above the MEDIAN of the twenty-one (1.320), so the common case is nearly exact — the
+     earlier claim "six of the first eight sit between 1.32 and 1.40" was four of twenty-one.
+     ⚠ THE TWO OUTLIERS DO GET BARS: 1.615 letterboxes top and bottom, 1.049 at the sides. Whether
+     that reads as "far too much empty space at the top and bottom of the card" is HIS call — it is
+     the exact complaint that started this work, so it is on the sheet rather than assumed away.
+     THE SIDE INSET MATCHES THE INGREDIENTS YE CAN SEE, which is his other complaint on the same
+     card: "there's now less padding around that image than around the ingredients."
+     ⚠ MATCHING THE ICON ROW'S BOX WAS NOT ENOUGH, and that was my first attempt. The row is inset
+     15px (the card's 9 plus its own 6) but the ICONS inside it are centred in a five-column grid,
+     so the leftmost one actually starts at 29px — and 29 is what the eye compares the picture
+     against, not an invisible container edge. Measured at 1920: picture 15, icon row 9, first icon
+     29. The picture is CENTRED, so the width it gives up is split between the two sides: to land
+     its edge on 29 the card must give up 2 x 20, not 2 x 29 — `calc(100% - 40px)`, which puts the
+     inset at the card's own 9 plus 20. My first go used 58 and overshot to 38, which is the same
+     arithmetic slip in the other direction. It also takes a little of the width he called too big:
+     the card is 353 tall at 1920 now, against 374. (It said 340 for one commit: the figure was
+     measured, then the width changed under it and the comment did not follow. CEO-caught.) */
+  /* ⭐ THE INSET TRACKS THE CARD, because the ingredient icons do — CEO review, 2026-09-10, and it
+     was right that my flat 40px could only be correct at one width. MEASURED across six desktop
+     viewports (scripts/qa/_picker_geometry_sweep.mjs), the first visible icon sits at:
+         --rcW 250 -> 24px      --rcW 338 -> 26px      --rcW 365 -> 29px
+     because the icons are CENTRED in a five-column grid: below the 52px cap an icon fills its cell
+     and sits flush, and above it the spare half-gap pushes it inward. So the icon's inset is
+     `24 + half the overhang`, and the overhang is `cell - 52` where `cell = (--rcW - 50) / 5`.
+     With a flat 40px the picture was inset 29 everywhere: dead level at 365, and 5px WIDER than the
+     icons at 250 — his original complaint, mirrored. This gives it the icons' own curve. */
+  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
+    --rcIconIn: calc(24px + max(0px, ((var(--rcW) - 50px) / 5 - 52px) / 2)); }
   body.pp4Stage #actionPanel .apBtn .recipeThumb {
-    width:100%; height:auto; max-width:100%; margin:0 auto 6px; }
+    width:calc(100% - 2 * (var(--rcIconIn) - 9px)); aspect-ratio:1.35; height:auto; object-fit:contain;
+    max-width:calc(100% - 2 * (var(--rcIconIn) - 9px)); margin:0 auto 6px; }
+  }
   /* THE FOCUSED CARD RESERVES A STRIP FOR THE PILL, rather than the pill covering whatever is
      underneath it. Moving it off the artwork (O2) only pushed the problem onto the ingredient
      icons — a smaller crime, still a crime, and visible in the very next screenshot. The card

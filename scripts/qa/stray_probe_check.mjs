@@ -46,7 +46,6 @@ import { fileURLToPath } from "node:url";
 import { askTheOS as askTheOSShared } from "../lib/stray_probes.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const isWin = process.platform === "win32";
 
 let failures = 0;
 const pass = (m) => console.log(`  PASS  ${m}`);
@@ -115,9 +114,14 @@ if (trialAtSea) {
   process.exit(0);
 }
 
-const KILL = isWin
-  ? `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -match 'remote-debugging-port' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`
-  : `pkill -f remote-debugging-port`;
+/* ⛔ THE REMEDY THIS GATE PRINTS MUST BE SAFE TO PASTE, and until 2026-09-10 it was not: both
+   branches killed EVERY debug-port browser on the machine, which on a shared laptop is every other
+   Claude session's work as well as yours. Wyatt's question was exactly this — "it must not [kill
+   other sessions]" — and the answer a red gate handed you was a command that does.
+   kill_stray_probes.mjs kills ORPHANS only: a browser whose launcher has exited, which is the
+   definition of abandoned and can never be somebody's live probe. One command, both platforms,
+   and it is the same one the Stop hook runs. */
+const KILL = `node scripts/qa/kill_stray_probes.mjs`;
 
 if (count === 0) {
   pass("no debug-port browsers are running at all");

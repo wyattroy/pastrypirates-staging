@@ -16,6 +16,7 @@
 // Exit 1 on any FAIL. Prints one line per check per size, then the contact sheet's path.
 // Hygiene: headless, muted, own ports, kills only its own Chrome/server (HARD-WON-LESSONS.md §8).
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./lib/stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
@@ -43,11 +44,14 @@ const log = (...a) => { const s = `[${((Date.now() - T0) / 1000).toFixed(0).padS
 
 // --- one server for the whole run, a fresh port (module cache is per URL — DRIVING-THE-GAME.md §1)
 const srv = spawn(PYTHON, ["-m", "http.server", String(PORT)], { cwd: REPO, stdio: "ignore" });
-const own = { dbg: [] };
+const own = { dbg: [], profiles: [] };
+/* ⛔ PROFILE, NEVER PORT — Wyatt, 2026-09-10: "it must not [kill other claude sessions]". A port is
+   not an identity: probes pick one as `base + pid % N` and the bases overlap, so two unrelated runs
+   collide the moment their pids agree modulo N. And `http.server <port>` matches ANY python server
+   on that number, including the one he keeps on 8000. Profiles are unique per run; see killProfile. */
 const killAll = () => {
   try { srv.kill("SIGKILL"); } catch {}
-  for (const d of own.dbg) { try { execSync(`pkill -f "remote-debugging-port=${d}"`, { stdio: "ignore" }); } catch {} }
-  try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
+  for (const d of own.profiles) killProfile(d);
 };
 process.on("exit", killAll); for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { killAll(); process.exit(1); });   // a timed-out caller sends SIGTERM, which skips "exit" handlers
 await sleep(800);
@@ -73,7 +77,7 @@ async function openChrome(W, H, dbg) {
   await send("Page.enable"); await send("Runtime.enable");
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
   const shot = async file => { const r = await send("Page.captureScreenshot", { format: "png" }); fs.writeFileSync(file, Buffer.from(r.result.data, "base64")); return file; };
-  const close = () => { try { ws.close(); } catch {} try { proc.kill("SIGKILL"); } catch {} try { execSync(`pkill -f "remote-debugging-port=${dbg}"`, { stdio: "ignore" }); } catch {} };
+  const close = () => { try { ws.close(); } catch {} try { proc.kill("SIGKILL"); } catch {} };
   return { send, ev, shot, close, errs };
 }
 

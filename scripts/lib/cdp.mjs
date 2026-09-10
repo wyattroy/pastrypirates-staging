@@ -2,6 +2,7 @@
 // it, kill it — scoped to its own ports so it never touches another agent's probe (HARD-WON-LESSONS §8).
 // Shared by playtest.mjs (and reusable by any future browser gate). Nothing game-specific lives here.
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { CHROME, LINUX_ARGS, PYTHON } from "./chrome.mjs";
@@ -93,9 +94,13 @@ export async function openChrome({ W, H, dbgPort, httpPort, serveRoot, profileDi
     await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 }); };
   const type = async (text) => send("Input.insertText", { text });
   const nav = async (url) => send("Page.navigate", { url });
+  /* ⛔ SCOPED BY PROFILE, NEVER BY PORT — Wyatt, 2026-09-10: "will finally { killAll() } kill
+     processes running in other claude sessions? it must not." It could: a port is not an identity
+     (every probe picks one as `base + pid % N`, and the bases overlap), and `http.server <port>`
+     matches ANY python server on that number, including the one he runs on 8000. See killProfile. */
   const close = () => { try { ws.close(); } catch {} try { proc.kill("SIGKILL"); } catch {}
-    try { execSync(`pkill -f "remote-debugging-port=${dbgPort}"`, { stdio: "ignore" }); } catch {}
-    if (srv) { try { srv.kill("SIGKILL"); } catch {} try { execSync(`pkill -f "http.server ${httpPort}"`, { stdio: "ignore" }); } catch {} } };
+    killProfile(profileDir);
+    if (srv) { try { srv.kill("SIGKILL"); } catch {} } };
   return { W, H, httpPort, send, ev, shot, clickXY, type, nav, close, consoleErrs, sleep };
 }
 

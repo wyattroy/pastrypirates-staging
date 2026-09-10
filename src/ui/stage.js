@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@6012fe66";
+const PP4_STAMP = "2026.09.07.3-staging@6ebbb34f";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -104,6 +104,7 @@ const S = {
   bubDue: 0,                // when the live bubble is due to retire — a DEADLINE, not a timer
   bubFinish: null,          // …and the resolver the deadline calls. See stageFlash for why.
   waitFinish: null,         // resolver for a WAIT line specifically — see promptTick
+  lastSeq: "",              // panel.js's per-prompt stamp, so "a NEW question arrived" is readable
   hadPrompt: false,         // …and last frame's answer, so the retire is an EDGE, not a level
   raf: 0,
   lastPill: "",
@@ -3563,7 +3564,33 @@ function promptTick(force){
      was asking for.
      The honest question is "has a NEW question arrived since you were told to wait", so the panel
      going empty -> non-empty is the signal, and an already-open panel simply waits for the next one. */
-  if (has && !S.hadPrompt && S.waitFinish) S.waitFinish();
+  /* ⭐ A NEW QUESTION ALSO RETIRES IT, NOT ONLY AN EMPTY PANEL — Wyatt, playtest 2026-09-10, item
+     14.1: "'waiting for yer mateys' appears ONLY on host, while both host and guest are picking
+     recipes. expectation: this does not appear UNTIL host is actually waiting for guest to decide."
+     THE NOTE ABOVE ALREADY NAMED THIS GAP: "an already-open panel simply waits for the next one."
+     That is exactly the crew path. The host answers the Ahoy barrier and is told to wait; the guest
+     then answers, the draft opens, and the recipe picker replaces the Ahoy card WITHOUT the panel
+     ever passing through an empty tick — so `!S.hadPrompt` is false, waitFinish never fires, and a
+     line that means "nothing is happening yet" sits over the host's screen while he is being asked
+     to choose a recipe. It reads as though the game is waiting on somebody else when it is waiting
+     on HIM, which is the opposite of what the line is for.
+     `revealSeq` is panel.js's own per-prompt stamp — it increments once per question asked — so a
+     CHANGE in it is the honest form of "a new question has arrived", with no second clock and no
+     guessing from text. The empty->non-empty test stays exactly as it was for the prompts that have
+     no button row and therefore no stamp. */
+  /* ⚠ AND A FALLBACK IDENTITY, because the stamp is not always written — CEO review, 2026-09-10.
+     panel.js only stamps revealSeq when the prompt HAS BUTTONS and motion is not reduced, so a
+     reduced-motion captain got no stamp, this test never fired, and 14.1 came straight back for
+     them. The panel's own text is a serviceable identity when there is no stamp: it changes when
+     the question does, which is the whole thing being asked.
+     (The stamp counts panel RENDERS rather than questions strictly speaking — a re-render of the
+     same prompt bumps it. Harmless here: retiring a wait line while a real question is on screen is
+     the correct outcome either way, and it cannot fire at birth because panel() runs this tick
+     synchronously before the wait line is shown.) */
+  const seq = ap.dataset.revealSeq || ap.textContent.trim().slice(0, 60);
+  const newQuestion = has && (!S.hadPrompt || (seq && seq !== S.lastSeq));
+  if (newQuestion && S.waitFinish) S.waitFinish();
+  S.lastSeq = seq;
   S.hadPrompt = has;
   if (!has){
     // full mode teardown — the recipes->lots transition never passes through an empty tick, and a

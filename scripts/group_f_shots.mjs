@@ -54,8 +54,6 @@ const out = { tag: TAG, W, H, mobile: MOBILE, scenes: {} };
 async function finish(code) {
   fs.writeFileSync(path.join(OUT, `result-${TAG}.json`), JSON.stringify(out, null, 2));
   try { c.close(); } catch {}
-  try { execSync(`pkill -f "remote-debugging-port=${DBG}"`, { stdio: "ignore" }); } catch {}
-  try { execSync(`pkill -f "http.server ${PORT}"`, { stdio: "ignore" }); } catch {}
   process.exit(code);
 }
 const die = async (msg) => { log("ABORT: " + msg); await finish(1); };

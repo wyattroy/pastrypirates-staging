@@ -16,6 +16,9 @@
  * it, and this is that test.
  */
 import { isOrphan } from "../lib/stray_probes.mjs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let fails = 0;
 const check = (name, got, want) => {
@@ -35,6 +38,29 @@ check("a launcher that has exited is an ORPHAN", isOrphan("4242", alive), true);
 check("a live launcher is NOT an orphan", isOrphan("900", alive), false);
 check("numeric ppid is handled like a string", isOrphan(900, alive), false);
 check("numeric 1 is handled like a string", isOrphan(1, alive), true);
+
+/* ── AND NOTHING MAY SWEEP BY PORT ─────────────────────────────────────────────────────────────
+ * Wyatt, 2026-09-10: "will finally { killAll() } kill processes running in other claude sessions?
+ * it must not." IT COULD, in TWELVE scripts, and every one of them carried a comment claiming it
+ * was "scoped to its own ports". A port is not an identity: probes pick one as `base + pid % N`,
+ * so two unrelated runs collide the moment their pids agree modulo N — and the bases overlap
+ * between probes as well (two start at 9790). Worse, `pkill -f "http.server <port>"` matches ANY
+ * python server on that number, including the one Wyatt keeps running on 8000.
+ * The identity is the PROFILE DIRECTORY, `<repo>/.tmp-<probe>-<pid>`. This gate is what stops the
+ * convenient-but-wrong version coming back, in the thirteenth script somebody writes next month. */
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const BAD = /execFileSync\(|execSync\(/;
+const PORT_KILL = /(?:execSync|execFileSync)\([^)]*pkill -f "(?:remote-debugging-port=|http\.server )/;
+const walk = (dir) => readdirSync(dir).flatMap((n) => {
+  const f = join(dir, n);
+  return statSync(f).isDirectory() ? walk(f) : (/\.(mjs|js)$/.test(f) ? [f] : []);
+});
+const offenders = walk(join(ROOT, "scripts"))
+  .filter((f) => !f.endsWith("stray_orphan_redproof.mjs"))
+  .filter((f) => PORT_KILL.test(readFileSync(f, "utf8")));
+check("no script sweeps browsers by PORT (it would kill another session)",
+      offenders.length, 0);
+if (offenders.length) console.log("        " + offenders.map((f) => f.replace(ROOT + "/", "")).join("\n        "));
 
 console.log(fails ? `\n${fails} failure(s).` : "\nAll checks passed.");
 process.exit(fails ? 1 : 0);

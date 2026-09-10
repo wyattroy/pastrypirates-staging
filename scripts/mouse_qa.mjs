@@ -3,6 +3,7 @@
 // unoccluded check (inside viewport, inside body's rect, elementFromPoint hits the element).
 // A button that exists but fails that gate is a FINDING, never a click. Screenshot per action.
 import { spawn, execSync } from "node:child_process";
+import { killProfile } from "./lib/stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -29,7 +30,8 @@ const chrome = HEADED
   ? (execSync(`open -na "Google Chrome" --args ${chromeArgs.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ")}`), { kill() {} })
   : spawn(CHROME, chromeArgs, { stdio: "ignore" });
 const killAll = () => { try { chrome.kill("SIGKILL"); } catch {} try { srv.kill("SIGKILL"); } catch {}
-  try { execSync(`pkill -f "remote-debugging-port=${DBG}"`); } catch {} try { execSync(`pkill -f "http.server ${PORT}"`); } catch {} };
+  killProfile(PROFILE);   /* scoped by profile, never by port — see killProfile */
+ };
 process.on("exit", killAll); process.on("SIGINT", () => { killAll(); process.exit(1); });
 await sleep(1500);
 let tgt; for (let i = 0; i < 20 && !tgt; i++) { try { tgt = await (await fetch(`http://127.0.0.1:${DBG}/json/new?about:blank`, { method: "PUT" })).json(); } catch { await sleep(300); } }
