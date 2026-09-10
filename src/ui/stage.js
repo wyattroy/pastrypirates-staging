@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@dc36c09c";
+const PP4_STAMP = "2026.09.07.3-staging@dd2bf4cf";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2531,6 +2531,26 @@ function mountRecipeStack(ap){
   if (key === rcKey) return;
   rcKey = key;
 
+  /* ⭐ EACH TITLE RESERVES ITS PARTNER'S NAME, so a swap cannot move the stack — his 2026-09-10
+     item 1, the jump he filmed. The front card is the one in flow, so whichever recipe is in FRONT
+     decides how tall the stack is. At his two reference widths all 21 names sit on one line
+     (scripts/qa/_recipe_title_lines.mjs), but the card's border is a fixed 2px that does not scale,
+     so on a real 390px phone the longest tips onto a second line — measured, "Chocolate Genoise
+     Sponge Cake". Swapping to it grew the stack by a line. Reserving two lines on EVERY card would
+     put a blank line under names that never need it, which is not his card.
+     So each title carries the other card's name as a data attribute, and the CSS draws it as an
+     invisible ::after in the SAME grid cell as the real name (index.html, search data-ghost). The
+     title is then as tall as the longer of the two, on both cards, at every width, with nothing
+     measured: no per-frame cost, no answer that goes stale when the card scales, and nothing that
+     can read a hidden card as zero lines. Generated content is not in textContent or innerText, and
+     a visibility:hidden box is not in the accessibility tree, so the name a reader hears — and
+     every probe that reads a card — is unchanged. */
+  cards.forEach((c, i) => {
+    const t = c.querySelector(".recipeTitle");
+    const other = cards[(i + 1) % cards.length].querySelector(".recipeTitle");
+    if (t && other) t.dataset.ghost = other.textContent.trim();
+  });
+
   let front = 0;
   const row = cards[0].parentElement;
 
@@ -3722,28 +3742,41 @@ function promptTick(force){
          it to 18% on 2026-09-10, so the true factor is 1.36 and this was quietly costing the card
          width he had asked for. Read it from --rcPeek instead of naming it twice — rule 9, and the
          two can no longer disagree. */
+      /* ⚠ READ AS A PLAIN NUMBER. The first version of this read `--rcPeek` and `--rcW` and divided
+         them — but getComputedStyle hands a calc() custom property back UNRESOLVED, so `--rcPeek`
+         came back as the string "calc(var(--rcW) * 0.18)", parseFloat made NaN of it, and every
+         call fell through to the hardcoded 0.18. Right by coincidence, reading nothing. The peek
+         is its own number now (--rcPeekFrac), so this reads what it claims to. */
       const peekFrac = (() => {
-        const raw = getComputedStyle(rcRow).getPropertyValue("--rcPeek");
-        const px = parseFloat(raw) || 0;
-        const w0 = parseFloat(getComputedStyle(rcRow).getPropertyValue("--rcW")) || 0;
-        const f = (px > 0 && w0 > 0) ? px / w0 : 0.18;
-        return (f > 0.02 && f < 0.6) ? f : 0.18;      // a sane band; never let a bad read shrink the card
+        const f = parseFloat(getComputedStyle(rcRow).getPropertyValue("--rcPeekFrac"));
+        return (f > 0.02 && f < 0.6) ? f : 0.145;     // a sane band; never let a bad read shrink the card
       })();
       const factor = 1 + peekFrac * 2;
       const want = avail > 140 ? Math.max(160, Math.min(RC_CARD_MAX, Math.floor((avail - 8) / factor))) : 0;
-      const now = parseFloat(rcRow.style.getPropertyValue("--rcW")) || 0;
-      if (want && Math.abs(want - now) > 1) rcRow.style.setProperty("--rcW", want + "px");
-      if (!want && now) rcRow.style.removeProperty("--rcW");   // no column to measure: back to the CSS
+      /* ⭐ WRITES THE WIDTH AS A NUMBER, and the whole card scales with it. Wyatt, 2026-09-10: "I
+         don't care about the objective absolute sizes. I just care about the ratios." The CSS turns
+         --rcWn into --rcW (a length) and into --rcK (actual / the width he tuned at), and every
+         dimension inside the card is his number times --rcK. So when this derivation gives 376
+         instead of his 400, the card does not just get narrower — it gets SMALLER, in proportion,
+         and stays his. */
+      const now = parseFloat(rcRow.style.getPropertyValue("--rcWn")) || 0;
+      if (want && Math.abs(want - now) > 1) rcRow.style.setProperty("--rcWn", String(want));
+      if (!want && now) rcRow.style.removeProperty("--rcWn");   // no column to measure: back to the CSS
     }
     const sheetW = (() => {
       const capW = Math.min(brd ? Math.round(brd.width) : vwPx() - 16, vwPx() - 16);
       if (!rcRow) return capW;
       const rs = getComputedStyle(rcRow);
-      const rcW = parseFloat(rs.getPropertyValue("--rcW")) || 250;
+      /* the NUMBER, not --rcW: --rcW is a calc() now, and getComputedStyle would return it
+         unresolved, so parseFloat would silently hand back the 250 fallback every time */
+      const rcW = parseFloat(rs.getPropertyValue("--rcWn")) || 250;
       const pad = (el) => { const c = getComputedStyle(el);
         return (parseFloat(c.paddingLeft) || 0) + (parseFloat(c.paddingRight) || 0)
              + (parseFloat(c.borderLeftWidth) || 0) + (parseFloat(c.borderRightWidth) || 0); };
-      const want = Math.ceil(rcW * 1.4 + 8 + pad(rcRow) + pad(ap) + pad(box));
+      /* card + a peek each side — the same factor the width above was derived from, read from his
+         peek rather than a remembered 1.4 (that was the peek at 20%; he set 18%) */
+      const pf = parseFloat(rs.getPropertyValue("--rcPeekFrac"));
+      const want = Math.ceil(rcW * (1 + 2 * ((pf > 0.02 && pf < 0.6) ? pf : 0.145)) + 8 + pad(rcRow) + pad(ap) + pad(box));
       return Math.max(200, Math.min(want, capW));
     })();
     const RC_INSET = 10;

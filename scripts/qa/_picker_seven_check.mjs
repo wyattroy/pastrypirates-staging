@@ -102,7 +102,7 @@ const M = `JSON.stringify((()=>{
       return {d:Math.round(fr.left-ir.left), icon:[Math.round(ir.left),Math.round(ir.top),Math.round(ir.width)],
               card:[Math.round(fr.left),Math.round(fr.top),Math.round(fr.width)],
               iconIn:(i.parentElement&&i.parentElement.id)||''};})(),
-    rcW:(()=>{const r=document.querySelector('#actionPanel .apBtns');return r?Math.round(parseFloat(getComputedStyle(r).getPropertyValue('--rcW'))||0):null})(),
+    rcW:(()=>{const r=document.querySelector('#actionPanel .apBtns');return r?Math.round(parseFloat(getComputedStyle(r).getPropertyValue('--rcWn'))||0):null})(),
     boxDisplay:box?getComputedStyle(box).display:null,
     boxAlign:box?getComputedStyle(box).alignItems:null,
     boxDir:box?getComputedStyle(box).flexDirection:null,

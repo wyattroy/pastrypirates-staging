@@ -2748,12 +2748,30 @@
        — the box collapsed 362px -> 280px, `100%` collapsed with it, and the card went 250 -> 216
        under his thumb. A constant cannot do that. The row's own min-width below is what stops the
        BOX collapsing, so the circle keeps its place too. */
-    /* ⚠ HIS "50% BIGGER" IS NOT HERE, AND THE REASON IS ARITHMETIC — see the parked note in
-       stage.js. A 375px card needs ~553px of row; the captains column it now lives in has ~382. */
-    /* ⭐ HIS NUMBERS, 2026-09-10, sent from the tuner. Every value below is his; none is derived,
-       adjusted or rounded by me. "send me the numbers and I wire exactly those" — this is that. */
-    --rcW: 360px;                          /* phone & tablet: one card, his point 1 */
-    --rcPeek: calc(var(--rcW) * 0.18);     /* his back-card peek */
+    /* ⭐ HIS CARD IS A SET OF PROPORTIONS, NOT A SET OF PIXELS — Wyatt, 2026-09-10: "I don't care
+       about the objective absolute sizes. I just care about the ratios. So please shrink things
+       according to the ratios that I outlined in the artifact."
+       That rule dissolves both places his numbers would not fit. He tuned each card at a REFERENCE
+       width (360 for phone & tablet, 400 for desktop); whatever width the layout can actually
+       give, every dimension scales by `--rcK = actual / reference`, so a 225px phone card and a
+       376px desktop card are both HIS card, drawn smaller. Nothing inside it is a pixel count any
+       more — which is also rule 9.
+       ⚠ THE WIDTH IS A NUMBER, NOT A LENGTH, and that is load-bearing. CSS cannot divide one
+       length by another to get a ratio, and getComputedStyle hands a calc() custom property back
+       as an UNRESOLVED string — so a JS reader of `--rcPeek: calc(...)` was getting NaN and
+       falling back to a guess. Plain numbers are readable by both. */
+    --rcWn: 360;                           /* the card's width, as a number */
+    --rcRef: 360;                          /* the width he tuned this card at */
+    /* HIS 18% IS WHAT HE SAW AS 14.5%, and this number is what shows. The tuner's "back card peek"
+       slid the back card 18% of a card-width and then scaled it to .965 from its left edge, which
+       pulls its right edge back 3.5% — so the sliver on his screen was 14.5% of the card. This
+       game's value means the sliver itself (the tap strip, the circle and the row's reservation
+       all read it that way), and it was still showing 20%: his number had reached the layout but
+       not the card. Measured 2026-09-10, 0.20 against his 0.145. */
+    --rcPeekFrac: 0.145;
+    --rcW: calc(var(--rcWn) * 1px);
+    --rcK: calc(var(--rcWn) / var(--rcRef));
+    --rcPeek: calc(var(--rcW) * var(--rcPeekFrac));
     --rcGap: 10px;                          /* his 6.5: the circle sits 10px off the back card */
     --rcSwap: 34px; }
   /* ⭐ THE TWO PLACES A NARROW SCREEN IS TREATED DIFFERENTLY, and both numbers are measured
@@ -2771,13 +2789,14 @@
      run clean off the right edge. That is D-38's one unacceptable outcome, a control a captain
      cannot reach, and a sea trial has already caught this exact failure once on passplay-phone.
      So his 360 stands from 431px up (every tablet, and the narrow desktop windows), and a true
-     phone keeps the measured 225. It is on his sheet as a question, because "one card for both"
-     was his instruction and only he can choose which half of it gives way. */
+     phone keeps the measured 225 — and since his ratio ruling the same day, 225 is not a different
+     card: it is his 360 card drawn at 0.625, every proportion intact. That settles the question this
+     note used to park on his sheet ("which half of 'one card for both' gives way"): neither does. */
   @media (max-width: 430px) {
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 225px; }
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcWn: 225; }
   }
   @media (max-width: 360px) {
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 180px; }
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcWn: 180; }
   }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn {
     /* ⚠ max-width WAS 250px AND WOULD HAVE SILENTLY EATEN HIS ITEM 3. --rcW is now 375 on a desktop
@@ -2793,7 +2812,7 @@
        clean move. */
     /* ⭐ HIS 2026-09-10 SIZES. The card's transition is derived from RC_SWAP_MS in stage.js rather
        than typed here — .38s IS his 380, and if he re-dials the swap only that constant moves. */
-    padding:14px; transition:transform .38s cubic-bezier(.22,.61,.36,1), opacity .38s; }
+    padding:calc(14px * var(--rcK)); transition:transform .38s cubic-bezier(.22,.61,.36,1), opacity .38s; }
   /* ⚠ THE ROOMIER PADDING IS PART OF HIS DESKTOP ASK AND WAS REACHING PHONES — caught by a CEO
      review, 2026-09-10, after I claimed "below 901 the card is byte-for-byte what it was". It was
      not: this line sat under a comment headed "HIS 2026-09-10 SIZES" with no width on it, so a
@@ -2801,8 +2820,8 @@
      TRANSITION is deliberately not scoped — .38s is derived from RC_SWAP_MS and belongs to the swap
      at every size. */
   @media (min-width: 901px) {
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcW: 400px; }
-    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { padding:23px; }
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) { --rcWn: 400; --rcRef: 400; }
+    body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn { padding:calc(23px * var(--rcK)); }
   }
   /* ⭐ "make the cards larger vertically by 50%" — a MIN-HEIGHT derived from the card's own width,
      not a typed pixel count (rule 9). The card was landing near 0.58 of its width; 0.87 is that
@@ -2876,9 +2895,10 @@
        out as 0.2 x min(250, cardWidth - 108) = 28px. Measured, not reasoned: back-card visible
        fraction 0.098 against the 0.20 he asked for.
        So the offset is written as a plain element-relative percentage, which is what a transform
-       wants anyway. -28% is -50% (the centring half) + 22%; the scale below pulls the right edge
-       back by ~1.75% of the width, landing the visible sliver on ~20.25%. */
-    transform:translateX(-28%) scale(.965) rotate(1.1deg);
+       wants anyway. The offset itself is derived from --rcPeekFrac on the next line. */
+    /* the sliver, derived: centred (-50%), then out by the sliver plus the 1.75% the .965 scale
+       takes back on this side (it scales from the top CENTRE here, so half of the 3.5%) */
+    transform:translateX(calc(-50% + (var(--rcPeekFrac) + 0.0175) * 100%)) scale(.965) rotate(1.1deg);
     transform-origin:50% 0; filter:brightness(.93) saturate(.88); opacity:.97; }
   /* THE TAP STRIP over the back card's visible 20% — his 6.7. Transparent by design: the thing a
      captain sees and aims at is the card edge underneath it. Sized and placed from the same three
@@ -2984,46 +3004,35 @@
      with a card that is not on screen, and the ingredient rows it aligned are icons now, not rows.
      Deleted rather than left inert — a rule that no longer applies is the next reader's wrong
      answer about why the layout works. */
-  body.pp4Stage #actionPanel .apBtn .recipeTitle { font-size:19.5px; line-height:1.2; margin-bottom:6px; }
-  /* ⭐ THE TITLE RESERVES ITS LINES, OR THE SWAP JUMPS — the OTHER half of his 2026-09-10 item 1.
-     Fixing the artwork's aspect made two cards the same height at 1920 and 768, and the phone still
-     lurched: measured, 153px against 168px, with the whole difference in the TITLE — 39px for a
-     two-line name against 54px for a three-line one. Recipe names are not one length and a narrow
-     card wraps the long ones further, so which recipe is in FRONT decided how tall the card was.
-     This is the fault the retired subgrid block above used to cover. Its retirement note argued
-     that "one card at a time cannot fall out of step with a card that is not on screen" — true of a
-     static picker, and untrue the moment the cards SWAP, which is exactly what brings the other one
-     on screen. Reserving three lines is the version with no second element in it: no subgrid, no
-     @supports, and a two-line name simply sits in a three-line box.
-     ⚠ 54px IS MEASURED, NOT CHOSEN, and my first attempt at it was a guess that was WRONG IN BOTH
-     DIRECTIONS. I reserved `3 * 1.2em` = 45px on the theory that 39px was two lines; it is not.
-     Every one of the 21 names in RECIPE_BOOK was then rendered at each card width:
-         card 225 -> longest is 54px ("Spiced Cocoa Shortbread")
-         card 250 -> longest is 54px ("Molten Chocolate Lava Cake")
-         card 365 -> longest is 39px — every name fits on ONE line
-     A one-line title box is 39px (a 15px line plus its margins), so 54 is exactly two lines. My 45
-     sat between the two and reserved a line and a half, which is no line count at all.
-     ⚠ AND BELOW THE DESKTOP BREAKPOINT ONLY, because at 365 the measurement says every name is one
-     line — so desktop is already swap-stable and must not grow by 15px to fix a problem it does not
-     have. He has just told me those cards are too big.
-     A 22nd recipe with a longer name means re-running that measurement; it is in
-     scripts/qa/_recipe_title_lines.mjs so it does not have to be rebuilt from memory. */
-  /* ⛔ KEYED TO THE CARD, NOT THE VIEWPORT — and a CEO review caught why that matters, 2026-09-10.
-     I gated this on `max-width: 900px` and claimed "a swap cannot resize the stack at any size".
-     False: the 250px card is used whenever the captains box is NOT a side column, and that decision
-     reads window HEIGHT as well as width (src/ui/stage.js) — so a 950x800 window is "desktop" to a
-     media query and still gets a 250px card with no reservation. A 15px jump on every swap, live,
-     in exactly the shape he filmed.
-     The thing that decides whether a name wraps is the CARD'S width, so that is what the rule asks.
-     ⭐ 274px IS MEASURED, and the measurement is now wide enough to find the edge — the first
-     version sampled 225/250/365 and missed everything in between. All 21 names at nine widths
-     (scripts/qa/_recipe_title_lines.mjs): 54px at 225 and 250, and 39px — one line — at 275 and
-     every width above it. So the boundary is between 250 and 275, and the reservation is needed
-     below 275 and nowhere else. */
-  body.pp4Stage #actionPanel .apBtns:has(.recipeList) .apBtn.recipeCard { container-type: inline-size; }
-  @container (max-width: 274px) {
-    body.pp4Stage #actionPanel .apBtn .recipeTitle { min-height: 54px; }
-  }
+  /* ⭐ THE TITLE IS DRAWN THE WAY HIS TUNER DREW IT — and it was not, until a measurement caught
+     it. The base .recipeTitle rule carries the old full-size card's chrome: 12px of padding above
+     the name, 9px below, 12px each side, and a 10px margin each side. None of that was in the tuner
+     he tuned against, so in the game his "gap under the image, 11px" drew as 23px, and the name had
+     44px less room to sit on one line. Measured 2026-09-10, 47px for a one-line title where his
+     card has 23.
+     His card, from the artifact: the image, his 11px, the name, his 6px, a rule inset 10px each
+     side, then the ingredient row. So the title has no padding but his gap, the rule is drawn by
+     ::before at that inset, and every number rides --rcK. */
+  body.pp4Stage #actionPanel .apBtn .recipeTitle {
+    font-size:calc(19.5px * var(--rcK)); line-height:1.2;
+    /* letter-spacing rides the scale too, or a small card's names would wrap where his do not */
+    letter-spacing:calc(.3px * var(--rcK));
+    position:relative; margin:0; border-bottom:0;
+    padding:0 0 calc(6px * var(--rcK) + 3px);           /* his 6px, then room for the 3px rule */
+    display:grid; justify-items:center; align-items:center; }
+  body.pp4Stage #actionPanel .apBtn .recipeTitle::before {
+    content:""; position:absolute; bottom:0; left:calc(10px * var(--rcK)); right:calc(10px * var(--rcK));
+    border-bottom:3px double #b48a52; }
+  /* the partner's name, invisible, in the same cell — see data-ghost in src/ui/stage.js */
+  body.pp4Stage #actionPanel .apBtn .recipeTitle > .rtName,
+  body.pp4Stage #actionPanel .apBtn .recipeTitle[data-ghost]::after { grid-area:1 / 1; }
+  body.pp4Stage #actionPanel .apBtn .recipeTitle[data-ghost]::after {
+    content:attr(data-ghost); visibility:hidden; }
+  /* (A fixed title reservation stood here — `min-height: 54px` below a 274px card, keyed by a
+     container query. His 2026-09-10 ratio ruling made it wrong twice over: the card is proportional
+     now, so a name wraps at the same place at every width and a pixel threshold means nothing, and
+     54px was measured at the old 12.5px title. Each title now reserves its PARTNER's name instead —
+     data-ghost, above — so the pair is always as tall as its longer name and nothing is counted.) */
   body.pp4Stage #actionPanel .apBtn .recipeThumb { height:54px; width:auto; display:block; margin:0 auto 2px; }
   body.pp4Stage #actionPanel .apBtn .recipeDesc { display:none; }
   /* playtest 21 item 5: every ingredient of both recipes has to be readable WITHOUT SCROLLING, now
@@ -3047,7 +3056,9 @@
   /* his 38px ingredient inset, written the way the tuner computed it: the row's own side padding
      is `38 - the card's padding`, so the row's content starts 38px from the card's edge. */
   body.pp4Stage #actionPanel .apBtn .recipeIcons {
-    display:grid; grid-template-columns:repeat(5,1fr); padding:5px calc(38px - 14px) 2px; gap:5px;
+    display:grid; grid-template-columns:repeat(5,1fr);
+    padding:calc(6px * var(--rcK)) calc((38px - 14px) * var(--rcK)) calc(2px * var(--rcK));
+    gap:calc(5px * var(--rcK));
     justify-items:center; align-items:center; }
   body.pp4Stage #actionPanel .apBtn .recipeIcons .ri { width:100%; }
   body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img {
@@ -3065,14 +3076,15 @@
      `max-width:100%` is the only guard kept: it can shrink the picture if a card is ever narrower
      than the width he chose, but it can never grow it past his number. */
   body.pp4Stage #actionPanel .apBtn .recipeThumb {
-    width:205px; max-width:100%; aspect-ratio:2.31; height:auto; object-fit:contain;
-    margin:0 auto 11px; }
-  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:60px; }
+    width:calc(205px * var(--rcK)); max-width:100%; aspect-ratio:2.31; height:auto; object-fit:contain;
+    margin:0 auto calc(11px * var(--rcK)); }
+  body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:calc(60px * var(--rcK)); }
   @media (min-width: 901px) {
-    body.pp4Stage #actionPanel .apBtn .recipeThumb { width:298px; }
-    body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:57px; }
+    body.pp4Stage #actionPanel .apBtn .recipeThumb { width:calc(298px * var(--rcK)); }
+    body.pp4Stage #actionPanel .apBtn .recipeIcons .ri img { max-width:calc(57px * var(--rcK)); }
     /* the row inset follows the desktop padding, same 38px total he set */
-    body.pp4Stage #actionPanel .apBtn .recipeIcons { padding:5px calc(38px - 23px) 2px; }
+    body.pp4Stage #actionPanel .apBtn .recipeIcons {
+      padding:calc(6px * var(--rcK)) calc((38px - 23px) * var(--rcK)) calc(2px * var(--rcK)); }
   }
 
   /* THE FOCUSED CARD RESERVES A STRIP FOR THE PILL, rather than the pill covering whatever is

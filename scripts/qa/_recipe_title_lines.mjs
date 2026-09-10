@@ -23,17 +23,23 @@ try{
     if(!names.length) return 'NO RECIPE_BOOK EXPORT';
     document.body.classList.add('pp4Stage');
     const res=[];
-    for (const cardW of [225, 250, 275, 300, 320, 340, 355, 365, 375]) {
-      // the title's own text box: card width minus the card's left+right padding (9 each)
+    /* ⭐ MEASURED AT HIS TWO REFERENCE CARDS, and nowhere else, because the card is proportional
+       now (2026-09-10): font, padding and letter-spacing all scale by --rcK, so a name wraps at a
+       225px phone card exactly where it wraps at his 360px one. Two geometries answer every width. */
+    for (const ref of [{size:'phone & tablet', W:360, pad:14}, {size:'desktop', W:400, pad:23}]) {
       const host=document.createElement('div');
-      host.style.cssText='position:fixed;left:-9999px;top:0;width:'+(cardW-18)+'px';
+      // the card's content box: his width, less his padding, less the card's 2px border each side
+      host.style.cssText='position:fixed;left:-9999px;top:0;width:'+(ref.W-2*ref.pad-4)+'px';
       const t=document.createElement('div'); t.className='recipeTitle';
-      t.style.cssText='font-size:12.5px;line-height:1.2';
+      // ⚠ padding:0 IS LOAD-BEARING — the bare class still carries the old 12px side padding, which
+      // the game card no longer has; the first run of this probe measured with it and overcounted
+      t.style.cssText='font-size:19.5px;line-height:1.2;letter-spacing:.3px;margin:0;padding:0';
       host.appendChild(t); document.body.appendChild(host);
-      let max=0, worst='';
-      for (const n of names){ t.textContent=n; const h=t.offsetHeight; if(h>max){max=h;worst=n;} }
       const one=(()=>{t.textContent='X';return t.offsetHeight;})();
-      res.push({cardW, maxPx:max, oneLinePx:one, lines:Math.round(max/one), worst});
+      const lines={};
+      let max=0, worst='';
+      for (const n of names){ t.textContent=n; const L=Math.round(t.offsetHeight/one); lines[L]=(lines[L]||0)+1; if(L>max){max=L;worst=n;} }
+      res.push({...ref, font:getComputedStyle(t).fontFamily.split(',')[0], maxLines:max, worst, namesByLineCount:lines});
       host.remove();
     }
     return JSON.stringify({count:names.length, res});

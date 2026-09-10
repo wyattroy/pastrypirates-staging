@@ -20,7 +20,7 @@ const M=`JSON.stringify((()=>{
   const th=front.querySelector('.recipeThumb'), ic=front.querySelector('.recipeIcons'),
         icImg=front.querySelector('.recipeIcons .ri img');
   const fr=R(front), br=back?R(back):null;
-  return {rcW:Math.round(parseFloat(getComputedStyle(document.querySelector('#actionPanel .apBtns')).getPropertyValue('--rcW'))||0),
+  return {rcW:Math.round(parseFloat(getComputedStyle(document.querySelector('#actionPanel .apBtns')).getPropertyValue('--rcWn'))||0),
     cardW:front.offsetWidth, cardH:front.offsetHeight,
     insetImg: th?th.offsetLeft:null,
     insetIcon: (ic&&icImg)?(ic.offsetLeft+icImg.offsetLeft):null,

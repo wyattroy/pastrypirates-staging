@@ -379,7 +379,8 @@ export function recipeCardHTML(recipe){
   const info=recipeInfo(recipe);
   const items=recipe.map(i=>`<span class="ri" data-ing="${i}">${ingImg(i)}</span>`).join("");
   const thumb=info&&info.img?`<img class="recipeThumb" src="${info.img}" alt="">`:"";
-  return thumb+`<div class="recipeTitle">${recipeTitle(recipe)}</div>`+
+  // the name is wrapped so it can share one grid cell with its partner's (see data-ghost, stage.js)
+  return thumb+`<div class="recipeTitle"><span class="rtName">${recipeTitle(recipe)}</span></div>`+
     `<div class="recipeList recipeIcons">${items}</div>`;
 }
 // ---- recipe modal: click a player's recipe name (in the captain's row, once one is chosen) to
