@@ -391,7 +391,15 @@ export async function playBakeoffLive(spec,io){
   const swaps=spec.swaps||[];
   // The shape cardHTML/benchHTML/stepOfSlot have always read. Built from the spec rather than
   // handed in, so this function never touches a live engine object.
-  const bake={order:spec.order,locked:(spec.locked||[]).slice(),attempts:spec.attempts||0,baker:spec.baker};
+  /* ⚠ `recipe` HAS TO BE COPIED HERE OR NOTHING DOWNSTREAM CAN SEE IT, and for a day it was not.
+     bakeRecipeName() reads bake.recipe and its own comment says the name "comes from the BAKER's
+     own recipe" — but this line, the one place the bake object is actually built, never carried the
+     field. So `bake.recipe` was undefined for EVERY captain in every mode, the name silently
+     rendered as the empty string, and the comment described an intention the code did not have.
+     Wyatt found it with ?ovens=1 and reported it as a fault of the shortcut; the shortcut was
+     innocent — it had never worked for anybody. */
+  const bake={order:spec.order,locked:(spec.locked||[]).slice(),attempts:spec.attempts||0,
+    baker:spec.baker,recipe:(spec.recipe||[]).slice()};
   const n=bake.order.length;
   while(bake.locked.length<n)bake.locked.push(false);
 

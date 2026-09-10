@@ -128,12 +128,6 @@ export function netWatchStatus(db, room, handler) {
   return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "status" });
 }
 
-export function netWatchTurnOrder(db, room, handler) {
-  if (!db || !room) return null;
-  const ref = db.ref("rooms/" + room + "/turnOrder");
-  return registry.attach({ scope: "room", ref, event: "value", callback: handler, label: "turnOrder" });
-}
-
 export function netWatchRecipes(db, room, handler) {
   if (!db || !room) return null;
   const ref = db.ref("rooms/" + room + "/recipes");

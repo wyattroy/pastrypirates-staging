@@ -241,7 +241,18 @@ export function pilotMsg(id, shippedMsg){ return pilotLine(id, shippedMsg).msg; 
  *  they spend anything on it (flashing the captains box, dimming the board, holding the turn).
  *  Asking pilotLine() for a string and testing it for emptiness answers the same question, but it
  *  makes every call site re-derive "empty means silent", which is the kind of thing that drifts. */
+/* ⭐ SILENCED FOR A TEST URL — Wyatt, playtest 2026-09-10, on ?endcard=1: "you must give me a
+   better way than running through a whole game myself."
+   A shortcut whose whole job is to reach the END of a voyage must not be held up by the tutorial
+   that teaches the BEGINNING of one. Measured: with the draft auto-answered, the route still sat
+   forever on the Pilot's "yer recipe's stowed below" card, which waits for a tap.
+   ⚠ IN MEMORY, NEVER WRITTEN. Setting `off` in the stored state would silence Polly for this
+   browser long after the test URL was closed — a dev flag that quietly changes the real game is
+   worse than the delay it removes. This flag dies with the page. */
+let silenced = false;
+export function pilotSilence(){ silenced = true; }
 export function pilotSpeaks(id){
+  if (silenced) return false;
   const l = LADDERS[id];
   return !!l && l[pilotRung(id)] != null;
 }
@@ -274,7 +285,7 @@ export function pilotSkipToVeteran(){
 
 /** The parrot is a TWO-STATE TOGGLE (his ruling, over a three-step: an unlabelled three-state
  *  control gets pressed at random). ON also puts every count back to 0 and says so. */
-export function pilotIsOn(){ return !read().off; }
+export function pilotIsOn(){ return !silenced && !read().off; }
 export function pilotToggle(){
   const s = read();
   if (s.off){ pilotStartFromTheTop(); return true; }

@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@cb9a79e2";
+const PP4_STAMP = "2026.09.07.3-staging@6012fe66";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2256,6 +2256,17 @@ let rcFlightTimers = [];
    middle of the board and then written back as the parked geometry. That is the
    two-answers-for-one-number fault this picker has already paid for twice. */
 let rcInFlight = false;
+/* ⭐ IS THE PARKED LEFT FINAL YET? The flight computes its dx ONCE, from wherever the sheet is
+   parked at the instant it starts — so anything that moves the parked left afterwards silently
+   moves the flight's destination and its board-centre hold with it. Wyatt, playtest 2026-09-10:
+   "the cards should appear directly over the center of the board; in desktop this is not what
+   happened... there is a glitch with the cards moving over to the side, where they drop frames."
+   Measured: 244px right of centre, and eleven rewrites of the parked left during one arrival.
+   So the sound-icon alignment must finish BEFORE the flight starts and must not run again while it
+   is running — during the flight both the sheet (the flight) and the front card (the swap) are
+   under their own transforms, and every rect the alignment could read is a lie about where things
+   will come to rest. One write, on the tick the cards are first laid out; nothing after. */
+let rcAlignReady = false;
 /* The live animations, so a picker that is torn down mid-show does not leave a fill:both animation
    pinning the sheet somewhere the tick is no longer writing. */
 let rcAnims = [];
@@ -2280,6 +2291,17 @@ const RC_CARD_MAX = 375;
    result, and a flight that anticipates — pulls back before it goes — and overshoots on arrival.
    He asked for "more game feel and weight"; what he picked is a heavier, slower, springier card
    than anything I proposed. Do not tighten these back up without asking him. */
+/* ⭐ THE BOARD GETS TWO SECONDS TO ITSELF FIRST — Wyatt, playtest 2026-09-10: "I want the cards to
+   appear after a 2-second delay, to let the users see the board first."
+   The sheet is pinned to opacity 0 for this whole window (promptTick sets it, rcFlightShow's
+   keyframes take it back), so it is genuinely invisible rather than drawn and then hidden.
+   ⭐ AND THE WAIT IS WHERE THE SHOW IS MEASURED FROM. The first version made this a `delay` on the
+   entrance keyframes, which meant the geometry was still read two seconds early — while the board
+   was still laying out at 1012px against the 1036px it settles at, which held the cards 87px right
+   of centre. Spending the delay first and measuring after costs nothing and makes every number in
+   the show a fact about a board that has stopped moving. His tuner numbers are untouched: they all
+   run from the end of this wait. */
+const RC_DELAY_MS = 2000;    // board alone, before anything arrives
 const RC_FADE_MS  = 1160;    // the entrance
 const RC_FROM     = 1.25;    // starts 25% LARGER and settles down — his choice, not a typo
 const RC_OVER     = 1.03;    // and dips a little past 1 on the way
@@ -2302,6 +2324,7 @@ function rcFlightStop(){
 function rcFlightReset(){
   rcFlightStop();
   rcFlightKey = null;
+  rcAlignReady = false;
   const box = $("pp4Prompt");
   if (box) box.style.transform = "";   // (.pp4RcHold went with the CSS transition — see rcFlightRun)
 }
@@ -2337,20 +2360,66 @@ function boardDrawnRect(){
 function rcFlightRun(key, brd){
   const box = $("pp4Prompt");
   if (!box || !brd) return;
+  /* ⚠ BEFORE rcFlightReset(), AND THAT ORDER IS THE WHOLE POINT. dx below is measured ONCE and
+     never revisited, so the flight must not start while the sound-icon alignment still has a
+     correction to make — but rcFlightReset() CLEARS rcAlignReady, so testing it after the reset
+     tests a flag this function just falsified. Measured: the guard failed on every tick forever,
+     the entrance was never attached, and the opacity pin promptTick sets was never released — the
+     picker did not appear at all, at any size. Return before touching any state: nothing has been
+     reset and no key has been claimed, so this is simply "try again next tick". */
+  if (!rcAlignReady) return;
   rcFlightReset();
   rcFlightKey = key;
 
   const REDUCED = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (REDUCED) return;                     // parked, immediately, and no demo swap: the show IS motion
+  /* ⚠ EVERY EXIT HANDS THE OPACITY BACK. promptTick pins the sheet to 0 before calling this so it
+     cannot flash un-animated; any path that does not attach the entrance owes it a release, or the
+     picker is invisible for the rest of the voyage. Reduced motion is the loudest case: the whole
+     show is skipped, so the sheet must simply BE there. */
+  const rcShow = () => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; };
+  if (REDUCED) { rcShow(); return; }        // parked, immediately, and no demo swap: the show IS motion
 
-  /* ⚠ fixedRect, NOT gBCR — `brd` arrives in body-relative space (see boardDrawnRect) and a delta
+  /* ⭐ THE WHOLE SHOW IS MEASURED WHEN IT STARTS, NOT WHEN IT IS SCHEDULED — and his two-second
+     delay is what makes that possible. dx is computed ONCE and every beat hangs off it, so reading
+     the geometry early bakes an early answer into all of them. Measured 2026-09-10: at the instant
+     the picker first ticks, the board is still laying out — 1012px wide against the 1036px it
+     settles at — and the cards held 87px right of centre because of it. Waiting the delay costs
+     nothing (the sheet is pinned invisible for exactly that window anyway) and every number below
+     is then read off a board that has stopped moving.
+     ⚠ fixedRect, NOT gBCR — `brd` arrives in body-relative space (see boardDrawnRect) and a delta
      between two different coordinate spaces is off by exactly the item-22 shift. Both sides in one
      space or neither. */
+  rcInFlight = true;                 // from NOW: the sheet is the show's, and promptTick keeps off it
+  rcLater(() => rcFlightShow(box, brd, rcShow), RC_DELAY_MS);
+}
+
+/* The show itself, one tick of the clock after rcFlightRun claimed the picker. Split out so the
+   measurement and the keyframes are the same statement — see the note at the call above. */
+function rcFlightShow(box, brd, rcShow){
+  if (!box.isConnected) { rcShow(); rcInFlight = false; return; }
   const r = fixedRect(box);
-  if (r.width < 2 || r.height < 2) { rcFlightKey = null; return; }   // not laid out yet — try next tick
-  const dx = Math.round((brd.left + brd.width  / 2) - (r.left + r.width  / 2));
-  const dy = Math.round((brd.top  + brd.height / 2) - (r.top  + r.height / 2));
-  if (!dx && !dy) return;                  // parked IS the middle (a board smaller than the sheet)
+  if (r.width < 2 || r.height < 2) { rcFlightKey = null; rcInFlight = false; rcShow(); return; }
+  /* ⭐ THE CARD OVER THE MIDDLE, NOT THE SHEET — Wyatt, playtest 2026-09-10: "the cards should
+     appear directly over the center of the board; in desktop this is not what happened."
+     The sheet is wider than the card it carries: the swap circle and the back card's peek both
+     live inside it, off to the right, so a sheet centred on the board leaves the CARD left of
+     centre — measured at 88px on 1920 and 56px on 1280, and 5px on a phone where the sheet is
+     barely wider than the card, which is exactly why this only ever looked wrong on desktop.
+     Centre the thing he is looking at. The flight's transform is on the SHEET, so moving the sheet
+     by this delta moves the card by the same delta — measuring the card and translating the sheet
+     is not a mismatch, it is the only way to aim at the card at all. */
+  const aim = (() => {
+    const ap0 = $("actionPanel");
+    if (!ap0) return r;
+    const c = [...ap0.querySelectorAll(".apBtn")]
+      .filter(b => b.querySelector(".recipeList") && fixedRect(b).width > 2)
+      .sort((a, b) => fixedRect(a).left - fixedRect(b).left)[0];
+    const cr = c ? fixedRect(c) : null;
+    return (cr && cr.width > 2 && cr.height > 2) ? cr : r;
+  })();
+  const dx = Math.round((brd.left + brd.width  / 2) - (aim.left + aim.width  / 2));
+  const dy = Math.round((brd.top  + brd.height / 2) - (aim.top  + aim.height / 2));
+  if (!dx && !dy) { rcShow(); rcInFlight = false; return; }   // parked IS the middle (a board smaller than the sheet)
 
   /* ⭐ DRIVEN BY THE WEB ANIMATIONS API, NOT BY A CSS TRANSITION — and that is what his tuner
      numbers actually require. A transition can carry one value from A to B on one curve; it cannot
@@ -2362,20 +2431,23 @@ function rcFlightRun(key, brd){
   const ANIMS = [];
   const hold = `translate(${dx}px, ${dy}px)`;
 
+  /* the delay is already spent — these are his numbers, from now */
+  const rcAt = ms => ms;
+
   ANIMS.push(box.animate([
     { opacity: 0, transform: `${hold} scale(${RC_FROM})`, offset: 0 },
     { opacity: 1, transform: `${hold} scale(${RC_OVER})`, offset: .62 },
     { opacity: 1, transform: `${hold} scale(1)`,          offset: 1 },
   ], { duration: RC_FADE_MS, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" }));
+  rcShow();   // the keyframes own opacity from here — they fill backwards through the delay
 
   /* AND IT HOLDS THERE. Without this the entrance's fill:both ends and the box snaps to its parked
      place the instant the fade finishes — a second animation pinned to the same transform is what
      keeps it over the middle of the board for his 950ms of stillness and the swap. */
   ANIMS.push(box.animate([{ transform: hold }, { transform: hold }],
-    { duration: RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS, delay: RC_FADE_MS, fill: "both" }));
+    { duration: RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS, delay: rcAt(RC_FADE_MS), fill: "both" }));
 
-  rcInFlight = true;
-  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, RC_FADE_MS + RC_LAND_MS);
+  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, rcAt(RC_FADE_MS + RC_LAND_MS));
 
   rcLater(() => {
     const b2 = $("pp4Prompt");
@@ -2389,7 +2461,7 @@ function rcFlightRun(key, brd){
       { transform: `translate(${lx}px, ${ly}px) scale(${1 + RC_SQUASH}, ${1 - RC_SQUASH})`, offset: .72 },
       { transform: "translate(0px, 0px) scale(1,1)", offset: 1 },
     ], { duration: RC_FLY_MS, easing: "cubic-bezier(.68,-.55,.27,1.55)", fill: "both" }));
-  }, RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS);
+  }, rcAt(RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS));
 
   /* AND EVERYTHING IS CANCELLED WHEN THE SHOW ENDS, or a fill:both animation would hold the sheet
      off its parked place for the rest of the voyage — the tick would keep writing left/top that
@@ -2399,7 +2471,7 @@ function rcFlightRun(key, brd){
     rcInFlight = false;
     ANIMS.forEach(a => { try { a.cancel(); } catch (e) {} });
     rcAnims = [];
-  }, RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS + RC_FLY_MS + 40);
+  }, rcAt(RC_FADE_MS + RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS + RC_FLY_MS + 40));
 }
 
 /* ⭐ THE HELPER PILL IS LOCKED UNDER THE CARDS — Wyatt, 2026-09-09: "make that 'tap a recipe'
@@ -2425,6 +2497,11 @@ function rcChromeTeardown(box){
   const a0 = box.querySelector(".pp4RcAsk");  if (a0) a0.remove();
   const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
   rcFlightReset();        // a transform must never outlive the box it moved
+  /* ⚠ AND NEITHER MAY THE OPACITY PIN. #pp4Prompt is the ONE box every prompt in the game is drawn
+     in, so a picker torn down between "pinned to 0" and "the entrance took over" would hand the
+     next question — a trade, a battle, the end card — a permanently invisible box. Same reasoning
+     as the transform on the line above, and the same one-line cure. */
+  box.style.opacity = "";
 }
 
 /* ⚠ THE DRAG IS GONE, ON PURPOSE, AND THIS NOTE IS ALL THAT SURVIVES IT — 2026-09-09.
@@ -3410,6 +3487,19 @@ function capEmptyTick(){
      exact moment he named — "make it appear after the recipe has been selected". It is raised by the
      one event consumer (so host, guest, solo and pass-play all get it identically) and cleared when
      a voyage begins, so it cannot carry over into the next game. */
+  /* ⚠ AND THE FLAG ALONE IS NOT ENOUGH ON A RESUME — Wyatt, playtest 2026-09-10, item 12: "When i
+     reloaded, there was no wind particle animation and no captain's box — but the ships were in the
+     right place."
+     `S.recipePicked` is set by CONSUMING a recipeSet event. A solo resume rebuilds the voyage by
+     replaying its decision log, and that replay does not re-run the live consumer — so the flag
+     stayed false for a game whose recipes were chosen twenty turns ago, and the captains box hid
+     itself for the rest of the voyage. A hide that depends on having WITNESSED a moment cannot
+     survive a reload; the moment has to be readable from the game.
+     The event stream IS that record, and it is rebuilt by the replay. Read it only while the flag
+     is false — which is only during the draft, when there are a handful of events — and latch it,
+     so this costs one scan of a short array and nothing at all thereafter. */
+  if (!S.recipePicked && appState.game && Array.isArray(appState.game.events)
+      && appState.game.events.some(e => e && e.t === "recipeSet")) S.recipePicked = true;
   const want = (appState.game && !S.recipePicked) ? "hidden" : "";
   if (cap.style.visibility !== want) cap.style.visibility = want;
 }
@@ -3734,7 +3824,12 @@ function promptTick(force){
       const r = fixedRect(c);
       return (r.width > 2 && r.left >= brd.right - 4) ? r : null;
     })();
-    if (capCol){
+    /* NOT WHILE IT IS FLYING. Everything this block measures is under an animation's transform
+       once the show starts — see rcAlignReady where it is declared. */
+    /* A LAYOUT WITH NO COLUMN NEVER ALIGNS, so it is ready by definition — a phone and a tablet
+       must not wait for a step that will never run. */
+    if (!capCol) rcAlignReady = true;
+    if (capCol && !rcInFlight){
       /* THE ICON, NOT THE ROW. #btnMute is the whole menu line — "Sound: ON – blocked by yer
          browser", 540px of it — and he said "the left pixel of the SOUND ICON". The glyph is the
          <img class="narrIcon"> inside it; the row's own left differs from it by whatever padding
@@ -3751,16 +3846,38 @@ function promptTick(force){
       /* the ROW's display, not the image's: an <img> inside a display:none row is itself
          `inline`, so asking the image answers a different question than the one intended. */
       if (icon && front && row && getComputedStyle(row).display !== "none"){
-        const iR = fixedRect(icon), fR = fixedRect(front);
+        const iR = fixedRect(icon), fR = fixedRect(front), bR = fixedRect(box);
         if (iR.width > 2 && fR.width > 2){
-          const shift = Math.round(iR.left - fR.left);
-          if (Math.abs(shift) > 1){
-            const want = Math.round(parseFloat(box.style.left || 0) + shift);
+          /* ⭐ THE CARD'S INSET INSIDE THE SHEET, NOT ITS POSITION ON SCREEN — and that difference
+             is the whole of Wyatt's playtest item 2 ("the cards should appear directly over the
+             center of the board; in desktop this is not what happened... there is a glitch with
+             the cards moving over to the side, where they drop frames").
+             MEASURED, 2026-09-10: this block used to read the card's LIVE left and add the
+             difference to the sheet's parked left. During the arrival the flight puts a transform
+             on the sheet, so that live left is wherever the ANIMATION currently has it — and this
+             ran on every tick of a four-second animation. One arrival rewrote the parked left
+             ELEVEN times at 1920 (1207 -> 991 -> 943 -> 989 -> 976) and ten times at 1280. Three of
+             his findings fall out of that one mistake:
+               · rcFlightRun computes its dx ONCE, from the parked left at flight start; moving that
+                 left afterwards means translate(dx) no longer lands on the board's centre, so the
+                 cards held 244px right of it;
+               · a style write plus a rect read, every tick, is layout thrashing — 6 frames over
+                 33ms at 1920 (worst 91ms) against ZERO on a phone, which is the one size where
+                 this block does not run;
+               · and the entrance reads wrong because the thing it is scaling is also jumping.
+             The sheet's transform moves the card and the sheet by exactly the same amount, so
+             `card.left - sheet.left` is INVARIANT under it. Ask for that, and the answer is the
+             same on every frame: it settles in one tick and writes nothing after. */
+          const inset = fR.left - bR.left;
+          const parked = parseFloat(box.style.left || 0) || 0;
+          const want = Math.round(iR.left - inset);
+          rcAlignReady = true;          // the cards are laid out and this tick has the final answer
+          if (Math.abs(want - parked) > 1){
             /* never off the glass: the alignment is a preference, reachability is not.
                ⚠ CLAMPED AGAINST THE PAINTED WIDTH, not `box.style.width` — the board-centre branch
                above never assigns a width, so reading the inline style there measures 0 and the
                clamp silently permits the sheet to leave the screen. */
-            const bw = Math.round(fixedRect(box).width) || 0;
+            const bw = Math.round(bR.width) || 0;
             box.style.left = Math.max(8 - fixedOrigin().x, Math.min(want, glassR - bw - 8)) + "px";
           }
         }
@@ -3811,7 +3928,15 @@ function promptTick(force){
          captains box, the narration bubbles — so the box agrees with all of them by using the same
          array rather than a colour chosen here. */
       const who = askSeat;
-      const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span>, pick yer recipe:`;
+      /* ⚠ THE TAIL IS ITS OWN SPAN, and that is what lets the name have every pixel the sentence
+         does not need. Wyatt, playtest 2026-09-10, on the guest's card: "the text box showing
+         their name was unnecessarily narrow, so their name was cut off with a '...' — the text box
+         should be allowed to be wider, the cutoff seemed unnecessarily slim."
+         It was capped at 45% of the ask's own width, which is circular: the ask is sized to
+         max-content, and its content includes a name being capped at a fraction of the result. As
+         two real flex items — an unshrinkable tail and a name that takes the rest — the split is
+         MEASURED by the browser instead of guessed by me, and "Wyargh phone" simply fits. */
+      const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span><span class="pp4RcSay">, pick yer recipe:</span>`;
       if (ask.dataset.rcAsk !== askHtml){ ask.dataset.rcAsk = askHtml; ask.innerHTML = emojify(askHtml); }
     }
     /* THE SEA HINT SITS OUT THE SHOW. peekHintTick() places this pill by dodging whatever else is
@@ -3898,7 +4023,17 @@ function promptTick(force){
        flight measures the parked box and the parked box is only correct once every clamp above has
        been applied (the lift, the width, the overflow nudge). Keyed to rcKey, so a picker that
        simply re-ticks costs nothing and the NEXT captain's picker gets its own flight. */
-    if (rcKey && rcFlightKey !== rcKey) rcFlightRun(rcKey, brd);
+    /* ⚠ NOTHING IS SHOWN UNTIL THE ENTRANCE OWNS IT. rcFlightRun can legitimately decline a tick
+       or two — waiting for the sheet to be laid out, and now for the sound-icon alignment to
+       settle — and for those ticks the sheet is displayed with no animation attached, i.e. fully
+       opaque at its parked place. Measured after adding the alignment gate: the cards appeared for
+       one frame, vanished for the two seconds Wyatt asked for, then faded in. Hold it at zero
+       until the entrance's own keyframes take over (they fill backwards through the delay, so
+       opacity 0 is exactly what they would have painted anyway). */
+    if (rcKey && rcFlightKey !== rcKey){
+      box.style.opacity = "0";
+      rcFlightRun(rcKey, brd);
+    }
     /* ⭐ AND THE REVEAL'S HEIGHT PIN IS RELEASED ONCE THE ART HAS LANDED.
        MEASURED at 390x844: the white sheet ran 132..445 while its content ended at 346 — 99px of
        blank cream under the card. The cause is not this block: runHeightSequence (panel.js) pins

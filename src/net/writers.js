@@ -150,12 +150,9 @@ export function netSetDraftResponse(db, room, seat, payload, onError) {
   return withReporter(db.ref("rooms/" + room + "/draftResponses/" + seat).set(payload), onError);
 }
 
-/* ---------- turn order / room status ------------------------------------------------------------ */
-
-export function netSetTurnOrder(db, room, order, onError) {
-  return withReporter(db.ref("rooms/" + room + "/turnOrder").set(order), onError);
-}
-
+/* ---------- room status ------------------------------------------------------------------------- */
+/* (netSetTurnOrder lived here. Sailing order is an engine event now — Game.setTurnOrder — so there
+   is no node to write and nothing to watch. One pipe.) */
 // Reused for both the room-scoped "status: ended" patch (with an error
 // reporter, fire-and-forget) and startGame()'s much larger "status:
 // playing" reset patch (no reporter — that call site already wraps its own

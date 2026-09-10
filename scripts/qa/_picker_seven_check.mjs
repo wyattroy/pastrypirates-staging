@@ -80,6 +80,14 @@ const M = `JSON.stringify((()=>{
         return (r.left<-1||r.top<-1||r.right>innerWidth+1||r.bottom>innerHeight+1)
           ?{l:Math.round(r.left),r:Math.round(r.right),vw:innerWidth}:null;}).filter(Boolean);})(),
     /* his 2026-09-10 alignment: the FRONT CARD's left pixel against the SOUND ICON's */
+    /* IS THE NAME ACTUALLY CLIPPED? innerHTML always holds the whole name -- text-overflow is a
+       PAINT, not an edit -- so reading the markup answers a different question than the one his
+       screenshot asked. scrollWidth > clientWidth is the element saying there is more of it than
+       you can see. (No backticks in here: this whole block is a template literal, and I have now
+       broken it twice the same way.) */
+    whoClipped:(()=>{const w=document.querySelector('.pp4RcAsk .pp4RcWho');
+      if(!w)return null;return {text:w.textContent,over:Math.round(w.scrollWidth-w.clientWidth),
+        clipped:w.scrollWidth-w.clientWidth>1};})(),
     cardCount:[...document.querySelectorAll('#actionPanel .apBtn')].filter(b=>b.querySelector('.recipeList')&&b.getBoundingClientRect().width>2).length,
     /* ⚠ THE ICON GLYPH, which is what he named and what stage.js aligns to. #btnMute is the whole
        menu line — 540px of "Sound: ON – blocked by yer browser" — so measuring the row answered a
@@ -110,7 +118,11 @@ const go = async () => {
   await waitFor(`!!document.getElementById('choiceSolo')`, 25000);
   await C.ev(`document.getElementById('choiceSolo').click()`);
   await waitFor(`(()=>{const b=document.getElementById('btnNameConfirm');return !!(b&&b.offsetParent)})()`);
-  await C.ev(`document.getElementById('nameModalInput').value='Wyatt'`);
+  /* ⚠ A REALISTIC NAME, NOT A SHORT ONE. This probe used 'Wyatt' — five characters, which fits
+     anything — while the bug Wyatt actually hit was his own 'Wyargh phone' being ellipsised to
+     "Wyargh ph..." on the guest's card. A test that only ever uses the easy input cannot see a
+     width fault, and this one did not. */
+  await C.ev(`document.getElementById('nameModalInput').value='Wyargh phone'`);
   await C.ev(`document.getElementById('btnNameConfirm').click()`);
   await waitFor(`(()=>{const p=document.getElementById('actionPanel');return !!(p&&/ahoy/i.test(p.textContent))})()`,26000);
   await C.ev(`(()=>{const b=[...document.querySelectorAll('#actionPanel .apBtn')].find(x=>/nah/i.test(x.textContent));if(b)b.click()})()`);
@@ -136,6 +148,13 @@ const go = async () => {
    created when the show ends, and a cancelled animation leaves getAnimations(), so an empty list
    IS the landing. The rect check after it is a belt. */
 const settle = async (ms=16000) => {
+  /* ⚠ WAIT FOR THE SHOW TO START BEFORE WAITING FOR IT TO END. Wyatt's 2026-09-10 ask put a
+     two-second lead-in before the picker arrives, and during that window there are no animations
+     at all — so "no animations" was true IMMEDIATELY and this settled before anything had
+     happened, measuring a card whose artwork had not finished loading. It reported the sound-icon
+     alignment as 74px out on a build where the game corrects it. Started, THEN finished. */
+  await waitFor(`(()=>{const b=document.getElementById('pp4Prompt');
+    return !!b && b.getAnimations().length>0})()`, ms).catch(()=>{});
   await waitFor(`(()=>{const b=document.getElementById('pp4Prompt');
     return !!b && b.getAnimations().length===0})()`, ms).catch(()=>{});
   const read = () => C.ev(`(()=>{const c=[...document.querySelectorAll('#actionPanel .apBtn')]
@@ -173,6 +192,7 @@ try {
        word for both for four runs. Say which one it is. */
     say(`   every card fully on the glass? ${m.cardCount===0?"NO CARDS MEASURED — the picker was not up":(m.offscreen.length===0?`YES (${m.cardCount} cards)`:"NO — "+JSON.stringify(m.offscreen))}`);
     say(`   align: ${JSON.stringify(m.align)}`);
+    say(`   name clipped? ${JSON.stringify(m.whoClipped)}`);
     say(`   ask centred in the sheet? ${JSON.stringify(m.askCentred)}   (equal gaps = centred)`);
     say(`   PANEL ${JSON.stringify(m.panel)}   panel wider than box by ${m.panelWiderThanBox}px`);
     say(`   board ${JSON.stringify(m.board)}   panel hides ${m.boardHidden==null?'?':(m.boardHidden*100).toFixed(1)+'%'} of it`);

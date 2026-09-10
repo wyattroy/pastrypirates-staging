@@ -309,7 +309,7 @@ const WATCHER_INVENTORY = [
   "netWatchFlip", "netWatchConnected", "netWatchPresence",
   "netWatchChat", "netWatchBattle", "netWatchRecovery",
   "netWatchDraftPrompt", "netWatchEvents", "netWatchPrompt", "netWatchNarr",
-  "netWatchSeats", "netWatchStatus", "netWatchTurnOrder", "netWatchRecipes",
+  "netWatchSeats", "netWatchStatus", "netWatchRecipes",
   "netWatchResponse", "netWatchDraftResponse",
 ];
 const WATCHERS_FILE = path.join(NET_DIR, "watchers.js");
@@ -333,10 +333,14 @@ async function checkWatcherInventory() {
   }
 
   const content = fs.readFileSync(WATCHERS_FILE, "utf8");
+  /* 16 -> 15 on 2026-09-10: netWatchTurnOrder was folded into the event stream (Game.setTurnOrder,
+     consumed once in consumeEvent), so there is no rooms/<C>/turnOrder node to watch. This number
+     is meant to move when a channel is deliberately removed — it exists to catch one appearing or
+     vanishing unnoticed, not to freeze the count. */
   const attachCount = (content.match(/registry\.attach\(/g) || []).length;
-  if (attachCount !== 16) {
+  if (attachCount !== 15) {
     ok = false;
-    failures.push(`INVENTORY: expected exactly 16 registry.attach() calls in src/net/watchers.js, found ${attachCount}`);
+    failures.push(`INVENTORY: expected exactly 15 registry.attach() calls in src/net/watchers.js, found ${attachCount}`);
   }
 
   return ok;

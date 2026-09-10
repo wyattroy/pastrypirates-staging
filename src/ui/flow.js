@@ -54,7 +54,7 @@ import {
   CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled, BAKE_REWATCH_COST,
   buildRoster, emojify,
 } from "../shared/index.js";
-import { el, boardCell, setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo } from "./board.js";
+import { el, boardCell, setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo, render as renderBoard } from "./board.js";
 import {
   liveRender, panel, setNeedsAction, narrateLastEvent, flash, showNarration,
 } from "./panel.js";
@@ -914,6 +914,12 @@ export async function bakeoffPrompt(player,setup,fallback){
        spec exists: a watcher has no `player`, and a name resolved independently on two machines is two
        answers waiting to disagree. One field, built once, read by baker and watcher alike. */
     baker:pn(player.idx),
+    /* ⭐ AND THE RECIPE RIDES WITH IT, for exactly the reason `baker` does: a WATCHER has no
+       `player` to look it up from, so a name resolved separately on two machines is two answers
+       waiting to disagree. The bot's spec (orchestrator botBakePerform) has carried this since it
+       was asked for; the HUMAN's — this one — did not, which is why the line was blank on the one
+       screen he was looking at. */
+    recipe:(player.recipe||[]).slice(),
     coins:player.coins};
   // Spending a coin goes through the ENGINE, live, one at a time — so the purse on screen drops the
   // moment the player buys a look rather than after the whole prompt resolves. `canAfford` lets the
@@ -2829,6 +2835,22 @@ export async function humanAct(player,sailCtx){
 export async function takeTurn(player){
   await passGate(player.idx);
   applyActiveSeat(player.idx);
+  /* ⭐ THE DOTTED COURSE BELONGS TO ONE CAPTAIN'S TURN — Wyatt, playtest 2026-09-10: "the dotted
+     line stays up on others' turns and doesn't seem to update until the player's next turn.
+     Expectation: the dotted line is ONLY visible on the player's turn, and auto updates with their
+     current location each turn."
+     WHY IT LINGERED: with Polly on, the sail prompt draws the course and NOTHING takes it down —
+     the `else forgetCourse()` beside that draw only runs when the parrot is OFF, which was the
+     whole point of his earlier ruling that the line should last the voyage rather than fade after
+     three turns. Both rulings are right and they are about different things: the line should
+     persist through HIS turn, not through everybody's.
+     A FOURTH SHARED STEP, HERE, which is exactly what this door was built for. Clearing at the top
+     of EVERY turn answers both halves of his ask at once: a bot's turn draws no course, so the sea
+     is clear while it sails; and his own next turn re-charts from wherever he is standing NOW,
+     because the sail prompt draws it fresh from `spec.pos`. No new flag, no second clock, and
+     pass-and-play gets it right for free — every seat there is a local captain taking its own
+     turn. */
+  forgetCourse();
   appState.game.ev({t:"turn",p:player.idx});
   return (player.strategy==="human"?humanTurn:botTurn)(player);
 }
@@ -3734,6 +3756,19 @@ export function endReplay(){
      own the boats.
      ONE LINE, AFTER `replaying` IS ALREADY FALSE, so the guard inside it passes. */
   renderLiveShips();
+  /* ⭐ AND THE BOARD ITSELF IS DRAWN ONCE, HERE — Wyatt, playtest 2026-09-10, item 12: "When i
+     reloaded, there was no wind particle animation and no captain's box — but the ships were in
+     the right place."
+     MEASURED, and it is bigger than either symptom he named: render() is called ZERO times after a
+     resume. Not once. The replay rebuilds every fact and drawBoard() lays the board out, but
+     render() — which draws the compass needle, the forecast chip, the storm state, the wind
+     particle field and the captain's log — never runs again until the next LIVE event, which on a
+     resumed voyage can be a whole turn away. "The ships were in the right place" is exactly the
+     tell: renderLiveShips() was added on this line for the same bug, one symptom at a time.
+     The line above is the boats; this is everything else on the board. One call, on the healthy
+     path only — the shortfall branch above returns before it, because a voyage that failed to
+     rebuild must show his restore-failure card rather than a confidently drawn wrong board. */
+  renderBoard();
 }
 
 // notes/edits BUG-03/D-07: the replay didn't rebuild the voyage. Explain which way it failed and

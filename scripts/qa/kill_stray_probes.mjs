@@ -25,11 +25,19 @@
  * EXIT: always 0 unless it could not look. Tidying up must never fail a build or block a turn —
  * this runs from a Stop hook, and a hook that can fail is a hook somebody disables.
  */
+import { execFileSync } from "node:child_process";
 import { askTheOS, parseProbes, killPid, isWin } from "../lib/stray_probes.mjs";
 
 const DRY = process.argv.includes("--dry-run");
 const QUIET = process.argv.includes("--quiet");
 const say = (m) => { if (!QUIET) console.log(m); };
+/* ⭐ --quiet MEANS "SAY NOTHING WHEN THERE IS NOTHING TO SAY", NEVER "SAY NOTHING". The Stop hook
+   runs this on every turn with --quiet, so a silent sweep is what a clean machine looks like — but
+   a sweep that actually KILLED something is the one event I need to see, because it means a probe
+   of mine leaked and I should fix the probe rather than lean on the sweep. Wyatt, 2026-09-10, with
+   twenty-two of them cooking his laptop: "COME ON MAN!!!! you were supposed to learn this the last
+   time!" A cleanup I never hear about is a lesson I never learn. */
+const shout = (m) => console.log(m);
 
 let text;
 try { text = askTheOS(); }
@@ -64,11 +72,25 @@ for (const o of orphans) (killPid(o.pid) ? killed : survived).push(o.pid);
    earned. `taskkill /T` takes a whole tree, so re-asking is also how the child processes each
    orphan owns get counted honestly rather than assumed. */
 let after = [];
+/* ⚠ A BEAT BEFORE ASKING. SIGKILL is delivered immediately but the process is not off the table
+   the same instant, so `process.kill(pid, 0)` inside killPid can still find it and report a
+   failure to kill something that is already dying. Measured 2026-09-10 on a deliberately orphaned
+   browser: the sweep printed "killed 0" and "1 would not die", and two seconds later the machine
+   had zero browsers on it. */
+try { execFileSync("/bin/sh", ["-c", "sleep 1"], { stdio: "ignore" }); } catch {}
 try { after = parseProbes(askTheOS()).filter((p) => p.orphan); } catch { /* reported below */ }
 
-console.log(`stray probes: killed ${killed.length} abandoned debug browser(s)` +
+/* ⭐ THE HEADLINE IS COUNTED FROM THE OS, NOT FROM WHAT killPid BELIEVED. The two disagree in the
+   ordinary case above, and when they disagree the OS is right — this whole file exists because a
+   number that was ASSERTED rather than measured let twenty-two browsers sit on Wyatt's laptop
+   while the tooling said all was well. `survived` is kept, but only to name processes the OS
+   still sees; a pid that killPid doubted and the OS cannot find was killed. */
+const stillHere = new Set(after.map((p) => String(p.pid)));
+const verifiedKilled = orphans.length - after.length;
+(verifiedKilled ? shout : say)(`stray probes: ⚠ killed ${verifiedKilled} abandoned debug browser(s) — A PROBE OF MINE LEAKED` +
   (inUse ? `, left ${inUse} that a live launcher is still using` : "") + ".");
-if (survived.length) console.log(`  ${survived.length} would not die (${survived.join(", ")}) — likely another user's, or already gone.`);
-if (after.length) console.log(`  ${after.length} orphan(s) still present after the sweep: ${after.map((p) => p.pid).join(", ")}`);
-if (!after.length && killed.length) console.log(`  the machine is clear of abandoned probes.${isWin ? "" : ""}`);
+const reallySurvived = survived.filter((pid) => stillHere.has(String(pid)));
+if (reallySurvived.length) shout(`  ${reallySurvived.length} would not die (${reallySurvived.join(", ")}) — likely another user's.`);
+if (after.length) shout(`  ${after.length} orphan(s) still present after the sweep: ${after.map((p) => p.pid).join(", ")}`);
+if (!after.length && verifiedKilled) shout(`  the machine is clear of abandoned probes.${isWin ? "" : ""}`);
 process.exit(0);

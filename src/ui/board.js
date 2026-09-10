@@ -1408,7 +1408,16 @@ export function windDotsTick(angle,storming){
   // of the Captains panel. Opt in with ?windhud=1 when the density dial is actually wanted.
   if(windHudEnabled())buildWindHud();
   if(layer)layer.style.transform=`rotate(${windAngle+180}deg)`;
-  if(!windBuilt){
+  /* ⚠ LATCH ONLY ONCE THERE IS SOMETHING TO BUILD INTO — Wyatt, playtest 2026-09-10, item 12:
+     "When i reloaded, there was no wind particle animation... but the ships were in the right
+     place." Measured across a reload of the same voyage: 20 dots became 0, permanently.
+     `windBuilt` was set BEFORE the build and without checking that the layer exists. On a resume
+     the board is rebuilt from a replayed log, and a render can land before #boardwrap has been
+     laid out — windEnsureLayer then returns null, this flag latches true, nothing is built, and
+     because the flag is the only retry guard NOTHING EVER BUILDS THEM AGAIN for the life of the
+     page. A guard that says "already done" after doing nothing is the whole bug.
+     One added condition, and the retry happens naturally on the next render. */
+  if(!windBuilt&&layer){
     windBuilt=true;
     buildWindDots(layer,appState.game&&appState.game.seed,windDotCount);
     startWindDots();
@@ -1872,11 +1881,25 @@ export function render(){
     const flag=document.getElementById(`bmflag_${ing}`);
     if(flag){const dry=remaining<=0&&remaining<1e9;flag.style.opacity=dry?1:0;}
   }
-  if(spinNeedle&&e.wind){
-    const storming=!!e.storm;
+  /* ⭐ THE WIND IS A FACT ABOUT THE GAME, NOT ABOUT THIS EVENT — Wyatt, playtest 2026-09-10, item
+     12: "When i reloaded, there was no wind particle animation... but the ships were in the right
+     place."
+     MEASURED, before and after a reload of the same voyage: 20 wind dots became 0. Every event the
+     engine emits carries the wind that was blowing when it happened, and this whole block hung off
+     `e.wind` — so it only ever ran while a NEW event was being drawn. A resume rebuilds the board
+     by replaying a log; the render that lands is not a fresh event, `e.wind` is undefined, and the
+     needle, the forecast chip and the particle layer are all skipped. They then stay skipped until
+     the next live event, which on a resumed voyage can be a whole turn away.
+     The engine already holds the answer — windNow/stormNow are what the compass readout itself
+     reads — so resolve it once here and let the event merely OVERRIDE it. A replayed frame draws
+     the wind the game is actually under, which is the same wind the header was already showing
+     beside it. Two sources for one fact was the defect; this is one. */
+  const liveWind = e.wind || (appState.game && appState.game.windNow) || null;
+  if(spinNeedle&&liveWind){
+    const storming=!!(e.wind ? e.storm : (appState.game && appState.game.stormNow));
     // v2 rule 7: a storm blows ONE direction now, so there is no combined diagonal to aim at —
     // the needle simply points where the wind points, storm or no storm.
-    const angle=({N:0,E:90,S:180,W:270})[e.wind];
+    const angle=({N:0,E:90,S:180,W:270})[liveWind];
     spinNeedle.style.transform=`rotate(${angle}deg)`;
     // v2 rule 6: next round's committed wind, as the small chevron riding on the needle. It points
     // the way the wind will BLOW, matching the needle's own convention exactly.

@@ -21,6 +21,16 @@ export const isWin = process.platform === "win32";
 
 /** One line per matching process, as `pid|created|parent-alive|orphan`. Throws if it cannot look —
  *  a failed look is NOT an empty result, and conflating the two is the bug this family exists after. */
+/** Is a debug-port browser with this parent ABANDONED? Pure, and exported ONLY so it can be
+ *  red-proofed — the bug it now encodes lived inside a function that shells out, which is exactly
+ *  why nothing could test it and why it survived long enough to cook Wyatt's laptop twice.
+ *  `alive` is the set of PIDs currently in the process table, as strings. */
+export function isOrphan(ppid, alive) {
+  // re-parented to init: the launcher is gone, whatever the process table says about PID 1
+  if (String(ppid) === "1" || String(ppid) === "0") return true;
+  return !alive.has(String(ppid));
+}
+
 export function askTheOS() {
   if (isWin) {
     // PowerShell, because Get-CimInstance is the only thing here that can see a command line.
@@ -39,7 +49,18 @@ export function askTheOS() {
   return raw.split("\n").filter(Boolean).map((l) => {
     const m = l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
     if (!m) return "";
-    return `${m[1]}|${m[3].slice(0, 24)}|${alive.has(m[2]) ? "parent-alive" : "orphan"}`;
+    /* ⚑ PPID 1 IS AN ORPHAN, AND MISSING THAT MADE THIS WHOLE GATE DECORATIVE — 2026-09-10.
+       Wyatt, with his laptop choking: "COME ON MAN!!!! you were supposed to learn this the last
+       time!" There were 22 abandoned headless browsers up, several pegging 70-85% CPU, and this
+       check had just printed "EVERY ONE has a live launcher — a probe in use, not a leak".
+       WHY IT LIED. Every probe here spawns Chrome DETACHED so it outlives the shell. When the
+       launcher exits, the kernel re-parents the child to init — PID 1 — which is alive by
+       definition and always in the process table. So `alive.has(ppid)` was TRUE for precisely the
+       browsers that had been abandoned, and the more thoroughly a probe leaked, the more confident
+       this gate was that it had not.
+       "Its parent is init" IS the operating system telling you the launcher is gone. That is the
+       whole definition of an orphan on Unix, and it was the one case the test could not see. */
+    return `${m[1]}|${m[3].slice(0, 24)}|${isOrphan(m[2], alive) ? "orphan" : "parent-alive"}`;
   }).filter(Boolean).join("\n");
 }
 
@@ -63,4 +84,43 @@ export function killPid(pid) {
      the reaper report kills it had not made — CEO 182. Only ESRCH is a death. */
   try { process.kill(pid, 0); return false; }
   catch (e) { return String(e?.code ?? "") !== "EPERM"; }
+}
+
+/* ⭐ THE REAPER — added 2026-09-10, after twenty-two abandoned browsers cooked Wyatt's laptop.
+ *
+ * ONE implementation, used by BOTH the rig (before it launches) and the Stop hook (before I
+ * reply), because two copies of "which processes are mine to kill" is two answers waiting to
+ * disagree — and the thing they disagree about is whether to SIGKILL something.
+ *
+ * WHY KILLING ORPHANS IS NOT ENOUGH ON ITS OWN, and why the rig calls this too: a probe leaks
+ * precisely when it CANNOT clean up after itself — the node process is SIGKILLed by a tool
+ * timeout, so its `finally { killAll() }` never runs. No amount of discipline inside the probe
+ * covers that. Reaping at the START of the next launch makes leaks self-limiting instead: the
+ * worst case becomes one stray browser between runs rather than twenty-two across an afternoon.
+ *
+ * SCOPED, ALWAYS. It kills only processes whose --user-data-dir sits under `<repo>/.tmp-`, which
+ * this repo's probes own and nothing else on the machine uses. A bare `pkill -f
+ * remote-debugging-port` kills every other agent's browser on the machine, and this project paid
+ * for that lesson on 2026-08-21.
+ */
+export function reapOrphans(repoRoot, { dryRun = false } = {}) {
+  const prefix = `--user-data-dir=${repoRoot}/.tmp-`;
+  let listed = "";
+  try {
+    listed = execFileSync("/bin/sh", ["-c",
+      "ps -eo pid,ppid,command | grep -- '--remote-debugging-port' | grep -v grep || true"],
+      { encoding: "utf8" });
+  } catch { return { killed: [], spared: [], looked: false }; }
+  const alive = new Set(execFileSync("/bin/sh", ["-c", "ps -eo pid"], { encoding: "utf8" })
+    .split("\n").map((s) => s.trim()).filter(Boolean).slice(1));
+  const killed = [], spared = [];
+  for (const line of listed.split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const m = line.match(/^(\d+)\s+(\d+)\s+(.*)$/);
+    if (!m) continue;
+    if (!m[3].includes(prefix)) continue;              // not ours — never touch it
+    if (!isOrphan(m[2], alive)) { spared.push(m[1]); continue; }   // somebody is driving it
+    if (dryRun) { killed.push(m[1]); continue; }
+    try { process.kill(Number(m[1]), "SIGKILL"); killed.push(m[1]); } catch {}
+  }
+  return { killed, spared, looked: true };
 }

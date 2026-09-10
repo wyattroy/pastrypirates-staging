@@ -67,7 +67,7 @@
 // every time (harmless, and needed so a genuine re-entry still sees the current room state).
 
 import { appState } from "./state/index.js";
-import { pilotSpeaks } from "./ui/pilot.js";
+import { pilotSpeaks, pilotSilence } from "./ui/pilot.js";
 import { pingVisit, pingStart, pingFin, usageGid } from "./ui/usage.js";
 import { Game, roundCfg, rollStorm } from "./engine/index.js";
 import { applyResult } from "./engine/bakeoff.js";
@@ -93,7 +93,7 @@ import {
   netWatchEvents, netWatchPrompt, netWatchNarr,
   netSetDlog,
   netCreateRoom, netClaimSeat, netReadRoom, netWatchSeats, netWatchStatus,
-  netSetTurnOrder, netWatchTurnOrder, netWatchRecipes,
+  netWatchRecipes,
   netLeaveRoom, netSetFeedback, netReadDlog, netReadEv,
   netMarkHostGoneOnDisconnect, netClearHostGone,
   netForfeitOnDisconnect, netClearForfeitOnDisconnect,
@@ -109,7 +109,7 @@ import {
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
   reachable, pickCell, localAsk, pilotGate, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
-  startPassAndPlay,
+  startPassAndPlay, startSinglePlayer,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
   wireRecipeModal, recipeInfo, winRecipeSpan, recipeCardHTML, passGate,
@@ -988,6 +988,17 @@ export async function recipeDraftNet(){
     }
     pending.push(player);
   }
+  /* ⭐ ?endcard=1 DOES NOT STOP TO ASK WHICH PASTRY. The card he is trying to reach does not care
+     which recipe was drafted, and left unattended the draft waits on a human forever — measured:
+     the shortcut sat at "choose yer recipe" for forty seconds and went no further, which is why he
+     reported the whole route as untestable. `?ovens=1` is deliberately NOT included: there the
+     recipe IS the thing being baked, so choosing it is part of what the shortcut poses.
+     Seat 0's first card, logged like any other decision so a host-reload replay of a test game
+     still reconstructs it, and no r() is drawn — the seeded stream is byte-identical either way. */
+  if(pending.length&&testFlagOn("endcard",endCardEnabled)){
+    for(const player of pending){picks[player.idx]=0;logDecision(0);}
+    pending.length=0;
+  }
   if(pending.length){
     // G4 (Wyatt-approved 2026-07-30): one short line — the prompt's job is to ask, not re-teach.
     // Not an extracted @copy site: the message reaches the dispatcher via a variable. D-29 (`yer`).
@@ -1388,6 +1399,20 @@ async function skipToEndCard(){
     player.ing=[...player.recipe];
     g.ev({t:"testhold",p:player.idx});
     player.done=true;player.baking=false;
+    /* ⭐ AND IT POSES A COIN RECORD, so the awards are worth looking at — Wyatt, playtest
+       2026-09-10, item 11: "I can't test this because it's too time consuming... I need you to QA
+       this, not me."
+       MEASURED WITHOUT THIS: the card was reachable but EVERY captain got the same "Good Mate —
+       Pirated for the love of the game" fallback, because a voyage nobody sailed has no battles,
+       no trades, no distance and no flips. So the one thing he asked to look at — the Black Spot
+       of Bad Tides, "most tails flipped" — could not appear at all, and a shortcut that reaches a
+       screen but empties it of the thing being checked is not a shortcut to that check.
+       `flips`/`heads` are plain per-captain counters and `tails` is their difference, so posing
+       them is a fact, not a simulation. Distinct per seat, so there is an unambiguous unluckiest
+       captain; derived from idx so it draws NO random numbers, which is the constraint every other
+       line of this shortcut is written to (a seeded game must stay seeded). */
+    player.flips=(player.flips||0)+6+player.idx;
+    player.heads=(player.heads||0)+player.idx;      // tails = 6, so seat 0 is always the unluckiest
     if(g.finishOrder.indexOf(player.idx)<0)g.finishOrder.push(player.idx);
   }
   liveRender();
@@ -1395,7 +1420,14 @@ async function skipToEndCard(){
   return true;
 }
 export async function runLiveNet(){
-  await showAhoyIntro();
+  /* ⭐ ?endcard=1 WALKS PAST THE OPENING TOO. Measured 2026-09-10, and it was the LAST tap between
+     Wyatt and the card: with the lobby auto-started, the tutorial silenced and the draft
+     auto-answered, the route still sat on "Ahoy! Choose a recipe, gather each ingredient, then
+     sail home first to win!" indefinitely — showAhoyIntro is its own barrier, not part of the
+     Pilot, so silencing Polly never touched it. A URL that exists to remove taps must remove the
+     first one as well as the last.
+     Only endcard: ?ovens=1 poses a state a captain then PLAYS, so it keeps its opening. */
+  if(!testFlagOn("endcard",endCardEnabled))await showAhoyIntro();
   // turn order is randomized once here and never rotates — a one-time first-player advantage,
   // not something that cycles away round to round
   let order=appState.game.players.map((_,i)=>i);
@@ -1404,8 +1436,15 @@ export async function runLiveNet(){
   // "staggeredcoins" mode) to flatten the first-mover advantage without overcorrecting to favor
   // whoever goes last
   order.forEach((i,pos)=>{appState.game.players[i].coins=appState.game.cfg.startCoins+pos;});
-  appState.turnOrder=order.slice();buildPlayerRows();
-  if(!appState.replaying&&appState.db&&appState.room)netSetTurnOrder(appState.db,appState.room,order,netFail("turn order"));
+  /* ONE PIPE. This was `appState.turnOrder=…; buildPlayerRows();` followed by a write to
+     rooms/<C>/turnOrder that only a guest's watchTurnOrder ever read — the host doing the work AND
+     posting a note about it, and the guest doing the work again from the note. The engine says it
+     once now; consumeEvent applies it on every tier including this one.
+     ⚠ AWAITED, because the next thing that happens is showTurnOrderIntro, which READS
+     appState.turnOrder. The emit only queues the fact; the drain is what applies it. Same shape as
+     recipeDraftNet's drain of recipeSet, for the same reason. */
+  appState.game.setTurnOrder(order);
+  await liveRender();
   // G5 (Wyatt-approved 2026-07-30): *"Put the recipe selection step NEXT"* — immediately after the
   // Ahoy intro, before the turn-order intro. The player is told to choose a recipe and then asked
   // to choose one, with nothing in between.
@@ -1421,8 +1460,8 @@ export async function runLiveNet(){
   //   4. recipeDraftNet reads nothing from appState.turnOrder and iterates in SEAT-index order.
   // So r() consumption order (shuffle -> bot recipe picks) and logDecision order are both identical.
   //
-  // The silent setup above (:727-734 — shuffle, staggered coins, turnOrder, buildPlayerRows,
-  // netSetTurnOrder) was deliberately NOT moved. Nothing is on screen for it, so from a player's
+  // The silent setup above (shuffle, staggered coins, and the setTurnOrder emit that replaced the
+  // hand-written appState/buildPlayerRows/netSetTurnOrder trio) was deliberately NOT moved. Nothing is on screen for it, so from a player's
   // point of view it does not sit "between" the two intros at all — and moving it WOULD perturb
   // the RNG stream, which is the one thing this swap must not do.
   await recipeDraftNet();
@@ -1802,6 +1841,16 @@ export async function consumeEvent(e){
      this same line, which is the whole point of there being one consumer. */
   // the captains box has been hidden while it was empty (his item 4); a chosen recipe is what
   // fills it, and that is this event — so the one consumer tells the stage, on every device.
+  /* SAILING ORDER, ON THE ONE PIPE. Host, guest and a reloading host all reach this same line —
+     the host through liveRender()'s local drain, a guest through watchEvents. The two lines below
+     are exactly what the host used to run inline and what watchTurnOrder used to run again.
+     ⚠ Array.isArray, because Firebase Realtime Database has no array type: a dense integer-keyed
+     array survives the round trip, but the guard costs nothing and this file has been bitten by
+     that exact assumption before (see watchRecipes' note, and fixEv). */
+  if(e.t==="turnOrder"&&Array.isArray(e.order)&&e.order.length){
+    appState.turnOrder=e.order.slice();
+    buildPlayerRows();
+  }
   if(e.t==="recipeSet"&&window.__pp4&&window.__pp4.recipePicked)window.__pp4.recipePicked();
   if(e.t==="recipeSet"&&decisionIsLocal(e.p)&&!appState.replaying&&pilotSpeaks("recipe.stowed")){
     flashCaptainsBox();
@@ -2035,7 +2084,11 @@ export function watchPrompt(){
       // local screen would have titled the card "{Captain}'s Bake-Off" while a remote captain's
       // still read "The Bake-Off". A title is not load-bearing; the divergence would have been.
       const wireSpec={order:prompt.order||[],before:prompt.before||[],swaps:prompt.swaps||[],
-                      locked:prompt.locked||[],attempts:prompt.attempts||0,cost,baker:prompt.baker};
+                      locked:prompt.locked||[],attempts:prompt.attempts||0,cost,baker:prompt.baker,
+                      /* the same field the local branch reads — the parity gate above exists to
+                         catch precisely this kind of one-sided omission, and `baker` was the last
+                         one it caught. */
+                      recipe:prompt.recipe||[]};
       const seat=prompt.seat;
       /* MP-13 (04-01 Task 4) — A CAPTAIN WHO DROPS MID-BAKE DOES NOT STALL THE TABLE.
          The bake has no shot clock any more (Wyatt, 2026-08-18: the finish line gets as long as it
@@ -2612,7 +2665,7 @@ export async function startGame(){
     const seed=Math.floor(Math.random()*1e9);
     pingStart(strategies.filter(s=>s==="human").length,"net");
     await netUpdateRoom(appState.db,appState.room,{status:"playing",cfg,seed,ev:null,prompt:null,response:null,narr:null,meta:null,
-      recipes:null,dlog:null,flip:null,battle:null,draftPrompts:null,draftResponses:null,clock:null,turnOrder:null,chat:null});
+      recipes:null,dlog:null,flip:null,battle:null,draftPrompts:null,draftResponses:null,clock:null,chat:null});
     /* THE HOST'S HAND ON THE WHEEL — Wyatt, 2026-08-20: "when the host leaves, the guest isn't told
        anything; the game simply stalls." Armed the moment the voyage actually starts, because a
        lobby that loses its host is already covered (the room is deleted and watchRoom's existing
@@ -2651,7 +2704,7 @@ export function beginGame(cfg,seed){
      stopped the game with an empty panel and, measured, NOTHING in the console. See
      voyageAground()'s note in util.js for why that is worse than a crash. */
   if(appState.isHost){runLiveNet().catch(e=>voyageAground(e,"runLiveNet"));}
-  else{watchEvents();watchPrompt();watchNarr();watchFlip();watchDraftPrompt();watchTurnOrder();watchRecoveryState();}
+  else{watchEvents();watchPrompt();watchNarr();watchFlip();watchDraftPrompt();watchRecoveryState();}
   /* EVERY CLIENT WATCHES THE BENCH NODE, THE HOST INCLUDED — watchChat's shape, one line below,
      and for the same reason (04-01 Task 3, MP-05). A bake-off bench is published by whoever is
      BAKING, and the baker may be a guest, so a host that only ever wrote to this node could never
@@ -2671,12 +2724,11 @@ export function beginGame(cfg,seed){
 }
 // non-host clients don't compute turn order themselves (only the host's runLiveNet does) — read
 // the host's synced copy instead, and reorder the captains panel once it arrives
-export function watchTurnOrder(){
-  netWatchTurnOrder(appState.db,appState.room,snap=>{
-    const v=snap.val();
-    if(v){appState.turnOrder=v;buildPlayerRows();}
-  });
-}
+/* ⛔ watchTurnOrder IS GONE — folded into the event stream (see Game.setTurnOrder). It was the
+   smallest of the six non-event channels and the clearest example of what is wrong with all of
+   them: it existed only so a guest could re-run two lines the host had already run, from a node
+   the host wrote purely to trigger it. Sailing order now arrives the way sails, docks and recipes
+   do. Six channels left; the pattern is the same for each. */
 // FIX-03/T-02-04 (02-02): Firebase Realtime Database has no native array type — the SDK hands
 // rooms/<C>/recipes back as a dense ARRAY, padded with null, only when the picked-seat/max-index
 // ratio is high enough to look array-like; a lone early pick (the normal shape of a draft still in
@@ -3073,6 +3125,21 @@ export function boot(){
     if(Array.isArray(rematch)&&rematch.length>=2&&rematch.length<=4&&rematch.every(n=>typeof n==="string"&&n.trim())){
       preloadAssets(); // same art the finished voyage just used — warm cache, not awaited
       startPassAndPlay(rematch);
+    }else if(ovensNowEnabled()||bake2Enabled()||endCardEnabled()){
+      /* ⭐ A TEST URL IS ONE TAP NOW — Wyatt, playtest 2026-09-10, on ?endcard=1: "I can't test this
+         because it's too time consuming — you must give me a better way than running through a
+         whole game myself."
+         MEASURED BEFORE: the shortcut worked, but it only skipped the VOYAGE. Reaching the card
+         still cost Play Solo, a captain name, the tutorial fork and a recipe pick — and left
+         unattended it simply sat at the draft forever, because the draft waits on a human. Four
+         taps between him and the thing he is meant to look at, on a phone, is four taps too many
+         for a URL whose entire purpose is removing them.
+         Solo, because every one of these flags poses a SOLO state; the captain name falls back to
+         the collision-safe default (requireName), so nothing is typed. Only on the journey where
+         no game is waiting — a real voyage mid-flight always outranks a test flag. */
+      preloadAssets();
+      if(endCardEnabled())pilotSilence();   // a route to the ENDING must not wait on the tutorial
+      startSinglePlayer();
     }else{
     // JOURNEY 1 — NOBODY'S GAME IS WAITING: paint the home screen NOW.
     // It needs the card's own CSS, the logo, and one 71KB backdrop still. The ~7.7MB of board art

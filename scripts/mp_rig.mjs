@@ -29,6 +29,7 @@ import path from "node:path";
 
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
+import { reapOrphans } from "./lib/stray_probes.mjs";
 // screenshots: $MP_RIG_SHOTS, else ./mp-rig-shots under the caller's cwd (was a dead scratchpad path)
 export const SHOTS = process.env.MP_RIG_SHOTS || path.join(process.cwd(), "mp-rig-shots");
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -68,7 +69,24 @@ const profilePath = p => (process.platform === "win32" && /^\/tmp\//.test(p))
   ? path.join(os.tmpdir(), p.slice(5))
   : p;
 
+/* ⭐ EVERY LAUNCH REAPS THE LAST RUN'S LEAKS FIRST — 2026-09-10.
+   killAll() runs in a `finally`, which is exactly the code path that does NOT run when a probe is
+   SIGKILLed by a tool timeout — and that is how twenty-two abandoned browsers accumulated across
+   one afternoon and pegged Wyatt's CPU. Discipline inside the probe cannot cover a probe that is
+   killed; reaping at the START of the next one can, and turns "twenty-two by evening" into "at
+   most one between runs". Scoped to this repo's own .tmp- profiles — see reapOrphans. */
+let reaped = false;
+function reapOnce() {
+  if (reaped) return;
+  reaped = true;
+  try {
+    const { killed } = reapOrphans(REPO);
+    if (killed.length) console.log(`  [rig] reaped ${killed.length} orphaned probe browser(s) from a previous run`);
+  } catch {}
+}
+
 export function launch(dbgPort, profile, { headless = true, url = "about:blank" } = {}) {
+  reapOnce();
   profile = profilePath(profile);
   fs.rmSync(profile, { recursive: true, force: true });
   const args = [
@@ -78,9 +96,25 @@ export function launch(dbgPort, profile, { headless = true, url = "about:blank" 
     "--disable-gpu", `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${profile}`,
     "--no-first-run", "--no-default-browser-check", "--window-size=1200,950", url
   ];
+  wireExit();
   const p = spawn(CHROME, args, { stdio: "ignore" });
   procs.push(p); ports.dbg.push(dbgPort);
   return p;
+}
+
+/* ⚠ AND ON EVERY WAY OUT, not only the happy one. `finally { killAll() }` at a probe's top level
+   covers a thrown error; it does NOT cover an uncaught rejection, a Ctrl-C, or a SIGTERM. Those
+   are separate doors out of a node process and each one used to leak a browser. (SIGKILL cannot be
+   caught by anyone — that case is what reapOnce() above exists for.) */
+let exitWired = false;
+function wireExit() {
+  if (exitWired) return;
+  exitWired = true;
+  const bye = () => { try { killAll(); } catch {} };
+  process.on("exit", bye);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { bye(); process.exit(130); });
+  process.on("uncaughtException", (e) => { bye(); console.error(e); process.exit(1); });
+  process.on("unhandledRejection", (e) => { bye(); console.error(e); process.exit(1); });
 }
 
 export function killAll() {

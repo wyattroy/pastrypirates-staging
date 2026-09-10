@@ -336,6 +336,19 @@ class Game{
     p.recipe=recipe;
     this.ev({t:"recipeSet",p:p.idx,recipe});
   }
+  /* ⭐ SAILING ORDER IS AN ENGINE FACT ON THE ONE PIPE — Wyatt, 2026-09-09: "I hate the idea of
+     seven channels all with different pipes! We need ONE pipe."
+     It used to be three separate mechanisms saying the same thing: the host set appState.turnOrder
+     and redrew the rows itself, THEN wrote rooms/<C>/turnOrder, and a guest ran watchTurnOrder and
+     did the host's two lines over again from that node. Two writers of one piece of state, kept in
+     step by hand — which is the shape every host/guest bug this month has worn.
+     Now the engine owns the fact and says so once; both tiers drain the same event through the one
+     consumer, and the side channel, its writer and its watcher are gone. */
+  setTurnOrder(order){
+    this.turnOrder=order.slice();
+    this.ev({t:"turnOrder",order:this.turnOrder.slice()});
+    return this.turnOrder;
+  }
   ev(o){if(!this.record)return;o.round=this.round;o.wind=this.windNow;o.storm=this.stormNow;o.wind2=this.windNow2;
     // `baking` rides in the snapshot so the board can render a captain's out-of-play state from the
     // EVENT rather than from live state — which is what keeps the scrubber honest when you drag it

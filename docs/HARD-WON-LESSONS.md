@@ -973,6 +973,49 @@ disk unused so multiplayer is two `<script>` tags away. It ships from `main` and
 
 ---
 
+### A DETACHED PROCESS'S PARENT IS PID 1, AND "IS THE PARENT ALIVE?" THEREFORE ALWAYS SAID YES
+
+**2026-09-10. Twenty-two abandoned headless Chromes, several at 70–85% CPU, on the laptop Wyatt
+was working on. He had told me this once already:** *"COME ON MAN!!!! you were supposed to learn
+this the last time!"*
+
+**Every guard was in place and every one of them passed.** There was a `Stop` hook killing stray
+probes on every turn, a `SubagentStop` hook doing the same, and `stray_probe_check` running FIRST
+in the gate chain. The check printed, while the machine was choking:
+
+> `PASS  22 debug-port browser(s) are up and EVERY ONE has a live launcher — a probe in use, not a leak`
+
+**The whole failure was one missing case in one boolean.** An orphan was defined as *"its parent is
+not in the process table"*. But every probe here spawns Chrome so that it outlives the shell, and
+when the launcher exits the kernel **re-parents the child to init — PID 1**, which is alive by
+definition and always in the table. So the test returned "supervised" for precisely the browsers
+that had been abandoned, and **the more completely a probe leaked, the more confident the tooling
+was that it had not.** The killer shared the definition, so it spared them too.
+
+**"Its parent is init" IS the operating system telling you the launcher is gone.** That is what an
+orphan *is* on Unix, and it was the one case the test could not see.
+
+**Three things came out of it, and the order matters:**
+1. **The definition is now a pure, exported `isOrphan(ppid, alive)`** with its own red-proof
+   (`scripts/qa/stray_orphan_redproof.mjs`, gate 2). It had lived inside a function that shells out,
+   which is exactly why nothing could test it and why it survived. `--fixture=` could never have
+   caught this: it supplies lines that are ALREADY classified.
+2. **Cleanup cannot depend on the leaking process.** `finally { killAll() }` is the code path that
+   does NOT run when a probe is SIGKILLed by a tool timeout — which is how they accumulated. So
+   `mp_rig.launch()` now REAPS orphans before it spawns, which turns "twenty-two by evening" into
+   "at most one between runs", and the rig also wires `SIGINT`/`SIGTERM`/`uncaughtException`/
+   `unhandledRejection`, each of which is a separate door out of a node process that used to leak.
+3. **A sweep that kills something now SHOUTS, even under `--quiet`.** A cleanup nobody hears about
+   is a lesson nobody learns; the hook stayed silent for weeks while sweeping nothing.
+
+**And the reporting lied in the small way too:** it said *"killed 0"* and *"1 would not die"* about
+a browser that was gone two seconds later, because `process.kill(pid, 0)` still found it mid-death.
+The headline is counted from the OS after a beat now, never from what the killer believed.
+
+**The general lesson, which is not about browsers:** when a guard has never fired, that is not
+evidence the thing it guards against is not happening. Go and create the failure it claims to catch
+and watch it fire. This one had never fired.
+
 ## 8. Rules that lived only in the laptop's memory — ported here so a CLOUD session has them
 
 Wyatt, 2026-08-21: *"I want to be able to run all future sessions in the cloud."* A cloud session
