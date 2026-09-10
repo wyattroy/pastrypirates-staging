@@ -1855,6 +1855,18 @@ export async function consumeEvent(e){
 }
 
 // remote: feed the broadcast event stream into the ONE consumer
+/* ⭐ THE GUEST'S DRAIN IS A QUEUE, FOR THE SAME REASON THE HOST'S BECAME A CHAIN — Wyatt,
+   2026-09-09, on a bot's dock coin ringing while it was still sailing. The host's fix is in
+   panel.js's liveRender; this is its other half, and without it the two tiers would disagree about
+   the one thing this file exists to keep identical.
+   ⚠ `await consumeEvent(e)` INSIDE A CALLBACK DOES NOT SERIALISE CALLBACKS. Firebase delivers each
+   event on its own callback, and a burst fires them in the same tick — so the second event's
+   consumer started while the first was still awaiting its sail animation, exactly as the host's
+   Promise.all did. The push and the evIdx assignment stay where they are, BEFORE any await, so the
+   feed cannot reorder; only the PRESENTATION is queued.
+   One promise chain, never awaited by anyone, each link catching its own throw so a wreck on one
+   event cannot stop the queue. */
+let _evQ = Promise.resolve();
 export function watchEvents(){
   netWatchEvents(appState.db,appState.room,async snap=>{
     // G14 (Wyatt-approved 2026-07-30): the guest half of the trade-wind sweep. THE PUSH AND THE
@@ -1879,7 +1891,9 @@ export function watchEvents(){
        every line AFTER it. `player` rides turn/sail/dock/pass/attack for applyActiveSeat (02.15-01
        Stage 2); the rim sweep's known, accepted degradation stands: the guest's coin panels lag
        by the sweep's duration, an event arriving mid-sweep snaps the ship true on the next paint. */
-    await consumeEvent(e);
+    // QUEUED, not awaited here: this callback has already done the ordering-critical work above.
+    _evQ = _evQ.then(() => consumeEvent(e)).catch(err => { console.error("consumeEvent", err); });
+    await _evQ;
   });
 }
 export function watchPrompt(){

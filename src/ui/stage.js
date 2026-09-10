@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@b94b8ab0";
+const PP4_STAMP = "2026.09.07.3-staging@ff2c3f3e";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -160,12 +160,15 @@ function camToSeat(i){
    the same shot, and one number cannot be right for both (CLAUDE.md, "nothing is a constant").
    Shared by the sail window and the battle framing below, so those two cannot drift apart. */
 const CAM_FIT_PAD = 1.2;                             // cells of water left around the subject
-function camFitCells(cells, maxZoom, reservePx){
+function camFitCells(cells, maxZoom, reservePx, padCells){
   if (!cells || !cells.length) return;
   const cp = cellPx();
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   cells.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
-  const P = CAM_FIT_PAD;
+  /* `padCells` is optional and defaults to the shared CAM_FIT_PAD, so every other caller — the
+     storm's wide shot, the battle framing — is untouched. The sail fit asks for exactly one, which
+     is the number Wyatt gave. */
+  const P = (padCells != null) ? padCells : CAM_FIT_PAD;
   const bw = (x1 - x0 + 1 + 2 * P) * cp, bh = (y1 - y0 + 1 + 2 * P) * cp;
   let side = Math.max(bw, bh);
   side = Math.max(side, 640 / zoomCap(maxZoom || 2.2));   // D-36: less zoom on a big board
@@ -278,7 +281,22 @@ function camFitSail(seat, pos){
      second prompt of a voyage onward the director always leaves the words their room. The very
      first prompt of a session still reserves nothing, exactly as before. */
   if (need > 0) S.lastPromptNeed = need;
-  camFitCells(cells, 2.2, need || S.lastPromptNeed || 0);
+  /* ⭐ FRAME THE SAILABLE AREA, NOT A FIXED WINDOW — Wyatt, 2026-09-09: "sometimes the viewport
+     director is more zoomed out than it needs to be when sailing -- it should zoom into the
+     sailable area, with a 1-square padding around that -- so the farthest N/E/S/W that a player can
+     go is fully onscreen, plus at least one square in all of those directions; more if needed in
+     order to have the narration box not occlude a square."
+     ⚠ THE PAD WAS NEVER THE PROBLEM — IT IS 1.2 CELLS AND ALWAYS WAS. What actually held the camera
+     back is the FLOOR one function down: `side = Math.max(side, 640 / zoomCap(maxZoom))`. At 2.2
+     that floor is a 291-unit window — about SEVEN CELLS on a 15-grid — so a three-cell sail window
+     was framed at seven and the extra four were the thing he was looking at. The frame was not
+     computed too wide; it was refused permission to be narrow.
+     SO THE CEILING GOES UP AND THE PAD BECOMES HIS EXACT 1. At 4.0 the floor is ~160 units (under
+     four cells), which stops binding on any real sail window and lets the fit's own arithmetic —
+     bounds + 1 cell — decide. It still cannot zoom past what zoomCap allows on a wide board (D-36),
+     and the "more if needed" half was already built: `reservePx` grows the frame by exactly the
+     height the prompt measures on screen, and the containment pass re-measures afterwards. */
+  camFitCells(cells, 4.0, need || S.lastPromptNeed || 0, 1);
 }
 /* THE CONTAINMENT PASS — WYATT'S RULING, BUILT ON THE POSED COMPARISON IT WAITED FOR.
    His solution, stated twice (2026-08-23: "you can always have the director zoom out more…";

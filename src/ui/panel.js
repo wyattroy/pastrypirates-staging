@@ -183,14 +183,34 @@ export function liveRender(){
      burst's earlier pops and sounds were skipped on the host alone) was the last divergence
      inside the one-consumer claim, flagged as Q-13 and closed by his (b). Start-in-order,
      interleave-at-awaits — the same semantics a guest has when a burst arrives. */
+  /* ⭐ ONE AT A TIME, IN ORDER — Wyatt, 2026-09-09: "the coin flip sound from bots docking still
+     happens too soon -- it happens WHILE they are sailing. this may require an architectural fix,
+     like the engine being able to fire their 'dock' event until they actually have arrived in the
+     dock square; same as regular players."
+     ⚠ HIS DIAGNOSIS IS RIGHT AND THE FAULT IS THIS LOOP, not the engine. It used to START every
+     consumer synchronously and then Promise.all them — the comment above described it exactly:
+     "start-in-order, interleave-at-awaits". A bot's turn emits its sail and its dock in the same
+     burst, so BOTH consumers began in the same tick: the sail's began awaiting its square-by-square
+     walk, and the dock's ran straight past it to playForEvent, which sits at the top of consumeEvent
+     precisely so a sail's own sound is instant. The dock coin therefore rang while the boat was
+     still three squares out.
+     ⭐ AN EVENT STREAM IS A TIMELINE, so draining it concurrently is wrong for any event whose
+     consumer animates — this just happened to be audible first. Awaiting each before starting the
+     next makes the drain mean what it says.
+     ⚠ AND THE FIRST ONE STILL STARTS SYNCHRONOUSLY, which is load-bearing and was the whole point of
+     the note above: `chain` is seeded with the first consumer already CALLED, not with a resolved
+     promise .then()-ing into it. Seeding it the tidy way would have pushed every first sound of a
+     burst behind a microtask — the s4 regression, re-introduced by a refactor that looked neutral. */
   let drained=DRAINED;
   if(_nh.onConsumeEvent){
-    const pending=[];
-    while(appState.evConsumed<appState.game.events.length){
-      const e=appState.game.events[appState.evConsumed++];
-      pending.push(_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent")));
+    const batch=[];
+    while(appState.evConsumed<appState.game.events.length)batch.push(appState.game.events[appState.evConsumed++]);
+    if(batch.length){
+      const run=e=>_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent"));
+      let chain=run(batch[0]);                       // started NOW, in this tick — not deferred
+      for(let i=1;i<batch.length;i++){const e=batch[i];chain=chain.then(()=>run(e));}
+      drained=chain.then(()=>{});
     }
-    if(pending.length)drained=Promise.all(pending).then(()=>{});
   }
   if(appState.isHost){
     // seam (D-07/criterion 1, RESEARCH Q1b edge 2): was a direct pushEvents() call — pushEvents
