@@ -188,6 +188,20 @@ function bakeTitle(bake,watching){
   const inner=watching?`${who}'s Bake-Off`:`${who}, Yer Bake-Off`;
   return `<span class="bkoWho">${inner}</span>`;
 }
+/* ⭐ WHICH PASTRY IS THIS, ACTUALLY — Wyatt, 2026-09-09: "Add the recipe name to the bakeoff under
+   {Player's} Bake off and above the first step."
+   THE CARD BELOW LISTS FIVE INGREDIENTS IN ORDER AND NEVER SAYS WHAT THEY MAKE. A captain who has
+   sailed sixteen days for Spiced Fudge Brownies arrives at the ovens and is shown cinnamon, sugar,
+   cocoa, eggs, flour — the answer to "in what order", with the question missing.
+   THE NAME COMES FROM recipeTitle(), the game's one recipe-naming function, off the BAKER's own
+   recipe rather than from anything stashed on the bake — so a watcher sees the baker's pastry named
+   correctly, and there is no second place a recipe can be called something else. */
+function bakeRecipeName(bake){
+  const r=bake&&bake.recipe&&bake.recipe.length?bake.recipe:null;
+  if(!r)return "";
+  const t=recipeTitle(r);
+  return t?`<div class="bkoRecipe">${escHtml(t)}</div>`:"";
+}
 function shellHTML(bake,slots,hint,btnLabel,btnEnabled,watching){
   const att=bake.attempts+1;
   /* THE SAME SHELL FOR A WATCHER (04-01 Task 3, MP-05). Same header, same recipe card, same bench,
@@ -196,6 +210,7 @@ function shellHTML(bake,slots,hint,btnLabel,btnEnabled,watching){
      mechanism is what differs between tiers, never the drawing. */
   return `<div class="bko${watching?" bkoWatching":""}">
     <div class="bkoHd">${iconImg(CUPCAKE_IMG)} ${bakeTitle(bake,watching)}<span class="bkoAtt">attempt ${att}</span></div>
+    ${bakeRecipeName(bake)}
     ${cardHTML(bake)}
     ${benchHTML(bake,slots)}
     <div class="bkoHint" id="bkoHint">${hint}</div>

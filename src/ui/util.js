@@ -1068,6 +1068,27 @@ export function assignBadges(){
   }
   cands.sort((a,b)=>b.score-a.score);
   const bySeat={},usedCat=new Set();
+  /* ⭐ THE BLACK SPOT IS ALWAYS AWARDED — Wyatt, 2026-09-09: "include the unluckiest (most tails
+     flipped) prize in each awards lineup".
+     ⚠ IT WAS NOT MISSING, IT WAS COMPETING. Every badge below is handed out by one greedy pass over
+     `score = value / scale`, so "most tails" only appeared when it happened to out-score a captain's
+     battles, distance or trades — which on a lucky table is never. He wants it every voyage, so it
+     is assigned FIRST, to whoever actually flipped the most tails, and the greedy pass then fills
+     the rest of the table around it.
+     ⭐ AND THE COUNTER ALREADY MEANS WHAT HE HOPED — he asked to "make sure that the most tails
+     flipped counter is doing total tails, not streak". It is: `flips - heads`, a total, computed
+     where `arrs` is built above. The STREAK award is a different badge (hottestStreak, heads), which
+     is probably what raised the question. Checked, not assumed. */
+  {
+    const t=arrs.tails||[];
+    let best=-1,bestSeat=-1;
+    for(let i=0;i<n;i++)if((t[i]||0)>best){best=t[i]||0;bestSeat=i;}
+    const def=BADGE_POOL.find(d=>d.key==="tails");
+    if(def&&bestSeat>=0&&best>0){
+      bySeat[bestSeat]={seat:bestSeat,def,value:best,score:best/def.scale};
+      usedCat.add("tails");
+    }
+  }
   for(const c of cands){
     if(bySeat[c.seat]!==undefined||usedCat.has(c.def.key))continue;
     bySeat[c.seat]=c;usedCat.add(c.def.key);

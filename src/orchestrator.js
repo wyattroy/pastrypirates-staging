@@ -386,7 +386,8 @@ export function benchPublish(spec,seat,patch){
      baker's own screen said whose bake it was. Forwarding it is what makes a watched bench read
      "Crustbeard's Bake-Off". */
   const snap=Object.assign({seat,order:spec.order,before:spec.before,swaps:spec.swaps||[],
-    locked:spec.locked||[],attempts:spec.attempts||0,baker:spec.baker||null,epoch:0},patch||{});
+    locked:spec.locked||[],attempts:spec.attempts||0,baker:spec.baker||null,
+    recipe:spec.recipe||null,epoch:0},patch||{});
   // `||null`, not bare: RTDB rejects a set() carrying `undefined`, and a spec without a baker
   // (an older client's) must degrade to bakeTitle's fallback, not kill the whole publish.
   applyBenchSnap(snap);                                   // LOCAL RENDER ALWAYS
@@ -422,7 +423,8 @@ function benchWatch(snap){
     setPicks:(player)=>{picks=player||[];if(pickCb)pickCb(picks);}};
   _bench=sess;
   playBakeoffLive({order:snap.order,before:snap.before,swaps:snap.swaps||[],
-                   locked:snap.locked||[],attempts:snap.attempts||0,baker:snap.baker},{watch:ctl})
+                   locked:snap.locked||[],attempts:snap.attempts||0,baker:snap.baker,
+                   recipe:snap.recipe},{watch:ctl})
     .catch(e=>{console.error("bench watch",e);})
     .then(()=>{if(_bench===sess)_bench=null;});
   // A watcher that arrives after the shuffle has begun does not sit on a Ready that will never be
@@ -1225,7 +1227,14 @@ async function botBakePerform(player,setup,fallback){
     swaps:(setup.swaps||[]).map(sw=>[sw[0],sw[1]]),
     locked:player.bake.locked.slice(),
     attempts:player.bake.attempts,
-    baker:pn(player.idx)};
+    baker:pn(player.idx),
+    /* ⭐ THE RECIPE TRAVELS WITH THE BAKE — Wyatt, 2026-09-09: "Add the recipe name to the bakeoff
+       under {Player's} Bake off and above the first step."
+       ON THE SPEC, NOT LOOKED UP AT DRAW TIME, for the same reason `baker` is: a WATCHER does not
+       have the baker's recipe in their own game state, so a bench rendered from the wire could name
+       the pastry only for the person already looking at their own. The card below has always listed
+       five ingredients in order without ever saying what they make. */
+    recipe:(player.recipe||[]).slice()};
   benchPublish(spec,player.idx,{phase:"open"});      // the bench appears; the bot "studies"
   await sleep(BENCH_STUDY_MS);
   benchPublish(spec,player.idx,{phase:"shuffle"});   // Ready — every watcher's crates cover and swap

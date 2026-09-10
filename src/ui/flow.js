@@ -1310,24 +1310,26 @@ async function animateRimSweepPlay(ev){
   const to=ev.state[seat]&&ev.state[seat].pos;
   const from=prev.state[seat]&&prev.state[seat].pos;
   if(!to||!from||!g.onRim(from))return false;
-  const rode=await animateRimSweepRun(seat,from,to);
-  /* THE TRADE-WIND LADDER, AFTER THE RIDE RATHER THAN BEFORE IT.
-     The rim carrying a ship most of the way across the sea is the most startling thing that
-     happens to a first-time captain, and nothing says why — the tradewind bubble that used to
-     stand here was withdrawn. Spoken once the ride has been WATCHED, because the sentence explains
-     something that just happened; said first it would be a rule about a thing not yet seen.
-     ⚠ NOT GATED ON WHOSE SHIP IT IS, and the mode-fork gate is what talked me out of that. My
-     first version only spoke when the swept captain was local — a conditional on WHO IS PLAYING,
-     inside code that draws, which is exactly the class of thing that gate exists to stop. It was
-     also worse teaching: watching a BOT get carried across the sea explains the rim just as well
-     as being carried yourself, and the spec's own observation about the opening is that a
-     first-timer sits through two bot turns before touching anything. So it fires on the first
-     sweep this DEVICE witnesses, whoever is aboard. The count is per device either way, and
+  /* ⭐ THE TRADE-WIND LADDER NOW SPEAKS *BEFORE* THE RIDE — Wyatt, 2026-09-09, reversing a call
+     that was argued for at length right here:
+       "the 'sail the trade winds' helper text stage should happen immediately when a player ENTERS
+        the trade winds, BEFORE they are swept around the rim -- so the player knows what to look
+        for."
+     ⚠ WHAT STOOD HERE ARGUED THE OPPOSITE, and it is worth keeping the argument rather than quietly
+     deleting it: "spoken once the ride has been WATCHED, because the sentence explains something
+     that just happened; said first it would be a rule about a thing not yet seen."
+     HIS REASON BEATS IT, and the difference is the word LOOK. That reasoning is right for a rule
+     and wrong for a SPECTACLE. The rim carries a ship most of the way across the sea in about a
+     second; a captain who does not know it is coming spends that second working out what happened
+     instead of watching it. Told first, the sentence is an instruction to watch — and the ride
+     then demonstrates it. Told after, the ride is startling and the sentence is a footnote.
+     ⚠ NOT GATED ON WHOSE SHIP IT IS, and that half is unchanged and still load-bearing. An earlier
+     version spoke only when the swept captain was local — a conditional on WHO IS PLAYING, inside
+     code that draws, which is exactly what the mode-fork gate exists to stop. It is also worse
+     teaching: watching a BOT get carried across explains the rim just as well. Per device, and
      nothing here rides the wire. */
-  if(rode){
-    /* WAS `await flash(learn)` — a reading-speed narration that took itself away. His item 4. */
-    await pilotGate("rim.sweep");
-  }
+  await pilotGate("rim.sweep");
+  const rode=await animateRimSweepRun(seat,from,to);
   return rode;
 }
 // /4 (Wyatt's playtest, storm rides): the SAME guarded ride, callable with an explicitly known
@@ -3688,6 +3690,22 @@ export function endReplay(){
   // own replay guard passes. No-op for guests and solo (armHostGone checks isHost/room itself).
   netHandlers().onHostBack?.();
   liveRender();           // flush any freshly-rebuilt events + paint the current board
+  /* ⭐ AND PUT THE BOATS WHERE THE VOYAGE LEFT THEM — Wyatt, 2026-09-09: "there's another problem
+     that happens when solo games are reloaded from closed tabs, which is that all the boats appear
+     at tortuga; instead they should be played to their last point automatically so they appear in
+     the correct places immediately."
+     ⚠ REPRODUCED BEFORE IT WAS FIXED (scripts/qa/_solo_resume_positions.mjs). The ENGINE restores
+     perfectly — same four squares before and after the reload — and the SHIPS were drawn at cells
+     7.5/6.5, 7.5/8.5, 8.5/7.5, 6.5/7.5: the four Tortuga docks, exactly his picture.
+     THE CAUSE IS THAT NOTHING EVER MOVED THEM. drawBoard() seats the boats on their home docks
+     "right away, before the first event renders", and after that the ONLY thing that repositions a
+     ship is renderLiveShips(), which is called from the per-square sail stepper during live play.
+     A replay rebuilds state silently — renderLiveShips() guards itself out while `replaying` is
+     true, by the same rule liveRender() follows — so a resumed voyage had correct positions in the
+     engine and four boats still tied up at home. liveRender() above paints the BOARD; it does not
+     own the boats.
+     ONE LINE, AFTER `replaying` IS ALREADY FALSE, so the guard inside it passes. */
+  renderLiveShips();
 }
 
 // notes/edits BUG-03/D-07: the replay didn't rebuild the voyage. Explain which way it failed and
