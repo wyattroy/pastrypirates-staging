@@ -121,7 +121,9 @@ import {
   setNameWarning, nameTakenMsg, // item 16/D-19: the inline "that name's taken" line and its words
   SESSION_SCHEMA_V, SOLO_SCHEMA_V,
   encodeDec, decodeDec, saveSoloState, clearSoloState, fixEv, syncLogLines, spawnPops, apBtnStyle,
-  optionButtonsHTML, backButtonHTML, // 02.1-03: the ONE button-row builder, shared with localAsk
+  // (optionButtonsHTML/backButtonHTML no longer imported here — the guest's hand-rolled draft
+  //  renderer was the last caller, and it now goes through localAsk like every other tier.
+  //  prompt_one_renderer_check.mjs holds that.)
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, applyActiveSeat, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
