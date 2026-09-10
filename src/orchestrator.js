@@ -108,7 +108,7 @@ import {
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
-  reachable, pickCell, localAsk, pilotGate, humanTurn, botTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
+  reachable, pickCell, localAsk, pilotGate, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
@@ -1085,7 +1085,7 @@ async function runLiveDayClassic(order){
     for(const i of order){
       const player=appState.game.players[i];
       if(player.done)continue;
-      await (player.strategy==="human"?humanTurn(player):botTurn(player));
+      await takeTurn(player);
       if(appState.game.checkFinish(player)){
         liveRender();
         if(appState.game.finishOrder.length===1){
@@ -1110,7 +1110,7 @@ async function runLiveDayClassic(order){
           for(const j of lastLap){
             const q=appState.game.players[j];
             if(q.done)continue;
-            await (q.strategy==="human"?humanTurn(q):botTurn(q));
+            await takeTurn(q);
             if(appState.game.checkFinish(q))liveRender();
           }
           // v2.1: the final lap is the likeliest moment for a raid on the bakery (rule 13c), and
@@ -1145,7 +1145,7 @@ async function runLiveDayBakeoff(order){
        order as the engine's playBakeoff (live and headless must consume identical randomness).
        endBakeDay still closes the day at the end, so same-day arrivals keep their fair race. */
     if(player.baking){await bakeTurnLive(player);continue;}
-    await (player.strategy==="human"?humanTurn(player):botTurn(player));
+    await takeTurn(player);
     if(g.lightOvens(player)){liveRender();await narrateLastEvent();await bakeTurnLive(player);}
   }
   liveRender();

@@ -43,15 +43,25 @@ console.log("decider_table_check — who answers for this seat must have exactly
 
 const util = strip(read("src/ui/util.js"));
 const orch = strip(read("src/orchestrator.js"));
+const flowSrc = strip(read("src/ui/flow.js"));   // takeTurn() lives here — the one door (2026-09-09)
 
 /* INSTRUMENT REACHED ITS SUBJECT. Both predicates must still exist, or every verdict below is
    about a tree that no longer has the thing being checked. */
 {
+  /* ⭐ RE-ANCHORED 2026-09-09, NOT DELETED. This asked whether orchestrator.js still contained a
+     person-or-bot branch, and answered "no" the day one was no longer supposed to exist: Wyatt's
+     "Bots and humans MUST share an input door" turned three copies of
+     `p.strategy==="human"?humanTurn(p):botTurn(p)` into one `takeTurn(player)` in flow.js.
+     THE SUBJECT MOVED, SO THE INSTRUMENT FOLLOWS IT. The thing that must exist is now the DOOR, and
+     the person test that lives behind it. A gate whose subject has legitimately moved must be
+     re-anchored — deleting it would quietly retire a real check, and leaving it red trains people
+     to ignore a red suite. */
   const hasLocal = /function decisionIsLocal\s*\(/.test(util);
-  const personSites = [...orch.matchAll(/\.strategy\s*===\s*"human"\s*\?/g)].length;
-  hasLocal && personSites > 0
-    ? pass(`instrument reached its subject — decisionIsLocal() exists, and ${personSites} site(s) choose person-or-bot`)
-    : fail(`cannot find the subject (decisionIsLocal:${hasLocal} person/bot sites:${personSites}) — every verdict below is meaningless`);
+  const hasDoor = /export\s+async\s+function\s+takeTurn\s*\(/.test(flowSrc);
+  const personSites = [...flowSrc.matchAll(/\.strategy\s*===\s*"human"\s*\?/g)].length;
+  hasLocal && hasDoor && personSites > 0
+    ? pass(`instrument reached its subject — decisionIsLocal() exists, takeTurn() is the one door, and ${personSites} site(s) choose person-or-bot behind it`)
+    : fail(`cannot find the subject (decisionIsLocal:${hasLocal} takeTurn:${hasDoor} person/bot sites:${personSites}) — every verdict below is meaningless`);
 }
 
 /* ONE SPELLING OF "DOES A PERSON ANSWER". Three identical copies live in orchestrator.js today
@@ -68,11 +78,16 @@ const orch = strip(read("src/orchestrator.js"));
      WHAT IS ACTUALLY INVARIANT, and it is two things:
        · the TURN-TAKING branch has one shape, wherever it appears; and
        · the person test itself has one spelling everywhere, so there is no second way to ask. */
-  const turnSites = [...orch.matchAll(/await\s*\(\s*(\w+)\.strategy\s*===\s*"human"\s*\?\s*humanTurn\(\1\)\s*:\s*botTurn\(\1\)\s*\)/g)].length;
-  const turnBranches = [...orch.matchAll(/\?\s*humanTurn\s*\(/g)].length;
-  turnSites === turnBranches && turnSites > 0
-    ? pass(`all ${turnSites} turn-taking site(s) are the identical line — no copy has drifted`)
-    : fail(`${turnBranches} site(s) branch to humanTurn but only ${turnSites} match the canonical shape \`await (p.strategy==="human"?humanTurn(p):botTurn(p))\` — one copy has drifted`);
+  /* ⭐ AND THE STRONGER FORM OF THE SAME PROPERTY. This used to require three copies of the
+     turn-taking branch to be BYTE-IDENTICAL — the best available guarantee while three copies
+     existed. There is now exactly ONE, inside takeTurn(), so the invariant becomes what it always
+     wanted to be: *no caller decides person-or-bot for itself.* Copies cannot drift if there are
+     none, and a new one cannot appear without failing here. */
+  const orchForks = [...orch.matchAll(/\?\s*humanTurn\s*\(/g)].length;
+  const doorForks = [...flowSrc.matchAll(/\?\s*humanTurn\s*:/g)].length;
+  orchForks === 0 && doorForks === 1
+    ? pass(`no caller picks person-or-bot for itself — the fork exists once, inside takeTurn()`)
+    : fail(`the turn fork must live ONCE, in takeTurn(): found ${orchForks} in orchestrator.js and ${doorForks} in flow.js`);
 
   /* ONE PROPERTY, ONE VALUE — the OPERATOR may vary, and this case said otherwise on its second
      run. `!== "human"` is a legitimate negation of the same question, not a second way of asking

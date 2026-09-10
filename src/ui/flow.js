@@ -2801,6 +2801,36 @@ export async function humanAct(player,sailCtx){
     const done=await humanTrade(player);if(!done){await humanAct(player,sailCtx);}return;
   }
 }
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ⭐ THE ONE DOOR EVERY TURN COMES THROUGH — Wyatt, 2026-09-09: "Bots and humans MUST share an
+   input door."
+
+   His model, and it is the rule in CLAUDE.md now: *human vs bot decides only HOW AN ACTION IS
+   CHOSEN, never what may be done.* What stood in its way was `player.strategy === "human" ?
+   humanTurn(p) : botTurn(p)` at three call sites — two functions, not one door with two choosers —
+   so every fact that is true of ANY turn had to be remembered twice, in two files' worth of
+   interleaved mode-specific work.
+
+   THREE THINGS ARE TRUE OF EVERY TURN WHOEVER IS SAILING, and they live here now:
+     · the device changes hands first (passGate — a no-op outside pass-and-play, so it is honest to
+       run it for a bot too rather than branching on who is playing)
+     · the screen then turns to that captain (applyActiveSeat)
+     · and the engine records that a turn began (the `turn` event)
+   A fourth shared step will be added HERE, once, rather than to two functions by somebody who
+   remembers both exist.
+
+   ⚠ WHAT IS NOT MERGED, AND WHY THAT IS THE HONEST STOPPING POINT. humanTurn is 99 lines of
+   prompt-and-wait and botTurn is 111 of plan-and-animate; their remaining preambles genuinely
+   differ (a banner and a shot-clock flag against a thinking beat), and folding those together is a
+   rewrite of the turn loop rather than a convergence of it. The DOOR is what his rule needs: one
+   entry, one place turn-level facts are published, and the only thing downstream of it is the
+   choosing. The rest is in .planning/BACKLOG.md with its own entry. */
+export async function takeTurn(player){
+  await passGate(player.idx);
+  applyActiveSeat(player.idx);
+  appState.game.ev({t:"turn",p:player.idx});
+  return (player.strategy==="human"?humanTurn:botTurn)(player);
+}
 export async function humanTurn(player){
   /* THE DEVICE CHANGES HANDS BEFORE THE SCREEN CHANGES CAPTAIN — Wyatt, 2026-08-31: "Move it, I
      trust the plan." The plan puts pass-and-play's hand-over in the Decider: it is a precondition
@@ -2819,8 +2849,7 @@ export async function humanTurn(player){
      noticed. Gate: scripts/qa/handover_before_turn_check.mjs.
 
      NOTHING CHANGES OUTSIDE PASS-AND-PLAY — passGate returns immediately in every other mode. */
-  await passGate(player.idx);
-  applyActiveSeat(player.idx); // ONE ACTIVE SEAT, both tiers — see its note in util.js (02.15-01 Stage 2)
+  // (passGate, applyActiveSeat and the `turn` event now happen in takeTurn — the one door)
   // a prior player's shot-clock expiry can leave this set from their forfeited turn — this
   // flag only ever got cleared by the clock's arming deep inside a decision, too late to
   // save this turn's own early "did the previous turn just die?" guards below, so clear it
@@ -2829,8 +2858,7 @@ export async function humanTurn(player){
   // pass & play: this seat's own "check my recipe" button is only ever offered while its
   // turn is genuinely live (see render()) — any reveal from a prior turn is already gone.
   appState.activeTurnSeat=player.idx;appState.recipeRevealed=false;
-  appState.game.ev({t:"turn",p:player.idx});
-  liveRender();
+  liveRender();   // draws the `turn` event takeTurn just emitted, now that the seat flags are set
   // NARR-03/D-25: the round header already announced the wind moments ago, so the neutral banner
   // does not restate it; only the captain whose turn it is gets the reminder.
   // v2 rule 7: the storm has ALREADY happened by the time a turn begins — it blew the whole table
@@ -3054,9 +3082,8 @@ async function botDockCoin(dockEv){
   await sleep(FLIP_LAND_HOLD_MS);
 }
 export async function botTurn(player){
-  applyActiveSeat(player.idx); // ONE ACTIVE SEAT, both tiers (02.15-01 Stage 2)
+  // (applyActiveSeat and the `turn` event now happen in takeTurn — the one door)
   const g=appState.game;
-  g.ev({t:"turn",p:player.idx});
   await botBeat();
   // v2.1: no turn is ever lost to weather, so a bot has no forfeit branch either.
   if(!g.adjPort(player))player.dockedNow.clear();
