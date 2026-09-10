@@ -2797,8 +2797,14 @@
          clearly looks blank" — and it was 71% of a card wide on desktop.
      v4 SEPARATES BEING SEEN FROM BEING TAPPED, which is what both earlier failures were really
      about. The back card is a REAL card with its real art and title, offset so exactly 20% of it
-     shows — and it is pointer-events:none, aria-hidden, out of the tab order. It cannot fail the
-     structural check because it is not a clickable at all. What IS clickable is .pp4RcPeek, a
+     shows — and it is pointer-events:none, aria-hidden, out of the tab order.
+     ⚠ THE SENTENCE THAT STOOD HERE — "it cannot fail the structural check because it is not a
+     clickable at all" — WAS FALSE, and the sea trial of 2026-09-10 failed on it, ten legs of ten.
+     scripts/lib/checks.mjs excluded display:none, visibility:hidden, opacity and zero size, and
+     never asked about pointer-events; so the card behind WAS counted, found to be behind the card
+     in front, and reported as a control a captain could not reach. The check's definition was the
+     thing that was wrong, and it is fixed there — with a red proof holding the bar that a genuinely
+     clickable button under an opaque lid must STILL fail (checks_pointer_events_redproof.mjs). What IS clickable is .pp4RcPeek, a
      transparent strip that covers ONLY the visible sliver, so its own centre is genuinely the
      topmost thing there. His 6.7 is satisfied by a control the check agrees is real.
      Scaled and dimmed a touch so it reads as further away rather than as a second front card —

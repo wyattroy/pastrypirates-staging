@@ -20,7 +20,27 @@ export const MEASURE = `(() => {
   // does not exist for this mode (#btnStart is display:none in solo) is never treated as "offered
   // to the player". A gate that fires on something the player cannot see teaches its reader to
   // dismiss it, which is worse than no gate (HARD-WON-LESSONS.md).
-  const interactive = [...document.querySelectorAll(clickSel)].filter(vis).map(el => {
+  /* ⭐ A CONTROL THE BROWSER WILL NOT CLICK IS NOT A CONTROL — and this check has never asked.
+     vis() above excludes display:none, visibility:hidden, opacity and zero size. It does NOT ask
+     about pointer-events, and disabled below means the disabled attribute, .apDisabled or
+     aria-disabled. So an element the BROWSER itself refuses to deliver a click to was still being
+     counted as "a control the player must be able to reach".
+
+     ⚠ WHY THIS IS A CORRECTION AND NOT A GATE BEING BENT AROUND A FAILURE. The recipe picker is a
+     STACK of two cards by design (Wyatt's ruling 18: show it is two without saying so in numbers).
+     The card behind is deliberately pointer-events:none, aria-hidden and out of the tab order —
+     what answers a tap on its visible sliver is .pp4RcPeek, a separate control that IS reachable.
+     The comment in index.html claims that arrangement "cannot fail the structural check because it
+     is not a clickable at all". THAT CLAIM WAS FALSE: the check never looked at pointer-events, so
+     the back card was counted, found to be behind the front card, and reported on every leg as an
+     unreachable control. The finding was about the instrument's definition, not the game.
+
+     THE BAR THIS HAD TO CLEAR, because loosening a check is how a suite quietly stops meaning
+     anything: a genuinely clickable button that is genuinely covered must STILL fail. That is
+     red-proofed in scripts/qa/checks_pointer_events_redproof.mjs, which builds both cases and
+     asserts one passes and the other fails. */
+  const clickable = el => getComputedStyle(el).pointerEvents !== 'none';
+  const interactive = [...document.querySelectorAll(clickSel)].filter(vis).filter(clickable).map(el => {
     const r = el.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
     const hit = document.elementFromPoint(cx, cy);
     const top = !!(hit && (hit === el || el.contains(hit) || hit.contains(el)));
