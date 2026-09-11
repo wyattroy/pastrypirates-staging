@@ -3353,9 +3353,9 @@
      min-height replaces the flex item's automatic "never smaller than my content" floor — so the
      first run of this squashed three wrapped rows down to 40px each, crates spilling over the row
      below, and the list reported nothing to scroll. Rows never shrink; the LIST scrolls. */
-  body.pp4Stage #players .player-row { min-height:var(--rowH1); flex-shrink:0; }
-  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px);
-    max-height:calc(4 * (var(--rowH1) + 4px)); overflow-y:auto; overscroll-behavior:contain; }
+  body.pp4Stage #players .player-row { min-height:var(--rowH1); flex-shrink:0; margin-bottom:var(--rowGap); }
+  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px); --rowGap:4px;
+    max-height:calc(4 * (var(--rowH1) + var(--rowGap))); overflow-y:auto; overscroll-behavior:contain; }
   body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
   body.pp4Stage .prowTop .chips { flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; gap:3px; justify-content:flex-end; }
   body.pp4Stage .chip { width:26px; height:26px; border-radius:6px; }
@@ -3384,6 +3384,25 @@
   #capRecipeBand .chip.have::after { content:"\2713"; position:absolute; right:-5px; bottom:-5px;
     width:14px; height:14px; border-radius:50%; background:#1f9d5c; color:#fff; font:900 9px/14px system-ui, sans-serif;
     text-align:center; box-shadow:0 0 0 1.5px #fff; }
+  /* ⭐ ON A PHONE, EVERY CAPTAIN FITS — measured, not picked. In the 2026-09-10 sea trial the box
+     showed only THREE captains for a whole voyage at 390x664 (the height a phone browser actually
+     gives the page), and scripts/qa/_phone_box_rows_check.mjs counted it mid-voyage: 2 of 4 rows
+     fully visible as shipped, 3 of 4 with the recipe band posed away. The band is his Q4; the box's
+     room on a phone is capped so the board stays square (his Q11, "the board does not give way");
+     his "cap it and scroll" is for the TALLEST table, not an ordinary one.
+     THE CRATE SIZE IS WHAT GIVES, and it is derived from that honest phone: the box gets 188px there,
+     less 12 of padding and 35 of band leaves 141 for four rows — 35 each with a 3px gap — so a row is
+     32, and a crate is 32 − 2×3 padding − 2×2 border = 22px. Measured after: 4 of 4 visible, board
+     unchanged. Phone-width only: a tablet and a laptop have the room and keep 26.
+     ⚠ PLACED AFTER THE BAND'S OWN RULES, on purpose: same selectors, so the later rule wins — the
+     first cut sat above them and the band's 26px sizes quietly overrode the phone's. */
+  @media (max-width: 600px) {
+    body.pp4Stage #players { --rowH1:calc(22px + 2 * 3px + 2 * 2px); --rowGap:3px; }
+    body.pp4Stage #players .player-row { padding:3px 6px; }
+    body.pp4Stage #players .chip, #capRecipeBand .chip { width:22px; height:22px; }
+    #capRecipeBand { min-height:calc(22px + 2px + 5px + 2px); padding:2px 6px 5px; margin-bottom:4px; }
+    body.pp4Stage #pp4Cap { padding-top:6px; padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
+  }
   body.pp4Stage .prowTop .prowRecipe { display:none; flex-basis:100%; }
   body.pp4Stage .player-row.pp4Open .prowRecipe { display:block; }
   body.pp4Stage .player-row { cursor:pointer; }

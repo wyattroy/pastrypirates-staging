@@ -83,7 +83,7 @@ try{
     console.log(`  card height ${m.cardH}px; his tuner card at this scale ${expH.toFixed(1)}px  ${Math.abs(m.cardH-expH)<=3?'✓':'✗ differs by '+(m.cardH-expH).toFixed(1)}`
       + `   (name "${m.frontTitle}", ${m.nameLines} line in a ${m.cellLines}-line box; textContent unchanged: ${m.titleText===m.frontTitle?'✓':'✗ '+m.titleText})`);
     if(Math.abs(m.cardH-expH)>3) bad++;
-    try{ const shot=await C.send("Page.captureScreenshot",{format:"png"}); (await import("node:fs")).writeFileSync(path.join(process.env.SHOTS||REPO,`ratio-${s.w}x${s.h}.png`), Buffer.from(shot.result.data,"base64")); }catch{}
+    try{ const shot=await C.send("Page.captureScreenshot",{format:"png"}); (await import("node:fs")).writeFileSync(path.join(process.env.SHOTS||(await import("node:os")).tmpdir(),`ratio-${s.w}x${s.h}.png`), Buffer.from(shot.result.data,"base64")); }catch{}
     // THE SWAP: force the long name into the pair    // THE SWAP: force the long name into the pair, then trade places and compare the stack's height
     /* a real deal of this pair, posed: the back card's name AND the front card's ghost of it */
     await C.ev(`(()=>{const L='Chocolate Genoise Sponge Cake';

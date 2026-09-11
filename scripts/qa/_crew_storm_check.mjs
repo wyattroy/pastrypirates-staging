@@ -39,7 +39,14 @@ const WATCH = `(()=>{
   const tick=()=>{
     S.frames++;
     const now=performance.now();
-    if(!S.lesson&&/A storm takes the whole crew/i.test(document.body.innerText||''))S.lesson=Math.round(now);
+    /* textContent, NOT innerText: the lesson TYPES ITSELF IN, and the not-yet-typed half is
+       visibility:hidden — invisible to innerText. The first run's driver tapped "Aye aye" before
+       the sentence had finished typing, so innerText never held it and the probe called a lesson
+       that WAS raised "never seen". The card being mounted is the fact; how long it stays is the
+       question, so both ends are timed. */
+    const up=/A storm takes the whole crew/i.test(((document.getElementById('actionPanel')||{}).textContent)||'');
+    if(up&&!S.lesson)S.lesson=Math.round(now);
+    if(up)S.lessonLast=Math.round(now);
     const a=st();
     if(!S.storm&&a&&a.game&&a.game.events&&a.game.events.some(e=>e.t==='storm'))S.storm=Math.round(now);
     if(S.storm&&now-S.storm<8000){
@@ -51,7 +58,11 @@ const WATCH = `(()=>{
   };
   requestAnimationFrame(tick);
   return "watching";})()`;
-const READ = `JSON.stringify(window.__cs?{lesson:__cs.lesson,storm:__cs.storm,tracks:__cs.tracks}:null)`;
+const READ = `JSON.stringify(window.__cs?{lesson:__cs.lesson,lessonLast:__cs.lessonLast,storm:__cs.storm,tracks:__cs.tracks}:null)`;
+/* THE GUEST NEVER TAPS "AYE AYE" — a real guest reads at a person's speed, and the question is
+   whether the game leaves the card up long enough to be read. So on the guest's page only, a tap
+   the driver aims at the parrot's button does nothing; whatever takes the card down is the game. */
+const GUEST_READS = `(()=>{const o=HTMLElement.prototype.click;HTMLElement.prototype.click=function(){if(this.classList&&this.classList.contains('pp4AyeAye'))return;return o.call(this);};return 'guest reads at human speed';})()`;
 const FORCE = `(()=>{const a=__pp_app_state_debug();const g=a&&a.game;if(!g)return 'no game';
   if(g.cfg)g.cfg.storm=1; return 'storm forced: cfg.storm='+(g.cfg&&g.cfg.storm);})()`;
 
@@ -90,6 +101,7 @@ try {
   if (!(saidH && saidG)) console.log(`  ⚠ "Nah" not found on ${saidH ? "" : "host "}${saidG ? "" : "guest"} — the lesson may be silenced there`);
   await sleep(1500);
   for (let i = 0; i < 20; i++) { const r = await H.ev(FORCE).catch(() => "err"); if (/forced/.test(r)) { console.log("  " + r); break; } await sleep(500); }
+  console.log("  " + await G.ev(GUEST_READS));
   await driver(H, url); await driver(G, url);
   console.log("  both seats driving");
   const t0 = Date.now();
@@ -98,16 +110,19 @@ try {
     await sleep(3000);
     h = JSON.parse(await H.ev(READ)); g = JSON.parse(await G.ev(READ));
     if (Math.round((Date.now() - t0) / 1000) % 30 < 3) console.log(`  +${Math.round((Date.now() - t0) / 1000)}s  storm host:${!!(h && h.storm)} guest:${!!(g && g.storm)}  lesson host:${!!(h && h.lesson)} guest:${!!(g && g.lesson)}`);
-    if (h && g && h.lesson && g.lesson && h.storm && g.storm && Date.now() - t0 > 20000) { await sleep(8000); h = JSON.parse(await H.ev(READ)); g = JSON.parse(await G.ev(READ)); break; }
+    if (h && g && h.lesson && g.lesson && h.storm && g.storm && Date.now() - t0 > 60000) { await sleep(8000); h = JSON.parse(await H.ev(READ)); g = JSON.parse(await G.ev(READ)); break; }
   }
   console.log(`\n  storm reached — host: ${!!(h && h.storm)}  guest: ${!!(g && g.storm)}`);
-  console.log(`  1. the storm lesson — host: ${h && h.lesson ? "SEEN" : "never"}   guest: ${g && g.lesson ? "SEEN" : "never"}`);
+  const dur = d => d && d.lesson ? ((d.lessonLast || d.lesson) - d.lesson) : null;
+  console.log(`  1. the storm lesson — host: ${h && h.lesson ? "SEEN" : "never"}   guest: ${g && g.lesson ? "SEEN, on screen " + dur(g) + "ms without the guest tapping" : "never"}`);
   console.log(`  2. how each ship moved in the first storm (per screen):`);
   for (const [who, d] of [["host", h], ["guest", g]]) {
     const rows = Object.entries((d && d.tracks) || {}).map(([k, tr]) => [k, shape(tr)]).filter(([, s]) => s);
     console.log(`     ${who}: ` + (rows.length ? rows.map(([k, s]) => `${k} ${s.kind} (${s.changes} changes, ${s.holds} holds, ${s.span}ms)`).join(" · ") : "no ship moved"));
   }
-  const ok1 = !!(h && g && h.storm && h.lesson && g.lesson);
+  /* A lesson that is up for under three seconds cannot be read by a person — that is the fault he
+     reported ("only appeared for Host") even if the card technically mounts. */
+  const ok1 = !!(h && g && h.storm && h.lesson && g.lesson && dur(g) >= 3000);
   console.log(ok1 ? "\n  PASS (1) — the lesson reached both screens" : (h && h.storm ? "\n  FAIL (1) — a storm happened and the lesson did not reach both screens" : "\n  NOT RUN — no storm was reached, so (1) proves nothing"));
   exit = ok1 ? 0 : 1;
 } catch (e) { console.log("PROBE FAILED: " + (e && e.message || e)); } finally { await killAll(); }
