@@ -372,6 +372,7 @@ drift rule 23 exists to prevent, and it had already started.
 - the viewer's RECIPE sits in a band across the top of the captains panel — its name plus one chip per ingredient, greyed until held and ticked once held; greyed chips there are ingredients still needed, not cargo. Every ROW, the viewer's own included, shows only what that captain actually holds, or "empty hold";
 - on a shared (pass-and-play) device that band shows a "Check my recipe" button instead of the recipe, and between captains it can be a blank strip at the top of the panel — both keep one captain's recipe private from the next, and the blank strip keeps the panel from jumping;
 - one recipe card highlighted and another not is the two-tap selection state, not a rendering failure;
+- the orange "Bake this!" pill on a tapped recipe card deliberately COVERS the middle of that card — the picture, the recipe name or the ingredient row, whichever is there at that screen size. It is the confirmation button, meant to be the loudest thing on the card, and it goes away on the second tap. Wyatt has ruled this many times (latest 2026-09-11); it is never a FAIL and never an issue;
 - a ship drawn at reduced opacity is BAKING and deliberately off the board, not disabled or broken;
 - a coin slider drawn greyed and undraggable is a captain with an empty purse — the disabled control IS the answer;
 - a narration bubble sits off-centre because it is anchored to a captain's ship with a tail; only a battle result is deliberately centred;

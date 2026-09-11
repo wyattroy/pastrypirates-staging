@@ -43,7 +43,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@8a7b78a6";
+const PP4_STAMP = "2026.09.07.3-staging@dd56bb96";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -4099,6 +4099,32 @@ function promptTick(force){
        were already written correctly on the tick the flight STARTED (the flight is armed at the
        very end of this same block, after every clamp has run), so skipping is not deferring a
        decision: it is refusing to overwrite a right answer with a wrong one. */
+    /* ⭐ AND THE REVEAL'S HEIGHT PIN IS RELEASED ONCE THE ART HAS LANDED.
+       MEASURED at 390x844: the white sheet ran 132..445 while its content ended at 346 — 99px of
+       blank cream under the card. The cause is not this block: runHeightSequence (panel.js) pins
+       #apGrid's row to the height it measured so the typewriter cannot type into a box that is
+       still the old size, and releases it to max-content on settle. For the recipe picker that
+       measurement happens BEFORE the two recipe thumbnails have decoded, so the pin holds a height
+       the card no longer needs, and the row never shrinks back.
+       IT WAS ALWAYS THERE — the design this replaces forced the sheet to the captains box's own
+       bottom, which was taller still, so the pin was never the binding constraint and nobody saw
+       it. Removing the forced height is what exposed it.
+       RELEASED ONLY WHEN THE ART IS ACTUALLY IN (every img complete). max-content cannot clip — it
+       fits whatever is in the box — so the fault the pin guards against (Wyatt's P3/P5, "the 2nd
+       line is cut off during writing") cannot come back through this door.
+       ⭐ AND BEFORE THE SHOW, NOT AFTER IT (2026-09-11). This block used to sit below the flight's
+       arming, so on the one tick where it could run the flight had just set rcInFlight and it
+       waited out the whole show. Measured at 390x664: for ~5s the row stayed pinned at 292.75px —
+       the TWO cards' height, laid out one above the other before the stack mounted — under a 148px
+       stack, so "Tap a recipe to see its route" hung 153px below the cards, off the board, against
+       his 2026-09-09 ruling ("locked underneath the recipe cards so it moves with them"). Every
+       phone pick in sea trial 2043 was photographed like that. Released here, the lift below also
+       measures the real height rather than the pin's. */
+    const grid = $("apGrid");
+    if (grid && !rcInFlight && /px$/.test(grid.style.gridTemplateRows || "")){
+      const imgs = [...ap.querySelectorAll(".recipeCard img")];
+      if (imgs.length && imgs.every(i => i.complete)) grid.style.gridTemplateRows = "max-content";
+    }
     const apTop = rcInFlight ? -1 : ap.getBoundingClientRect().top;
     /* LIFT THE WHOLE BOX IF THE CARDS DO NOT FIT UNDER IT (D-42's find, see the note at `top`).
        Measure what the panel actually wants — scrollHeight is the content's own height, produced by
@@ -4161,24 +4187,6 @@ function promptTick(force){
     if (rcKey && rcFlightKey !== rcKey){
       box.style.opacity = "0";
       rcFlightRun(rcKey, brd);
-    }
-    /* ⭐ AND THE REVEAL'S HEIGHT PIN IS RELEASED ONCE THE ART HAS LANDED.
-       MEASURED at 390x844: the white sheet ran 132..445 while its content ended at 346 — 99px of
-       blank cream under the card. The cause is not this block: runHeightSequence (panel.js) pins
-       #apGrid's row to the height it measured so the typewriter cannot type into a box that is
-       still the old size, and releases it to max-content on settle. For the recipe picker that
-       measurement happens BEFORE the two recipe thumbnails have decoded, so the pin holds a height
-       the card no longer needs, and the row never shrinks back.
-       IT WAS ALWAYS THERE — the design this replaces forced the sheet to the captains box's own
-       bottom, which was taller still, so the pin was never the binding constraint and nobody saw
-       it. Removing the forced height is what exposed it.
-       RELEASED ONLY WHEN THE ART IS ACTUALLY IN (every img complete) AND THE SHOW IS OVER, which is
-       long past the ~180ms the pin exists to cover — so the clipping fault it guards against
-       (Wyatt's P3/P5, "the 2nd line is cut off during writing") stays impossible. */
-    const grid = $("apGrid");
-    if (grid && !rcInFlight && /px$/.test(grid.style.gridTemplateRows || "")){
-      const imgs = [...ap.querySelectorAll(".recipeCard img")];
-      if (imgs.length && imgs.every(i => i.complete)) grid.style.gridTemplateRows = "max-content";
     }
     return;
   }

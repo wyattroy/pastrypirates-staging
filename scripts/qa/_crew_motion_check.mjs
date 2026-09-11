@@ -52,6 +52,19 @@ const WATCH = `(()=>{
   return "watching";})()`;
 /* take the trade winds whenever they are offered — raced against the rig driver's 700ms beat */
 const PREFER_WIND = `(()=>{if(window.__pw)return 'already';window.__pw=setInterval(()=>{const c=document.querySelector('.sailCell.sailSwept');if(c)c.dispatchEvent(new MouseEvent('click',{bubbles:true}));},250);return 'taking the trade winds when offered';})()`;
+/* THE GUEST SEEKS THE RING. Two runs on 2026-09-10 gave the host 4 rides and the guest none: taking a
+   trade-wind square only when one is OFFERED leaves it to luck whether the guest's route ever
+   reaches the rim. So the GUEST alone also steers: when no ride is offered, it takes the offered
+   square nearest the trade-wind ring (the engine's own \`rim\` set, read off its replica). The host
+   is left to the rig's driver, so only one captain's choosing changes. */
+const SEEK_RIM = `(()=>{if(window.__sr)return 'already';window.__sr=setInterval(()=>{
+  if(document.querySelector('.sailCell.sailSwept'))return;             // PREFER_WIND takes it
+  const g=(()=>{try{return __pp_app_state_debug().game}catch(e){return null}})(); if(!g||!g.rim)return;
+  const rim=[...g.rim].map(k=>k.split(',').map(Number));
+  const cells=[...document.querySelectorAll('.sailCell')]; if(!cells.length)return;
+  const d=c=>Math.min(...rim.map(r=>Math.abs(r[0]-(+c.dataset.gx))+Math.abs(r[1]-(+c.dataset.gy))));
+  cells.sort((a,b)=>d(a)-d(b))[0].dispatchEvent(new MouseEvent('click',{bubbles:true}));},300);
+  return 'steering for the trade-wind ring';})()`;
 const READ = `JSON.stringify(window.__cm?{sails:__cm.sails,winds:__cm.winds,me:(()=>{try{return __pp_app_state_debug().mySeat}catch(e){return null}})()}:null)`;
 let exit = 1;
 setTimeout(async () => { console.log("  WATCHDOG — out of time"); try { await killAll(); } catch {} process.exit(2); }, (MINUTES + 3) * 60000).unref();
@@ -61,10 +74,20 @@ try {
   await makeGuest(G, url, code, "Guest Gus");
   console.log(`  room ${code} — host: ${await H.ev(WATCH)}  guest: ${await G.ev(WATCH)}`);
   await startVoyage(H); await sleep(1500);
-  console.log("  " + await H.ev(PREFER_WIND) + " / " + await G.ev(PREFER_WIND));
+  console.log("  " + await H.ev(PREFER_WIND) + " / " + await G.ev(PREFER_WIND) + " + " + await G.ev(SEEK_RIM));
   await driver(H, url); await driver(G, url);
   const t0 = Date.now();
-  while (Date.now() - t0 < MINUTES * 60000) await sleep(5000);
+  /* REPORT AS IT GOES. A 2026-09-11 run hung after its loop and the watchdog killed it holding
+     seven minutes of rides it had never printed. Each guest ride is printed the moment it closes,
+     and every read is time-boxed, so a late hang costs the verdict line, not the evidence. */
+  const tb = (p, ms = 8000) => Promise.race([p, sleep(ms).then(() => null)]);
+  let shown = 0;
+  while (Date.now() - t0 < MINUTES * 60000) {
+    await sleep(15000);
+    const g = JSON.parse(await tb(G.ev(READ)) || "null"); if (!g) continue;
+    const mine = g.winds.filter(x => x.p === g.me);
+    for (const x of mine.slice(shown)) console.log(`    guest ride #${++shown}: camera moved ${x.camMoves}x, ship off the guest's board in ${x.offFrames} of ${x.frames} frames`);
+  }
   await sleep(5000);
   const h = JSON.parse(await H.ev(READ)), g = JSON.parse(await G.ev(READ));
   // W1-1: sails by OTHER seats, as each screen drew them
