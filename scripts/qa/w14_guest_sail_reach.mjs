@@ -18,13 +18,18 @@
  * AND AN ACQUITTAL IS AS SUSPECT AS A CONVICTION: if this says every square is reachable on a build
  * whose FULL trial just failed this exact leg, suspect the probe before believing it.
  */
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve, launch, attach, killAll, sleep, makeHost, makeGuest, startVoyage, driver } from "../mp_rig.mjs";
-
-const PORT = 8520, DBG_H = 9422, DBG_G = 9423;
+/* PROFILES INSIDE THE REPO, PORTS OFF THE PID — the literal "/tmp/chrome-w14-*" made Chrome exit
+   before its DevTools port opened on Windows (no /tmp there), and fixed ports collide with any other
+   session running the same probe. Rooted off this module so it works on both of his machines. */
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const PORT = 8520 + (process.pid % 40), DBG_H = 9422 + 2 * (process.pid % 40), DBG_G = DBG_H + 1;
 const MINUTES = Number(process.argv.find(a => a.startsWith("--minutes="))?.split("=")[1] || 8);
 const url = serve(PORT);
-launch(DBG_H, "/tmp/chrome-w14-host");
-launch(DBG_G, "/tmp/chrome-w14-guest");
+launch(DBG_H, path.join(REPO, `.tmp-w14-host-${process.pid}`));
+launch(DBG_G, path.join(REPO, `.tmp-w14-guest-${process.pid}`));
 const H = await attach(DBG_H), G = await attach(DBG_G);
 /* THE PHONE, because that is where it fails and where he plays. */
 await H.send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 900, deviceScaleFactor: 1, mobile: false });

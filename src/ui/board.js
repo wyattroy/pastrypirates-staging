@@ -1703,6 +1703,7 @@ export function render(){
   const humanIdxs=appState.game.players.map((player,i)=>player.strategy==="human"?i:-1).filter(i=>i>=0);
   const youIdx=humanIdxs.length===1?humanIdxs[0]:-1;
   const spectator=humanIdxs.length===0;
+  let bandHtml="", hasYou=false;   // the viewer's recipe, for #capRecipeBand — filled by the loop, written once after it
   appState.game.players.forEach((player,i)=>{
     const [x,y]=shipXY(st[i].pos,i,st,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
@@ -1743,9 +1744,39 @@ export function render(){
        recipe is yours, everyone else's is private) look like a pass-and-play feature. It is not:
        on separate devices the hardware enforces it for free, on one shared screen the same rule
        needs a tap. Step 5's narrow half, at Wyatt's choosing, 2026-08-31. */
-    const canReveal=mayRevealRecipe({isMySeat:i===appState.mySeat,spectator,sharedDevice:appState.passAndPlay,askedThisTurn:appState.recipeRevealed});
-    const offerCheckBtn=offersRecipeCheck({isMySeat:i===appState.mySeat,isActiveSeat:i===appState.activeTurnSeat,sharedDevice:appState.passAndPlay,askedThisTurn:appState.recipeRevealed});
-    if(canReveal){
+    /* WHO IS LOOKING is read ONCE, here, and every secrecy decision below takes it from these two
+       names — the two rules, and the band. It used to be read inline in each rule's call, so adding
+       the band would have been a third read of the same fact in a file that draws (mode_fork_check). */
+    const mine=i===appState.mySeat, sharedDevice=appState.passAndPlay;
+    const canReveal=mayRevealRecipe({isMySeat:mine,spectator,sharedDevice,askedThisTurn:appState.recipeRevealed});
+    const offerCheckBtn=offersRecipeCheck({isMySeat:mine,isActiveSeat:i===appState.activeTurnSeat,sharedDevice,askedThisTurn:appState.recipeRevealed});
+    /* ⭐ YOUR RECIPE LIVES IN THE BAND, NOT IN YOUR ROW — Wyatt's Q4 ruling, 2026-09-10: "A header
+       band across the top of the plaque — above all the captain rows. Coins and crates are facts
+       about the table; a recipe is a fact about you." So every row, yours included, shows the same
+       two facts — coins and the crates aboard — and the recipe the viewer is allowed to see goes
+       in #capRecipeBand, with a tick on each ingredient already in the hold.
+       THE SAME TWO RULES DECIDE IT, unchanged: mayRevealRecipe / offersRecipeCheck. So the band is
+       empty exactly when the row used to be — and that is his duty on the ruling, "it must not be
+       on screen when a pass-and-play device changes hands", met by the rule that already met it.
+       A SPECTATOR HAS NO "YOU", so a spectator keeps every recipe in its own row, as before. */
+    const bandSeat=mine&&!spectator;
+    if(bandSeat){
+      hasYou=true;
+      const rec=appState.game.players[i].recipe;
+      if(canReveal&&rec&&rec.length){
+        const bh=[...st[i].ing];
+        const want=appState.game.players[i].recipe.map(ing=>{
+          const k=bh.indexOf(ing); const have=k>=0; if(have)bh.splice(k,1);
+          return `<span class="chip ${have?"have":""}" title="${iname(ing)}${have?" — aboard":""}">${ingImg(ing)}</span>`;
+        }).join("");
+        bandHtml=`<span class="narrRecipeLink capRecipeName" data-idx="${i}">${iconImg(SCROLL_IMG)} ${recipeTitle(appState.game.players[i].recipe)}</span>`+
+          `<span class="capRecipeIng">${want}</span>`;
+      }else if(offerCheckBtn){
+        // @copy misc.board.checkrecipebtn
+        bandHtml=`<button type="button" class="checkRecipeBtn" onclick="revealMyRecipe()" style="background:${HEXCOL[i]};color:#fff;border-color:${HEXCOL[i]}">🔍 Check my recipe</button>`;
+      }
+    }
+    if(canReveal&&!bandSeat){
       $("prowRecipe"+i).innerHTML=`${iconImg(SCROLL_IMG)} ${recipeTitle(appState.game.players[i].recipe)}`;
       $("prowRecipe"+i).classList.add("hasRecipe");
       // recipe chips consume one matching crate each; every leftover crate is surplus cargo
@@ -1759,10 +1790,6 @@ export function render(){
       const extras=hold.map(x2=>`<span class="chip extra" title="surplus cargo: ${iname(x2)}">${ingImg(x2)}</span>`);
       // @copy misc.board.prowcargorow
       newChipsHtml=chips.join("")+(extras.length?`<span style="opacity:.4">·</span>`:"")+extras.join("");
-    }else if(offerCheckBtn){
-      $("prowRecipe"+i).classList.remove("hasRecipe");
-      // @copy misc.board.checkrecipebtn
-      newChipsHtml=`<button type="button" class="checkRecipeBtn" onclick="revealMyRecipe()" style="background:${HEXCOL[i]};color:#fff;border-color:${HEXCOL[i]}">🔍 Check my recipe</button>`;
     }else{
       // other captains' recipe maps are private — only the crates visibly aboard their ship are shown.
       // sorted so duplicate ingredients sit next to each other — easier to spot a tradeable double
@@ -1782,6 +1809,20 @@ export function render(){
     const lastEv=appState.game.events[appState.game.events.length-1];
     $("crown"+i).innerHTML=(lastEv.t==="end"&&lastEv.winner===i&&appState.evIdx===appState.game.events.length-1)?iconImg(CROWN_IMG):"";
   });
+  /* the band is written only when it CHANGES, for T-33's reason above: rebuilding it every render
+     re-fetches five <img>s a frame. Compared against the string this wrote, not against innerHTML,
+     which the browser normalises and would never match. */
+  const band=$("capRecipeBand");
+  if(band&&band.dataset.src!==bandHtml){
+    if(band.dataset.src&&bandHtml)pulseEl(band);
+    band.innerHTML=bandHtml; band.dataset.src=bandHtml;
+  }
+  /* THE BAND KEEPS ITS PLACE WHILE IT IS BLANK, so the box never changes height mid-voyage — his
+     Q11, "the board does not give way". On a phone the board takes whatever the box leaves, so a
+     band that came and went at every pass-and-play reveal and hand-over would breathe the board up
+     and down by its own height each time. Blank is visibility:hidden — nothing drawn, which is the
+     secrecy duty — not display:none. Only a table with no "you" (spectating bots) has no band. */
+  if(band){ band.hidden=!hasYou; band.classList.toggle("bandEmpty",!bandHtml); }
   // active-player ring + captain's-box highlight: whose turn is it as of this event?
   /* T-09 (Wyatt, 2026-08-26, with a host/guest screenshot pair): "the bakeoff SHOULD be happening
      for guest because it's their turn -- but Dough hook (who just played) is still displayed as the
@@ -1859,6 +1900,15 @@ export function render(){
   // ever point at different captains, and in step with the narration playhead rather than ahead of
   // it. See applyCaptainOrder, and the one-answer note above.
   applyCaptainOrder(active);   // the SAME value as the ring and the highlight — see the note above
+  /* THE ACTIVE ROW STAYS IN VIEW when the list is capped and scrolling (his Q11: "Cap it and
+     scroll"). Only the LIST scrolls — scrollIntoView would also scroll the page, and on a phone that
+     moves the board — and only when the row is actually outside the visible part of the list. */
+  { const list=$("players"), row=active!=null?$("prow"+active):null;
+    if(list&&row&&list.scrollHeight>list.clientHeight+1){
+      const top=row.offsetTop-list.offsetTop, bot=top+row.offsetHeight;
+      if(top<list.scrollTop)list.scrollTop=top;
+      else if(bot>list.scrollTop+list.clientHeight)list.scrollTop=bot-list.clientHeight;
+    } }
   if(appState.game.cfg.crates<1e9)for(const ing of appState.game.ings){
     const remaining=e.tokens[ing];
     for(let idx=0;idx<appState.game.cfg.crates;idx++){

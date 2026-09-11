@@ -5,6 +5,7 @@ import { spawn, execSync } from "node:child_process";
 import { killProfile } from "./stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { CHROME, LINUX_ARGS, PYTHON } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -34,6 +35,11 @@ export function withTimeout(promise, ms, label) {
    actually use. */
 export function freshProfileDir(profileDir) {
   if (!profileDir) return profileDir;
+  /* THE SAME /tmp MAPPING mp_rig's launch() has carried since 2026-09-03, here too, because the
+     WebKit mount (lib/wk.mjs) and openChrome() come through THIS function and not that one: a
+     literal "/tmp/wk-edge" is a directory Windows does not have, and the browser dies without a
+     word. os.tmpdir() IS /tmp on a Mac, so nothing changes there. */
+  if (process.platform === "win32" && /^\/tmp\//.test(profileDir)) profileDir = path.join(os.tmpdir(), profileDir.slice(5));
   /* TWO WAYS A WIPE FAILS, and only one of them throws. rmSync raises EBUSY when a file is held
      open (the measured case), but a partial delete can also leave the directory standing with
      content in it. Check the result rather than trusting the call. */

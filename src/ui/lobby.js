@@ -42,7 +42,7 @@ import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN } from "./util.js";
 // F2/UI-06 (2026-07-29): escHtml's only use here was the duplicate seat-name rendering that this
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
-import { syncBoardSizing } from "./board.js";
+import { syncBoardSizing, render as renderBoard } from "./board.js";
 /* THE AMBIENCE BED RIDES THE THREE SCREEN FUNCTIONS BELOW, and this file's own header already
    states the reason: "Wired in these three functions rather than at each caller, because every
    route to these screens goes through them and a route added later cannot forget." The bed is a
@@ -368,6 +368,14 @@ export function passGate(seatIdx){
   // changes hands — playtest 18's "reveal lasts the turn" rule, and the reason nothing private
   // can be on screen while the ceremony (or the old blur) holds the board.
   appState.recipeRevealed=false;
+  /* ⚠ AND THE BOX IS REDRAWN NOW, or the lock is only on paper. Measured 2026-09-10 by
+     scripts/qa/_pnp_band_handover.mjs: 3 of 8 "Pass the wheel to …" cards shared the screen with
+     the OUTGOING captain's recipe in the band. Clearing the flag changes what MAY be drawn; nothing
+     redraws until the next engine event, and a hand-over is not one. (It could not happen before
+     that day only because "Check my recipe" itself never redrew — so no recipe was ever on screen
+     to leak. Fixing the button exposed this; both are fixed together.) His duty on the Q4 ruling:
+     the band "must not be on screen when a pass-and-play device changes hands." */
+  if(appState.game&&appState.game.events&&appState.game.events.length)renderBoard();
   // /4 (Wyatt's pick, 2026-08-13): the hand-off is a CENTRE-STAGE CEREMONY like every other —
   // dim sea, minimal white card (name + button, no briefing), the button in the incoming
   // captain's own boat color. The v2 blur overlay below survives only as the non-stage fallback,

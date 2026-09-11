@@ -24,7 +24,6 @@ const C = await attach(DBG);
 await C.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
 await C.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
 
-const SHOTS = "/tmp/claude-0/-home-user-pastrypirates/205edaad-bb58-527a-85d4-b887228dafd2/scratchpad";
 
 // what the engine actually holds — the state both the UI and my change read
 const STATE = `(async()=>{try{

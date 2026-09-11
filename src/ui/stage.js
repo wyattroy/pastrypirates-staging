@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@dd2bf4cf";
+const PP4_STAMP = "2026.09.07.3-staging@612a98d4";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2451,7 +2451,10 @@ function rcFlightShow(box, brd, rcShow){
   ANIMS.push(box.animate([{ transform: hold }, { transform: hold }],
     { duration: RC_LAND_MS + RC_SWAP_MS + RC_HOLD_MS, delay: rcAt(RC_FADE_MS), fill: "both" }));
 
-  rcLater(() => { if (rcSwapFn) rcSwapFn(); }, rcAt(RC_FADE_MS + RC_LAND_MS));
+  /* THE DEMO SWAP NEVER FIGHTS THE PLAYER. It is there to show a newcomer that the cards trade
+     places; a captain who has already tapped a card has shown they know what the cards are, and
+     swapping their choice out from under their thumb is the one thing the show must not do. */
+  rcLater(() => { if (rcSwapFn && !document.querySelector("#actionPanel .apBtn.pp4Focus")) rcSwapFn(); }, rcAt(RC_FADE_MS + RC_LAND_MS));
 
   rcLater(() => {
     const b2 = $("pp4Prompt");
@@ -2600,6 +2603,12 @@ function mountRecipeStack(ap){
       row.classList.remove("rcSwapping");
       front = (front + 1) % cards.length;
       paint();
+      /* ⚠ AND NO "BAKE THIS!" SURVIVES ON THE CARD THAT WENT BEHIND. The cancel at the top of the
+         swap runs when it STARTS; a tap during its 380ms slide lands after that and selects the
+         card that is on its way to the back. Measured, 2026-09-10 sea trial, solo-tablet: the
+         selected card ended up behind, wearing "Bake this!", unreachable — and the trial's mouse
+         spent thirteen minutes trying to confirm it. The back card can never be the one pending. */
+      if (cards.some(c => c.dataset.rcpos === "back" && c.classList.contains("pp4Focus"))) resetRecipeFocus();
       void row.offsetWidth;
       row.classList.remove("rcSnap");
       swapping = false;

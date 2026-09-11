@@ -83,7 +83,21 @@ import { pickTree, treeLine } from "./lib/pick_tree.js";
 const REAL_ROOT = path.join(__dirname, "..");
 
 const DEBUG_HOOK_NAMES = ["__pp_module_ok", "__pp_boot_count", "__pp_net_debug", "__pp_app_state_debug"];
-const RETAINED_GLOBAL_ALLOWLIST = ["revealMyRecipe", ...DEBUG_HOOK_NAMES];
+/* TWO NAMES ADDED 2026-09-10, BOTH ON THE RECORD RATHER THAN SLIPPED IN. This gate never read the
+   /4 stage code (it was UNGATED-IN-4 through the cutover), so neither was ever judged against it:
+     · __pulseBeacon — a probe's read-only log of the attention pulse (src/ui/pulsebeacon.js). A
+       debug hook in all but name; nothing in the game reads it.
+     · __pp4 — THE STAGE'S API. flow.js, board.js, lobby.js and bakeoff.js call back into stage.js
+       through it (stageCenterNow, flip, sailCells, stormCam, sweepCam…), because stage.js imports
+       them and an import back would close a cycle module_graph_check forbids. It is a real seam,
+       not a leak — but it IS the pattern this assertion exists to stop spreading, so it is named
+       here as the one standing exception and the gate still fails on any NEW window global.
+       Turning it into a registered callback object imported from a leaf module is its own job. */
+const RETAINED_GLOBAL_ALLOWLIST = ["revealMyRecipe", ...DEBUG_HOOK_NAMES, "__pulseBeacon", "__pp4"];
+
+/* Which game a root is — the frozen classic/ or the live one. Two lists in this file (the coin sites
+   and one voice exception) differ between them, because classic/ still carries v1 text. */
+const treeOf = (root) => /(^|[\\/])classic[\\/]?$/.test(path.resolve(root)) ? "classic" : "live";
 
 /* ================= File discovery (never scripts/) ================= */
 
@@ -309,6 +323,11 @@ const REGISTER_CHROME_EXCEPTIONS = [
   {
     kind: "notice",
     rel: "index.html",
+    /* CLASSIC ONLY since 2026-09-10: the live index.html no longer carries this notice — his ruling
+       of 2026-09-04 (qid:t206-privacy-line) replaced it with a small link to privacy.html — but the
+       frozen classic/ game still does, and the chain reads classic. So the exception applies there
+       and the freshness check does not demand it of a game that deleted the text. */
+    trees: ["classic"],
     anchor: `nothing beyond the name you confirm after picking how to play is collected`,
     why: "the playtesting/privacy NOTICE. Wyatt, 2026-07-30: \"the whole thing is written in normal english not pirate, so the 'ye' feels weird and out of place.\" The surrounding paragraph is plain English throughout — one pirate pronoun inside it is a register mismatch, not pirate voice. G16. Reworded in Phase 22 (22-01, Task 2): the captain-name field it pointed at moved off the welcome screen into the #nameModal that opens after a mode card is picked (D-01), so \"the name you type above\" no longer describes where the name is entered.",
   },
@@ -327,6 +346,7 @@ const REGISTER_CHROME_EXCEPTIONS = [
 function checkChromeExceptionsFresh(root) {
   const failures = [];
   for (const e of REGISTER_CHROME_EXCEPTIONS) {
+    if (e.trees && !e.trees.includes(treeOf(root))) continue;   // an exception scoped to the other game
     const full = path.join(root, e.rel);
     if (!fs.existsSync(full)) continue;
     if (!fs.readFileSync(full, "utf8").includes(e.anchor)) {
@@ -566,8 +586,9 @@ function checkCoReachableExplanations(root) {
     }
 
     /* ---- 6b: every `disabled:` option must have a reachable reason ----
-     * A reason counts as reachable when the SAME guard flag the `disabled:` flag tests also decides
-     * an explanation string somewhere in the file. Two shapes both count, because both ship today:
+     * A reason counts as reachable when the option carries its own `why:` (the tap-why — see the
+     * note at `ownWhy` below), or when the SAME guard flag the `disabled:` flag tests also decides
+     * an explanation string somewhere in the file. Those older two shapes still count:
      *   an `if` arm      —  if(targets.length&&!canAfford)sub=`Yer too poor...`
      *   a ternary        —  const offerSub=canOfferCoins?null:`Ye don't have any coin...`
      * The flag name is matched WITHOUT a leading \b, because the character before `!` is usually
@@ -593,7 +614,29 @@ function checkCoReachableExplanations(root) {
           // stored in a variable, so an assignment-only test would report it missing.
           return new RegExp(`\\b${flagName}\\b\\s*\\?[^?]*:[^?]*[\`"']`).test(l) || new RegExp(`!\\s*${flagName}\\b\\s*\\?[^?]*[\`"']`).test(l);
         };
-        const hasReason = nonComment.some((l) => flagRe.test(l) && assignsExplanation(l) && /[`"']/.test(l));
+        /* ⭐ THE THIRD SHAPE, AND SINCE 2026-08-25 THE USUAL ONE: the option carries its OWN reason.
+           His copy pass that day deleted the shared helper lines under the pills, because each was
+           "a second copy of a sentence the button says while pointing at itself" — the greyed
+           button's tap-why (`why:` on the option object, shown when a captain taps the dead
+           circle). This check predates that, so it reported all five such buttons in flow.js as
+           dead with no explanation (Buy, the 2-for-1 barter, Trade, a trade ingredient, coins
+           only) while every one of them had a `why:` sentence. Found 2026-09-10; the rule it
+           protects is unchanged — a greyed control must say why — it just recognises where the
+           game now says it. The object is read to its closing brace, up to two lines on. */
+        const ownWhy = (() => {
+          const tail = [line.slice(m.index), lines[i + 1] || "", lines[i + 2] || ""].join("\n");
+          let depth = 0, inStr = null, end = tail.length;
+          for (let k = 0; k < tail.length; k++) {
+            const ch = tail[k];
+            if (inStr) { if (ch === "\\") { k++; continue; } if (ch === inStr) inStr = null; continue; }
+            if (ch === '"' || ch === "'" || ch === "`") { inStr = ch; continue; }
+            if ("({[".includes(ch)) depth++;
+            if (")}]".includes(ch)) { if (depth === 0) { end = k; break; } depth--; }
+          }
+          const obj = tail.slice(0, end);
+          return /\bwhy\s*:\s*(?!null\b|undefined\b|""|''|``)\S/.test(obj);
+        })();
+        const hasReason = ownWhy || nonComment.some((l) => flagRe.test(l) && assignsExplanation(l) && /[`"']/.test(l));
         if (!hasReason) {
           // the label of the option that actually carries this `disabled:` flag — the NEAREST
           // preceding `label:` on the line, not the first one, since a line can hold several options
@@ -941,7 +984,65 @@ export function checkStormRainSeeded(root) {
 // count. A region is bounded from its anchor to the next `\n  },\n` (the 2-space-indented closing
 // brace every EVENT_NARRATION/showTurnOrderIntro-style entry in this codebase ends with) so the
 // check reads real source text, never a rendered/evaluated string.
+/* ⚠ RE-ANCHORED 2026-09-10, AND SIX SITES DELETED BECAUSE THEIR COINS ARE GONE — not because they
+   were inconvenient. This list rotted after the cutover while nothing ran it (it is not in the npm
+   test chain): six of its ten anchors named narration that no longer carries a coin at all —
+     · aground's "lossTag" repairs clause — v2: aground is no longer a coin flip (util.js says so)
+     · the four coin-BACKED sidebet lines — v2 rule 5: a call is free, nothing is ever lost or doubled
+     · battleflee's (−1🌕) toll — v2 rule 2: fleeing is free (util.js:738 says so, in those words)
+   and "fish" became the Muse, whose coin now reads "Recipe idea! (+N🌕)". A deleted site is the
+   right answer when the text it protected no longer exists; the anti-vacuity rule (an anchor it
+   cannot find goes LOUD) still holds for every site below. Every trailing signed-coin parenthetical
+   util.js and flow.js produce TODAY is on this list — checked by grepping "🌕)" in both. */
 const COIN_PARENTHETICAL_SITES = [
+  {
+    name: "dock — the buy it pays for, and the coin flip's heads and tails, both viewers",
+    rel: path.join("src", "ui", "util.js"),
+    anchor: "const spent=",
+    wraps: ['<span class="nobrk">(−${paid}🌕)</span>'],
+    counts: {
+      '<span class="nobrk">(+${heads}🌕)</span>': 2,
+      '<span class="nobrk">(+${tails}🌕)</span>': 2,
+    },
+  },
+  {
+    name: "sidebet won, free call — you",
+    rel: path.join("src", "ui", "util.js"),
+    anchor: "— ye called it! <span",
+    wraps: ['— ye called it! <span class="nobrk">(+${e.delta}🌕)</span>'],
+  },
+  {
+    name: "sidebet won, free call — third person",
+    rel: path.join("src", "ui", "util.js"),
+    anchor: "🔭 ${pn(e.p)} called it! <span",
+    wraps: ['🔭 ${pn(e.p)} called it! <span class="nobrk">(+${e.delta}🌕)</span>'],
+  },
+  {
+    name: "muse — the passing coin (what fishing became)",
+    rel: path.join("src", "ui", "util.js"),
+    // anchored at the start of the line, not on "Recipe idea!": the region is read FORWARD from the
+    // anchor, so an anchor inside the span would never see the span's own opening tag
+    anchor: "${seaLine(e.sea,",
+    wraps: ['<span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>'],
+  },
+  {
+    name: "turn-order draw — waiting captains' consolation coin",
+    rel: path.join("src", "ui", "flow.js"),
+    anchor: "const rest=order.slice(1).map(",
+    // P7 (Wyatt, 2026-08-01, second pass): the span used to cover the parenthetical ALONE, which
+    // kept "(+2🌕)" intact but let it detach from the captain it belongs to across a line break —
+    // "…Davy Scones" / "(+2🌕), Dough Hook…". The expectation is now the STRONGER form: the name
+    // and its amount inside one span, as a single readable unit. Tightened deliberately, not
+    // relaxed — this still fails if the wrapper disappears entirely.
+    wraps: ['<span class="nobrk">${pn(i)} (+${k+1}🌕)</span>'],
+  },
+];
+
+/* THE FROZEN classic/ GAME KEEPS ITS OWN LIST — the ten sites exactly as they were before the
+   2026-09-10 re-anchor above. The chain has run this gate `--tree=classic` since the cutover, and
+   classic/ still carries the v1 coins (the aground flip, coin-backed bets, the flee toll, fishing),
+   so those anchors are still TRUE there. One list per game, picked by which game is being read. */
+const COIN_PARENTHETICAL_SITES_CLASSIC = [
   {
     name: "aground (util.js) — half-coins-lost repairs clause",
     rel: path.join("src", "ui", "util.js"),
@@ -1019,12 +1120,13 @@ const COIN_PARENTHETICAL_SITES = [
     wraps: ['<span class="nobrk">${pn(i)} (+${k+1}🌕)</span>'],
   },
 ];
+const coinSitesFor = (root) => treeOf(root) === "classic" ? COIN_PARENTHETICAL_SITES_CLASSIC : COIN_PARENTHETICAL_SITES;
 
 export function checkCoinParentheticalNobrk(root) {
   const failures = [];
   const bySrc = {};
   let scanned = 0;
-  for (const site of COIN_PARENTHETICAL_SITES) {
+  for (const site of coinSitesFor(root)) {
     const full = path.join(root, site.rel);
     if (!fs.existsSync(full)) continue; // synthetic --drill fixture trees carry only what a case needs
     if (!bySrc[site.rel]) bySrc[site.rel] = fs.readFileSync(full, "utf8");
@@ -1113,7 +1215,7 @@ function runAll(root, { quiet = false } = {}) {
   results.push({ name: "classic-region-empty", ...a3 });
 
   const a4 = checkRetainedGlobalsAllowlist(root);
-  log(`${a4.ok ? "PASS" : "FAIL"} retained-globals allowlist — only window.revealMyRecipe (+ the 4 debug hooks) permitted under src/`);
+  log(`${a4.ok ? "PASS" : "FAIL"} retained-globals allowlist — only window.revealMyRecipe (+ the debug hooks and the stage's __pp4 seam) permitted under src/`);
   results.push({ name: "retained-globals-allowlist", ...a4 });
 
   const a5 = checkPirateRegister(root);
@@ -1145,7 +1247,7 @@ function runAll(root, { quiet = false } = {}) {
   results.push({ name: "fbinit-before-solo-resume", ...a10 });
 
   const a12 = checkCoinParentheticalNobrk(root);
-  log(`${a12.ok ? "PASS" : "FAIL"} coin-parenthetical-nobrk — every trailing signed-coin parenthetical is wrapped in a nobrk span (FIX-21) [${a12.stats.scanned} of ${COIN_PARENTHETICAL_SITES.length} site(s) scanned]`);
+  log(`${a12.ok ? "PASS" : "FAIL"} coin-parenthetical-nobrk — every trailing signed-coin parenthetical is wrapped in a nobrk span (FIX-21) [${a12.stats.scanned} of ${coinSitesFor(root).length} site(s) scanned]`);
   results.push({ name: "coin-parenthetical-nobrk", ...a12 });
 
   /* ALWAYS THE LIVE index.html, whatever tree the register checks run against. CEO Review 9
@@ -1304,14 +1406,15 @@ function drill() {
     ].join("\n"));
     fixture("src/ui/recipe.js", "export const d = 'melt-in-your-mouth shortbread';\n");
     fixture("src/ui/lobby.js", `    if(s.id)label=me?"you":"";\n    else label="🤖 bot";\n`);
-    // G16: the fixture now also carries the two kind:"notice" anchors — the privacy line and the
-    // credits paragraph. Both are real player-visible index.html text using the plain pronoun, so
-    // they are the notice kind's positive control AND satisfy checkChromeExceptionsFresh.
-    fixture("index.html", `<html><body>\n<!-- layoutWide layoutWide layoutWide layoutWide -->\n<input id="ppName0" placeholder="Player 1 (you)">\n<div>Anonymized move data is recorded to help improve the game — nothing beyond the name you confirm after picking how to play is collected.</div>\n<div>and to Juju, our overly enthusiastic noodle, for keeping your feet warm through every late night</div>\n</body></html>\n`);
+    // G16: the fixture carries the kind:"notice" anchor — the credits paragraph, real player-visible
+    // index.html text using the plain pronoun — so it is the notice kind's positive control AND
+    // satisfies checkChromeExceptionsFresh. (The privacy line it also carried left index.html on
+    // 2026-09-04 for privacy.html, and its exception went with it on 2026-09-10.)
+    fixture("index.html", `<html><body>\n<!-- layoutWide layoutWide layoutWide layoutWide -->\n<input id="ppName0" placeholder="Player 1 (you)">\n<div>and to Juju, our overly enthusiastic noodle, for keeping your feet warm through every late night</div>\n</body></html>\n`);
     {
       const r = checkPirateRegister(tmpRoot);
       const drillOk = r.ok;
-      console.log(`${drillOk ? "PASS" : "FAIL"} drill 5e/8 (negative control — exclusions hold, incl. all three F1 LABEL anchors and both G16 NOTICE anchors) — expected PASS, got ${r.ok ? "PASS" : "FAIL"}`);
+      console.log(`${drillOk ? "PASS" : "FAIL"} drill 5e/8 (negative control — exclusions hold, incl. all three F1 LABEL anchors and the G16 NOTICE anchor) — expected PASS, got ${r.ok ? "PASS" : "FAIL"}`);
       for (const f of r.failures) console.log(`    ${f}`);
       if (!drillOk) allDrillsOk = false;
     }
@@ -1539,13 +1642,12 @@ function drill() {
   {
     resetFixture();
     fixture("src/ui/util.js", [
-      '  aground:(e,at,cellPx=0,viewerSeat)=>{',
-      '    const lossTag=lost!=null?` (−${lost}🌕)`:"";', // unwrapped — the pre-fix shape
-      '    return {txt:`...${lossTag}`};',
-      '  },',
+      '  pass:(e,at,cellPx,viewerSeat)=>({',
+      '    txt:`🌊 ${seaLine(e.sea,you,name)} Recipe idea! (+${appState.game.cfg.passCoin}🌕)`,', // unwrapped — the pre-fix shape
+      '  }),',
     ].join("\n"));
     const r = checkCoinParentheticalNobrk(tmpRoot);
-    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("COIN-NOBRK:") && f.includes("aground"));
+    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("COIN-NOBRK:") && f.includes("muse"));
     console.log(`${drillOk ? "PASS" : "FAIL"} drill 9a (an unwrapped coin parenthetical FAILS naming COIN-NOBRK) — expected FAIL, got ${r.ok ? "PASS" : "FAIL"}`);
     for (const f of r.failures) console.log(`    ${f}`);
     if (!drillOk) allDrillsOk = false;
@@ -1556,20 +1658,19 @@ function drill() {
   {
     resetFixture();
     fixture("src/ui/util.js", [
-      '  aground:(e,at,cellPx=0,viewerSeat)=>{',
-      '    const lossTagRENAMED=lost!=null?` <span class="nobrk">(−${lost}🌕)</span>`:"";',
-      '    return {txt:`...`};',
-      '  },',
+      '  pass:(e,at,cellPx,viewerSeat)=>({',
+      '    txt:`🌊 ${seaLineRENAMED(e.sea,you,name)} <span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>`,', // the anchor itself renamed
+      '  }),',
     ].join("\n"));
     const r = checkCoinParentheticalNobrk(tmpRoot);
-    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("COIN-NOBRK-ANCHOR") && f.includes("aground"));
+    const drillOk = !r.ok && r.failures.some((f) => f.startsWith("COIN-NOBRK-ANCHOR") && f.includes("muse"));
     console.log(`${drillOk ? "PASS" : "FAIL"} drill 9b (anti-vacuity — a renamed/lost anchor FAILS naming COIN-NOBRK-ANCHOR rather than silently passing) — expected FAIL, got ${r.ok ? "PASS" : "FAIL"}`);
     for (const f of r.failures) console.log(`    ${f}`);
     if (!drillOk) allDrillsOk = false;
   }
 
   // 9c: NEGATIVE CONTROL — the real, fixed src/ui/util.js and src/ui/flow.js pass in full: every one
-  //     of the 10 anchored sites is found AND wrapped. This is the drill that proves the fix and the
+  //     of the anchored sites is found AND wrapped. This is the drill that proves the fix and the
   //     gate agree, mirroring drill 7d's own "copy the FIXED tree in" technique.
   {
     resetFixture();

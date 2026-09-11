@@ -3708,7 +3708,14 @@ export function startPassAndPlay(names){
 }
 // pass & play: reveal the active turn-holder's own recipe on demand — see render()'s
 // canReveal/offerCheckBtn logic and the recipeRevealed re-lock points inside humanTurn.
-export function revealMyRecipe(){appState.recipeRevealed=true;liveRender();}
+/* ⚠ IT MUST REDRAW THE BOX ITSELF — "Check my recipe" did nothing on screen from 2026-08-28 until
+   this was measured on 2026-09-10 (scripts/qa/_pnp_band_handover.mjs: the flag flipped to true and
+   the button stayed). It called liveRender(), which USED to draw; since W1 that function only drains
+   NEW engine events into the one consumer, and a tap on this button emits none — so the captain
+   tapped, nothing happened, and their recipe only appeared after their next move. Revealing a
+   recipe is not a game event (it changes what THIS screen may show, not the game), so it redraws
+   the board directly rather than inventing an event for it. */
+export function revealMyRecipe(){appState.recipeRevealed=true;renderBoard();}
 
 /* ================= recovery/replay seam trio ================= */
 // This section resolves the final 3 of the milestone's 6 UI->orchestration edges (RESEARCH.md

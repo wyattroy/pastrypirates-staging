@@ -54,6 +54,9 @@ export const MEASURE = `(() => {
     const round = br >= Math.min(el.getBoundingClientRect().width, el.getBoundingClientRect().height) / 2 - 1;
     return { id: mark(el), round, chain: (() => { const out = []; let n = el; while (n && n !== document.body) { if (n.__qaId) out.push(n.__qaId); n = n.parentElement; } return out; })(),
       tag: el.className.toString().slice(0,40) || el.id, text: (el.textContent||'').trim().slice(0,24), rect: R(el), topmost: top,
+      /* a recipe card says WHICH card it is — front, back, or not yet mounted as a stack — because
+         "the card behind counted as a control" is only diagnosable from that (2026-09-10) */
+      rcpos: el.classList.contains('recipeCard') ? (el.dataset.rcpos || 'unmounted') : null,
       // WHAT covers it, not just THAT it is covered — a finding you cannot act on is half a finding.
       coveredBy: top ? null : (hit ? ((hit.id ? '#'+hit.id : '') + '.' + String(hit.className||'').trim().split(/\s+/).slice(0,2).join('.') + ' <' + hit.tagName.toLowerCase() + '>').slice(0,60) : 'nothing (outside any element)'),
       disabled: el.disabled || el.classList.contains('apDisabled') || el.getAttribute('aria-disabled') === 'true' }; });
@@ -118,7 +121,7 @@ function shapeOverlap(A, B, tol = 3) {
   F(off.length === 0, "on-screen", off.length ? `clickable off-screen: ${off.slice(0,6).join(", ")}` : "all clickables on screen");
 
   // 2. every clickable control is the topmost thing at its own centre (not hidden under something)
-  const occ = m.interactive.filter(e => !e.disabled && withinVP(e.rect) && !e.topmost).map(e => `${e.text || e.tag} <- covered by ${e.coveredBy}`);
+  const occ = m.interactive.filter(e => !e.disabled && withinVP(e.rect) && !e.topmost).map(e => `${e.text || e.tag}${e.rcpos ? ' [' + e.rcpos + ' card]' : ''} <- covered by ${e.coveredBy}`);
   F(occ.length === 0, "not-occluded", occ.length ? `clickable covered by something else: ${occ.slice(0,6).join(", ")}` : "all clickables reachable");
 
   // 3. no two DISTINCT clickable controls overlap (piled buttons, a control on a control)

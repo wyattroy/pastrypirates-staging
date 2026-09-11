@@ -46,7 +46,7 @@ const FORK = /\b(isHost|amHost|passAndPlay|mySeat|seatLocal|decisionIsLocal)\b/;
    legitimately lives (rule 23), and counting it would train the reader to ignore this gate. */
 const BASELINE = {
   "src/ui/audio.js":  0,
-  "src/ui/board.js":  3,
+  "src/ui/board.js":  2,   // 3 -> 2: the recipe secrecy rules read who-is-looking ONCE, 2026-09-10
   "src/ui/flow.js":  13,
   "src/ui/lobby.js":  5,
   "src/ui/panel.js":  3,   // 4 -> 3: pause forks left at A-10, 2026-08-28

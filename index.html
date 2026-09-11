@@ -1800,7 +1800,11 @@
        rounding left the glyph box ~2px wider than the track (Dough Hook "83px in 81px"), so the
        last letter kissed the coin. padding-right makes the box always exceed the text AND reads as
        a deliberate gap. box-sizing:border-box so the padding is inside the measured column. */
-    body.pp4Stage .player-row .pname { overflow:visible; padding-right:6px; box-sizing:border-box; }
+    /* overflow is hidden again now — the column is FIXED (see --nameCol), so an 18-character name
+       genuinely overflows it on desktop too and must scroll, clipped, like the phone's. The 2px
+       rounding overhang that forced `visible` ("ough Hook") is handled where it belongs: the column
+       is the widest name plus this padding, and the marquee needs a real overflow to fire. */
+    body.pp4Stage .player-row .pname { overflow:hidden; padding-right:6px; box-sizing:border-box; }
   }
   body.pp4Stage #layout, body.pp4Stage #left { display:block; }
   /* THE BOARD STRIP CLIPS ITS OWN LAYERS — playtest 22 (Wyatt: "the trade winds are not occluded
@@ -2978,8 +2982,10 @@
      nothing is left on the element to go stale. The outgoing front card drops back and dims as the
      incoming one rises; because the two elements simply exchange their data-rcpos, the CSS above
      carries them the rest of the way. */
+  /* the front card slides to exactly where the back card sits — the same derived sliver as the
+     back card's own transform, not the 20% the peek used to be */
   body.pp4Stage #actionPanel .apBtns:has(.recipeList).rcSwapping .apBtn[data-rcpos="front"] {
-    transform:translateX(20%) scale(.965); opacity:.55; }
+    transform:translateX(calc((var(--rcPeekFrac) + 0.0175) * 100%)) scale(.965); opacity:.55; }
   body.pp4Stage #actionPanel .apBtns:has(.recipeList).rcSwapping .apBtn[data-rcpos="back"] {
     transform:translateX(-50%) scale(1) rotate(0deg); opacity:1; }
   @media (prefers-reduced-motion: reduce) {
@@ -3322,10 +3328,62 @@
   /* playtest 11: one-line captain rows — name · coins · hold; the recipe line hides until the
      row is tapped (the rows are stable elements, so the toggle survives re-renders) */
   body.pp4Stage .prowTop { display:flex; flex-wrap:wrap; align-items:center; gap:3px 8px; }
-  body.pp4Stage .prowTop .pname { flex:0 1 auto; max-width:36%; }
+  /* ⭐ ONE NAME COLUMN FOR THE WHOLE TABLE, so every coin starts at the same x — his Q8 ruling,
+     2026-09-10: "Coin + number beside the name, as his mockup", where the name sits in a FIXED
+     column. Measured before this: coins ragged by 49px on a phone and 63px on desktop with an
+     18-character name, because every row sized its own name.
+     --nameCol is the widest name at the table (capped at 36% of the list, so the crates keep their
+     room), set by refreshNameMarquees() in src/ui/util.js; a name wider than the cap scrolls. The
+     36% is the cap the old per-row max-width already used, so a short-named table looks as before
+     with its coins now in line. */
+  body.pp4Stage .prowTop .pname { flex:0 0 var(--nameCol, auto); width:var(--nameCol, auto); max-width:36%; }
+  body.pp4Stage #players[style*="--nameCol"] .prowTop .pname { max-width:none; }
+  /* ⭐ CAPPED, AND IT SCROLLS — his Q11 ruling, 2026-09-10: "Cap it and scroll. The board does not
+     give way." The cap is the height of four captains on ONE line each — a row is a crate (26px)
+     plus the row's padding (5px top and bottom) and border (2px top and bottom), and each row's 4px
+     bottom margin, which a flex column counts into what it scrolls — so an ordinary table never scrolls and never takes more than it does today; only a hold
+     big enough to wrap a row onto a second line makes the list scroll, instead of taking the height
+     from the board. Written from those parts rather than as one number, so a change to the crate
+     size carries through. The active row is kept in view by board.js (search "STAYS IN VIEW"). */
+  /* EVERY ROW IS ONE CRATE TALL, even with an empty hold — measured, an "empty hold" row was 33px
+     and grew to 40 the moment its captain bought a first crate, and on a phone that 7px came out of
+     the board. With every row the same height the list is exactly its captains, and only a hold
+     that wraps can ask for more — which is what the cap below turns into scrolling. */
+  /* ⚠ flex-shrink:0 IS LOAD-BEARING. #players is a flex column with a max-height, and an explicit
+     min-height replaces the flex item's automatic "never smaller than my content" floor — so the
+     first run of this squashed three wrapped rows down to 40px each, crates spilling over the row
+     below, and the list reported nothing to scroll. Rows never shrink; the LIST scrolls. */
+  body.pp4Stage #players .player-row { min-height:var(--rowH1); flex-shrink:0; }
+  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px);
+    max-height:calc(4 * (var(--rowH1) + 4px)); overflow-y:auto; overscroll-behavior:contain; }
   body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
   body.pp4Stage .prowTop .chips { flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; gap:3px; justify-content:flex-end; }
   body.pp4Stage .chip { width:26px; height:26px; border-radius:6px; }
+  /* ⭐ YOUR RECIPE, ACROSS THE TOP OF THE BOX — his Q4 ruling, 2026-09-10. The name (tap it for the
+     full recipe card, the same link the captain's log uses) and the five ingredients, each ticked
+     once it is aboard — the green tick is his mockup's. Filled by board.js under the game's secrecy
+     rule, so `hidden` is set whenever no recipe may show; the display:flex below would defeat the
+     browser's own [hidden] rule, hence the restatement. */
+  /* ONE LINE, ALWAYS. On a phone the box gets its measured natural height (capped at 250px) and the
+     board gets the rest, so a band that wrapped to two lines for a long recipe name took ~25px from
+     the board and pushed the fourth captain under the box's own scroll — measured at 390px,
+     "Mexican Chocolate Pots" put the crates on a second line. The name shortens with an ellipsis
+     instead; tapping it still opens the whole recipe card. */
+  #capRecipeBand { display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap;
+    gap:10px; padding:2px 6px 7px; margin:0 0 6px; border-bottom:2px solid rgba(91,58,31,.16); }
+  #capRecipeBand[hidden] { display:none; }
+  #capRecipeBand.bandEmpty { visibility:hidden; }
+  /* one height whatever it holds — the recipe's crates (26px) or the Check my recipe button — so a
+     reveal cannot move the board by the difference: the crate, the band's padding and its rule */
+  #capRecipeBand { min-height:calc(26px + 2px + 7px + 2px); }
+  #capRecipeBand .capRecipeName { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:13.5px; text-decoration:underline; text-underline-offset:3px; }
+  #capRecipeBand .capRecipeName img { width:16px; height:16px; vertical-align:-3px; }
+  #capRecipeBand .capRecipeIng { display:flex; gap:4px; flex:0 0 auto; margin-left:auto; }
+  #capRecipeBand .chip { position:relative; }
+  #capRecipeBand .chip.have::after { content:"\2713"; position:absolute; right:-5px; bottom:-5px;
+    width:14px; height:14px; border-radius:50%; background:#1f9d5c; color:#fff; font:900 9px/14px system-ui, sans-serif;
+    text-align:center; box-shadow:0 0 0 1.5px #fff; }
   body.pp4Stage .prowTop .prowRecipe { display:none; flex-basis:100%; }
   body.pp4Stage .player-row.pp4Open .prowRecipe { display:block; }
   body.pp4Stage .player-row { cursor:pointer; }
@@ -3940,6 +3998,9 @@
            line of text in the captains box to save space." The rows are self-explanatory (a name,
            a purse, a hold), and on a phone the heading's height came straight out of the board's
            square. Do not restore it. -->
+      <!-- YOUR recipe, above every captain's row — his Q4 ruling, 2026-09-10. Filled by board.js
+           under the same secrecy rule the rows use, so it is empty whenever a recipe must not show. -->
+      <div id="capRecipeBand" hidden></div>
       <div id="players"></div>
     </div>
     <!-- MUTE-01 (Wyatt, 2026-08-02): "when the screen size is too narrow to have the mute button

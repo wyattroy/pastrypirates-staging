@@ -182,17 +182,40 @@ export function buildPlayerRows(){
 // overflows it scrolls instead of blowing out the layout or truncating unreadably
 export function refreshNameMarquees(){
   const $=id=>document.getElementById(id);
-  // DESKTOP (>600px): the name column grows to fit (index.html @media min-width:601px), so a name
-  // NEVER needs to scroll — and a 2px rounding overhang would otherwise trip the marquee and scroll
-  // the first letter off ("ough Hook", Wyatt 2026-08-21). The marquee is a PHONE affordance, where
-  // an 18-char name genuinely cannot fit the fixed 106px column. Clear any stale scroll and stop.
-  const desktop=(document.documentElement.clientWidth||window.innerWidth)>600;
+  /* ⭐ ONE COLUMN FOR EVERY NAME — his Q8 ruling, 2026-09-10: the name sits in a FIXED column so
+     every coin starts at the same x. The column is the widest name at the table plus the 6px gap
+     the desktop rule pads with, capped at 36% of the list so the crates keep their room; a name
+     wider than that scrolls. Measured before: coins ragged by 49px (phone) and 63px (desktop).
+     (Widths are read from each name's inline-block, which a running marquee's transform does not
+     change, so re-running this mid-scroll measures the same thing.)
+     ⚠ AND THE MARQUEE NOW RUNS ON DESKTOP TOO — his follow-up the same day, "A long captain name
+     SCROLLS on desktop too". This used to return early above 600px because the desktop column GREW
+     to fit, and a 2px rounding overhang had tripped the scroll and taken the first letter off
+     ("ough Hook", his report of 2026-08-21). A fixed column is exactly what makes an 18-character
+     name overflow on desktop, so the early return had to go — and the overhang is answered by a
+     THRESHOLD instead: a name must overflow by more than MARQUEE_MIN px to scroll. The widest name
+     always has its own 6px of slack in the column, so rounding can never reach it. */
+  const MARQUEE_MIN=3;
+  const list=$("players");
+  let widest=0;
+  for(const i of seatDisplayOrder()){
+    const inner=$("pname"+i)&&$("pname"+i).firstElementChild;
+    if(inner)widest=Math.max(widest,Math.ceil(inner.getBoundingClientRect().width));
+  }
+  if(list){
+    // the column holds the widest name, the gap the desktop rule pads it with, and 2px of slack
+    const w0=$("pname"+seatDisplayOrder()[0]);
+    const padR=w0?(parseFloat(getComputedStyle(w0).paddingRight)||0):0;
+    const cap=Math.floor(list.clientWidth*0.36);
+    const col=widest&&cap>40?Math.min(widest+padR+2,cap):0;
+    if(col)list.style.setProperty("--nameCol",col+"px"); else list.style.removeProperty("--nameCol");
+  }
   for(const i of seatDisplayOrder()){
     const wrap=$("pname"+i),inner=wrap&&wrap.firstElementChild;
     if(!wrap||!inner)continue;
-    if(desktop){ if(wrap.classList.contains("marquee")){wrap.classList.remove("marquee");wrap.style.removeProperty("--scrollDist");} continue; }
-    const overflow=inner.scrollWidth-wrap.clientWidth;
-    if(overflow>0){wrap.classList.add("marquee");wrap.style.setProperty("--scrollDist",(overflow+2)+"px");}
+    const pad=parseFloat(getComputedStyle(wrap).paddingRight)||0;
+    const overflow=inner.scrollWidth-(wrap.clientWidth-pad);
+    if(overflow>MARQUEE_MIN){wrap.classList.add("marquee");wrap.style.setProperty("--scrollDist",(overflow+2)+"px");}
     // a column that GREW (side-by-side vs stacked, or a live resize) can un-clip a name that used
     // to need the scroll — drop the class and stop animating something with nothing left to reveal.
     else if(wrap.classList.contains("marquee")){wrap.classList.remove("marquee");wrap.style.removeProperty("--scrollDist");}
