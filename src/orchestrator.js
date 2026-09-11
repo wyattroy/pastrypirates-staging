@@ -108,7 +108,7 @@ import {
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
-  reachable, pickCell, localAsk, pilotGate, armStormGate, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
+  reachable, pickCell, localAsk, pilotGate, armStormGate, pilotOpeningFork, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay, startSinglePlayer,
   endReplay, animateRimSweepIfAny, animateSailRoute, stormCamForEvent, publishNow,
   showHome, showRoom, showGameView, renderSeatList, wireWelcome, buildPlayerRows, hideBootLoader,
@@ -1771,8 +1771,14 @@ export function watchDraftPrompt(){
        path, the pp4Stage handling, and the teardown that clears the stamp AND the panel before
        anything else. Every one of those was a thing the old copy either re-implemented or simply
        did not have. */
+    /* ⭐ THIS DEVICE ASKS ITS OWN CAPTAIN "DO YE KNOW HOW TO PLAY?" — the Pilot is per device
+       (docs/INTENDED-BEHAVIOUR.md), and the host's Ahoy card marks itself `pp4Fork` so a guest's own
+       browser can run the SAME opening the host's runs (pilotOpeningFork, src/ui/flow.js): decay,
+       and the fork only if THIS browser has never played. The answer sets this browser's ladder and
+       nothing else; the host only needs the barrier released, so the wire still gets choice 0. */
+    const fork=(player.classes||[]).some(c=>/\bpp4Fork\b/.test(c||""))?pilotOpeningFork(player.msg):null;
     raiseLocalPrompt(appState.mySeat,()=>
-      localAsk(player.msg,(player.labels||[]).map((l,i)=>({
+      localAsk(fork?fork.msg:player.msg,fork?fork.opts:(player.labels||[]).map((l,i)=>({
         label:l,
         cls:(player.classes||[])[i],
         short:(player.shorts||[])[i],
@@ -1781,7 +1787,9 @@ export function watchDraftPrompt(){
         /* THE ONE DIFFERENCE: the answer goes on the wire instead of into a local promise. `v` is a
            bare index here (the draft channel carries no slider), and netSetDraftResponse wants the
            same {id,choice} it always did. */
-        const choice=(v&&typeof v==="object")?v.i:v;
+        const picked=(v&&typeof v==="object")?v.i:v;
+        if(fork)fork.apply(picked);
+        const choice=fork?0:picked;
         netSetDraftResponse(appState.db,appState.room,appState.mySeat,{id:player.id,choice},netFail("recipe response"));
         // localAsk's done() has already cleared the stamp and the panel — see renderAskPrompt.
         if(player.waitMsg)showNarration(player.waitMsg,{wait:true}); // item 19: no deadline on a wait line

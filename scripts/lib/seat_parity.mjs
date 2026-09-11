@@ -147,3 +147,27 @@ export async function compareWhenSettled(A, B, { sampleMs = 250, stableFor = 3, 
   // Never guess. A pair that never settles is reported as such, not compared and not passed.
   return { a: lastA, b: lastB, skipped: `neither seat settled within ${capMs}ms — not compared` };
 }
+
+/* ⭐ A MOMENT APART IS NOT A DIFFERENT GAME — his ARCH ruling, 2026-08-30 (docs/INTENDED-BEHAVIOUR.md):
+   "The guest is behind the host — expected… same sequence, never a different script — possibly a
+   moment apart." compareWhenSettled waits for both seats to STOP MOVING, but a seat can stand still
+   while its drain waits on an animation, so a guest one event behind — Flaky's purse 6 against the
+   host's 7, the turn still lit on the captain who just finished — reads as settled and disagreeing.
+   Measured: that exact finding was reported in every trial from 2039 to 2043 (Flaky 6/5, Dough 8/7,
+   Dough 11/10, Flaky 7/6), and in 2043 both halves had healed by the next day.
+   So a disagreement is CONFIRMED only if it outlives the window: re-compared, settled, for up to
+   `windowMs`. If the two agree on that field at any settled moment inside it, it was the lag his
+   ruling expects and the caller is told how long it took to heal. If it never heals, it is a real
+   divergence — or the stuck-screen class T-04 named ("a difference that OUTLIVES the battle is the
+   bug") — and it stands. This is the clock that file's own note said the comparator lacked. */
+export async function confirmDivergence(A, B, finding, { windowMs = 10000 } = {}) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < windowMs) {
+    await new Promise(r => setTimeout(r, 400));
+    const r = await compareWhenSettled(A, B, { capMs: 3000 });
+    if (!r || r.skipped) continue;
+    if (!r.findings.some(f => f.field === finding.field)) return { healed: true, ms: Date.now() - t0 };
+  }
+  return { healed: false, ms: Date.now() - t0 };
+}
+

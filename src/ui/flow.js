@@ -3279,9 +3279,11 @@ export async function botTurn(player){
    Pilot's fork ("do ye know how to play?") is per device — a first-time guest must be able to ask
    for help the veteran host does not need — so the host must never compose a guest's buttons.
    A remote seat keeps `optsFor`, which is the ordinary card everybody shares. */
-export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce,subFor,localOptsFor}){
+export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,announce,subFor,localOptsFor,localMsgFor}){
   const sub=seat=>subFor?(subFor(seat)||null):null;
   const localOpts=seat=>(localOptsFor?(localOptsFor(seat)||null):null)||optsFor(seat);
+  // `localMsgFor` follows localOptsFor's rule: what THIS device's seats read, never sent to a remote one
+  const localMsg=seat=>(localMsgFor?(localMsgFor(seat)||null):null)||msgFor(seat);
   const results={};
   /* ⭐ A LOCAL PROMPT IS ADDRESSED TO A SEAT, AND THIS DISPATCHER IS THE ONLY THING THAT KNOWS WHICH
      — Wyatt, 2026-09-09, crew, two windows: "guest's recipe choice narration box says '{host name},
@@ -3300,7 +3302,7 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
      WHY IT IS SAFE ON A GUEST: applyActiveSeat only ever names a seat the game already has, and
      during a simultaneous draft each device SHOULD be pointing at its own captain — that is what
      every other surface (the ribbon, the camera) already assumes it means. */
-  const askLocal = (seat) => raiseLocalPrompt(seat, () => localAsk(msgFor(seat),localOpts(seat),null,sub(seat)));
+  const askLocal = (seat) => raiseLocalPrompt(seat, () => localAsk(localMsg(seat),localOpts(seat),null,sub(seat)));
   if(appState.passAndPlay){
     if(isPublic){
       // ONE DEVICE, ONE SHOWING — the table reads it together, off one screen.
@@ -3351,11 +3353,14 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
    the return value now matters. Used by exactly one caller: showAhoyIntro, so that the Pilot's
    fork can live at the bottom of the Ahoy card rather than in a second box in front of it
    (Wyatt, 2026-09-07 playtest item 2). Everyone else passes nothing and gets the card unchanged. */
-export async function netIntroBarrier(msg,btnLabel,localOpts){
+export async function netIntroBarrier(msg,btnLabel,localOpts,{localMsg=null,forkable=false}={}){
   if(appState.replaying)return;
   // /4 playtest 12: the two intro barriers (ahoy + turn order) play CENTER STAGE — board dimmed,
   // message and button centred — instead of a bubble at the top and a lone circle mid-sea
-  const opts=[{label:btnLabel,value:0,cls:"primary ahoyGlow",stage:true}];
+  /* `pp4Fork` is a MARKER, not a style: it tells a remote device "this is the card yer own Pilot may
+     ask its fork on" (see pilotOpeningFork). It rides the classes the draft channel already
+     carries, so nothing new crosses the wire. */
+  const opts=[{label:btnLabel,value:0,cls:"primary ahoyGlow"+(forkable?" pp4Fork":""),stage:true}];
   const humans=appState.game.players.filter(player=>player.strategy==="human");
   // whoever clicks through first (or isn't last) sits on this instead of a blank panel while the
   // rest of the crew finishes reading — same idea as recipeDraftNet's "waiting for the crew" beat.
@@ -3375,6 +3380,7 @@ export async function netIntroBarrier(msg,btnLabel,localOpts){
      and the honest fix is not a bigger baseline but not needing to ask. */
   let mine=null;
   const results=await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg,
+    localMsgFor:localMsg?(()=>localMsg):null,
     localOptsFor:localOpts?(seat=>{ if(mine==null)mine=seat; return localOpts; }):null});
   return mine==null?undefined:results[mine];
 }
@@ -3441,7 +3447,8 @@ export async function showAhoyIntro(){
        a name is a second thing to keep in step, and this one was already out of step. */
     if(flag==="new"){clearSoloState();clearSession();}
   }
-  if(!appState.replaying)pilotDecayOnLaunch();
+  /* decay and the fork are ONE step now — pilotOpeningFork(), below — so a crew guest's own device
+     runs exactly the same opening when its Ahoy card arrives (see watchDraftPrompt) */
   /* NOT ON A REPLAY. netIntroBarrier below self-skips when appState.replaying is set, because a
      host refresh re-runs this whole path — and a localAsk here would put a card on screen and wait
      for a tap that is never coming, hanging the rebuild. The fork inherits the same guard rather
@@ -3463,20 +3470,41 @@ export async function showAhoyIntro(){
 
      ASKED BEFORE, SET AFTER: pilotFirstTime() is read while the card is still being composed and
      the rung is written once the barrier releases, so the read can never see its own write. */
-  const asking=!appState.replaying&&pilotFirstTime();
-  // @copy misc.introbarrier.pilotfork — his words, 2026-09-07.
-  const cardMsg=asking?`${msg}<br><br>Do ye know how to play?`:msg;
-  const forkOpts=asking?[
-    {label:"⚓️ Yarrgh!",value:0,cls:"primary ahoyGlow",stage:true},
-    {label:"🦜 Nah",value:1,cls:"primary ahoyGlow",stage:true},
-  ]:null;
+  const fork=pilotOpeningFork(msg);
   // NARR-01/D-25 (Wyatt-approved 2026-07-29): button trimmed to just "Arrgh!" — icon kept (D-16).
   // @copy misc.introbarrier.ahoy
-  const knows=await netIntroBarrier(cardMsg,"⚓ Arrgh!",forkOpts);
-  /* "Nah" (value 1) is the captain who wants teaching — so it starts at the TOP of every ladder.
-     Anything else, including a barrier that resolved with no answer, skips to veteran: the safe
-     failure here is the game a veteran already knows, never a tutorial nobody asked for. */
-  if(asking){ if(knows===1)pilotStartFromTheTop(); else pilotSkipToVeteran(); }
+  /* ⚠ THE SHARED MESSAGE IS THE PLAIN ONE, and the question is only ever this device's. The card's
+     text used to be built here with "Do ye know how to play?" appended whenever THIS (the host's)
+     captain was new, and draftDispatch sent that same text to every seat — so a crew guest was
+     asked a question with ONE button under it ("⚓ Arrgh!"): a first-time guest could not ask for
+     the lessons, and a veteran guest could not turn them off. Seen in the 2026-09-10 sea trial's
+     crew-phone screenshots, host and guest side by side. `forkable` marks the card so the guest's
+     own device can ask its own captain (orchestrator.js, watchDraftPrompt). */
+  const knows=await netIntroBarrier(msg,"⚓ Arrgh!",fork?fork.opts:null,{localMsg:fork?fork.msg:null,forkable:true});
+  if(fork)fork.apply(knows);
+}
+/* ⭐ THE PILOT'S OPENING, ONE FUNCTION FOR EVERY DEVICE. Decay, then — only on a device that has
+   never played — the fork: the Ahoy line with "Do ye know how to play?" under it and his two
+   circles. Returns null when there is nothing to ask. `apply(answer)` sets the starting rung:
+   "Nah" (1) is the captain who wants teaching — the TOP of every ladder; anything else, including a
+   barrier that resolved with no answer, skips to veteran, because the safe failure is the game a
+   veteran already knows, never a tutorial nobody asked for.
+   Used by showAhoyIntro for this device's own seats, and by a crew guest's device when the host's
+   Ahoy card arrives. Per device, as docs/INTENDED-BEHAVIOUR.md "🦜 THE TUTORIAL IS PER DEVICE"
+   requires: it draws a card and writes this browser's own ladder, and emits NO event. */
+export function pilotOpeningFork(baseMsg){
+  if(appState.replaying)return null;
+  pilotDecayOnLaunch();
+  if(!pilotFirstTime())return null;
+  // @copy misc.introbarrier.pilotfork — his words, 2026-09-07.
+  return {
+    msg:`${baseMsg}<br><br>Do ye know how to play?`,
+    opts:[
+      {label:"⚓️ Yarrgh!",value:0,cls:"primary ahoyGlow",stage:true},
+      {label:"🦜 Nah",value:1,cls:"primary ahoyGlow",stage:true},
+    ],
+    apply:answer=>{ if(answer===1)pilotStartFromTheTop(); else pilotSkipToVeteran(); },
+  };
 }
 // right after the Ahoy intro closes: announce who won the flip for first mover, and cheer up
 // everyone sailing later by pointing out the coin they get in exchange for waiting. Stays up

@@ -369,7 +369,8 @@ drift rule 23 exists to prevent, and it had already started.
 - a scrollable card or sheet may run past the bottom of the screen; being cut off at the bottom edge is how it tells you to scroll;
 - board artwork (the map, islands, ships, logo, decorative art) may be clipped at the edge of the board itself — the board is a camera view of a larger map, so its contents are cut off by design;
 - each viewer's own captain is listed FIRST in the captains panel, so two screens legitimately show different row orders;
-- a captain's own row shows their RECIPE (greyed chips are ingredients still needed, not cargo); every other row shows only what that captain actually holds, or "empty hold";
+- the viewer's RECIPE sits in a band across the top of the captains panel — its name plus one chip per ingredient, greyed until held and ticked once held; greyed chips there are ingredients still needed, not cargo. Every ROW, the viewer's own included, shows only what that captain actually holds, or "empty hold";
+- on a shared (pass-and-play) device that band shows a "Check my recipe" button instead of the recipe, and between captains it can be a blank strip at the top of the panel — both keep one captain's recipe private from the next, and the blank strip keeps the panel from jumping;
 - one recipe card highlighted and another not is the two-tap selection state, not a rendering failure;
 - a ship drawn at reduced opacity is BAKING and deliberately off the board, not disabled or broken;
 - a coin slider drawn greyed and undraggable is a captain with an empty purse — the disabled control IS the answer;

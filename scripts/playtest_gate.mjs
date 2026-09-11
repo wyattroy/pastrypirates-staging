@@ -41,7 +41,7 @@ import { makePlayer, sideQuests, GATE_SRC } from "./lib/player.mjs";
 import { legVerdictLine, legVerdict } from "./lib/leg_verdict.mjs";
 import { gameTreeHash } from "./lib/game_tree_hash.mjs";
 import { legIsFresh } from "./lib/leg_cache_key.mjs";
-import { compareWhenSettled } from "./lib/seat_parity.mjs";
+import { compareWhenSettled, confirmDivergence } from "./lib/seat_parity.mjs";
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const LEGS = arg("legs", "solo-desktop,solo-phone,passplay-phone,crew-desktop").split(",");
@@ -452,10 +452,13 @@ async function runLeg(name, idx) {
           if (r && r.findings && r.findings.length) {
             for (const f of r.findings) {
               const key = f.field + "|" + f.why;
-              if (!rec.parity.some(p => p.key === key)) {
-                rec.parity.push({ key, ...f });
-                log(`[${name}] SEATS DISAGREE — ${f.field}: ${f.why}`);
-              }
+              if (rec.parity.some(p => p.key === key)) continue;
+              /* only a disagreement that OUTLIVES a moment is a different game — see
+                 confirmDivergence in lib/seat_parity.mjs, and his ruling it quotes */
+              const c = await confirmDivergence(host, guest, f);
+              if (c.healed) { log(`[${name}] seats a moment apart — ${f.field}: ${f.why} — agreed again ${c.ms}ms later (his "possibly a moment apart"; not a finding)`); continue; }
+              rec.parity.push({ key, ...f });
+              log(`[${name}] SEATS DISAGREE — ${f.field}: ${f.why} — still disagreeing after ${c.ms}ms`);
             }
           }
           await sleep(2500);
