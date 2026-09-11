@@ -21,6 +21,7 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
 import { showsThinkingIndicator } from "../shared/visibility.js";
+import { devHost } from "../shared/host.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
 
@@ -42,7 +43,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@4c3a3723";
+const PP4_STAMP = "2026.09.07.3-staging@f2503284";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -161,6 +162,21 @@ function camToSeat(i){
    the same shot, and one number cannot be right for both (CLAUDE.md, "nothing is a constant").
    Shared by the sail window and the battle framing below, so those two cannot drift apart. */
 const CAM_FIT_PAD = 1.2;                             // cells of water left around the subject
+/* A TRY-IT SWITCH FOR HIS #6, STAGING AND LOCAL ONLY — Wyatt, 2026-09-10: "pass-and-play on a phone
+   loads too zoomed in", with a screenshot of the camera holding a fight at its closest shot (about
+   eight squares of sea). How close is too close is his call, and a number is easier to judge than a
+   description: `?camcap=1.6` caps the closest ANY framing may zoom — the sail fit (up to 4× today on
+   a phone), a fight (2.2×), everything — without touching the framing logic itself. devHost() gated,
+   so a player's URL bar cannot reach it. Remove once he has chosen and the choice is wired in. */
+function devCamCap(){
+  try {
+    if (!devHost()) return null;
+    const m = /[?&]camcap=([\d.]+)/.exec(location.search);
+    if (m) return Math.max(1, +m[1]);
+    // read at fit time, so a posed comparison can re-frame ONE moment at several caps
+    return +window.__pp4DevCamCap > 0 ? Math.max(1, +window.__pp4DevCamCap) : null;
+  } catch (e) { return null; }
+}
 function camFitCells(cells, maxZoom, reservePx, padCells){
   if (!cells || !cells.length) return;
   const cp = cellPx();
@@ -172,7 +188,12 @@ function camFitCells(cells, maxZoom, reservePx, padCells){
   const P = (padCells != null) ? padCells : CAM_FIT_PAD;
   const bw = (x1 - x0 + 1 + 2 * P) * cp, bh = (y1 - y0 + 1 + 2 * P) * cp;
   let side = Math.max(bw, bh);
-  side = Math.max(side, 640 / zoomCap(maxZoom || 2.2));   // D-36: less zoom on a big board
+  /* the dev cap is read at fit time so a posed comparison can re-frame ONE moment at several caps
+     (window.__pp4DevCamCap, dev hosts only — see devCamCap) */
+  /* `typeof`, because cam_fit_cells_containment_check.mjs lifts THIS function out and runs it on
+     its own, where nothing else in the module exists — a bare call threw and took the gate down */
+  const devCap = (typeof devCamCap === "function") ? devCamCap() : null;
+  side = Math.max(side, 640 / zoomCap(Math.min(maxZoom || 2.2, devCap || Infinity)));   // D-36: less zoom on a big board
   /* THE DIRECTOR MAKES THE ROOM (Wyatt, 2026-08-23): "you can always have the director zoom out
      more if it needs to, to find places to put the elements without covering sail squares."
      A placement search can only choose among the spaces the camera has already left it — so when a

@@ -25,6 +25,9 @@ await H.send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 900, d
 await G.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
 const WATCH = `(()=>{
   if(window.__cm)return "already";
+  /* ⚠ THE ROUTE IS ON e.draw.route — Game.bakeDraw bakes it there (src/ui/flow.js, animateSailRoute's
+     note). The first run read e.route, found nothing, filtered every sail out as "too short", and
+     reported NOT RUN with both captains sailing the whole time. */
   const S=window.__cm={sails:[],winds:[],seen:0,live:[]};
   const st=()=>{try{return __pp_app_state_debug()}catch(e){return null}};
   const ships=()=>{const h=document.getElementById('boardShips');return h?[...h.querySelectorAll('g')].filter(g=>g.querySelector('image')):[]};
@@ -32,7 +35,7 @@ const WATCH = `(()=>{
   const tick=()=>{
     const now=performance.now(); const a=st(); const evs=a&&a.game&&a.game.events||[];
     while(S.seen<evs.length){const e=evs[S.seen]; const n=S.seen++;
-      if(e&&(e.t==='sail'||e.t==='tradewind')&&typeof e.p==='number')S.live.push({kind:e.t,n,p:e.p,t0:now,tf:[],vbs:[],off:0,frames:0,route:(e.route||[]).length});}
+      if(e&&(e.t==='sail'||e.t==='tradewind')&&typeof e.p==='number')S.live.push({kind:e.t,n,p:e.p,t0:now,tf:[],vbs:[],off:0,frames:0,route:((e.draw&&e.draw.route)||e.route||[]).length});}
     const sh=ships(); const bw=document.getElementById('boardwrap'); const br=bw?bw.getBoundingClientRect():null;
     for(const L of S.live){
       const g=sh[L.p]; if(!g)continue;
@@ -67,7 +70,7 @@ try {
   // W1-1: sails by OTHER seats, as each screen drew them
   for (const [who, d] of [["host", h], ["guest", g]]) {
     const other = d.sails.filter(x => x.p !== d.me && x.route > 2);
-    console.log(`  W1-1 ${who} screen: ${other.length} sail(s) by other captains (routes of 3+ squares) — median ${med(other.map(x => x.moves))} in-between positions, fewest ${other.length ? Math.min(...other.map(x => x.moves)) : "-"}`);
+    console.log(`  W1-1 ${who} screen: ${d.sails.length} sail(s) seen in all, ${other.length} by other captains with a route of 2+ squares — median ${med(other.map(x => x.moves))} in-between positions, fewest ${other.length ? Math.min(...other.map(x => x.moves)) : "-"}`);
   }
   const gOther = g.sails.filter(x => x.p !== g.me && x.route > 2);
   const w11 = gOther.length >= 3 && gOther.every(x => x.moves >= 3);
