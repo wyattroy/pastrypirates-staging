@@ -425,6 +425,69 @@ class Game{
     if(c[0]<0||c[1]<0||c[0]>=n||c[1]>=n)return true;
     return this.isRound&&!this.valid.has(c[0]+","+c[1]);}
   onRim(c){return this.isRound&&this.rim.has(c[0]+","+c[1]);}
+  /* THE RIDE, AS GEOMETRY: the rim squares from `entry` to its arc's head, inclusive. Arcs are
+     contiguous in rimCellInfo and each head is its arc's LAST member (see the constructor), so a
+     forward slice is the whole answer. One definition for both readers — the trade-wind animation
+     (flow.js rimSweepPath) and the dotted course (seaRoute, below). */
+  rimRide(entry){
+    if(!this.isRound||!this.rimCellInfo||!entry)return [];
+    const cells=this.rimCellInfo,key=entry[0]+","+entry[1];
+    const i=cells.findIndex(c=>c.k===key);if(i<0)return [];
+    const h=this.rimHead[key];if(!h)return [];
+    const hk=h[0]+","+h[1];
+    const j=cells.findIndex((c,n)=>n>=i&&c.k===hk);if(j<0)return [];
+    return cells.slice(i,j+1).map(c=>[c.x,c.y]);
+  }
+  /* THE SEA AS A CAPTAIN CROSSES IT, TRADE WINDS INCLUDED — for the dotted course. Wyatt,
+     2026-09-11: "it doesn't take into account the trade winds! but it must -- both to calculate the
+     true shortest route, and because the current dotted line asks me to sail through the trade
+     winds as if they're a regular square."
+     waterField() floods the rim as if it were open water, and no ship can sail along it: the first
+     rim square a ship touches sweeps it to that arc's clockwise head (tradewind(); sailSearch's
+     "never a staging post"). So here a step onto the rim LANDS ON ITS HEAD — one square sailed, the
+     ride free — and the rim is never walked through. Squares sailed; wind and other ships ignored,
+     the same simplifications waterField makes, so it answers "which way, and how far" and no more.
+     Pure geometry of this board: no RNG drawn, no event emitted.
+     waterField itself is left as it is: the bots' planner scores moves on it, and changing what a
+     bot believes about the rim changes how every bot plays — its own measured change, on the list. */
+  seaRoutes(from){
+    const k=c=>c[0]+","+c[1];
+    const STEPS=[[0,-1],[1,0],[0,1],[-1,0]];   // fixed order, so a tie resolves the same way every time
+    const dist={[k(from)]:0},prev={},q=[[from[0],from[1]]];
+    while(q.length){
+      const c=q.shift(),dc=dist[k(c)];
+      for(const s of STEPS){
+        const o=[c[0]+s[0],c[1]+s[1]];
+        if(this.blocked(o)||this.isIsland(o)||this.isHome(o))continue;
+        let land=o,via=null;
+        if(this.onRim(o)){
+          const h=this.rimHead[k(o)];if(!h)continue;
+          land=[h[0],h[1]];via=[o[0],o[1]];
+          if(land[0]===c[0]&&land[1]===c[1])continue;   // a ride that brings ye back to where ye stand
+        }
+        const lk=k(land);
+        if(dist[lk]!==undefined)continue;
+        dist[lk]=dc+1;prev[lk]={from:k(c),via};q.push(land);
+      }
+    }
+    return {dist,prev};
+  }
+  /* One charted leg, square by square: sailed squares as they are, a trade-wind ride as the rim
+     squares the current carries ye through. [] when `to` cannot be reached. */
+  seaRoute(routes,from,to){
+    const k=c=>c[0]+","+c[1];
+    if(!routes||routes.dist[k(to)]===undefined)return [];
+    const rev=[];let cur=k(to),guard=0;
+    while(cur!==k(from)){
+      if(++guard>1024)return [];
+      const p=routes.prev[cur];if(!p)return [];
+      if(p.via){const ride=this.rimRide(p.via);for(let i=ride.length-1;i>=0;i--)rev.push(ride[i]);}
+      else{const [x,y]=cur.split(",").map(Number);rev.push([x,y]);}
+      cur=p.from;
+    }
+    rev.push([from[0],from[1]]);
+    return rev.reverse();
+  }
   /* entering the rim channel sweeps you to the head of that quadrant.
      `blown` records HOW the ship got into the channel, because the narration says two different
      things about it (playtest 22 item 3, Wyatt): a captain who sailed in chose the ride, and only a

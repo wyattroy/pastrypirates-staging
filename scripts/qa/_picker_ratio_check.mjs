@@ -14,7 +14,7 @@ const C=await attach(DBG);
 const waitFor=async(e,ms=40000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await C.ev(e))return 1}catch{}await sleep(200)}throw new Error("timed out: "+e)};
 // his tuner numbers, 2026-09-10
 const HIS = { phone:{ref:360,pad:14,img:205,icon:60}, desktop:{ref:400,pad:23,img:298,icon:57},
-              all:{aspect:2.31,gapImg:11,gapTitle:6,inset:38,peek:0.145,title:19.5} };
+              all:{aspect:2.31,gapImg:11,gapTitle:6,inset:38,peek:0.145,title:16.6} };  // title: his 19.5 in the tuner's Zilla Slab = 16.6 in the game's Georgia (his Q3, 2026-09-11)
 // ⚠ peek 0.145 IS his 18%: the tuner slid the back card 18% and its .965 scale took 3.5% back, so
 //   the sliver he saw — and the one this measures — is 14.5% of the card.
 const M=`JSON.stringify((()=>{

@@ -132,6 +132,7 @@ import {
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
   isDisabledBtn, showWhy, // playtest 21 item 5: a greyed circle is tappable and says why
   voyageAground, // the visible stall guard — a throw in the turn chain must never be silent again
+  forgetCourse, // 2026-09-11: the dotted course comes down the moment a boat starts to move
 } from "./ui/index.js";
 
 // `$`/`sleep` are classic-script-local (index.html:863/:921) — see src/ui/board.js's/panel.js's
@@ -1440,9 +1441,10 @@ export async function runLiveNet(){
      rooms/<C>/turnOrder that only a guest's watchTurnOrder ever read — the host doing the work AND
      posting a note about it, and the guest doing the work again from the note. The engine says it
      once now; consumeEvent applies it on every tier including this one.
-     ⚠ AWAITED, because the next thing that happens is showTurnOrderIntro, which READS
-     appState.turnOrder. The emit only queues the fact; the drain is what applies it. Same shape as
-     recipeDraftNet's drain of recipeSet, for the same reason. */
+     ⚠ AWAITED, because the drain is what rebuilds the captains' rows in sailing order, and the
+     intro that follows should find them already in it. (The engine holds the order itself since
+     2026-09-11 — see consumeEvent's turnOrder note.) Same shape as recipeDraftNet's drain of
+     recipeSet, for the same reason. */
   appState.game.setTurnOrder(order);
   await liveRender();
   // G5 (Wyatt-approved 2026-07-30): *"Put the recipe selection step NEXT"* — immediately after the
@@ -1857,8 +1859,16 @@ export async function consumeEvent(e){
      ⚠ Array.isArray, because Firebase Realtime Database has no array type: a dense integer-keyed
      array survives the round trip, but the guard costs nothing and this file has been bitten by
      that exact assumption before (see watchRecipes' note, and fixEv). */
+  /* ⭐ THE ENGINE'S OWN RECORD, NOT A COPY OF IT — Wyatt, 2026-09-11, note 4: "the captain's box
+     and top nav player circles no longer seem to be in turn order, like they should be."
+     The order lived twice: on the engine (Game.setTurnOrder) and in appState.turnOrder, filled only
+     HERE. A reloaded voyage replays silently — liveRender() returns before this consumer while
+     `replaying` — and endReplay() jumps the frontier past every rebuilt event, so this line never
+     ran and the copy stayed null: the rows fell back to seat order and the circles lost theirs. A
+     phone reloads a tab whenever it likes. Now there is one record: the host's engine sets it (in
+     play and in a replay alike), a guest's engine learns it here, and every reader asks the engine. */
   if(e.t==="turnOrder"&&Array.isArray(e.order)&&e.order.length){
-    appState.turnOrder=e.order.slice();
+    appState.game.turnOrder=e.order.slice();
     buildPlayerRows();
   }
   /* ⭐ THE STORM LESSON, ON EVERY DEVICE — his item 15. The `storm` event is emitted before a
@@ -1914,11 +1924,33 @@ export async function consumeEvent(e){
      newround/end) retires the previous storm before the new round's animation rather than after.
      Both are the same correction. What does NOT move is spawnPops() — coins should land on the
      square the boat arrives at, so the pops stay below, after the walk. */
+  /* ⭐ THE DOTTED COURSE COMES DOWN THE MOMENT A BOAT MOVES — Wyatt, 2026-09-11: "It should
+     disappear the moment your boat starts animatedly sailing -- it looks glitchy that it stays in
+     the ocean as you move away from its starting position." With the parrot on, the sail prompt
+     leaves the line up for the rest of the turn on purpose (his 2026-09-09 ruling), and only the
+     next turn took it down. It is a picture of where to go FROM HERE, so it ends when "here" does:
+     the same events that wait for the boat to arrive (below), in the one consumer, on every device. */
+  const moves=(e.draw&&Array.isArray(e.draw.route))||e.t==="tradewind";
+  if(moves)forgetCourse();
   playForEvent(e, decisionIsLocal(e.p));
   $("scrub").max=Math.max(0,appState.game.events.length-1);
   stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
   await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
   await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
+  /* ⭐ AND NOTHING AFTER A MOVE IS SHOWN UNTIL THE BOAT HAS ARRIVED — Wyatt, 2026-09-11, note 2:
+     "the next event should not be triggered until the bot is able to choose it -- they should use
+     the same engine as the players; meaning that they choose to sail, and only after they arrive do
+     they get to then choose what to do."
+     A human already works that way: their buttons wait on stageSettled() (panel.js — the camera's
+     tween over AND the ship's drawn position equal to its target, capped at 1.4s). This consumer
+     only waited for the WALK, and a one-square hop has no walk at all (present() walks routes of 3+),
+     so a bot's muse or dock could sound while its hull was still gliding. The same gate, here, in the
+     one consumer, means every device and every captain wait for the same arrival — and a bot's turn
+     loop, which awaits the drain, cannot emit its next move before it. */
+  if(moves){
+    const settled=window.__pp4&&window.__pp4.settled;
+    if(settled)await settled();
+  }
   render();
   spawnPops(e,boardCell());
   if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
@@ -2710,7 +2742,6 @@ export function beginGame(cfg,seed){
   appState.live=true;appState.liveDone=false;appState.evIdx=0;appState.evPushed=0;appState.evConsumed=0;appState.evSeen=null;appState.narrGen=0;appState.narrEvIdx=null;appState.appliedMeta=false;
   // fresh start resets the decision log; a reload-replay keeps the log loaded by resumeHostGame
   if(!appState.replaying){appState.dlog=[];appState.dlogIdx=0;appState.dlogN=0;}
-  appState.turnOrder=null;
   appState.logLines=[];resetBoardLog(-2);$("log").innerHTML=""; // notes/edits 11-03: logRenderedTo now lives in src/ui/board.js
   $("chatLog").innerHTML="";clearChatBubbles();
   $("chatPanel").style.display=(appState.db&&appState.room)?"":"none"; // no chat in solo/pass-and-play — no one else to talk to

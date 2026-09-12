@@ -40,7 +40,7 @@ const ORDER = `JSON.stringify((()=>{
   const rows=[...document.querySelectorAll('#players .player-row .pname')]
     .map(r=>(r.textContent||'').replace(/\s+/g,' ').trim().slice(0,18));
   const evs=(S&&S.game&&S.game.events)?S.game.events.filter(e=>e.t==='turnOrder').length:null;
-  return {order:S?S.turnOrder:null, rows, turnOrderEvents:evs,
+  return {order:S&&S.game?S.game.turnOrder:null, rows, turnOrderEvents:evs,
           /* players carry no 'name' -- the roster does (buildPlayerRows reads appState.roster),
              and a bot seat has none at all. Ask the roster, and say 'bot' rather than null. */
           names:(S&&S.roster)?S.roster.map((r,i)=>(r&&r.name)||('bot'+i)):null};
@@ -76,7 +76,7 @@ try {
   // THE ORDER IS PUBLISHED BEFORE THE DRAFT (runLiveNet shuffles, then drafts), so by the time a
   // card is on screen the guest should already hold it. Wait on the VALUE, not on a sleep.
   await waitFor(G, `(()=>{const S=window.__pp_app_state_debug?__pp_app_state_debug():null;
-    return !!(S&&S.turnOrder&&S.turnOrder.length)})()`, 45000).catch(()=>{});
+    return !!(S&&S.game&&S.game.turnOrder&&S.game.turnOrder.length)})()`, 45000).catch(()=>{});
   await sleep(1500);
 
   const h = JSON.parse(await H.ev(ORDER)), g = JSON.parse(await G.ev(ORDER));

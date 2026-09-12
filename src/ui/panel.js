@@ -164,6 +164,19 @@ export function setClockUI(){
    AND IT CANNOT REJECT: each consumer keeps its own .catch(voyageAground), so the wreck screen
    still surfaces a throw and `await liveRender()` never needs a try. */
 const DRAINED = Promise.resolve();
+/* ⭐ ONE TIMELINE ACROSS CALLS, NOT ONLY WITHIN ONE — Wyatt, 2026-09-11, playtest note 2: "Bot sfx:
+   they're still happening WHILE the bot sails... both with 'muse' sfx and 'dock' coin flip. it seems
+   like something may have regressed, or the architecture isn't consistent and elegant. remember,
+   the next event should not be triggered until the bot is able to choose it."
+   The 2026-09-09 fix below chains the consumers of ONE call's batch. It said nothing about the NEXT
+   call, and there are dozens of fire-and-forget liveRender() calls: a second call's first consumer
+   started in that very tick — its sound first — while the first call's boat was still walking. And
+   a call that found no new events returned DRAINED at once, so `await liveRender()` could "finish"
+   while another call's sail was mid-glide. `_tail` is the one timeline: every batch queues behind
+   whatever is still being presented, and an empty call hands back the presentation in flight.
+   The first consumer still starts SYNCHRONOUSLY when nothing is in flight (`_busy` false) — the
+   property the note below calls load-bearing (a sail's own sound, instant). */
+let _tail = DRAINED, _busy = false;
 export function liveRender(){
   if(appState.replaying)return DRAINED;  // during reload-replay we rebuild state silently, no render/broadcast
   appState.evIdx=Math.max(0,appState.game.events.length-1);
@@ -206,15 +219,19 @@ export function liveRender(){
      the note above: `chain` is seeded with the first consumer already CALLED, not with a resolved
      promise .then()-ing into it. Seeding it the tidy way would have pushed every first sound of a
      burst behind a microtask — the s4 regression, re-introduced by a refactor that looked neutral. */
-  let drained=DRAINED;
+  let drained=_busy?_tail:DRAINED;
   if(_nh.onConsumeEvent){
     const batch=[];
     while(appState.evConsumed<appState.game.events.length)batch.push(appState.game.events[appState.evConsumed++]);
     if(batch.length){
       const run=e=>_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent"));
-      let chain=run(batch[0]);                       // started NOW, in this tick — not deferred
+      // started NOW, in this tick, when nothing is being shown; otherwise behind what is
+      let chain=_busy?_tail.then(()=>run(batch[0])):run(batch[0]);
       for(let i=1;i<batch.length;i++){const e=batch[i];chain=chain.then(()=>run(e));}
-      drained=chain.then(()=>{});
+      const mine=chain.then(()=>{});
+      _tail=mine;_busy=true;
+      mine.then(()=>{if(_tail===mine)_busy=false;});
+      drained=mine;
     }
   }
   if(appState.isHost){

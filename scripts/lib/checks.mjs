@@ -117,7 +117,16 @@ function shapeOverlap(A, B, tol = 3) {
 }
 
   // 1. every clickable control is fully on screen (nothing a player must reach is off the edge)
-  const off = m.interactive.filter(e => !e.disabled && !withinVP(e.rect)).map(e => `${e.text || e.tag}`);
+  /* CARRY THE NUMBERS, NOT JUST THE LABEL. Wyatt, 2026-09-11, on a report that named a control as
+   off-screen while the screenshot showed it centre-screen and tappable: "this seems like nonsense
+   -- i don't see it in the screenshots ... or else it just seems to be lying." He was right. The
+   check compared a rect to the viewport (withinVP, above) and then kept only e.text, so the claim
+   could be neither confirmed nor killed by anyone reading it. A measurement that discards its own
+   measurement is an assertion. The rect and the viewport go in the message so the next reader can
+   settle it in one glance -- a neighbouring carousel card poking past the edge looks completely
+   different from a button a player cannot reach, once you can see the numbers. */
+const off = m.interactive.filter(e => !e.disabled && !withinVP(e.rect)).map(e =>
+  `${e.text || e.tag} @ ${Math.round(e.rect.l)},${Math.round(e.rect.t)} ${Math.round(e.rect.w)}x${Math.round(e.rect.h)} (viewport ${m.iw}x${m.ih})`);
   F(off.length === 0, "on-screen", off.length ? `clickable off-screen: ${off.slice(0,6).join(", ")}` : "all clickables on screen");
 
   // 2. every clickable control is the topmost thing at its own centre (not hidden under something)

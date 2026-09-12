@@ -104,6 +104,32 @@ A bare stamp with no `-staging@<sha>` means he is looking at production and the 
 all work + the artifact."* What changed and what it means for a player · anything you got wrong and
 corrected · what is still open and whose it is · **the link**.
 
+## 9. IF THE PAGE HAS CONTROLS, THE PREVIEW NEVER LEAVES THE SCREEN
+
+**His words, 2026-09-12:** *"the preview must ALWAYS be visible while scrolling through the tuners --
+it is not user frinedly to have to scroll down to adjust a dial then scroll back up to see its
+change."*
+
+A tuner is a feedback loop, and a loop with a scroll in the middle of it is broken. **Pin the preview
+(`position: sticky; top: 0`) so every slider moves something he can see while he moves it.** Two
+things this needs and both are easy to get wrong:
+
+- The sticky element must be a **direct child of the tall scrolling container**. Wrap it in a div
+  that ends where the controls begin and it un-sticks the moment that wrapper scrolls past — which
+  looks exactly like sticky not working.
+- Cap it (`max-height: ~60vh; overflow: auto`) and give it an opaque background, or on a phone the
+  preview eats the screen the controls were supposed to live in.
+
+## 10. NO STANDFIRST. HE ALREADY HAS THE CONTEXT.
+
+**His words, 2026-09-12:** *"remove the verbose byline text. i already have context, in our chat
+session."*
+
+The page is a tool, not a memo. He arrives from the chat that produced it, so a paragraph explaining
+what the page is and why it exists is dead weight he has to scroll past every time. **A title, and
+straight into the thing.** Anything that genuinely has to be said belongs in the chat reply, or as a
+one-line caption on the exact control it concerns.
+
 ---
 
 ## Why these live here and not in CLAUDE.md

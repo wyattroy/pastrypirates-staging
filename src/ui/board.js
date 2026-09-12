@@ -152,6 +152,8 @@ import {
   // forbidden in this codebase (D-33/D-34/D-40) and no gate catches them, so they go with the code
   // that used them rather than being left behind as plausible-looking dependencies.
   assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx,
+  fitHold,   // 2026-09-11: every hold on one line (his check-9 note)
+  fitRecipeName,   // 2026-09-12: the recipe's name at the largest size that fits its card
 } from "./util.js";
 import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
@@ -1769,7 +1771,7 @@ export function render(){
           const k=bh.indexOf(ing); const have=k>=0; if(have)bh.splice(k,1);
           return `<span class="chip ${have?"have":""}" title="${iname(ing)}${have?" — aboard":""}">${ingImg(ing)}</span>`;
         }).join("");
-        bandHtml=`<span class="narrRecipeLink capRecipeName" data-idx="${i}">${iconImg(SCROLL_IMG)} ${recipeTitle(appState.game.players[i].recipe)}</span>`+
+        bandHtml=`<span class="narrRecipeLink capRecipeName" data-idx="${i}">${recipeTitle(appState.game.players[i].recipe)}</span>`+
           `<span class="capRecipeIng">${want}</span>`;
       }else if(offerCheckBtn){
         // @copy misc.board.checkrecipebtn
@@ -1802,9 +1804,13 @@ export function render(){
        chips were destroyed and rebuilt on every render: 600 fresh <img> elements in 210 seconds,
        each one a cold fetch. Moving the assignment inside the comparison keeps the pulse behaviour
        byte-identical and stops the churn. */
-    if(chipsEl.innerHTML!==newChipsHtml){
-      if(chipsEl.innerHTML)pulseEl(chipsEl);
-      chipsEl.innerHTML=newChipsHtml;
+    /* COMPARED AGAINST THE STRING THIS WROTE, not innerHTML — the band's reason (below), and now a
+       second one: fitHold() puts the squeeze on each crate as an inline margin, so innerHTML would
+       never match again and every render would rebuild and pulse every captain's hold. */
+    if(chipsEl.dataset.src!==newChipsHtml){
+      if(chipsEl.dataset.src)pulseEl(chipsEl);
+      chipsEl.innerHTML=newChipsHtml; chipsEl.dataset.src=newChipsHtml;
+      fitHold(chipsEl);
     }
     const lastEv=appState.game.events[appState.game.events.length-1];
     $("crown"+i).innerHTML=(lastEv.t==="end"&&lastEv.winner===i&&appState.evIdx===appState.game.events.length-1)?iconImg(CROWN_IMG):"";
@@ -1816,6 +1822,7 @@ export function render(){
   if(band&&band.dataset.src!==bandHtml){
     if(band.dataset.src&&bandHtml)pulseEl(band);
     band.innerHTML=bandHtml; band.dataset.src=bandHtml;
+    fitRecipeName();          // a new recipe is a new width to fit
   }
   /* THE BAND KEEPS ITS PLACE WHILE IT IS BLANK, so the box never changes height mid-voyage — his
      Q11, "the board does not give way". On a phone the board takes whatever the box leaves, so a

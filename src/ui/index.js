@@ -20,3 +20,6 @@ export * from "./handlers.js";
 // imports util.js itself, and util.js imports neither panel.js nor bakeoff.js.
 export * from "./bakeoff.js";
 export * from "./flow.js";
+// the dotted course's teardown, for the one event consumer (orchestrator.js) — named, not `*`,
+// because this is the one thing the consumer needs from it
+export { forgetCourse } from "./course.js";

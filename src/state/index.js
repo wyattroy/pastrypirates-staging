@@ -67,7 +67,6 @@ export const appState = {
   mySeat: null,
   isHost: false,
   roster: null,
-  turnOrder: null,
   numSeats: 4,
   evPushed: 0,
   // Q-18: how far THIS seat's own event feed has reached, in the host's numbering — set by

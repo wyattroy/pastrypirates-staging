@@ -216,7 +216,13 @@ async function settleAndCheck(c, tag, rec, f, sig) {
   if (!settle.settled) log(`  [${tag}] note: still moving at the cap (${settle.ms}ms) — checked anyway`);
   rec.screens.push({ shot: fSettled, motionShot: f, sig, fails, settle,
     motionOnly: motionFails.filter(k => !fails.some(x => x.rule === k.rule)) });
-  if (fails.length) for (const k of fails) log(`  [${tag}] STRUCT FAIL ${k.rule}: ${k.what}`);
+    /* NAME THE PICTURE. The settled shot was taken immediately above and the measurement that
+     failed was taken from that same settled frame, so the evidence already exists -- it was just
+     never pointed at. Wyatt, 2026-09-11: "you should tune the screenshotter to capture whatever
+     moment is failing more precisely or else it just seems to be lying." The moment was already
+     captured correctly; what was missing was the pointer to it. report.json knew which shot each
+     failure belonged to and the log did not, so settling one claim meant parsing 577KB of JSON. */
+  if (fails.length) for (const k of fails) log(`  [${tag}] STRUCT FAIL ${k.rule}: ${k.what}  -- SEE ${fSettled.split(/[\\/]/).pop()}`);
   for (const k of (rec.screens.at(-1).motionOnly || [])) log(`  [${tag}] during-animation only (not a failure) ${k.rule}: ${k.what}`);
   return fails;
 }

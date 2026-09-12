@@ -98,9 +98,9 @@ const rnd1 = s => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.
  * ⚠ TORTUGA IS LAND. His correction, 2026-09-02: "it looks like your algorithm for computing path
  * is treating tortuga like sailable ocean; it is not. It is land." The route finder I wrote had
  * re-derived the game's own predicate and dropped the `!isHome` clause. So nothing here re-derives
- * anything: it calls game.waterField(), which IS the engine's flood, carrying the engine's own
- * `!blocked && !isIsland && !isHome`. A route finder that answers a question the engine already
- * answers should CALL the engine — that is rule 9 and rule 23 together.
+ * anything: it calls the engine's own flood — game.seaRoutes() since 2026-09-11, which carries the
+ * engine's `!blocked && !isIsland && !isHome` AND its trade-wind rule. A route finder that answers a
+ * question the engine already answers should CALL the engine — that is rule 9 and rule 23 together.
  */
 
 const key = c => c[0] + "," + c[1];
@@ -108,25 +108,6 @@ const key = c => c[0] + "," + c[1];
 // game." Order is fixed so a tie between two equal-length routes always resolves the same way and
 // the drawing is stable between renders.
 const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-
-/** Walk downhill on the engine's own distance field: a shortest path from `from` to the target
- *  that field was built for. Returns [] when the target is unreachable. */
-function walkField(field, from, target){
-  const out = [[from[0], from[1]]];
-  let cur = from, guard = 0;
-  while (!(cur[0] === target[0] && cur[1] === target[1])){
-    const d = field[key(cur)];
-    if (d === undefined || ++guard > 512) return [];
-    let next = null;
-    for (const s of STEPS){
-      const o = [cur[0] + s[0], cur[1] + s[1]];
-      if (field[key(o)] === d - 1){ next = o; break; }
-    }
-    if (!next) return [];
-    out.push(next); cur = next;
-  }
-  return out;
-}
 
 /** Which docks still matter to this captain, and where they are.
  *  A sold-out island still has one crate when the black market is on, so "in stock" is not the
@@ -156,9 +137,16 @@ function wantedDocks(game, player, ingsOverride){
  * @returns {{cells:number[][], marks:number[][], home:boolean}|null}
  */
 export function chartTour(game, player, ingsOverride){
-  if (!game || !player || !player.pos || !game.waterField) return null;
+  if (!game || !player || !player.pos || !game.seaRoutes) return null;
   const start = [player.pos[0], player.pos[1]];
   const want = wantedDocks(game, player, ingsOverride);
+  /* ⭐ THE TRADE WINDS ARE PART OF THE SEA — Wyatt, 2026-09-11: "it doesn't take into account the
+     trade winds! but it must -- both to calculate the true shortest route, and because the current
+     dotted line asks me to sail through the trade winds as if they're a regular square."
+     This used to walk game.waterField(), which floods the rim like open water. It now asks the
+     engine's game.seaRoutes(): a step onto the rim lands on that arc's head, the ride is free, and
+     the rim is never sailed along. A leg that takes a ride comes back with the rim squares the
+     current carries ye through, so the line follows the current instead of cutting across it. */
 
   // ---- the recipe is full: one leg, home to Tortuga
   if (!want.length){
@@ -166,15 +154,16 @@ export function chartTour(game, player, ingsOverride){
     if (!home) return null;
     // Tortuga is LAND, so the route ends on the water beside it — the same adjacency the bakery
     // button already requires. The X still goes ON the island: that is the spot ye are marking.
+    const routes = game.seaRoutes(start);
     let best = null, bestD = Infinity;
     for (const s of STEPS){
       const o = [home[0] + s[0], home[1] + s[1]];
       if (game.blocked(o) || game.isIsland(o) || game.isHome(o)) continue;
-      const f = game.waterField(o), d = f[key(start)];
-      if (d !== undefined && d < bestD){ bestD = d; best = { cell: o, field: f }; }
+      const d = routes.dist[key(o)];
+      if (d !== undefined && d < bestD){ bestD = d; best = o; }
     }
     if (!best) return null;
-    const cells = walkField(best.field, start, best.cell);
+    const cells = game.seaRoute(routes, start, best);
     if (cells.length < 2) return null;
     return { cells, marks: [[home[0], home[1]]], home: true };
   }
@@ -185,12 +174,12 @@ export function chartTour(game, player, ingsOverride){
   const marks = [];
   let cur = start;
   while (remaining.length){
+    const routes = game.seaRoutes(cur);   // ONE flood from where this leg starts serves every dock
     let pick = -1, pickPath = null, pickD = Infinity;
     for (let i = 0; i < remaining.length; i++){
-      const f = game.waterField(remaining[i].cell);
-      const d = f[key(cur)];
+      const d = routes.dist[key(remaining[i].cell)];
       if (d === undefined || d >= pickD) continue;
-      const p = walkField(f, cur, remaining[i].cell);
+      const p = game.seaRoute(routes, cur, remaining[i].cell);
       if (!p.length) continue;
       pickD = d; pick = i; pickPath = p;
     }

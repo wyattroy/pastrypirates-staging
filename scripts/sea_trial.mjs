@@ -418,9 +418,56 @@ const verdict = !unitOk ? "FAILED"
   : legs.length ? "PASSED"
   : "NOTHING SAILED";
 
+/* WHAT THE VERDICT ACTUALLY MEANS. Wyatt, 2026-09-11: "how can you change the FAIL status to
+   actually be meaningful to me in future". One word was covering four unrelated things -- a doc
+   lint that only fails on Windows, a design he has ruled on many times, a path the driver never
+   clicked, and one real defect. That night FAILED was decided by two dig commands in a Cloudflare
+   doc, before the ternary above ever looked at the game.
+
+   docs/QA-PROCESS.md section 6 already says the judge is "a WITNESS, NOT A VERDICT -- roughly half
+   its findings survive contact with the source". On 2026-09-11 none of the three did. The doc and
+   the code disagreed about what a judge finding IS, and the code is the half he reads.
+
+   This DERIVES the split from the leg verdict strings themselves rather than carrying a second
+   hand-kept list of what counts as a fault (rule 23). If leg_verdict.mjs gains a new verdict shape,
+   add it to one of these four patterns in the same commit -- UNCLASSIFIED is printed so a new shape
+   announces itself instead of being silently dropped into the wrong bucket. */
+const GAME_FAULT = /structural check failure|dead control|unreachable control|did not finish|relaunch\(es\)|saw different games|console error/;
+const WITNESS    = /vision judge (FAILED|errored)/;
+const UNTESTED   = /offered but never exercised|NOT looked at|never judged|vision pass DEFERRED/;
+const NOT_FAULT  = /seen only DURING an animation/;
+const vLines     = voyagesBlock.split("\n").filter(l => l.includes("\u2717"));
+const nGame      = vLines.filter(l => GAME_FAULT.test(l)).length;
+const nWitness   = vLines.filter(l => WITNESS.test(l)).length;
+const nUntested  = vLines.filter(l => UNTESTED.test(l)).length;
+const nNotFault  = vLines.filter(l => NOT_FAULT.test(l)).length;
+const nUnknown   = vLines.filter(l => !GAME_FAULT.test(l) && !WITNESS.test(l) && !UNTESTED.test(l) && !NOT_FAULT.test(l)).length;
+const because =
+    nGame        ? nGame + " leg(s) hit a REAL game fault. Fix those; the rest of the red below is noise."
+  : !unitOk      ? "the browser-free checks went red. NOTHING in the game itself failed this run."
+  : notRun.length? "a leg did not sail, so this run proved less than it looks."
+  :                "no game fault was measured. Read the split before acting on anything.";
+const meaning = [
+  "> ### WHAT THIS VERDICT MEANS",
+  ">",
+  "> **" + because + "**",
+  ">",
+  "> | | count | act on it? |",
+  "> |---|---|---|",
+  "> | **real game faults** - a player is affected | **" + nGame + "** | **YES** |",
+  "> | judge findings - a WITNESS, not a verdict (QA-PROCESS s6) | " + nWitness + " | open the screenshot, then check docs/INTENDED-BEHAVIOUR.md |",
+  "> | never exercised / never judged - UNTESTED, not broken | " + nUntested + " | no - this is the NOT-RUN column, for actions |",
+  "> | seen only during an animation - the report says so itself | " + nNotFault + " | no |",
+  "> | browser-free checks (npm test) | " + (unitOk ? "green" : "**RED**") + " | " + (unitOk ? "-" : "docs or tooling can fail here. That is NOT the game.") + " |",
+  (nUnknown ? "> | UNCLASSIFIED - a new verdict shape this table does not know | **" + nUnknown + "** | tell whoever added it to update sea_trial.mjs |" : ""),
+].filter(Boolean).join("\n");
+
+
 const report = `# Sea trial ${TRIAL_VERSION} — build \`${STAMP}\` (tree \`${SHORT_TREE_HASH}\`)
 
 **${verdict}** — ${ranLegs.length} of ${legs.length} voyage(s) sailed${notRun.length ? `, ${notRun.length} NOT RUN` : ""}  ·  ${started.toISOString()}  ·  ${mins} min  ·  gear **${gear}**  ·  sailed on **${WHERE}**
+
+${meaning}
 
 > Gear chosen because: ${gearWhy}
 >

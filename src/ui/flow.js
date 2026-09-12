@@ -68,6 +68,7 @@ import {
   SHIP_GLIDE_MS, SAIL_ROUTE_TICK_MS, MOTION_BRIDGE_TICKS, MAX_NAME_LEN, getLastName,
   vwPx, fixedRect,
   clearSoloState, clearSession,   // ?pilot=new starts a NEW voyage; these own the two saved blobs
+  buildPlayerRows,                // endReplay: the captains' rows, rebuilt once in sailing order
 } from "./util.js";
 import { passGate, requireName, showStep, openNameModal, confirmName, wireNameModal, setNameWarning } from "./lobby.js";
 import { playBakeoffLive } from "./bakeoff.js";
@@ -440,18 +441,29 @@ export function sailSelfCheck(player,cells){
    second copy of the same rule to keep in step. Export holdVerb() and both lines can read it. */
 export function sailPickMsg(seat,cells,base="tap to sail"){
   // v2 rule 2: sailing is FREE, so the (−1🌕) parenthetical is gone.
-  const g=appState.game;
-  const swept=!!(g&&g.onRim&&(cells||[]).some(c=>c&&g.onRim(c)));
   /* `base` IS THE ONLY THING THE PILOT REPLACES, and its DEFAULT is the shipped clause — so every
      existing caller, and the wire payload, get byte-for-byte the line this built before.
-     The captain's name and the swept clause are composed here at every rung: they are situational
-     facts rather than teaching, and a first-timer needs them more than anyone. */
-  /* The swept clause becomes its own sentence when the rung already ended in one, or two em-dashes
-     collide ("— head for a dock. — blue squares take two taps"). With the DEFAULT base there is no
-     terminal stop, so the original form is what renders — identical by construction. */
-  const tail=swept?(/[.!?]$/.test(base)?" Blue squares take two taps.":" — blue squares take two taps"):"";
+     The captain's name is composed here at every rung: a situational fact, not teaching. */
+  /* ⭐ THE TWO-TAPS CLAUSE LEFT THIS LINE ON 2026-09-11 — his note 3: "should be a rung on the
+     tutorial ladder -- not always present." It is the "sail.twotap" ladder now, added by
+     withTwoTapRung() on the device that is LOOKING (renderPickPrompt), because the tutorial is per
+     device and this line travels on the wire: built here, a veteran host would have spoken for — or
+     silenced — a first-time guest. */
   // /4 playtest 6: one line — the card must stay small
-  return `${pn(seat)}: ${base}${tail}`;
+  return `${pn(seat)}: ${base}`;
+}
+/* The sail line, plus the two-taps rung when THIS device's ladder still has one and a blue square
+   is actually on offer — the same g.onRim test sailHighlightRect() paints blue with, so the words
+   and the colour cannot disagree. Spends one sighting. */
+export function withTwoTapRung(msg,cells){
+  const g=appState.game;
+  const swept=!!(g&&g.onRim&&(cells||[]).some(c=>c&&g.onRim(c)));
+  if(!swept||!pilotSpeaks("sail.twotap"))return msg;
+  const rung=pilotMsg("sail.twotap","");
+  pilotSee("sail.twotap");
+  if(!rung)return msg;
+  // a line that already ends in a stop takes a second sentence; otherwise the dash joins them
+  return /[.!?]$/.test(msg)?`${msg} ${rung}`:`${msg} — ${rung.charAt(0).toLowerCase()}${rung.slice(1).replace(/\.$/,"")}`;
 }
 /* THE SAIL CARD, BUILT ONCE. 02.15-01, the narrow half — see renderPickPrompt (02.15-02 Task 3,
    THE TRACER) for the wide one, which converged the ORCHESTRATION around this same builder.
@@ -694,7 +706,7 @@ export function renderPickPrompt(spec,answer){
   const seat=spec.seat!=null?spec.seat:(appState.mySeat??0);
   const rung=pilotLine("sail.pick","tap to sail");
   const teaching=pilotRung("sail.pick")<pilotDepth("sail.pick")-1;
-  const msg=teaching?sailPickMsg(seat,spec.cells,rung.msg):(spec.msg||sailPickMsg(seat,spec.cells));
+  const msg=withTwoTapRung(teaching?sailPickMsg(seat,spec.cells,rung.msg):(spec.msg||sailPickMsg(seat,spec.cells)),spec.cells);
   panel(sailPanelHTML(msg,rung.sub||null),true);
   /* THE ONWARD GUIDE RETIRES ON THE SAME DIAL AS THE WORDS — no second thing to remember to turn
      off. While the sail ladder still has a rung to give the course is drawn; when it reaches the
@@ -1065,18 +1077,12 @@ export function moveCrate(from,to,ing){
 // Together: headIdx >= fromIdx always, within one arc, with no wraparound. So a plain forward slice
 // is the whole answer.
 export function rimSweepPath(game,from){
-  if(!game||!game.isRound||!game.rimCellInfo||!from)return [];
-  const key=from[0]+","+from[1];
-  const cells=game.rimCellInfo;
-  const fromIdx=cells.findIndex(c=>c.k===key);
-  if(fromIdx<0)return [];                      // not on the ring
-  const head=game.rimHead&&game.rimHead[key];
-  if(!head)return [];
-  if(head[0]===from[0]&&head[1]===from[1])return []; // already AT its arc head — nothing to sweep
-  const headKey=head[0]+","+head[1];
-  const headIdx=cells.findIndex((c,i)=>i>=fromIdx&&c.k===headKey);
-  if(headIdx<0)return [];
-  return cells.slice(fromIdx+1,headIdx+1).map(c=>[c.x,c.y]);
+  /* THE SLICE NOW LIVES IN THE ENGINE (Game.rimRide), because a second reader appeared — the dotted
+     course, 2026-09-11 — and two copies of one piece of geometry are two things to keep in step.
+     rimRide includes the entry square; the sweep starts FROM it, so it is dropped here. A ship
+     already at its arc's head gets [head] back and therefore [] — nothing to sweep, as before. */
+  if(!game||typeof game.rimRide!=="function"||!from)return [];
+  return game.rimRide(from).slice(1);
 }
 // 2026-07-31: the PURE half of the smooth trade-wind arc — cell centres in, evenly-spaced curve
 // points out. Kept pure and exported for the same reason rimSweepPath is: it can then be tested
@@ -3820,6 +3826,11 @@ export function endReplay(){
      The line above is the boats; this is everything else on the board. One call, on the healthy
      path only — the shortfall branch above returns before it, because a voyage that failed to
      rebuild must show his restore-failure card rather than a confidently drawn wrong board. */
+  /* ⭐ AND THE CAPTAINS' ROWS, IN SAILING ORDER — his note 4, 2026-09-11. The rows were built when
+     the board was laid out, before the replay had re-drawn the lots, so they stood in plain seat
+     order; the turnOrder event that would have rebuilt them was replayed silently. The engine holds
+     the order now, so one rebuild here puts them right (the circles read it every tick). */
+  buildPlayerRows();
   renderBoard();
 }
 

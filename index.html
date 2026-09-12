@@ -253,7 +253,7 @@
      replaces — with no `order` set anywhere, every row is 0 and DOM order stands. */
   #players { display: flex; flex-direction: column; }
   .player-row { padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; border: 2px solid transparent; box-sizing: border-box; transition: border-color .25s ease, box-shadow .25s ease; }
-  .player-row.activeTurn { border-color: var(--rowcol, var(--accent)); box-shadow: 0 0 0 2px var(--rowcol, var(--accent)) inset, 0 0 6px rgba(0,0,0,.12); }
+  .player-row.activeTurn { box-shadow: 0 0 0 2px var(--rowcol, var(--accent)), 0 0 7px rgba(0,0,0,.22); }
   /* fixed dot/name/coins columns keep money and hold aligned across all captains regardless of
      name length or how many ingredients they're holding. The recipe name is a second grid row
      inside the same .prowTop grid (not a separate row/div) so its placement — above the chips
@@ -1347,6 +1347,15 @@
   @media (max-width: 600px) {
     .modalOverlay { align-items: flex-start; padding: 40px 16px; }
     .modalCard { margin: 0 auto; }
+    /* ⭐ THE WELCOME CARD, 10% SMALLER ON A PHONE — Wyatt, 2026-09-11: "shrink the pastry pirates
+       main center modal that has all the game mode start buttons on it by 10% -- this will give more
+       breathing room to the privacy policy links down the bottom."
+       `zoom`, not transform:scale — zoom gives the space back to the page; a transform only paints
+       smaller over the same box. And it is on the logo and the mode buttons, NOT the whole card:
+       the same card later holds the name and crew-code boxes, and a text box drawn under 16px makes
+       an iPhone zoom the page when it is tapped. */
+    #lobby .modalCard { width: 90%; padding: 23px 25px 20px; }
+    #lobby .modalTitle, #lobby #stepChoose { zoom: .9; }
   }
   /* super-narrow phones: the flippenator + shot clock read as too small to tap accurately —
      bump every dimension here ~1.5x over their normal clamp() ranges */
@@ -3020,7 +3029,10 @@
      side, then the ingredient row. So the title has no padding but his gap, the rule is drawn by
      ::before at that inset, and every number rides --rcK. */
   body.pp4Stage #actionPanel .apBtn .recipeTitle {
-    font-size:calc(19.5px * var(--rcK)); line-height:1.2;
+    /* 16.6, not his typed 19.5 — his answer, 2026-09-11: "Match what I saw". The tuner drew names in
+       Zilla Slab; the game draws them in Georgia bold, measured 17% wider at the same size, so 16.6px
+       is the size that gives the game's typeface the width he tuned. */
+    font-size:calc(16.6px * var(--rcK)); line-height:1.2;
     /* letter-spacing rides the scale too, or a small card's names would wrap where his do not */
     letter-spacing:calc(.3px * var(--rcK));
     position:relative; margin:0; border-bottom:0;
@@ -3218,9 +3230,14 @@
      living inside the scrolling box, so it does not any more: #statsScroll takes the space that is
      left, and this takes its own. Always visible AND never covering, which is what D-38 (a control
      you cannot hit) and D-43 (a card may be cut) were pulling against. */
+  /* ⭐ GOLD, AND THE ATTENTION RING — Wyatt, 2026-09-11, on the footer: "it IS pinned as a footer,
+     and it looks great! the only thing i'd change is the coloring -- make the button gold and give
+     it the attention orange gradient banner." The gold is the game's own orange-on-ink pairing
+     (#f5a623 / #3a2600 / #c9821a — the Bake this! pill and the downwind battle tag); the ring is
+     pp4Glow, granted in THE ATTENTION VOCABULARY block, not here (one gesture, one definition). */
   #statsWrap .pp4Again { display:block; width:100%; margin:12px 0 0; padding:16px;
-    font-size:18px; font-weight:800; border-radius:14px; border:3px solid #0e5c5c;
-    background:#177; color:#fffdf2; box-shadow:0 8px 24px rgba(0,0,0,.25);
+    font-size:18px; font-weight:800; border-radius:14px; border:3px solid #c9821a;
+    background:#f5a623; color:#3a2600; box-shadow:0 8px 24px rgba(0,0,0,.25);
     flex:0 0 auto; }
   /* the air under a sticky button has to belong to the SCROLLER, not to the button, or the button
      lifts off the card's bottom edge by its own margin and floats.
@@ -3344,14 +3361,14 @@
   /* ⭐ CAPPED, AND IT SCROLLS — his Q11 ruling, 2026-09-10: "Cap it and scroll. The board does not
      give way." The cap is the height of four captains on ONE line each — a row is a crate (26px)
      plus the row's padding (5px top and bottom) and border (2px top and bottom), and each row's 4px
-     bottom margin, which a flex column counts into what it scrolls — so an ordinary table never scrolls and never takes more than it does today; only a hold
-     big enough to wrap a row onto a second line makes the list scroll, instead of taking the height
-     from the board. Written from those parts rather than as one number, so a change to the crate
+     bottom margin, which a flex column counts into what it scrolls — so an ordinary table never scrolls and never takes more than it does today.
+     (Since 2026-09-11 no hold wraps at all — see ONE LINE, ALWAYS below — so with four captains the
+     list never scrolls; the cap stays as the guard it always was.) Written from those parts rather than as one number, so a change to the crate
      size carries through. The active row is kept in view by board.js (search "STAYS IN VIEW"). */
   /* EVERY ROW IS ONE CRATE TALL, even with an empty hold — measured, an "empty hold" row was 33px
      and grew to 40 the moment its captain bought a first crate, and on a phone that 7px came out of
-     the board. With every row the same height the list is exactly its captains, and only a hold
-     that wraps can ask for more — which is what the cap below turns into scrolling. */
+     the board. With every row the same height the list is exactly its captains — and since holds
+     stopped wrapping (2026-09-11), nothing can ask for more. */
   /* ⚠ flex-shrink:0 IS LOAD-BEARING. #players is a flex column with a max-height, and an explicit
      min-height replaces the flex item's automatic "never smaller than my content" floor — so the
      first run of this squashed three wrapped rows down to 40px each, crates spilling over the row
@@ -3360,7 +3377,24 @@
   body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px); --rowGap:4px;
     max-height:calc(4 * (var(--rowH1) + var(--rowGap))); overflow-y:auto; overscroll-behavior:contain; }
   body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
-  body.pp4Stage .prowTop .chips { flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; gap:3px; justify-content:flex-end; }
+  /* ⭐ ONE LINE, ALWAYS — his check-9 note, 2026-09-11 ("scroll within the same line, not go onto two
+     lines -- ideally by bunching on top of each other"). fitHold() (src/ui/util.js) squeezes the
+     crates with his numbers — gap 3px, never more than 35% overlap — and past that turns on
+     .holdScroll: the line scrolls sideways, starting from the left (a right-aligned row that
+     overflows cannot be scrolled to its first crate), with a fade at the edge saying there is more. */
+  /* flex-basis 0, NOT auto — measured 2026-09-11: .prowTop wraps its children, and with `auto` a
+     nowrap hold asks for its FULL width first, so a 10-crate hold jumped onto a line of its own and
+     the row grew from 32px to 54px before fitHold ever saw it. From 0 it takes the room that is left
+     on the captain's own line, which is exactly the room fitHold squeezes into. */
+  body.pp4Stage .prowTop .chips { flex:1 1 0; min-width:0; display:flex; flex-wrap:nowrap; gap:5px; justify-content:flex-end;
+    overflow:hidden; }
+  body.pp4Stage .prowTop .chips.holdScroll { justify-content:flex-start; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 14px),transparent); mask-image:linear-gradient(90deg,#000 calc(100% - 14px),transparent); }
+  body.pp4Stage .prowTop .chips.holdScroll::-webkit-scrollbar { display:none; }
+  body.pp4Stage .prowTop .chips .chip { flex:0 0 auto; position:relative; }
+  /* a crate that overlaps the one before it lifts off it — the soft edge from his page, so a bunch
+     still reads as crates ye can count. Later crates sit on top by document order. */
+  body.pp4Stage .prowTop .chips .chip.ov { box-shadow:-2px 0 3px rgba(40,30,10,.22); }
   body.pp4Stage .chip { width:26px; height:26px; border-radius:6px; }
   /* ⭐ YOUR RECIPE, ACROSS THE TOP OF THE BOX — his Q4 ruling, 2026-09-10. The name (tap it for the
      full recipe card, the same link the captain's log uses) and the five ingredients, each ticked
@@ -3373,19 +3407,30 @@
      "Mexican Chocolate Pots" put the crates on a second line. The name shortens with an ellipsis
      instead; tapping it still opens the whole recipe card. */
   #capRecipeBand { display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap;
-    gap:10px; padding:2px 6px 7px; margin:0 0 6px; border-bottom:2px solid rgba(91,58,31,.16); }
+    gap:10px; padding:3px 8px; margin:0 0 6px; border-radius:10px; border:1px solid #c2a068;
+    background:
+      radial-gradient(ellipse at 18% 12%, rgba(150,105,50,.20), transparent 55%),
+      radial-gradient(ellipse at 88% 82%, rgba(120,80,40,.18), transparent 52%),
+      radial-gradient(ellipse at 65% 30%, rgba(200,165,105,.16), transparent 60%),
+      linear-gradient(160deg, #f7edd2, #ecd9ac);
+    box-shadow: 0 1px 2px rgba(90,60,20,.2), inset 0 1px 0 rgba(255,255,255,.45); }
   #capRecipeBand[hidden] { display:none; }
   #capRecipeBand.bandEmpty { visibility:hidden; }
   /* one height whatever it holds — the recipe's crates (26px) or the Check my recipe button — so a
      reveal cannot move the board by the difference: the crate, the band's padding and its rule */
   #capRecipeBand { min-height:calc(26px + 2px + 7px + 2px); }
   #capRecipeBand .capRecipeName { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    font-size:13.5px; text-decoration:underline; text-underline-offset:3px; }
-  #capRecipeBand .capRecipeName img { width:16px; height:16px; vertical-align:-3px; }
+    font-size:15px; color:#5b3a1f; font-weight:800; font-family:Georgia,"Times New Roman",serif;
+    letter-spacing:.3px; text-shadow:0 1px 0 rgba(255,250,235,.5);
+    text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; }
   #capRecipeBand .capRecipeIng { display:flex; gap:4px; flex:0 0 auto; margin-left:auto; }
-  #capRecipeBand .chip { position:relative; }
-  #capRecipeBand .chip.have::after { content:"\2713"; position:absolute; right:-5px; bottom:-5px;
-    width:14px; height:14px; border-radius:50%; background:#1f9d5c; color:#fff; font:900 9px/14px system-ui, sans-serif;
+  #capRecipeBand .chip { position:relative; background:none; border:0; opacity:1; padding:0; border-radius:0;
+    width:23px; height:23px; }
+  /* the tick sits ON the ingredient and INSIDE the card — it used to hang 5px past the crate's
+     corner, which put it through the card's bottom edge once the card was only a little taller
+     than its own ingredients (Wyatt, 2026-09-12: "they stay within the card"). */
+  #capRecipeBand .chip.have::after { content:"\2713"; position:absolute; right:-2px; bottom:-2px;
+    width:13px; height:13px; border-radius:50%; background:#1f9d5c; color:#fff; font:900 9px/13px system-ui, sans-serif;
     text-align:center; box-shadow:0 0 0 1.5px #fff; }
   /* ⭐ ON A PHONE, EVERY CAPTAIN FITS — measured, not picked. In the 2026-09-10 sea trial the box
      showed only THREE captains for a whole voyage at 390x664 (the height a phone browser actually
@@ -3402,8 +3447,12 @@
   @media (max-width: 600px) {
     body.pp4Stage #players { --rowH1:calc(22px + 2 * 3px + 2 * 2px); --rowGap:3px; }
     body.pp4Stage #players .player-row { padding:3px 6px; }
-    body.pp4Stage #players .chip, #capRecipeBand .chip { width:22px; height:22px; }
-    #capRecipeBand { min-height:calc(22px + 2px + 5px + 2px); padding:2px 6px 5px; margin-bottom:4px; }
+    body.pp4Stage #players .chip { width:22px; height:22px; }
+    body.pp4Stage .prowTop .chips { gap:4px; }                 /* 20% of a 22px crate */
+    #capRecipeBand .chip { width:18px; height:18px; }          /* 88% of a hold's crate, his number */
+    #capRecipeBand .chip.have::after { width:11px; height:11px; font-size:8px; line-height:11px; }
+    #capRecipeBand { min-height:calc(22px + 2px + 5px + 2px); padding:3px 7px; margin-bottom:4px; }
+    #capRecipeBand .capRecipeName { font-size:13.5px; }
     body.pp4Stage #pp4Cap { padding-top:6px; padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
   }
   body.pp4Stage .prowTop .prowRecipe { display:none; flex-basis:100%; }
@@ -3520,7 +3569,8 @@
   #actionPanel .btlBtn:not(:disabled):not([aria-disabled="true"]),
   #btnStart:not(:disabled),
   #btnConfirmStart:not(:disabled),
-  #btnStartPassPlay:not(:disabled) {
+  #btnStartPassPlay:not(:disabled),
+  #statsWrap .pp4Again {
     animation: pp4Glow 1.1s ease-in-out infinite; }
 
   /* ⭐ HIS ⑥ : "Make the attention-getting orange gradient larger." --pp4GlowR is the ring's reach,
