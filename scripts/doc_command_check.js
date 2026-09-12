@@ -527,8 +527,19 @@ if (deployScripts.length && !silentDeploys.length) {
  * trim lowers the ceiling permanently and the ceiling never rises again. Regrowth becomes
  * impossible rather than merely discouraged, and the build is green the whole way down.
  *
- * WHEN YOU TRIM IT, LOWER THIS NUMBER IN THE SAME COMMIT. That is the whole mechanism. */
-const CEILING = 990;          // high-water mark. Only ever edit this DOWNWARD.
+ * WHEN YOU TRIM IT, LOWER THIS NUMBER IN THE SAME COMMIT. That is the whole mechanism.
+ *
+ * 990 -> 350, taken 2026-09-12 from the daily doc audit's own finding: THE RATCHET WAS BORN ALREADY
+ * SLIPPED, and the one step it depends on is the one step that did not happen. The trim (6733f743)
+ * took CLAUDE.md 1359 -> 200 without touching this file; CEILING arrived two commits later
+ * (ff8c2de0), when the file was ALREADY 222 lines, at 990 — a number that was neither the file's
+ * peak (1359) nor its size at the time (222), but the size of an intermediate version. So the
+ * comment above called 990 a "high-water mark" it had never been, and the file was left free to grow
+ * back to 990 with the build green the entire way: "growth back toward four figures", the single
+ * thing .claude/DAILY-DOC-AUDIT.md exists to catch, with its own detector holding 777 lines of
+ * slack. Lowered to TARGET: still downward-only, green today at 213, and it leaves 137 lines of
+ * headroom so Wyatt's own next edit does not hit a wall. */
+const CEILING = 350;          // high-water mark. Only ever edit this DOWNWARD.
 const TARGET  = 350;          // the goal: one screen of rules plus pointers.
 const claudeText  = fs.readFileSync(path.join(REPO, ".claude/CLAUDE.md"), "utf8");
 const claudeLines = claudeText.split("\n").length - (claudeText.endsWith("\n") ? 1 : 0);   // `wc -l`

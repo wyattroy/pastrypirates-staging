@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@be8a5208";
+const PP4_STAMP = "2026.09.07.3-staging@525c3ec8";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -893,7 +893,15 @@ function camFrame(){
   })() : 0;
   const squareRoom = (vwPx() <= 600) ? Math.max(64, vhPx() - ribH - vwPx() - phoneFootReserve) : Infinity;
   const CAP_BASE = side ? 0 : Math.min(250, S.capNeed || Math.round(vhPx() * 0.30), squareRoom);
-  const availH = Math.max(200, vhPx() - ribH - CAP_BASE - phoneFootReserve);
+  /* ⭐ THE BOARD IS A SQUARE, AND THE ROOM UNDER IT IS THE CAPTAIN'S BOX'S — Wyatt, 2026-09-12:
+     "I wanted the board to always be a square and the captain's box ratios to be related to the
+     space left underneath a square board as a constraint."
+     The DRAWN board was already square (preserveAspectRatio xMidYMin meet), but #boardwrap was not:
+     it took every pixel left over, so the white rounded frame drawn on it — which is what he
+     photographed — was 375x421 on his phone, 46px taller than the square inside it. Capping the wrap
+     at its own width makes the frame trace the board. What is left below is NOT the board's and NOT
+     the box's: it is slack, and it shows the page's own background. */
+  const availH = Math.max(200, Math.min(vwPx(), vhPx() - ribH - CAP_BASE - phoneFootReserve));
   if (wrap){
     if (Math.abs((parseFloat(wrap.style.top) || 0) - ribH) > 1) wrap.style.top = ribH + "px";
     if (Math.abs((parseFloat(wrap.style.height) || 0) - availH) > 2) wrap.style.height = availH + "px";
@@ -922,9 +930,13 @@ function camFrame(){
     // `bottom` at all — its own @media override sets `bottom:auto` and an inline style always
     // beats it, which would re-pin the tablet/desktop card to the viewport edge it was fixed to
     // never touch (T-142's own regression risk, one line over).
-    if (vwPx() <= 600) {
-      if (Math.abs((parseFloat(cap.style.bottom) || 0) - phoneFootReserve) > 1) cap.style.bottom = phoneFootReserve + "px";
-    } else if (cap.style.bottom) cap.style.removeProperty("bottom");
+    /* ⭐ AND THE BOX IS ITS OWN HEIGHT, NOT THE GAP TO THE BOTTOM OF THE SCREEN. It used to be
+       pinned top AND bottom, so on a tall phone it stretched to whatever was left — 351px of card
+       holding 209px of captains, and the difference was empty. Pinning only its top lets it be the
+       size its four captains need, and the slack falls below it where the page's background shows
+       through. Same phone, bars showing or hidden, the box is the same shape: which is the whole
+       reason one plaque picture per screen class can fit it. */
+    if (cap.style.bottom !== "auto") cap.style.bottom = "auto";
   }
   const vb = `${c.x} ${vy} ${c.w} ${h}`;
   if (vb !== lastVB){

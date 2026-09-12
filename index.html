@@ -358,7 +358,13 @@
      sketch's plain 2px). Its border-box bottom edge IS "the line separating the title". */
   #recipeModalBody .recipeModalTitleRow { position: sticky; top: 0; z-index: 2;
     display: flex; align-items: center; gap: 10px; text-align: left;
-    margin: 0; padding: 14px var(--cardPad) 10px;
+    /* ⛔ THE RIGHT PADDING IS THE CLOSE BUTTON'S SEAT. Wyatt, 2026-09-12: "it is impossible to close
+       that box because the x is hidden by the print and email buttons." Two faults in one spot: the
+       injected .modalX sits absolutely at the card's top-right with z-index 2, and this sticky row
+       ALSO has z-index 2 and comes later, so it painted straight over it; and the X is dark art at
+       45% opacity, which on this near-black title row would have been invisible even in front. The
+       row now leaves a 46px lane on its right and the X is styled to match the two icons. */
+    margin: 0; padding: 14px calc(var(--cardPad) + 46px) 10px var(--cardPad);
     /* FULLY OPAQUE, and the missing 3% was visible. At rgba(...,.97) the YIELD heading scrolling
        underneath ghosted through the row as a smudge — caught by reading the scrolled screenshot,
        not by any assertion. Wyatt has reported exactly this shape of fault before ("it looks like
@@ -377,6 +383,11 @@
     border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); color: #fff6c0;
     font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   #recipeModalBody .recipeIconBtn:hover { background: rgba(255,255,255,.18); }
+  /* the close X, made a third member of that row rather than a thing hidden behind it */
+  #recipeModal .modalX { z-index: 5; top: 14px; right: 16px; width: 38px; height: 38px; opacity: 1;
+    border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); }
+  #recipeModal .modalX:hover { background: rgba(255,255,255,.18); }
+  #recipeModal .modalX img { width: 46%; height: 46%; filter: invert(1) brightness(1.7); }
   #recipeModalBody .recipeModalIn { padding: 0 var(--cardPad) var(--cardPad); text-align: left; }
   #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #f5a623; text-transform: uppercase; letter-spacing: .5px; margin: 1.1em 0 .3em; }
   #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #ffd98a; margin: .8em 0 .15em; }
@@ -3374,8 +3385,17 @@
      first run of this squashed three wrapped rows down to 40px each, crates spilling over the row
      below, and the list reported nothing to scroll. Rows never shrink; the LIST scrolls. */
   body.pp4Stage #players .player-row { min-height:var(--rowH1); flex-shrink:0; margin-bottom:var(--rowGap); }
-  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px); --rowGap:4px;
-    max-height:calc(4 * (var(--rowH1) + var(--rowGap))); overflow-y:auto; overscroll-behavior:contain; }
+  /* ⚠ THE 2px OF PADDING IS THE RING'S ROOM, AND IT IS LOAD-BEARING. Wyatt, 2026-09-12, with a
+     phone screenshot: "the outline of the active captain is not accurately drawn currently... you
+     can see it being cut off." Measured by scripts/qa/_turn_ring_check.mjs rather than reasoned
+     about: #players carries overflow-y:auto so the box can scroll, and the ring moved OUTSIDE the
+     row that morning — 2px of box-shadow beyond the row's border-box, which an overflow other than
+     visible clips. The first row's top 2px and the last row's bottom 2px were being cut, which is
+     exactly what he saw. Padding lives INSIDE the scroll box, so it gives the ring somewhere to be
+     drawn without turning the scrolling off. The max-height grows by the same 4px so four captains
+     still fit in the room they were measured into. */
+  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px); --rowGap:4px; padding:2px;
+    max-height:calc(4px + 4 * (var(--rowH1) + var(--rowGap))); overflow-y:auto; overscroll-behavior:contain; }
   body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
   /* ⭐ ONE LINE, ALWAYS — his check-9 note, 2026-09-11 ("scroll within the same line, not go onto two
      lines -- ideally by bunching on top of each other"). fitHold() (src/ui/util.js) squeezes the
@@ -3422,7 +3442,15 @@
   #capRecipeBand .capRecipeName { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     font-size:15px; color:#5b3a1f; font-weight:800; font-family:Georgia,"Times New Roman",serif;
     letter-spacing:.3px; text-shadow:0 1px 0 rgba(255,250,235,.5);
-    text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:3px; }
+    /* the underline is the only thing saying "this opens the card", so it is drawn to be SEEN:
+       Wyatt, 2026-09-12 — "the recipe name's underline does not appear, and it should." A 1px rule
+       3px under Georgia on parchment, with a cream text-shadow beside it, was there in the computed
+       style and invisible on a phone. -webkit- prefixes because Safari is the browser he tests on
+       and the unprefixed thickness/offset are the newer spelling. */
+    text-decoration:underline; -webkit-text-decoration:underline;
+    text-decoration-thickness:2px; -webkit-text-decoration-thickness:2px;
+    text-underline-offset:2px; -webkit-text-underline-offset:2px;
+    text-decoration-color:rgba(91,58,31,.55); -webkit-text-decoration-color:rgba(91,58,31,.55); }
   #capRecipeBand .capRecipeIng { display:flex; gap:4px; flex:0 0 auto; margin-left:auto; }
   #capRecipeBand .chip { position:relative; background:none; border:0; opacity:1; padding:0; border-radius:0;
     width:23px; height:23px; }

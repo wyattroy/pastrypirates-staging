@@ -129,7 +129,7 @@ removed · `X-Robots-Tag: noindex`. A production build has none of them. Both ha
 mention it at all.** Measured tonight:
 
 ```bash
-dig DS playpastrypirates.com +noall +answer
+dig DS playpastrypirates.com +noall +answer    # Mac / Linux ONLY
 ```
 
 ```
@@ -149,8 +149,11 @@ while DNSSEC is active can cause your domain to become unreachable."*
 on the day" step. Disable DNSSEC at Squarespace, then wait until
 
 ```bash
-dig DS playpastrypirates.com +short
+dig DS playpastrypirates.com +short    # Mac / Linux ONLY
 ```
+
+On the Windows laptop that command does not exist; the same question there is `Resolve-DnsName -Name playpastrypirates.com -Type DS` (verified on Wy-Blade, 2026-09-12 — it returned one DS record, so DNSSEC was still live).
+
 
 **returns nothing at all**, before going anywhere near step 7. Re-enable it later from Cloudflare's
 own DNS panel if wanted.

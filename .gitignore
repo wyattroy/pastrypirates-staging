@@ -151,3 +151,6 @@ _site_stg/
 
 # the Stop hook's "have I summarised these commits yet" marker — per-machine, never shared
 .claude/hooks/.last-close
+
+# the image-generation API key — never committed, never printed (scripts/art/gen.mjs)
+.art-key

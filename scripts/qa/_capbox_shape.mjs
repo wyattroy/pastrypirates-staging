@@ -4,6 +4,10 @@
    need, and the ratio between them. No guesses — every number is read off the rendered page. */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+/* ⚠ ROOTED OFF THIS MODULE, never off a typed path. This probe was written in a scratch worktree
+   and carried that worktree's absolute /Users/wyattroy/... root into scripts/ -- which works on
+   exactly one computer, and Wyatt has two. It failed the gate chain on the Windows laptop the first
+   time it ran there. Same fix, same shape as _recipe_title_lines.mjs (rule: one fix, every site). */
 import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT=8790+(process.pid%25), DBG=9390+(process.pid%25);

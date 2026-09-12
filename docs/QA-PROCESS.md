@@ -226,6 +226,39 @@ what I am about to claim?* Four of five failures that day were an adjacent measu
 the real one — geometry reported as "has it stopped changing", a log phrase reported as "did Safari
 run", a warm-process timer reported as "can he see this on his phone".
 
+### 2a. A RED-PROOF NEEDS A CONTROL, or it is an observation
+
+**Broken → red is half a proof.** The other half is *restored → green, on the same file, with that
+one line as the only difference.* Without it, "it went red when I broke it" is equally consistent
+with "the copy I was running was broken all along" — which is precisely what one machine's first
+negative turned out to be, on 2026-09-12. Run all three: baseline, sabotage, control.
+
+### 2b. ⛔ AN INSTRUMENT THAT CANNOT REPORT ON ITSELF — four in one night
+
+**2026-09-12. The same fault, four times, in four costumes, and every one of them invisible from one
+of the two computers:**
+
+| the instrument | what it threw away |
+|---|---|
+| the sea trial's on-screen check | the rect it had just measured — it said "off-screen" and could not say where |
+| the trial report | named a defect without naming its screenshot |
+| the checklist hook's `--verbose` dump | printed the FIXTURE's reflog while the HOOK's was dying, three healthy lines either way |
+| the hook's own failure guard | shouted down a channel nobody was reading — `execFileSync` returns stdout and surfaces stderr only on the ERROR object, and the hook exits 0 |
+
+**THE RULE: when a check depends on a command, a dead command must never look like an empty answer.**
+Capture the failure, and make the instrument say *"I could not judge this"* out loud — a verdict
+reached with a dead instrument is not a pass, however right the answer happens to be. The checklist
+hook had FOUR rows passing for exactly that reason, because BLOCK is the correct answer when
+ownership cannot be judged at all.
+
+**And the corollary, which is what makes it expensive:** every one of these was green on the Mac.
+Wy-Blade runs 42 of the 49 sea trials on record. *"If the suite is only green on the Mac, then 'the
+tests pass' is a sentence that is true for one of Wyatt's two computers."* Anything that shells out
+is suspect until it has run on both — a literal space in a `--format=` string, a `^` in a revision
+(cmd.exe's escape character), `pkill`, `dig`, an absolute path, a bare dynamic `import()`. **The cure
+is not better quoting. It is not using a shell:** pass git an argument array and there is nothing to
+quote and no platform to get it wrong on.
+
 ## 3. THE FOUR STEPS (unchanged — see the top of this file)
 
 Show it broken → change it → show that SAME check passes → sweep.
