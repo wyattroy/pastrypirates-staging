@@ -36,9 +36,34 @@
   :root { --teal: #29a3b2; --ink: #1f4249; --accent: #fdb63d; --parch2: #fff6c0; --line: #cfe7eb; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif;
-    background: linear-gradient(160deg, #dcece9 0%, #e6efe1 45%, #f5f0dd 100%); background-attachment: fixed;
+    background: #123d45;
     color: var(--ink); }
-  .rulesPage { max-width: 720px; margin: 40px auto; padding: 0 20px 56px; }
+  /* ══ THE SAME SHAPE AS THE PREGAME SCREEN — W7-1 ═══════════════════════════════════════════════
+     Wyatt, 2026-09-12: "I want all of the non game pages to follow the same format as the index
+     pregame page where the content sits in a cream rounded corner box floating over a blurry
+     background of the game board itself."
+     THE BACKDROP IS THE GAME'S OWN, not a stock texture: assets/welcome-backdrop.jpg is a 512x512
+     capture of a real board, upscaled to cover and blurred — exactly what index.html's
+     #welcomeBackdrop does, down to the scale(1.06) that hides the soft edge a blur leaves at the
+     frame. A pseudo-element rather than a body background so the blur cannot reach the text.
+     THE CARD IS index.html's .modalCard, copied by VALUE and not by link — every page in this
+     folder keeps its own stylesheet by design (D-07), and nothing here may @import the game's. If
+     the pregame card is ever restyled, these four follow by hand, which is the deal that keeps a
+     page with no game logic on it from loading the game.
+     ⚠ THE VOICE IS UNTOUCHED. Credits and About are outside the game world and are NOT in pirate
+     speak (.claude/memory/project_voice_boundary). This changes the frame, never a word inside it. */
+  body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: url(assets/welcome-backdrop.jpg) center / cover no-repeat;
+    filter: blur(7px) saturate(1.15) brightness(.97); transform: scale(1.06); }
+  .rulesPage { position: relative; z-index: 1;
+    background: linear-gradient(175deg, #ffffff, var(--parch2) 250%);
+    border: 3px solid var(--teal); border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18);
+    max-width: 720px; margin: 40px auto; padding: 30px 28px 40px; }
+  @media (max-width: 600px) {
+    /* the card keeps its edges on a phone rather than going wall to wall — it is a card floating
+       over the sea, and a card with no sea beside it is just a page */
+    .rulesPage { margin: 16px 12px; padding: 22px 18px 30px; border-radius: 16px; border-width: 2px; } }
   .rulesTopCta { text-align: center; margin-bottom: 28px; }
   .rulesPlayBtn { display: inline-block; font-family: inherit; font-size: 14px; font-weight: 700;
     padding: 16px 32px; border-radius: 12px; border: 1.5px solid #e89827; cursor: pointer;
@@ -57,7 +82,6 @@
   .rulesFoot { margin-top: 28px; font-size: 12.5px; line-height: 1.5; text-align: center; opacity: .75; }
   .rulesFoot a { color: var(--teal); }
   @media (max-width: 560px) {
-    .rulesPage { margin: 24px auto; padding: 0 14px 40px; }
     .rulesBody { padding: 4px 16px 18px; border-radius: 12px; }
     h1 { font-size: 23px; }
   }
