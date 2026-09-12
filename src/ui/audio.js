@@ -1153,6 +1153,26 @@ function ambStop() {
 
 /* ---- the music: plays, ENDS, waits a minute, comes round again ---- */
 let musicSrc = null, musicGain = null, musicPanNode = null, musicTimer = null, musicRunning = false;
+/* ⭐ WHERE THE SONG WAS WHEN IT STOPPED — W3-6, Wyatt 2026-09-12: "every time I leave the tab and
+   come back, the song begins at the beginning again, and it's annoying and surprising and violates
+   my expectations, which is that the song should pause when I pause the game, and it should pick
+   back up where it left off."
+
+   IT PAUSES AND CONTINUES. IT DOES NOT CATCH UP — his correction, and the opposite of the obvious
+   instinct: "we don't need to advance the audio while context is suspended." So the clock is
+   `ctx.currentTime`, which STOPS ADVANCING while the context is suspended (the note at the top of
+   this file). That is the right property for this and not a trap: nothing accumulates while he is
+   away, which is exactly the behaviour he asked for.
+
+   A BUFFER SOURCE CANNOT BE PAUSED — once stopped it is dead — so "resume" means a NEW source
+   started at an offset. musicOffset is how far into the track we were; musicSince is the context
+   time the current source began, so the offset is one subtraction away. MUSIC_GAP_SEC's silence
+   gets the same treatment: a gap interrupted at 20 seconds comes back with 40 to go, rather than
+   starting its whole minute again. */
+let musicOffset = 0;      // seconds into the track that the next start should begin at
+let musicSince = 0;       // ctx.currentTime when the live source started
+let musicGapLeft = 0;     // seconds of the between-plays silence still owed, 0 when not in a gap
+let musicGapSince = 0;    // ctx.currentTime when that silence began
 
 function musicPlayOnce() {
   const buf = ambBuffers[MUSIC_FILE];
@@ -1166,15 +1186,30 @@ function musicPlayOnce() {
   src.onended = () => {
     if (src !== musicSrc || !musicRunning) return;   // stopped or superseded: not our business
     musicSrc = null;
+    musicOffset = 0;                                 // the track finished: next time, from the top
+    musicGapLeft = MUSIC_GAP_SEC; musicGapSince = ctx ? ctx.currentTime : 0;
     musicTimer = setTimeout(() => { if (musicRunning) musicPlayOnce(); }, MUSIC_GAP_SEC * 1000);
   };
-  src.start();
+  /* start at wherever we were. An offset past the end would throw, so it is clamped — a buffer that
+     was swapped for a shorter one must not take the music down with it. */
+  const at = Math.max(0, Math.min(musicOffset, Math.max(0, buf.duration - 0.05)));
+  src.start(0, at);
+  musicSince = ctx.currentTime - at;                 // so elapsed = ctx.currentTime - musicSince
+  musicGapLeft = 0;
   musicSrc = src;
 }
 
 function musicStart() {
   if (musicRunning || !ctx || !ambBuffers[MUSIC_FILE]) return;
   musicRunning = true;
+  /* stopped DURING the silence between plays? Then the silence resumes too, rather than the song
+     jumping in early or the whole minute starting over. */
+  if (musicGapLeft > 0) {
+    const owed = musicGapLeft;
+    musicGapLeft = 0;
+    musicTimer = setTimeout(() => { if (musicRunning) musicPlayOnce(); }, owed * 1000);
+    return;
+  }
   musicPlayOnce();
 }
 
@@ -1185,6 +1220,15 @@ function musicStop() {
   const src = musicSrc;
   musicSrc = null;
   if (!ctx || !musicGain) return;
+  /* REMEMBER THE PLACE. ctx.currentTime froze while the tab was hidden, so this subtraction is the
+     honest "how far into the song were we" — not "how far in would we be if it had kept playing". */
+  if (src) {
+    const buf = ambBuffers[MUSIC_FILE];
+    const played = Math.max(0, ctx.currentTime - musicSince);
+    musicOffset = (buf && played >= buf.duration) ? 0 : played;   // ran out: start the next one over
+  } else if (musicGapSince) {
+    musicGapLeft = Math.max(0, musicGapLeft - Math.max(0, ctx.currentTime - musicGapSince));
+  }
   /* Ramped, never cut — a song stopping dead mid-bar is worse than the silence it makes room for. */
   const now = ctx.currentTime;
   const g = musicGain.gain;

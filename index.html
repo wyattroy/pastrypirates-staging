@@ -357,7 +357,12 @@
      that line (rule 8: the double rule is this card's signature and is not swapped for the
      sketch's plain 2px). Its border-box bottom edge IS "the line separating the title". */
   #recipeModalBody .recipeModalTitleRow { position: sticky; top: 0; z-index: 2;
-    display: flex; align-items: center; gap: 10px; text-align: left;
+    /* ⚠ flex-start, NOT center — 2026-09-12, from his photograph of the real thing. The close X is
+       injected into the CARD and positioned absolutely, so it cannot ride a row that centres its
+       contents: the moment a recipe name wrapped to two lines ("Mexican Chocolate Pots") the row grew,
+       the printer and the envelope moved down with it, and the X stayed where it was. Aligning all
+       three to the row's top edge is the only arrangement that holds for a one- or two-line title. */
+    display: flex; align-items: flex-start; gap: 10px; text-align: left;
     /* ⛔ THE RIGHT PADDING IS THE CLOSE BUTTON'S SEAT. Wyatt, 2026-09-12: "it is impossible to close
        that box because the x is hidden by the print and email buttons." Two faults in one spot: the
        injected .modalX sits absolutely at the card's top-right with z-index 2, and this sticky row
@@ -387,7 +392,12 @@
   #recipeModal .modalX { z-index: 5; top: 14px; right: 16px; width: 38px; height: 38px; opacity: 1;
     border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); }
   #recipeModal .modalX:hover { background: rgba(255,255,255,.18); }
-  #recipeModal .modalX img { width: 46%; height: 46%; filter: invert(1) brightness(1.7); }
+  /* brightness(0) first flattens the art to pure black WHATEVER colour it was, and only then does
+     invert lift it to white — so there is no hue left to tint. `invert(1) brightness(1.7)` did the
+     opposite: it inverted the art's own colours and pushed the result past white into cyan, which is
+     what he photographed. sepia+saturate warms the white to the card's cream. */
+  #recipeModal .modalX img { width: 44%; height: 44%;
+    filter: brightness(0) invert(1) sepia(.35) saturate(2.2) hue-rotate(-12deg) brightness(1.06); }
   #recipeModalBody .recipeModalIn { padding: 0 var(--cardPad) var(--cardPad); text-align: left; }
   #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #f5a623; text-transform: uppercase; letter-spacing: .5px; margin: 1.1em 0 .3em; }
   #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #ffd98a; margin: .8em 0 .15em; }
@@ -3501,16 +3511,22 @@
      511x304 and 749x304 — about 1.60 : 1.68 : 2.46. The pictures are 1.53, 1.71 and 2.49, so the
      worst stretch anywhere is 4%, and on a twisted rope 4% is not a thing an eye finds.
 
+     AND THE PICTURES ARE KEYED, NOT MERELY CROPPED — his correction, 2026-09-12: "there appears to
+     be a white background to that section that must be removed to show the normal page." The rope
+     turns each corner as a curve, so a rectangular JPEG fills the four corners with whatever was
+     behind it — white — and painted four white triangles over the page. They are PNGs with the
+     background keyed to transparent now, so the page's own gradient shows through the corners.
+
      THE PADDING IS THE ROPE. It is px rather than a percentage on purpose: CSS resolves a vertical
      percentage padding against the element's WIDTH, which would have put 31px of rope at the top of
      a 390px box instead of 19.                                                                    */
   body.pp4Stage #pp4Cap {
-    background: url(assets/plaque/column.jpg) center / 100% 100% no-repeat;
+    background: url(assets/plaque/column.png) center / 100% 100% no-repeat;
     border: 0; border-radius: 0; box-shadow: none; padding: 24px 30px; }
   @media (min-width: 700px) and (max-width: 1100px) {
-    body.pp4Stage:not(.pp4Side) #pp4Cap { background-image: url(assets/plaque/tablet.jpg); } }
+    body.pp4Stage:not(.pp4Side) #pp4Cap { background-image: url(assets/plaque/tablet.png); } }
   @media (max-width: 600px) {
-    body.pp4Stage #pp4Cap { background-image: url(assets/plaque/phone.jpg); padding: 19px 20px; } }
+    body.pp4Stage #pp4Cap { background-image: url(assets/plaque/phone.png); padding: 19px 20px; } }
 
   /* ⛔ !important IS EARNED HERE AND NOWHERE ELSE. src/ui/util.js:163 writes the row's background
      INLINE, one colour per captain (`background:${HEXCOL[i]}18`), so a stylesheet cannot reach it

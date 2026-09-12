@@ -32,7 +32,7 @@
   "_ceiling_raise_2026_09_02": "100 -> 102, deliberately, for chart_sweep_conserves_check.mjs and glass_done_today_check.mjs. The alternative the ceiling offers is retiring a quiet per-bug gate, and quiet_gate_report.mjs found ZERO candidates: all 18 were touched within 5 days and every one guards a defect a player can see. Trading one of those for a planning-tooling gate is the wrong trade and was refused rather than fudged. What the two buy: SWEEP is now the only thing in this system that DELETES from the document Wyatt reads, and the number at the top of his page changed source. A rewrite that loses a row is unrecoverable, and a count that silently reads 0 is how the last one went wrong.",
   "_assets_comment": "INBOX-20260901T1335Z (Wyatt, launch critical): the art was 17.79 MB and every byte of it is on the boot path now that preloadAssets() warms the recipe and badge families. scripts/qa/asset_weight_check.mjs fails the build when assets/ grows past ceilingBytes. Raising it is allowed; raising it without saying in the commit what a player gets for the weight is what this stops. THE CEILING IS SET AT THE CURRENT TOTAL, NOT ABOVE IT -- it sat at 11.00 MB against a 10.57 MB tree until 2026-09-02, which is 0.43 MB of drift the gate could not see. It is now the exact byte total the gate itself prints, so ratcheting it after a compression pass is a copy, not a count.",
   "assets": {
-    "ceilingBytes": 4561920
+    "ceilingBytes": 5138022
   },
   "type": "module",
   "scripts": {
