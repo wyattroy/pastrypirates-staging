@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@4d0b4c60";
+const PP4_STAMP = "2026.09.07.3-staging@a86d4518";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -501,7 +501,7 @@ function boatUXY(i){
 // belongs here — BOARD-RENDERING §3 calls adding it "the step that gets forgotten", and #rimHost
 // was forgotten exactly this way: the current stayed parked on the full-board layout while the
 // water zoomed away beneath it. A LIST, not named consts, for the same reason.
-const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost"];
+const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost"];
 let ribHCache = 48, ribHAt = -1e9, lastVB = "", lastRipT = "";
 /* THE TOP BAND — where the board's top edge goes: the bottom of the ribbon, or of the wind pill
    when that sits lower (playtest 17, Wyatt: "the wind/forecast pip covers the top of the trade

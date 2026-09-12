@@ -904,6 +904,49 @@
      Sizes are cqw against #boardwrap (container-type: inline-size), so 640 board units == 100cqw
      and every call site keeps the board coordinates it already had. */
   #sailHost { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  /* ══ THE DOCK COIN (W3-7) ═══════════════════════════════════════════════════════════════════════
+     A coin the size of a thumbnail, turning over somebody else's boat while they dig at a dock.
+     Every number here is one Wyatt dialled himself in the coin tuner (2026-09-10) and they are
+     named in src/ui/dockcoin.js beside the settings they came from.
+     Z-INDEX 5 puts it OVER the boats (#boardShips is 4): it is a thing happening above a hull, and
+     a coin that vanished behind the mast would be worse than no coin. It ties with #stormOverlay
+     and wins on DOM order, which is right — a coin is nearer than the weather.
+     EVERY ANIMATED PROPERTY IS transform OR opacity, on HTML, in a camera layer. Nothing here may
+     ever animate width/height/top/left; that is the rule the sail squares and the sonar rings were
+     both rewritten to obey, and it is why the board costs zero layouts while it sits idle. */
+  #dockCoinHost { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  /* left/top are the boat, in cqw, so the coin sits where the hull is at whatever size the board is
+     drawn; the SIZE is px, so it is 16px at 1x zoom and grows with the camera's own transform —
+     which is exactly the two halves of his "16px at 1x zoom and grows with the camera". */
+  .dcoin { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; }
+  /* his 11px above the boat, ARRIVED AT by rising off it in 40ms — the gap is the distance it
+     travels, so there is one number, not two that can disagree */
+  .dcoinRise { width: 100%; height: 100%; animation: dcoinRise 40ms ease-out 1 both; }
+  /* 6 turns a second throws it 21px up and back on every one: one bob is half a turn */
+  .dcoinToss { width: 100%; height: 100%; animation: dcoinToss 83.3ms ease-in-out infinite alternate; }
+  /* 6 flips a second = a half-turn every 166.7ms = a whole turn every 333.3ms */
+  /* ONE element with a background-image, turned by rotateX — the same shape as `.coin.spin` above,
+     which is the flippenator's own spinning coin and has rendered correctly since the day it was
+     written. The version before this stacked two faces on a preserve-3d card with
+     backface-visibility:hidden; it measured perfectly and drew nothing at all. */
+  .dcoinSpin { width: 100%; height: 100%; border-radius: 50%;
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+    animation: dcoinSpin 333.3ms linear infinite;
+    /* his glow at 6px and his shadow at 13%, as one filter — drop-shadow follows the coin's own
+       round edge, where a box-shadow would draw the square it sits in */
+    filter: drop-shadow(0 0 6px rgba(255,228,150,.85)) drop-shadow(0 2px 2px rgba(0,0,0,.13)); }
+  .dcoin.dcoinGone { opacity: 0; transition: opacity 140ms linear; }
+  @keyframes dcoinRise { from { transform: translateY(0);     opacity: 0; }
+                         to   { transform: translateY(-11px); opacity: 1; } }
+  @keyframes dcoinToss { from { transform: translateY(0); } to { transform: translateY(-21px); } }
+  @keyframes dcoinSpin { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
+  /* the landing: 22% of squash, shaken out in one bounce */
+  @keyframes dcoinLand { 0%   { transform: translateY(-6px) scaleY(1); }
+                         45%  { transform: translateY(0)    scaleY(0.78); }
+                         100% { transform: translateY(0)    scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .dcoinRise, .dcoinToss, .dcoinSpin { animation: none !important; }
+    .dcoinRise { transform: translateY(-11px); opacity: 1; } }
   /* THE TRADE-WIND CURRENT (playtest 21 item 9 / WIND-02). Every animated property here is
      transform or opacity on an HTML element — compositor work, zero layout. Nothing in this block
      may ever animate width/height/top/left, which is what would quietly hand the board back the
@@ -4158,6 +4201,8 @@
              boats(4), because a current is scenery and must never cover a choice or a ship. -->
         <div id="rimHost" aria-hidden="true"></div>
         <div id="sailHost" aria-hidden="true"></div>
+        <!-- W3-7: the tiny coin that turns over another captain's boat when they dock (src/ui/dockcoin.js) -->
+        <div id="dockCoinHost" aria-hidden="true"></div>
         <div id="rippleHost" aria-hidden="true"><div id="rippleRing"></div></div>
         <!-- PERF-01 (2026-08-02): the boats, split out of #board into their own SVG so they paint
              ABOVE the ripple rings. Moving the rings to HTML had put them over the boats, which

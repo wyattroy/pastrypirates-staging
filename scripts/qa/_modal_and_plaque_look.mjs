@@ -16,30 +16,13 @@
    the two come apart by exactly the stretch — on a 390x217 phone box that is 20.5px of rope at the
    sides against 17.5px at the top, a 17% difference an eye reads as "the rope looks squashed."
    RED-PROOF: put `background: url(...) center / 100% 100%` back and this goes red. */
-import fs from "node:fs"; import path from "node:path"; import zlib from "node:zlib"; import { fileURLToPath } from "node:url";
+import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = process.argv[2] || REPO;
 const PORT=9010+(process.pid%25), DBG=9710+(process.pid%25);
 const url=serve(PORT); launch(DBG, path.join(REPO,`.tmp-look-${process.pid}`));
 const C=await attach(DBG);
-/* Chrome hands back a truecolour PNG, so this only has to handle colour type 6/2 — enough to read
-   pixels out of a screenshot without a dependency. */
-function decodePng(buf){
-  let i=8,w=0,h=0,ct=0,idat=[];
-  while(i<buf.length){ const len=buf.readUInt32BE(i), t=buf.toString("ascii",i+4,i+8), d=buf.slice(i+8,i+8+len);
-    if(t==="IHDR"){w=d.readUInt32BE(0);h=d.readUInt32BE(4);ct=d[9];}
-    else if(t==="IDAT")idat.push(d); else if(t==="IEND")break; i+=12+len; }
-  const raw=zlib.inflateSync(Buffer.concat(idat)), ch=ct===6?4:3, stride=w*ch, out=Buffer.alloc(w*h*4);
-  let prev=Buffer.alloc(stride), pos=0;
-  for(let y=0;y<h;y++){ const f=raw[pos++], line=Buffer.from(raw.slice(pos,pos+stride)); pos+=stride;
-    for(let x=0;x<stride;x++){ const a=x>=ch?line[x-ch]:0,b=prev[x],c=x>=ch?prev[x-ch]:0; let v=line[x];
-      if(f===1)v+=a; else if(f===2)v+=b; else if(f===3)v+=((a+b)>>1);
-      else if(f===4){const p=a+b-c,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-c); v+=(pa<=pb&&pa<=pc)?a:(pb<=pc?b:c);} line[x]=v&255; }
-    prev=line;
-    for(let x=0;x<w;x++){ const o=(y*w+x)*4; out[o]=line[x*ch];out[o+1]=line[x*ch+1];out[o+2]=line[x*ch+2];out[o+3]=255; } }
-  return {w,h,px:out};
-}
 const waitFor=async(e,ms=45000)=>{const t=Date.now();while(Date.now()-t<ms){try{if(await C.ev(e))return 1}catch{}await sleep(200)}throw new Error("timed out: "+e)};
 try{
   await C.send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:2,mobile:true});
