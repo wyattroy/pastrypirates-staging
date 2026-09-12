@@ -18,6 +18,9 @@
  *   node scripts/art/key.mjs in.png --out plaque.png --tol 40 --flat
  *
  * --flat keeps the background opaque-cropped instead of transparent (for art that sits on wood).
+ * --anywhere keys EVERY pixel near the key colour. The default keys only the background you can
+ *   reach from the edge of the canvas, because a plank seam painted near-black is not background —
+ *   see the note beside the flood fill for the picture that taught this.
  * PNG in, PNG out, and PNG is decoded in pure node. A JPEG — which is all the image models return —
  * is turned into one first by a headless Chrome that this script launches and kills itself, because
  * node has no JPEG decoder and a hand-rolled one is three hundred lines of Huffman and IDCT. That is
@@ -37,6 +40,7 @@ const has = k => argv.includes("--"+k);
 function die(m){ console.error("key: "+m); process.exit(1); }
 
 const tol  = +arg("tol", "38");
+const anywhere = has("anywhere");   // key every matching pixel, not only the background reachable from an edge
 const out  = arg("out", src.replace(/\.(png|jpe?g)$/i, "") + "-keyed.png");
 const flat = has("flat");
 
@@ -153,10 +157,33 @@ else {                                                    // the four corners ag
 }
 const isKey = i => Math.abs(px[i]-kr) + Math.abs(px[i+1]-kg) + Math.abs(px[i+2]-kb) <= tol*3;
 
+/* ⭐ ONLY THE BACKGROUND THAT TOUCHES AN EDGE — the default, and it is the fix for a real picture
+   that a plain colour key destroyed. A pirate plaque's PLANK SEAMS are painted very nearly black,
+   which is also this project's house key colour, so "every pixel near black is background" punched
+   the seams straight out of the wood: keyed over magenta, the sign read as four floating boards
+   with daylight between them (2026-09-12, plaque r5). Background is not a COLOUR, it is the region
+   you can reach from the edge of the canvas without crossing the art — a flood fill says so, and a
+   seam in the middle of a plank can never be reached.
+   --anywhere puts the old behaviour back for art that really is a subject on a flat field with no
+   dark interior, which is most icons. */
 let x0=w, y0=h, x1=-1, y1=-1, kept=0;
+const bg = new Uint8Array(w*h);
+if (anywhere){
+  for (let y=0; y<h; y++) for (let x=0; x<w; x++) if (isKey(at(x,y))) bg[y*w+x] = 1;
+} else {
+  /* an explicit stack, not recursion: a 1376x768 picture is a million pixels and a recursive fill
+     runs out of stack long before it runs out of background */
+  const stack = [];
+  const push = (x,y) => { if (x<0||y<0||x>=w||y>=h) return; const k=y*w+x;
+    if (bg[k] || !isKey(at(x,y))) return; bg[k]=1; stack.push(k); };
+  for (let x=0; x<w; x++){ push(x,0); push(x,h-1); }
+  for (let y=0; y<h; y++){ push(0,y); push(w-1,y); }
+  while (stack.length){ const k = stack.pop(), x = k%w, y = (k-x)/w;
+    push(x-1,y); push(x+1,y); push(x,y-1); push(x,y+1); }
+}
 for (let y=0; y<h; y++) for (let x=0; x<w; x++){
   const i = at(x,y);
-  if (isKey(i)) { if (!flat) px[i+3] = 0; }
+  if (bg[y*w+x]) { if (!flat) px[i+3] = 0; }
   else { kept++; if (x<x0)x0=x; if (x>x1)x1=x; if (y<y0)y0=y; if (y>y1)y1=y; }
 }
 if (x1 < 0) die(`everything matched the key colour #${[kr,kg,kb].map(v=>v.toString(16).padStart(2,"0")).join("")} — raise --tol or pass --key`);
