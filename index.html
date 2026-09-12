@@ -395,9 +395,16 @@
   /* brightness(0) first flattens the art to pure black WHATEVER colour it was, and only then does
      invert lift it to white — so there is no hue left to tint. `invert(1) brightness(1.7)` did the
      opposite: it inverted the art's own colours and pushed the result past white into cyan, which is
-     what he photographed. sepia+saturate warms the white to the card's cream. */
+     what he photographed.
+     ⚠ THE TAIL OF THIS CHAIN USED TO END `brightness(1.06)`, AND THAT STEP UNDID THE THREE BEFORE
+     IT. Caught by a CEO audit, 2026-09-12, which ran the filters through the spec's own matrices:
+     black -> invert(1) is rgb(255,255,255), and sepia/saturate/hue-rotate can only take a pure
+     white DOWN a little (to rgb(255,254,244)) — so a final 1.06 brightness clipped every channel
+     straight back to 255. The comment claimed a cream X and the pixels were pure white. The clip is
+     gone, so the warmth those three steps produce now actually survives to the screen: a faint warm
+     white, one step toward the card's cream rather than all the way to it. */
   #recipeModal .modalX img { width: 44%; height: 44%;
-    filter: brightness(0) invert(1) sepia(.35) saturate(2.2) hue-rotate(-12deg) brightness(1.06); }
+    filter: brightness(0) invert(1) sepia(.35) saturate(2.2) hue-rotate(-12deg); }
   #recipeModalBody .recipeModalIn { padding: 0 var(--cardPad) var(--cardPad); text-align: left; }
   #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #f5a623; text-transform: uppercase; letter-spacing: .5px; margin: 1.1em 0 .3em; }
   #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #ffd98a; margin: .8em 0 .15em; }
@@ -3506,10 +3513,32 @@
      pictures, so that nothing ever looks stretched." No nine-slice, no tiled wood, no corner knots
      painted back on — three of those were tried and all three failed in front of him.
 
-     THE SHAPES ARE MEASURED, NOT CHOSEN. With the rows a box needs (204px on a phone, 255 elsewhere)
-     and the rope taking about 8% of the picture's height at each edge, the box lands at 390x243,
-     511x304 and 749x304 — about 1.60 : 1.68 : 2.46. The pictures are 1.53, 1.71 and 2.49, so the
-     worst stretch anywhere is 4%, and on a twisted rope 4% is not a thing an eye finds.
+     ⛔ AND THE PICTURE IS NOT STRETCHED TO THE BOX. It was, until a CEO audit on 2026-09-12 read
+     the arithmetic this comment used to carry — "the worst stretch anywhere is 4%" — against the
+     rendered game and found 17% on a phone. The claim was wrong in a way worth naming, because the
+     shape it assumed does not exist: THE BOX'S HEIGHT IS A FUNCTION OF HOW MANY CAPTAINS ARE
+     SAILING. Measured on a 390px phone: 217px tall with four captains (1.80:1), about 110px with
+     two (3.5:1). `background-size: 100% 100%` squeezed one picture across both, so a two-captain
+     voyage stretched the rope by more than half its width — on the one picture that is on screen
+     for the whole voyage.
+
+     SO THE ROPE IS A PICTURE FRAME NOW (`border-image`), which is the browser's own nine-slice: the
+     four corners are drawn once at a fixed size, the four sides repeat the straight run in whole
+     twists (`round`), and only the middle — bare wood, where a stretch cannot be seen — is scaled
+     to whatever height the captain count asks for. The rope is then the same thickness at two
+     captains and at four, on every screen.
+
+     THE THREE NUMBERS PER SCREEN, and they are measured off each picture, not chosen:
+       slice   how far into the SOURCE the corner reaches — the rope's arc completes within about
+               55 source px on the phone picture and 60/55 on the other two (read off the pixels:
+               the band is rope for ~20px, then its shadow, then wood by ~40)
+       width   how thick the frame is DRAWN on screen = slice x (box width / picture width). px,
+               never a percentage: a vertical percentage would resolve against the box's height and
+               bring the stretch straight back through the other door.
+       fill    draws the middle of the picture too, so the wood arrives from the same board as the
+               rope rather than from a second asset that has to be colour-matched by hand.
+     `border-width` stays 0, so the frame costs NO layout: the rows keep every pixel of room they
+     had this morning and the padding below is still what holds them off the rope.
 
      AND THE PICTURES ARE KEYED, NOT MERELY CROPPED — his correction, 2026-09-12: "there appears to
      be a white background to that section that must be removed to show the normal page." The rope
@@ -3521,12 +3550,18 @@
      percentage padding against the element's WIDTH, which would have put 31px of rope at the top of
      a 390px box instead of 19.                                                                    */
   body.pp4Stage #pp4Cap {
-    background: url(assets/plaque/column.png) center / 100% 100% no-repeat;
-    border: 0; border-radius: 0; box-shadow: none; padding: 24px 30px; }
+    background: none; border-radius: 0; box-shadow: none; padding: 24px 30px;
+    border-style: solid; border-width: 0;
+    border-image-source: url(assets/plaque/column.png);
+    border-image-slice: 60 fill; border-image-width: 30px; border-image-repeat: round; }
   @media (min-width: 700px) and (max-width: 1100px) {
-    body.pp4Stage:not(.pp4Side) #pp4Cap { background-image: url(assets/plaque/tablet.png); } }
+    body.pp4Stage:not(.pp4Side) #pp4Cap {
+      border-image-source: url(assets/plaque/tablet.png);
+      border-image-slice: 55 fill; border-image-width: 34px; } }
   @media (max-width: 600px) {
-    body.pp4Stage #pp4Cap { background-image: url(assets/plaque/phone.png); padding: 19px 20px; } }
+    body.pp4Stage #pp4Cap { padding: 19px 20px;
+      border-image-source: url(assets/plaque/phone.png);
+      border-image-slice: 55 fill; border-image-width: 26px; } }
 
   /* ⛔ !important IS EARNED HERE AND NOWHERE ELSE. src/ui/util.js:163 writes the row's background
      INLINE, one colour per captain (`background:${HEXCOL[i]}18`), so a stylesheet cannot reach it

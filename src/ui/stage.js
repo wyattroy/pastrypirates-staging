@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@d227e12d";
+const PP4_STAMP = "2026.09.07.3-staging@4d0b4c60";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -892,7 +892,28 @@ function camFrame(){
     return Math.ceil(foot.getBoundingClientRect().height);
   })() : 0;
   const squareRoom = (vwPx() <= 600) ? Math.max(64, vhPx() - ribH - vwPx() - phoneFootReserve) : Infinity;
-  const CAP_BASE = side ? 0 : Math.min(250, S.capNeed || Math.round(vhPx() * 0.30), squareRoom);
+  /* ⭐ THE WHOLE PLAQUE HAS TO BE ON THE SCREEN — Wyatt, 2026-09-12: "You also need to ensure the
+     entire plaque is visible within the screen area." It was not, and the 250 above is why. That
+     cap is a RESERVATION, not the box's size: the box is whatever its captains need (271px for four
+     of them on a tablet), so booking 250 for it left the board 21px too tall and pushed the bottom
+     rope off the bottom of a 900x1024 tablet. Measured before the fix: board bottom 774, box 271
+     tall, viewport 1024 — the last 21px of plaque hanging below the screen.
+     SO THE RESERVATION IS THE BOX'S REAL NEED, and what protects the board from a box that wants
+     the whole screen is a FLOOR under the board rather than a ceiling over the box. That ordering
+     is his: the board is a square, the box takes the room under it, and anything left over is
+     slack. A box that needs more than the room simply shrinks the (still square) board until both
+     fit — down to BOARD_FLOOR, past which squareness gives way by exactly the overflow, which is
+     the same least-bad corner the phone rule already chose. */
+  const BOARD_FLOOR = 200;                      // the same floor availH itself refuses to go under
+  const roomForCap = Math.max(64, vhPx() - ribH - BOARD_FLOOR - phoneFootReserve);
+  /* AND THE NEED IS WHICHEVER IS BIGGER: the height measured off-screen before the box mounted
+     (S.capNeed) or the height the box is ACTUALLY drawing right now. They disagree by a few pixels
+     when a row grows after the measurement — 268 against 271 on a tablet — and three pixels of
+     under-booking is three pixels of rope hanging off the bottom of the screen, which is the same
+     fault he reported, just smaller. Reserve what is really there. */
+  const capNow = (cap && !side) ? Math.ceil(cap.getBoundingClientRect().height) : 0;
+  const capWants = Math.max(S.capNeed || Math.round(vhPx() * 0.30), capNow);
+  const CAP_BASE = side ? 0 : Math.min(capWants, squareRoom, roomForCap);
   /* ⭐ THE BOARD IS A SQUARE, AND THE ROOM UNDER IT IS THE CAPTAIN'S BOX'S — Wyatt, 2026-09-12:
      "I wanted the board to always be a square and the captain's box ratios to be related to the
      space left underneath a square board as a constraint."
@@ -905,8 +926,38 @@ function camFrame(){
   if (wrap){
     if (Math.abs((parseFloat(wrap.style.top) || 0) - ribH) > 1) wrap.style.top = ribH + "px";
     if (Math.abs((parseFloat(wrap.style.height) || 0) - availH) > 2) wrap.style.height = availH + "px";
+    /* ⭐ AND THE WINDOW IS SQUARE IN BOTH DIRECTIONS. Capping the HEIGHT alone made the board square
+       on a phone, where the strip's width is the viewport's and the two numbers meet on their own.
+       On a tablet they do not: 768x1024 gives a 739px-wide strip and only 705px of room under the
+       ribbon, so the window came out 739 x 705 — ten rows tall and ten and a half columns wide, with
+       the white frame (#board's own border) tracing that oblong. So when the room is shorter than
+       the strip is wide, the strip's WIDTH comes down to meet it and the leftover goes to the
+       margins. Wyatt, 2026-09-12: "the board is always supposed to be viewed in a square."
+       Measured: tablet 768x1024 went 739x705 -> 705x705; phone and laptop were already square and
+       do not move (availH there is already the strip's own width). */
+    /* A CEILING, NOT A WIDTH, and the difference is what makes this safe: max-width lets the strip
+       stay narrower than the square when its own layout says so, and only ever pulls it IN. It is
+       set !important because `#game.layoutWide #boardwrap` carries `max-width:none !important`, and
+       an important declaration beats a plain inline one. The first attempt compared availH against
+       the PARENT's width and never fired: #left measures 683 while the strip it holds is 739. */
+    if (!side){
+      const want = availH + "px";
+      if (wrap.style.maxWidth !== want){
+        wrap.style.setProperty("max-width", want, "important");
+        wrap.style.marginLeft = "auto"; wrap.style.marginRight = "auto";
+      }
+    } else if (wrap.style.maxWidth){
+      wrap.style.removeProperty("max-width");
+      wrap.style.removeProperty("margin-left"); wrap.style.removeProperty("margin-right");
+    }
   }
-  const aspect = availH / vwPx();
+  /* THE VIEWBOX'S SHAPE IS THE STRIP'S SHAPE, and it used to be the VIEWPORT's. On a phone those
+     are the same number and nobody noticed; on a tablet the strip is 739 inside a 768 viewport, so
+     the viewBox was cut 4% wider than the window it was drawn into and the board came out
+     739 x 708 — ten rows tall against ten and a half columns wide. Read off the element that
+     actually holds it, after the square cap above has been applied to it. */
+  const stripW = wrap ? (wrap.getBoundingClientRect().width || vwPx()) : vwPx();
+  const aspect = availH / stripW;
   let h = c.w * aspect;
   if (h > 640) h = 640;                       // whole board fits vertically; width stays filled
   const cy = c.y + c.w / 2;                   // keep the camera centre
@@ -920,7 +971,7 @@ function camFrame(){
     if (cap.style.top) cap.style.removeProperty("top");
     if (cap.style.bottom) cap.style.removeProperty("bottom");
   } else if (cap){
-    const scale = vwPx() / c.w;
+    const scale = stripW / c.w;
     const boardBottom = ribH + Math.min(availH, h * scale);
     const top = Math.round(Math.min(ribH + availH, boardBottom));
     if (Math.abs((parseFloat(cap.style.top) || 0) - top) > 1) cap.style.top = top + "px";
