@@ -2135,7 +2135,13 @@
      recipe card, and widening THAT is a taste call Wyatt has not made (parked as a question), not a
      bug he reported. Held by scripts/qa/w44_captains_width_check.mjs. */
   body.pp4Stage #pp4Cap > .panel,
-  body.pp4Stage #pp4Cap > #captainsPanel { max-width:none; width:100%; }
+  body.pp4Stage #pp4Cap > #captainsPanel { max-width:none; width:100%;
+    /* ⭐ AND THE CARD INSIDE THE PLAQUE GOES AWAY. #pp4Cap wears the wood; the panel it contains
+       carried .panel's own cream background, border and shadow, which painted a grey card straight
+       over the middle of the picture — the whole point of the plaque is that the wood shows behind
+       the captains. Measured by looking: the first render with the plaque in had rope round the edge
+       and a grey slab where the board should be. */
+    background: transparent; border: 0; box-shadow: none; padding: 0; }
 
   body.pp4Stage #layout > #chatPanel { display:none; }
   body.pp4Stage #chatBubbles { display:none; }
@@ -3483,6 +3489,41 @@
     #capRecipeBand .capRecipeName { font-size:13.5px; }
     body.pp4Stage #pp4Cap { padding-top:6px; padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
   }
+  /* ══ THE PLAQUE ═══════════════════════════════════════════════════════════════════════════════
+     ONE PICTURE PER BOX SHAPE, DRAWN WHOLE AT THE BOX'S SIZE — his model, 2026-09-11: "would it not
+     be more efficient to simply generate two differnt sizes of source asset, which work for the two
+     sizzes of captians box in the different screen layouts", and then 2026-09-12: "we want 3
+     pictures, so that nothing ever looks stretched." No nine-slice, no tiled wood, no corner knots
+     painted back on — three of those were tried and all three failed in front of him.
+
+     THE SHAPES ARE MEASURED, NOT CHOSEN. With the rows a box needs (204px on a phone, 255 elsewhere)
+     and the rope taking about 8% of the picture's height at each edge, the box lands at 390x243,
+     511x304 and 749x304 — about 1.60 : 1.68 : 2.46. The pictures are 1.53, 1.71 and 2.49, so the
+     worst stretch anywhere is 4%, and on a twisted rope 4% is not a thing an eye finds.
+
+     THE PADDING IS THE ROPE. It is px rather than a percentage on purpose: CSS resolves a vertical
+     percentage padding against the element's WIDTH, which would have put 31px of rope at the top of
+     a 390px box instead of 19.                                                                    */
+  body.pp4Stage #pp4Cap {
+    background: url(assets/plaque/column.jpg) center / 100% 100% no-repeat;
+    border: 0; border-radius: 0; box-shadow: none; padding: 24px 30px; }
+  @media (min-width: 700px) and (max-width: 1100px) {
+    body.pp4Stage:not(.pp4Side) #pp4Cap { background-image: url(assets/plaque/tablet.jpg); } }
+  @media (max-width: 600px) {
+    body.pp4Stage #pp4Cap { background-image: url(assets/plaque/phone.jpg); padding: 19px 20px; } }
+
+  /* ⛔ !important IS EARNED HERE AND NOWHERE ELSE. src/ui/util.js:163 writes the row's background
+     INLINE, one colour per captain (`background:${HEXCOL[i]}18`), so a stylesheet cannot reach it
+     any other way. His ruling, 2026-09-12: "the fill behind each captain should be black, not
+     cream" — 50% black over the wood. The captain's colour keeps the two places it carries meaning:
+     the name, and the ring around whoever's turn it is. */
+  body.pp4Stage #players .player-row { background: rgba(0,0,0,.5) !important;
+    /* and the ink on top of black is CREAM, his word, not white — the recipe card's own paper, so
+       the box stays on one warm palette. The coin count and "empty hold" inherit it; the names do
+       not, because they carry their own colour inline. */
+    color: #f7edd2; }
+  body.pp4Stage #players .player-row .coins { color: #f7edd2; }
+
   body.pp4Stage .prowTop .prowRecipe { display:none; flex-basis:100%; }
   body.pp4Stage .player-row.pp4Open .prowRecipe { display:block; }
   body.pp4Stage .player-row { cursor:pointer; }

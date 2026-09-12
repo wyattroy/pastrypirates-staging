@@ -24,6 +24,13 @@ const M=`JSON.stringify((()=>{
     boardRatio: bw ? +(bw.width/bw.height).toFixed(3) : null,
     capH: cap ? Math.round(cap.height) : null,
     ribbonBottom: rib ? Math.round(rib.bottom) : null,
+    /* W4-8's own question: is every captain actually on screen, or is the last one clipped? */
+    rowsVisible: (()=>{ const pl=document.getElementById('players'); if(!pl) return null;
+      const pr=pl.getBoundingClientRect();
+      return [...pl.querySelectorAll('.player-row')].filter(r=>{const q=r.getBoundingClientRect();
+        return q.top>=pr.top-0.5 && q.bottom<=pr.bottom+0.5;}).length; })(),
+    rowsTotal: document.querySelectorAll('#players .player-row').length,
+    playersScrolls: (()=>{const pl=document.getElementById('players'); return pl? pl.scrollHeight>pl.clientHeight+1 : null;})(),
     squareLeftover,
     leftoverRatio: squareLeftover>0 ? +(vw/squareLeftover).toFixed(2) : null };
 })())`;
@@ -54,7 +61,7 @@ try{
     const o=JSON.parse(await C.ev(M));
     if (process.env.SHOTS) { const sc=await C.send('Page.captureScreenshot',{format:'png'});
       if(sc.result?.data) (await import('node:fs')).writeFileSync(`${process.env.SHOTS}/sq-${w}x${h}.png`, Buffer.from(sc.result.data,'base64')); }
-    console.log(`${label.padEnd(32)} ${w}x${h}  board ${o.boardWindow} (${o.boardRatio}:1)  above ${o.topBand}  box ${o.capH}` +
-      `   →  IF SQUARE: leftover ${o.squareLeftover}px, box would be ${o.vw} x ${o.squareLeftover} = ${o.leftoverRatio}:1`);
+    console.log(`${label.padEnd(32)} ${w}x${h}  board ${o.boardWindow} (${o.boardRatio}:1)  box ${o.capH}` +
+      `   captains fully on screen ${o.rowsVisible}/${o.rowsTotal}${o.playersScrolls?'  ⚠ the list scrolls':''}`);
   }
 } catch(e){ console.log("FAILED: "+(e&&e.message||e)); } finally { await killAll(); }

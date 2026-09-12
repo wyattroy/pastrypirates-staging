@@ -100,7 +100,14 @@ const stacked = RULES.filter(r => last(r.head) === "#pp4Cap" && !/\.pp4Side/.tes
 }
 
 /* (4) THE CARD'S SIDE PADDING IS DECLARED ONCE. CEO Review 15: it is the easiest way to recreate a
-   dead strip while every width assertion stays green — 12 of the 13px beside every row IS this. */
+   dead strip while every width assertion stays green — 12 of the 13px beside every row IS this.
+
+   ⭐ AMENDED 2026-09-12, WHEN THE PLAQUE LANDED, and amended rather than loosened. The fault this
+   assertion was built for is DEAD SPACE beside the rows. The plaque's padding is not dead space: it
+   is the rope, the picture is drawn across the whole card, and the padding is exactly the room the
+   rope needs. So the rule is now "12px, OR the same rule paints the plaque" — a padding that grows
+   for any other reason still goes red, which is the tooth this gate was bought for. Change the one
+   without the other and it fails, as it should. */
 {
   const CANON = "12px";
   const padRules = RULES.filter(r => last(r.head) === "#pp4Cap" && /(?:^|;)\s*padding\s*:/.test(r.body));
@@ -108,11 +115,12 @@ const stacked = RULES.filter(r => last(r.head) === "#pp4Cap" && !/\.pp4Side/.tes
   for (const r of padRules) {
     const v = (r.body.match(/(?:^|;)\s*padding\s*:\s*([^;]+)/) || [])[1].trim();
     const parts = v.split(/\s+/);
-    if ((parts.length === 1 ? parts[0] : parts[1]) !== CANON) bad.push(`${r.head} { padding: ${v} }`);
+    const wearsPlaque = /assets\/plaque\//.test(r.body);
+    if ((parts.length === 1 ? parts[0] : parts[1]) !== CANON && !wearsPlaque) bad.push(`${r.head} { padding: ${v} }`);
   }
   if (!padRules.length) fail("the captains card declares no padding at all — re-anchor this assertion");
   else if (bad.length) bad.forEach(b => fail(`the captains card's side padding is no longer the agreed ${CANON} — ${b}. Growing it puts a dead strip back where the width assertions cannot see it`));
-  else pass(`the captains card's side padding is the one agreed value (${CANON}) in all ${padRules.length} rule(s) that set it`);
+  else pass(`the captains card's side padding is the agreed ${CANON}, or the plaque's own rope, in all ${padRules.length} rule(s) that set it`);
 }
 
 /* (5) NOTHING SNEAKS AN EXTRA INSET IN BY ANOTHER ROUTE. Everything the CEO used to defeat the
