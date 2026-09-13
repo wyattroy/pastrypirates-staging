@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@fba2e14e";
+const PP4_STAMP = "2026.09.07.3-staging@57f220fd";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -830,6 +830,22 @@ function zoomCap(z){
 // able to load. Same block-guard shape as 4/src/main.js:32, not an inline ternary.
 if (typeof window !== "undefined") {
   window.addEventListener("resize", () => { ribHAt = -1e9; lastVB = ""; });
+  /* Safari's bar growing or shrinking changes the visual viewport without always firing a window
+     resize — the same cache has to be dropped on that one too, or the board keeps its old size. */
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", () => { ribHAt = -1e9; lastVB = ""; });
+}
+/* ⭐ WHAT THE PLAYER CAN SEE, NOT WHAT THE PAGE WAS GIVEN. Wyatt plays on an iPhone 13 mini in Safari
+   (docs/QA-PROCESS.md, "HIS PHONE"), and Safari's bottom bar is not one size: compact, it floats
+   over the page from ~728px; expanded, it covers from ~711px — measured off his own recording and
+   screenshot, 2026-09-12. `documentElement.clientHeight` is the page's layout height and does not
+   move when that bar grows; `innerHeight` and the visual viewport do. So the board and the plaque
+   are sized against the SMALLEST of the three. In Chrome all three are the same number, which is
+   why no desktop check could ever have seen this. */
+function visibleH(){
+  const base = vhPx();
+  const ih = (typeof window !== "undefined" && window.innerHeight) || base;
+  const vv = (typeof window !== "undefined" && window.visualViewport && window.visualViewport.height) || base;
+  return Math.min(base, ih, vv);
 }
 function camFrame(){
   const c = S.cam;
@@ -891,7 +907,7 @@ function camFrame(){
     if (fs.display === "none" || fs.visibility === "hidden") return 0;
     return Math.ceil(foot.getBoundingClientRect().height);
   })() : 0;
-  const squareRoom = (vwPx() <= 600) ? Math.max(64, vhPx() - ribH - vwPx() - phoneFootReserve) : Infinity;
+  const squareRoom = (vwPx() <= 600) ? Math.max(64, visibleH() - ribH - vwPx() - phoneFootReserve) : Infinity;
   /* ⭐ THE WHOLE PLAQUE HAS TO BE ON THE SCREEN — Wyatt, 2026-09-12: "You also need to ensure the
      entire plaque is visible within the screen area." It was not, and the 250 above is why. That
      cap is a RESERVATION, not the box's size: the box is whatever its captains need (271px for four
@@ -905,15 +921,22 @@ function camFrame(){
      fit — down to BOARD_FLOOR, past which squareness gives way by exactly the overflow, which is
      the same least-bad corner the phone rule already chose. */
   const BOARD_FLOOR = 200;                      // the same floor availH itself refuses to go under
-  const roomForCap = Math.max(64, vhPx() - ribH - BOARD_FLOOR - phoneFootReserve);
+  const roomForCap = Math.max(64, visibleH() - ribH - BOARD_FLOOR - phoneFootReserve);
   /* AND THE NEED IS WHICHEVER IS BIGGER: the height measured off-screen before the box mounted
      (S.capNeed) or the height the box is ACTUALLY drawing right now. They disagree by a few pixels
      when a row grows after the measurement — 268 against 271 on a tablet — and three pixels of
      under-booking is three pixels of rope hanging off the bottom of the screen, which is the same
      fault he reported, just smaller. Reserve what is really there. */
   const capNow = (cap && !side) ? Math.ceil(cap.getBoundingClientRect().height) : 0;
-  const capWants = Math.max(S.capNeed || Math.round(vhPx() * 0.30), capNow);
-  const CAP_BASE = side ? 0 : Math.min(capWants, squareRoom, roomForCap);
+  const capWants = Math.max(S.capNeed || Math.round(visibleH() * 0.30), capNow);
+  /* ⭐ AND ON A PHONE THE BOARD SHRINKS, IT DOES NOT PUSH THE PLAQUE OFF THE SCREEN. squareRoom used
+     to be a ceiling on this reservation: "the board is as wide as the phone, the box gets whatever
+     is left under it". That was the right trade when the strip could only be full width. It can be
+     narrower now (the square cap below), so the old ceiling is what cut the plaque off: 29px at
+     390x664 and 10px at 375x668, measured. His ruling is the other way round — the whole plaque
+     on screen, the board a square that shrinks to make room. squareRoom stays computed because
+     camFrame's notes cite it; it just no longer gets a vote here. */
+  const CAP_BASE = side ? 0 : Math.min(capWants, roomForCap);
   /* ⭐ THE BOARD IS A SQUARE, AND THE ROOM UNDER IT IS THE CAPTAIN'S BOX'S — Wyatt, 2026-09-12:
      "I wanted the board to always be a square and the captain's box ratios to be related to the
      space left underneath a square board as a constraint."
@@ -922,7 +945,7 @@ function camFrame(){
      photographed — was 375x421 on his phone, 46px taller than the square inside it. Capping the wrap
      at its own width makes the frame trace the board. What is left below is NOT the board's and NOT
      the box's: it is slack, and it shows the page's own background. */
-  const availH = Math.max(200, Math.min(vwPx(), vhPx() - ribH - CAP_BASE - phoneFootReserve));
+  const availH = Math.max(200, Math.min(vwPx(), visibleH() - ribH - CAP_BASE - phoneFootReserve));
   if (wrap){
     if (Math.abs((parseFloat(wrap.style.top) || 0) - ribH) > 1) wrap.style.top = ribH + "px";
     if (Math.abs((parseFloat(wrap.style.height) || 0) - availH) > 2) wrap.style.height = availH + "px";
@@ -3059,10 +3082,13 @@ function buildStage(){
   if (!S.geomBound){
     S.geomBound = true;
     let t = 0;
-    window.addEventListener("resize", () => {
+    const again = () => {
       clearTimeout(t);
       t = setTimeout(computeStageGeometry, 120);   // debounced — a drag-resize fires dozens of times
-    });
+    };
+    window.addEventListener("resize", again);
+    /* and when Safari's bottom bar expands or collapses on his phone, which moves the visual viewport */
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", again);
   }
 }
 
@@ -3112,7 +3138,9 @@ function computeStageGeometry(){
   if (!body.classList.contains("pp4Stage")) return;
   S.geomAt = Date.now();
   const iw = document.documentElement.clientWidth || window.innerWidth;
-  const ih = document.documentElement.clientHeight || window.innerHeight;
+  /* the smallest honest height — see visibleH() above camFrame for why clientHeight alone lies on his phone */
+  const ih = Math.min(document.documentElement.clientHeight || window.innerHeight, window.innerHeight || Infinity,
+    (window.visualViewport && window.visualViewport.height) || Infinity);
   const cap = $("pp4Cap");
   if (iw <= 600){
     // PHONE: the `@media(min-width:601px)` rule this feeds never matches here regardless, but
@@ -3209,7 +3237,14 @@ function computeStageGeometry(){
   const insetCard = pillRidesRibbon();                 // the same @media (min-width:601px) boundary
   const capGapBelow = insetCard ? capGap : 0;          // vertical air under the card — NOT a side inset
   let capH = measureCapNaturalHeight(Math.max(240, candidate));
-  let boardSideStacked = Math.max(240, Math.min(candidate, ih - capH - capGapBelow));
+  /* ⭐ THE RIBBON IS PART OF THE SCREEN TOO — Wyatt, 2026-09-12, a photograph of his laptop's Safari
+     window: "the bottom of the captain's box is cut off -- the board has to shrink by about 15
+     pixels, i'd guess. measure it." Measured in Chrome at his window's shape, 711x840: the box
+     ended at 871, 31px below the window. This line booked the screen's height for the board and the
+     box and FORGOT THE RIBBON above both — topBand is 45px here, less the 14px of air under the card
+     that it did book, which is the 31 exactly. Same fault at 700x800 (31) and 1024x768 (38). The
+     board is a square and the box takes the room under it; the room starts under the ribbon. */
+  let boardSideStacked = Math.max(240, Math.min(candidate, ih - topBand - capH - capGapBelow));
   const surroundPerSide = (iw - boardSideStacked) / 2;
   const capBleeds = !insetCard || surroundPerSide < capGap;
   body.classList.toggle("pp4CapBleed", capBleeds);

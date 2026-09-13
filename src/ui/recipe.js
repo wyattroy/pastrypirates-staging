@@ -419,6 +419,16 @@ export function recipeCardHTML(recipe){
    4/index.html § recipeCard) and its description is hidden outright on the stage. So it has no
    gradient to cut off and no visible description to be cramped against — neither of D-35's two
    changes has anything to apply to there, and it is deliberately untouched. */
+/* ⭐ THE PRINT AND MAIL BUTTONS ARE DRAWN, NOT TYPED — Wyatt, 2026-09-12: "generate SVGs of the print
+   and email graphics so you don't rely on native emojis (which are uncentered in this screenshot)."
+   An emoji is a LETTER, and a letter sits on a text baseline with room left for descenders, so 🖨️
+   and ✉️ rode high in a 38px circle that centres its box, not its ink — and every phone draws them
+   in a different artist's hand. These are shapes: centred by construction, the same on every
+   device, and drawn in `currentColor` so they wear the button's own cream (#fff6c0) and follow it
+   if the button is ever restyled. One stroke weight for both, so they read as a pair beside the X. */
+const ICON_SVG_ATTRS = `viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"`;
+const PRINT_SVG = `<svg ${ICON_SVG_ATTRS}><path d="M7 8.5V3.5h10v5"/><rect x="3" y="8.5" width="18" height="8.5" rx="2"/><path d="M7 13.5h10v7H7z"/><path d="M17.5 11.5h.01"/></svg>`;
+const MAIL_SVG  = `<svg ${ICON_SVG_ATTRS}><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.8 7 12 13l8.2-6"/></svg>`;
 export function recipeModalHTML(recipe){
   const info=recipeInfo(recipe);
   const title=recipeTitle(recipe);
@@ -426,8 +436,8 @@ export function recipeModalHTML(recipe){
   // in wireRecipeModal() below rather than by a one-shot onclick at boot — an id handler attached
   // once would be attached to a button that no longer exists the second time the modal is opened.
   const head=`<div class="recipeModalTitleRow"><h2>${escHtml(title)}</h2>`+
-    `<button class="recipeIconBtn" data-recipeact="pdf" type="button" title="Download PDF" aria-label="Download PDF">🖨️</button>`+
-    `<button class="recipeIconBtn" data-recipeact="email" type="button" title="Email to myself" aria-label="Email to myself">✉️</button>`+
+    `<button class="recipeIconBtn" data-recipeact="pdf" type="button" title="Download PDF" aria-label="Download PDF">${PRINT_SVG}</button>`+
+    `<button class="recipeIconBtn" data-recipeact="email" type="button" title="Email to myself" aria-label="Email to myself">${MAIL_SVG}</button>`+
     `</div>`;
   const thumb=info&&info.img
     ?`<div class="recipeModalThumbWrap"><img class="recipeModalThumb" src="${info.img}" alt=""></div>`:"";

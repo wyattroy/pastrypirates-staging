@@ -388,6 +388,15 @@
     border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); color: #fff6c0;
     font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   #recipeModalBody .recipeIconBtn:hover { background: rgba(255,255,255,.18); }
+  /* THE DRAWN ICONS MAY NOT BE SQUEEZED. Photographed at 390x844 the first time, the printer and
+     envelope came out as specks in their 38px circles. MEASURED, with this rule removed for one run:
+     each SVG computed 6px WIDE and 20px tall. The button lays its content out as a flexbox, and an
+     SVG is a flex item that is allowed to shrink — so it was crushed sideways to a sliver, which on
+     a phone photographs as a dot. `flex: 0 0 auto` forbids the shrink and the width states the
+     size; with the rule back both measure 20 x 20 and sit exactly on the circle's centre (0, 0).
+     20px is the red X's own art at the same visual weight inside the same ring. */
+  #recipeModalBody .recipeIconBtn svg { width: 20px !important; height: 20px !important;
+    max-width: none !important; display: block; flex: 0 0 auto; }
   /* the close X, made a third member of that row rather than a thing hidden behind it */
   #recipeModal .modalX { z-index: 5; top: 14px; right: 16px; width: 38px; height: 38px; opacity: 1;
     border: 2px solid rgba(253,182,61,.5); background: rgba(255,255,255,.08); }
@@ -403,8 +412,12 @@
      straight back to 255. The comment claimed a cream X and the pixels were pure white. The clip is
      gone, so the warmth those three steps produce now actually survives to the screen: a faint warm
      white, one step toward the card's cream rather than all the way to it. */
-  #recipeModal .modalX img { width: 44%; height: 44%;
-    filter: brightness(0) invert(1) sepia(.35) saturate(2.2) hue-rotate(-12deg); }
+  /* ⭐ AND NO FILTER AT ALL, WHICH IS WHAT IT SHOULD HAVE BEEN FROM THE START. Wyatt, 2026-09-12:
+     "The X is not red, it's pure white." assets/icons/close-x.png IS RED — a painted red cross with a
+     cream edge. The cyan he photographed first was that red INVERTED (invert(red) is cyan), and every
+     "fix" after it kept inverting and then fought to warm the result back up. The art already is the
+     colour. Nothing to do to it. */
+  #recipeModal .modalX img { width: 58%; height: 58%; filter: none; }
   #recipeModalBody .recipeModalIn { padding: 0 var(--cardPad) var(--cardPad); text-align: left; }
   #recipeModalBody .recipeModalYield { font-size: 12.5px; font-weight: 700; color: #f5a623; text-transform: uppercase; letter-spacing: .5px; margin: 1.1em 0 .3em; }
   #recipeModalBody .recipeModalSub { font-size: 13px; font-weight: 700; color: #ffd98a; margin: .8em 0 .15em; }
@@ -923,7 +936,15 @@
      travels, so there is one number, not two that can disagree */
   .dcoinRise { width: 100%; height: 100%; animation: dcoinRise 40ms ease-out 1 both; }
   /* 6 turns a second throws it 21px up and back on every one: one bob is half a turn */
-  .dcoinToss { width: 100%; height: 100%; animation: dcoinToss 83.3ms ease-in-out infinite alternate; }
+  /* ⭐ ONE THROW, NOT A BOUNCE PER TURN — Wyatt, 2026-09-12, filmed on his phone: "the coin appears to
+     rise and fall 3 times instead of once." It did. The first build read his tuner's "21px toss" as
+     a bob per half-turn and ran it on an 83ms alternate — up and down every 167ms, so across the
+     795ms flip the coin bounced about five times, which a 60fps phone recording shows as a sawtooth
+     (measured frame by frame off his video). A toss is ONE throw: up 21px and back down, landing on
+     the sound's blip at 795ms, while the coin turns over six times a second inside it. So the
+     duration IS FLIP_SPIN_MS, it runs once, and the easing is a real throw — fast off the hand,
+     slow at the top, fast into the landing. */
+  .dcoinToss { width: 100%; height: 100%; animation: dcoinToss 795ms linear 1 both; }
   /* 6 flips a second = a half-turn every 166.7ms = a whole turn every 333.3ms */
   /* ONE element with a background-image, turned by rotateX — the same shape as `.coin.spin` above,
      which is the flippenator's own spinning coin and has rendered correctly since the day it was
@@ -938,7 +959,9 @@
   .dcoin.dcoinGone { opacity: 0; transition: opacity 140ms linear; }
   @keyframes dcoinRise { from { transform: translateY(0);     opacity: 0; }
                          to   { transform: translateY(-11px); opacity: 1; } }
-  @keyframes dcoinToss { from { transform: translateY(0); } to { transform: translateY(-21px); } }
+  @keyframes dcoinToss { 0%   { transform: translateY(0);     animation-timing-function: cubic-bezier(.33,.66,.66,1); }
+                         50%  { transform: translateY(-21px); animation-timing-function: cubic-bezier(.33,0,.66,.34); }
+                         100% { transform: translateY(0); } }
   @keyframes dcoinSpin { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
   /* the landing: 22% of squash, shaken out in one bounce */
   @keyframes dcoinLand { 0%   { transform: translateY(-6px) scaleY(1); }
@@ -3558,12 +3581,13 @@
 
      ⛔ AND THE PICTURE IS NOT STRETCHED TO THE BOX. It was, until a CEO audit on 2026-09-12 read
      the arithmetic this comment used to carry — "the worst stretch anywhere is 4%" — against the
-     rendered game and found 17% on a phone. The claim was wrong in a way worth naming, because the
-     shape it assumed does not exist: THE BOX'S HEIGHT IS A FUNCTION OF HOW MANY CAPTAINS ARE
-     SAILING. Measured on a 390px phone: 217px tall with four captains (1.80:1), about 110px with
-     two (3.5:1). `background-size: 100% 100%` squeezed one picture across both, so a two-captain
-     voyage stretched the rope by more than half its width — on the one picture that is on screen
-     for the whole voyage.
+     rendered game and found 17% on a phone: a 390x217 box (1.80:1) wearing a 760x495 picture
+     (1.54:1). `background-size: 100% 100%` bends a picture to whatever shape its box is.
+     ⚠ CORRECTED THE SAME NIGHT BY WYATT: this note once also claimed "about 110px with two captains".
+     "There is no such thing as a 2-captain voyage; all are 4-captain." Every table is four captains —
+     bots fill the empty seats — so the box has one height per screen, not one per head-count. The
+     frame below is still the right answer (the box is a different shape on every screen width),
+     but the reason is the SCREEN, never the captain count.
 
      SO THE ROPE IS A PICTURE FRAME NOW (`border-image`), which is the browser's own nine-slice: the
      four corners are drawn once at a fixed size, the four sides repeat the straight run in whole

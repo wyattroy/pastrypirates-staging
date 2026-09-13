@@ -101,6 +101,15 @@ try{
     return { xTop:Math.round(r.top), xH:Math.round(r.height), xRight:Math.round(r.right),
       icons, filter: img?getComputedStyle(img).filter.slice(0,60):'no img',
       titleLines: (document.querySelector('#recipeModalBody h2')||{}).offsetHeight,
+      /* the drawn print/mail icons: how big they actually PAINT, and what the page did to them */
+      iconSvgs: [...document.querySelectorAll('#recipeModalBody .recipeIconBtn')].map(b=>{
+        const g=b.querySelector('svg'); if(!g) return {noSvg:true, html:b.innerHTML.slice(0,60)};
+        const r=g.getBoundingClientRect(), cs=getComputedStyle(g);
+        return { w:+r.width.toFixed(1), h:+r.height.toFixed(1), cssW:cs.width, attrW:g.getAttribute('width'),
+          viewBox:g.getAttribute('viewBox'), btnFont:getComputedStyle(b).fontSize,
+          centreDx:+((r.left+r.width/2)-(b.getBoundingClientRect().left+b.getBoundingClientRect().width/2)).toFixed(1),
+          centreDy:+((r.top+r.height/2)-(b.getBoundingClientRect().top+b.getBoundingClientRect().height/2)).toFixed(1) };
+      }),
       alignedWithIcons: icons.length? Math.abs(Math.round(r.top)-icons[0].top)<=1 : null };
   })())`));
   const s2=await C.send('Page.captureScreenshot',{format:'png'});

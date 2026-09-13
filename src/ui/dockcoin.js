@@ -9,11 +9,12 @@
      landing bounce 22%   ·   glow 6px   ·   shadow 13%
      HOLDS its face 800ms ·   LEAVES by fading in 140ms
 
-   WHY THIS REPLACES THE BIG COIN FOR EVERYONE BUT YOU. The flippenator — the coin that takes over
-   the bottom of the screen — is YOUR flip: you tapped Dock, and the game stops to ask heads or
-   tails. A bot's dock is not a question being put to you, and until now it borrowed the same stage,
-   so four captains docking in a row took the screen four times over something you had no say in.
-   The tiny coin says the same thing where the thing is happening: over their boat.
+   WHAT A BOT'S DOCK LOOKED LIKE BEFORE THIS: NOTHING. Wyatt, 2026-09-12, having played it: "The big
+   coin never appeared for bots... there was simply never coin when bots docked. Now at least we see
+   a coin." The old path called the flippenator's spin/land broadcasts, which paint a coin only on a
+   stage that is not up during somebody else's turn — so the clock ran and nothing was drawn. (The
+   first version of this note claimed bots "borrowed" the big coin. They never visibly did; his eyes
+   on the real game are the evidence, and the claim is withdrawn.)
 
    ⛔ THE TRAP HE NAMED BEFORE ANYONE COULD FALL INTO IT, 2026-09-12: "the narration box comes up
    immediately after the sound of the coin flipping. And instead, you'll need to have that narration

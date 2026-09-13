@@ -3118,11 +3118,10 @@ export async function botOpenTradeLive(player){
 async function botDockCoin(dockEv){
   if(!dockEv||dockEv.t!=="dock")return;
   /* ⭐ W3-7, 2026-09-10: "a tiny coin flip above OTHER captains' boats when they dock, in time with
-     the sound." THE BIG COIN IS YOURS. The flippenator takes over the bottom of the screen because
-     you tapped Dock and the game is asking you heads or tails; a bot's dock asks you nothing, and
-     borrowing that stage meant four captains docking in a row seized the screen four times over
-     something you had no say in. The tiny coin (src/ui/dockcoin.js, every number his own from the
-     coin tuner) says the same thing where the thing is happening — over their hull.
+     the sound." Before this, a bot's dock showed NO coin at all — his words on playing it: "there was
+     simply never coin when bots docked." The flippenator broadcasts this used to send paint only a
+     stage that is not up on another captain's turn. The tiny coin (src/ui/dockcoin.js, every number
+     his own from the coin tuner) is drawn over their hull, where the dig is happening.
      WHAT IS UNCHANGED IS THE CLOCK. Same FLIP_SPIN_MS, same FLIP_LAND_HOLD_MS, same replay-aware
      sleep lent to it, so item 18's "all flips should last the same amount of time" is still true
      by construction. And this still RESOLVES before the caller narrates, which is the trap he

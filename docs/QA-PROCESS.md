@@ -332,6 +332,34 @@ in the leg summary — a recovered leg must never read as an untroubled one.**
 build: **zero relaunches there confirms the crash is container-only; any relaunch there overturns
 the diagnosis.** That row is the most valuable cell in the cloud-vs-local comparison.
 
+### ⭐ HIS PHONE IS AN iPHONE 13 MINI — every "on his phone" means THIS size
+
+**His words, 2026-09-12:** *"the phone i do all my testing on is an iphone 13 mini."*
+
+| | CSS size | pixel ratio | measured off his own screen recording, 2026-09-12 |
+|---|---|---|---|
+| **iPhone 13 mini, Safari** | **375 × 812** | **3×** | the recording is 1126 × 2436 = 375 × 812 @3x |
+
+**What Safari leaves of those 812 is not one number, and the difference is exactly the kind of
+fault he finds first.** Measured frame by frame from his recording and his screenshot of the same
+screen, in SCREEN pixels from the top of the glass:
+- the status bar takes the top **44px**, and this page has no `viewport-fit=cover`, so **the game's
+  page starts under it** (the board's top edge sits at screen 135 on his phone, page 91 — Chrome
+  at 375 wide puts it at 86)
+- **Safari's bar compact** (a floating capsule) covers from screen **~728** → the page is **684** tall
+- **Safari's bar expanded** (the full tinted toolbar) covers from screen **~711** → the page is
+  **667** tall. The captain's box ran to ~730 on screen there — **19px of plaque hidden**, which he
+  reported as "the bottom of the captain's box is cut off."
+
+⚠ **Use the PAGE heights, 667 and 684, in any emulation.** The first check written for this ran at
+711 and 728 — the screen numbers — and passed with 33px to spare while his real phone was cutting 19.
+
+**So a check at 390 wide is not a check on his phone.** The trial matrix below still sails its phone
+leg at 390 × 664 (the leg table lives in `scripts/playtest_gate.mjs` and is his ruling, so it is not
+quietly changed here) — but a layout check aimed at what HE sees runs at **375 × 667 and 375 × 684**
+(`scripts/qa/_square_leftover_check.mjs` does both), and any "fits on his phone" claim names which
+of the two it measured.
+
 ### The matrix a FULL trial sails (Wyatt's 2026-08-28 ruling)
 
 | | desktop 1890×960 | tablet 768×954 | phone 390×664 |

@@ -76,6 +76,21 @@ try{
     window.__dcT0 = performance.now();
     window.__dcDone = 0;
     window.__dcErr = '';
+    /* ONE THROW — Wyatt filmed it: "the coin appears to rise and fall 3 times instead of once."
+       Sampled in the page on every frame for the length of the flip: how high the toss has the
+       coin, frame by frame. Its PEAKS are counted below. */
+    window.__toss = [];
+    (function sample(t0){ const tick=()=>{ const el=document.querySelector('#dockCoinHost .dcoinToss');
+        if(el){ const m=new DOMMatrixReadOnly(getComputedStyle(el).transform); window.__toss.push(+m.m42.toFixed(2)); }
+        if(performance.now()-t0 < 790) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick); })(performance.now());
+    /* THE LANDED FACE IS READ IN THE PAGE, ON THE PAGE'S CLOCK. Reading it from node after the
+       screenshots above lost the race once — the probe's own photography took longer than the
+       coin's 800ms hold and it reported the face as "gone". 1150ms is mid-hold: landed at 795,
+       held until 1595. */
+    window.__landedArt = '';
+    setTimeout(()=>{ const s=document.querySelector('#dockCoinHost .dcoinSpin');
+      window.__landedArt = s ? (getComputedStyle(s).backgroundImage||'').split('/').pop().split('"')[0] : 'gone'; }, 1150);
     window.__dc.flipDockCoin(1, true).then(()=>{ window.__dcDone = performance.now() - window.__dcT0; })
       .catch(e=>{ window.__dcErr = String((e&&e.stack)||e); });
     return 'called'; })()`);
@@ -161,14 +176,33 @@ try{
       : fail(`the spinning coin is drawn with "${mid.art}" — it should be the game's own coin-spin`);
   }
 
+  /* ONE THROW, COUNTED. A peak is a frame higher than the frames either side of it (translateY is
+     negative going up, so "higher" is "more negative"). One throw is one peak, and it sits near the
+     middle of the flip. RED-PROOF: the first build's 83ms alternate bob gives about five. */
+  const toss = JSON.parse(await C.ev(`JSON.stringify(window.__toss||[])`) || "[]");
+  /* Counted as TURNS, with 3px of hysteresis: the coin must climb 3px from its lowest point before
+     the climb counts, and fall 3px from its highest before the fall does. A strict frame-by-frame
+     "higher than both neighbours" test read ZERO peaks on a clean single throw, because the top of
+     a real throw is rounded and several frames share it. */
+  let peaks = 0, dir = 0, lo = toss[0] ?? 0, hi = toss[0] ?? 0;
+  for (const v of toss){
+    if (dir >= 0){ if (v < hi) hi = v; if (v > hi + 3){ if (dir === 1) peaks++; dir = -1; lo = v; } }
+    if (dir <= 0){ if (v > lo) lo = v; if (v < lo - 3){ dir = 1; hi = v; } }
+  }
+  if (dir === 1 && toss.length && toss[toss.length-1] > Math.min(...toss) + 3) peaks++;
+  const top = toss.length ? Math.min(...toss) : 0;
+  console.log(`  toss over ${toss.length} frames: highest ${top.toFixed(1)}px, ${peaks} peak(s)`);
+  if (toss.length < 10) fail(`only ${toss.length} frames of toss were sampled — the probe cannot judge the throw`);
+  else if (peaks === 1 && top <= -18) pass(`the coin is thrown ONCE, ${Math.abs(top).toFixed(0)}px up (his 21), and comes down once`);
+  else fail(`the coin rose and fell ${peaks} times, highest ${top.toFixed(1)}px — he asked for one 21px throw`);
+
   /* HIS TRAP: nothing may narrate until the coin is done. The caller narrates on the line after the
      await, so what is measured is when the await lets go. */
   /* PHOTOGRAPH THE LANDED FACE WHILE IT IS STILL THERE. It lands at 795ms and holds for 800, so
      the window closes at 1595 — and the measurements above cost enough wall clock to walk straight
      past it, which is how the first run photographed an empty sea and called it "landed". */
   await sleep(Math.max(0, 1150 - (Date.now() - t0)));
-  const landedArt0 = await C.ev(`(()=>{const s=document.querySelector('#dockCoinHost .dcoinSpin');
-    return s? (getComputedStyle(s).backgroundImage||'').split('/').pop().split('"')[0] : 'gone';})()`);
+  const landedArt0 = await C.ev(`window.__landedArt||'not sampled'`);
   await lift(); await shot("dockcoin-landed.png"); await drop();
   /dcoinSpin|flip-heads/.test(landedArt0) || landedArt0==='flip-heads.png'
     ? pass(`it landed on the face the engine recorded (${landedArt0})`)
