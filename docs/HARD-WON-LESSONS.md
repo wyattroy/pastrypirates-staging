@@ -1975,3 +1975,37 @@ different worlds produce is not a measurement.**
   A detector that depends on typography is a detector with a locale bug waiting in it.
 - **When a check condemns something you have reason to believe works, suspect the check** — §10's
   rule, and it held five times out of five here.
+
+## The hundredth host-only fix — why it keeps happening, and what now stops it (2026-09-13)
+
+**Wyatt, the same night:** *"this is the 100th time I have noticed a problem like this that you have
+architected, so suggest the reason for the continuous flaw in your logic and propose a durable permanent
+fix to your own methodology."*
+
+**Three of tonight's faults were one mistake:**
+- the tiny dock coin was drawn in `botDockCoin()` — the bot turn loop, which only the **host** runs, and
+  only for **bots**. No human's dock ever drew one, on any screen;
+- the sail frame was decided in `pickCell()` — which runs only on the **engine's machine** — so a guest's
+  camera framed nobody's sail but its own;
+- the HTML board layers were panned by `vwPx()` — the **page** width — which only equals the board
+  window on **desktop**, so on a phone and a tablet every decoration drifted up and left.
+
+**THE FLAW IN THE REASONING, stated plainly:** a reaction to a game fact gets written into the code path
+that is under the microscope at the time — and the path under the microscope is almost always the host's,
+because a solo game runs only the host, and the screen being looked at is almost always a laptop. Each
+fix is correct where it was tested and silent everywhere else. The question CLAUDE.md already asks —
+*"what makes these two agree?"* — was being asked AFTER writing, of a picture that was already right on
+the one device in front of me.
+
+**WHAT NOW STOPS IT, in the order it bites:**
+1. **The reaction lives behind the one door.** Anything the board or camera does because of a game fact
+   is decided in `consumeEvent` (every device, every event) from two inputs — the ENGINE's event and the
+   device's LOCALITY (`decisionIsLocal`) — never in a turn loop, a pick, or a host branch. Anything that
+   SPEAKS about an event waits for that consumer (`eventDrawn`).
+2. **A gate holds the doors shut:** `scripts/qa/one_display_door_check.mjs`, in `npm test`, fails if the
+   coin is drawn from a turn loop, the turn frame from `pickCell`, the helm offered without asking who the
+   seat is, the layers panned by the page width, or a narrator speaks without waiting. Red-proofed: all
+   seven doors read OPEN on `c0917774`.
+3. **Two windows before "done".** A visual feature is not finished until `scripts/qa/_crew_director_coin_check.mjs`
+   (or its equivalent for that feature) has watched a host and a guest — one of them at his iPhone 13 mini
+   size — and compared what each screen drew.

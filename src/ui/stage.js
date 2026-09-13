@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@57f220fd";
+const PP4_STAMP = "2026.09.07.3-staging@6d4b721d";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -264,9 +264,19 @@ function camFitSail(seat, pos){
   // data-gx/gy). This used to invert that function's inset arithmetic by hand — a second copy of
   // the same maths that had to be kept in step with it, and it stopped being possible at all once
   // the squares became HTML sized in cqw rather than SVG rects with x/width attributes.
-  const cells = [...document.querySelectorAll(".sailCell")]
+  /* THE SQUARES ON SCREEN — OR, ON A SCREEN WATCHING SOMEBODY ELSE'S TURN THAT HAS DRAWN NONE, THE SAME
+     SQUARES FROM THE ENGINE. Only the captain choosing gets gold squares, so a frame built from the DOM
+     alone could only ever be right on one device. reachableFrom() is the engine's own answer to "where
+     may this captain sail", and the picker's squares are drawn from it, so the two agree by
+     construction (Wyatt, 2026-09-13, note 6: the guest camera was not framing anybody's sail). */
+  const drawn = [...document.querySelectorAll(".sailCell")]
     .map(r => [+r.dataset.gx, +r.dataset.gy])
     .filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1]));
+  let cells = drawn;
+  if (!drawn.length && who && typeof g.reachableFrom === "function"){
+    try { cells = g.reachableFrom(who).filter(c => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1])); }
+    catch (err) { cells = []; }
+  }
   cells.push(own);
   /* Reserve the room the prompt will need, measured from what is on screen rather than guessed:
      the ask pill and its helper line are what a sail prompt actually draws, and a narration bubble
@@ -1035,7 +1045,21 @@ function camFrame(){
        array and nothing else. */
     const layers = CAM_HTML_LAYERS.map(id => $(id)).filter(Boolean);
     if (layers.length){
-      const W = vwPx(), s2 = 640 / c.w;
+      /* ⭐ THE BOARD WINDOW'S WIDTH, NEVER THE PAGE'S — Wyatt, 2026-09-13, on a phone and a tablet:
+         "All the board decorations are offset up and left from where they should be (trade wind
+         arrows, dock coin flips, active player boat ripples)... make sure they're being drawn with
+         respect to the board square window; not the page itself. you've gotten in trouble for this
+         in the past!" These layers are inset:0 INSIDE #boardwrap, so the translate that pans them
+         has to be in #boardwrap's pixels. It was in vwPx() — the page's. The two were the same
+         number until 2026-09-12, when the board became a square that SHRINKS to make room for the
+         plaque (#boardwrap got a max-width): measured 708 inside a 739 page on a tablet, 524 inside
+         555 at his laptop window, 364 inside 375 on his phone. Every pan then over-shifted the
+         decorations by (page − window)/window of the camera's offset — up and left, and worse the
+         further the director zooms in, which is the drift he saw. The SVG layers never moved: they
+         pan by viewBox, and toScreen() already reads the SVG's own rect. This is that same
+         measurement, for the HTML layers. */
+      const bw = $("boardwrap");
+      const W = (bw && bw.getBoundingClientRect().width) || vwPx(), s2 = 640 / c.w;
       const t = `scale(${s2}) translate(${-(c.x / 640) * W}px, ${-(vy / 640) * W}px)`;
       if (t !== lastRipT){
         lastRipT = t;
@@ -3132,11 +3156,43 @@ function measureCapNaturalHeight(widthPx){
   cap.setAttribute("style", save);
   return h;
 }
+/* ⭐ THE TOP BAR FITS ON ONE LINE, EVERYTHING IN IT SHRINKING TOGETHER — Wyatt, 2026-09-13, on a
+   tablet-width Safari window: "the captain's box has force the top navbar to be shorter than it must
+   be to display all its information, forcing DAY 2 onto two different lines, and making the forecast
+   impossible to see. Solution: shrink all the elements dynamically so that all can appear fully."
+   WHY IT BROKE: above the phone breakpoint the bar is as wide as body, and body is as wide as the
+   board — which since 2026-09-12 shrinks to leave the plaque room. A narrower board is a narrower
+   bar, and its flex children each gave way on their own: "DAY 2" wrapped, the forecast pill cut to
+   "FORECAS…". Chrome's narrower font metrics hid it at his window size; Safari's did not.
+   SO NOTHING IN THE BAR MAY SHRINK OR WRAP BY ITSELF (index.html: flex-shrink:0, nowrap), and when
+   the bar's natural width is more than its room, every child is zoomed by the same factor — DAY,
+   the captain circles, the wind pill, the parrot and the menu keep their proportions and all of
+   them stay whole. Measured off the bar's own children every geometry beat, never a breakpoint.
+   `zoom` rather than transform: a transform would shrink the picture and leave the layout wide. */
+function fitRibbon(){
+  const rib = $("pp4Ribbon"); if (!rib) return;
+  const cs = getComputedStyle(rib);
+  if (cs.display === "none") return;
+  const cur = parseFloat(rib.style.getPropertyValue("--ribFit")) || 1;
+  const kids = [...rib.children].filter(k => getComputedStyle(k).display !== "none");
+  const gap = parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0;
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const natural = kids.reduce((w, k) => w + k.getBoundingClientRect().width / cur, 0)
+    + gap * Math.max(0, kids.length - 1) + pad;
+  const room = rib.clientWidth;
+  if (!room || !natural) return;
+  const fit = natural > room ? Math.max(0.55, Math.floor(((room - pad) / (natural - pad)) * 100) / 100) : 1;
+  if (Math.abs(fit - cur) > 0.009){
+    rib.style.setProperty("--ribFit", String(fit));
+    ribHAt = -1e9; lastVB = "";           // the bar's height just changed; the board is measured under it
+  }
+}
 function computeStageGeometry(){
   if (typeof document === "undefined") return;
   const body = document.body;
   if (!body.classList.contains("pp4Stage")) return;
   S.geomAt = Date.now();
+  fitRibbon();   // the top bar is sized first: its height is what the board is measured under
   const iw = document.documentElement.clientWidth || window.innerWidth;
   /* the smallest honest height — see visibleH() above camFrame for why clientHeight alone lies on his phone */
   const ih = Math.min(document.documentElement.clientHeight || window.innerHeight, window.innerHeight || Infinity,

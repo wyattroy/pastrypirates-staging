@@ -2008,8 +2008,42 @@ export async function eventCeremony(e){
 }
 // keep the yellow action panel in step with the bot's latest move — liveRender only
 // updates the board/log/bubble, so without this the panel stays stuck on the last human prompt.
+/* ⭐ NARRATION WAITS FOR THE BOARD TO FINISH DRAWING THE EVENT IT DESCRIBES — ON EVERY DEVICE.
+   Wyatt, 2026-09-12, before the dock coin was built: "you'll need to have that narration box showing
+   the result of the coin flip wait until the coin flip is over." The first build honoured that in ONE
+   place — a bot's turn loop, on the host — by awaiting the coin before narrating. That is a decision
+   written into the code path that happened to be under the microscope, and it is exactly how the
+   coin came to exist for bots and not for humans, and on the host and not on a guest
+   (his 2026-09-13 note 8). The board's reaction to an event now lives in the ONE consumer
+   (consumeEvent, src/orchestrator.js), which every device runs for every event; this registry is how
+   anything that SPEAKS about an event asks that consumer "are you finished with it?". Keyed by the
+   event object itself: the host's narrator and a guest's watchNarr both hold the very object the
+   consumer was handed. CAPPED, so a narrator can never be held forever by a consumer that is itself
+   waiting on a narration — a stalled wait speaks late, it never swallows the line. */
+const EV_DRAWING=new WeakMap();   // event object -> {pr, done}
+/* EXPECTED the moment an event is QUEUED for drawing (the host's drain batch, a guest's wire queue) —
+   not when its consumer starts. A bot's sail and dock land in one burst and are drawn in order; if the
+   dock were only marked once ITS consumer began, a narrator asking during the sail's walk would find
+   nothing pending and speak over a coin that had not been thrown yet. */
+export function expectEventDrawing(e){
+  if(!e||typeof e!=="object")return;
+  if(EV_DRAWING.has(e))return;
+  let done;const pr=new Promise(r=>{done=r;});
+  EV_DRAWING.set(e,{pr,done});
+}
+export function finishEventDrawing(e){
+  if(!e||typeof e!=="object")return;
+  const rec=EV_DRAWING.get(e);
+  if(rec)rec.done();else EV_DRAWING.set(e,{pr:Promise.resolve(),done:()=>{}});
+}
+export function eventDrawn(e,capMs=9000){
+  const rec=e&&typeof e==="object"?EV_DRAWING.get(e):null;
+  if(!rec)return Promise.resolve();
+  return Promise.race([rec.pr,new Promise(r=>setTimeout(r,capMs))]);
+}
 export async function narrateCurrent(){
   const e=appState.game.events[appState.evIdx];if(!e)return;
+  await eventDrawn(e);   // the board finishes the event (a dock coin's flip and hold) before a word of it
   await narrateCurrentBody(e);
   // his item 7: a bot's dock reaches the black-market ceremony by the same door a human's does
   await eventCeremony(e);

@@ -2249,6 +2249,11 @@
        full-bleed child, a comma-listed selector, a backdrop-filter or an inset shadow. */
     display:none; }
   body.pp4Stage #pp4Ribbon { display:flex; }
+  /* one line, always: no child of the bar shrinks, wraps or ellipsises on its own — src/ui/stage.js
+     fitRibbon() zooms them all by one factor when the bar is too narrow (Wyatt, 2026-09-13) */
+  body.pp4Stage #pp4Ribbon > * { flex-shrink:0; zoom:var(--ribFit, 1); }
+  body.pp4Stage #pp4Round, body.pp4Stage #pp4Ribbon > #pp4Pill { white-space:nowrap; }
+  body.pp4Stage #pp4Ribbon > #pp4Pill { overflow:visible; text-overflow:clip; max-width:none; }
   #pp4Round { font-size:13px; letter-spacing:1px; }
   .pp4Boats { display:flex; gap:5px; align-items:center; }
   .pp4Boat { width:24px; height:24px; border-radius:50%; background:rgba(255,255,255,.35); padding:2px; opacity:.7; }
@@ -3616,6 +3621,16 @@
      THE PADDING IS THE ROPE. It is px rather than a percentage on purpose: CSS resolves a vertical
      percentage padding against the element's WIDTH, which would have put 31px of rope at the top of
      a 390px box instead of 19.                                                                    */
+  /* ⭐ NOTHING BEHIND THE PLAQUE, AT ANY WIDTH — Wyatt, 2026-09-13: "I can see a faint background navy
+     blue behind the captain's box -- there should be no background behind the plaque; the page
+     should simply display behind it." MEASURED: at every width above the phone the box still wore
+     `box-shadow: 0 6px 24px rgba(0,0,0,.28)` — a dark halo spreading 24px round the rope — from the
+     cream card's old rules, `body.pp4Stage:not(.pp4Side) #pp4Cap` and `body.pp4Stage.pp4Side
+     #pp4Cap`. Both out-rank the plaque's own `body.pp4Stage #pp4Cap { box-shadow:none }` on
+     specificity, so "none" never reached the screen except on a phone. Stated here with the same
+     three selectors, later in the file, so it wins every width and every layout. */
+  body.pp4Stage #pp4Cap, body.pp4Stage:not(.pp4Side) #pp4Cap, body.pp4Stage.pp4Side #pp4Cap,
+  body.pp4Stage.pp4Side #pp4Col > #pp4Cap { box-shadow: none; background-color: transparent; }
   body.pp4Stage #pp4Cap {
     background: none; border-radius: 0; box-shadow: none; padding: 24px 30px;
     border-style: solid; border-width: 0;

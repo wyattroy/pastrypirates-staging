@@ -54,7 +54,6 @@ import {
   CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled, BAKE_REWATCH_COST,
   buildRoster, emojify,
 } from "../shared/index.js";
-import { flipDockCoin } from "./dockcoin.js";
 import { el, boardCell, setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo, render as renderBoard } from "./board.js";
 import {
   liveRender, panel, setNeedsAction, narrateLastEvent, flash, showNarration,
@@ -775,7 +774,9 @@ export function pickCell(player,cells){
   // (which is what fixed the guest, who never reached this line — pickCell runs on the engine's
   // machine). This call remains for the client that does NOT run that renderer: the spectator,
   // whose empty cell list collapses the same camFitSail to "frame the asked captain's ship".
-  if(window.__pp4)setTimeout(()=>window.__pp4.sailCells(player.idx),180);
+  /* (The host used to frame this captain's sail window from right here — the engine machine only, so a
+     guest's camera never framed anybody's sail but its own. The frame is decided by the one event
+     consumer on the `turn` event now, on every device; see consumeEvent, 2026-09-13 note 6.) */
   // @copy misc.draftwait.sailchoosing
   // D-10 DELIVERY (F7): same conversion as ask() — the spectator line is the neutral broadcast and
   // the ACTOR's variant is the empty string (their own board highlighting is their feedback). This
@@ -2876,6 +2877,11 @@ export async function takeTurn(player){
      turn. */
   forgetCourse();
   appState.game.ev({t:"turn",p:player.idx});
+  /* PUBLISHED AND DRAWN BEFORE THE CHOOSING BEGINS — so the one consumer frames this captain's turn on
+     every device (a guest the moment the event lands; the host here) before anybody is asked anything.
+     It used to sit undrawn until the next drain, which is why the host needed its own private camera
+     call in pickCell. The same pair every other turn-level event in this file already uses. */
+  publishNow();await liveRender();
   return (player.strategy==="human"?humanTurn:botTurn)(player);
 }
 export async function humanTurn(player){
@@ -3104,32 +3110,11 @@ export async function botOpenTradeLive(player){
   await botBeat();
   return true;
 }
-/* A COIN FLIP IS A COIN FLIP — item 18 (Wyatt, 2026-08-23c): "all flips should last the same
-   amount of time. it seems like bot flips (and maybe other players' flips?) take shorter time."
-   Measured true, and worse than shorter: a BOT's dock flip had NO coin at all. The engine flips
-   inside doDock() and botBeat() narrates the finished sentence, so the human watched a 1s spin on
-   their own docks and an instant verdict on everyone else's. Battle flips were already uniform
-   (hFlip/bFlip both wait out the one clock); the dock was the odd one out.
-   Same ceremony as humanFlip, same ONE clock (board.js FLIP_SPIN_MS via flipSpinLeftMs): spin,
-   wait out the remainder, land on the face the event already recorded — then the caller's
-   botBeat() narrates over the landed face, and the coin returns to "wait" after. Draws no RNG
-   (the flip already happened in the engine), so replay is untouched; sleep() is the replay-aware
-   one, so a reload fast-forwards straight through it. */
-async function botDockCoin(dockEv){
-  if(!dockEv||dockEv.t!=="dock")return;
-  /* ⭐ W3-7, 2026-09-10: "a tiny coin flip above OTHER captains' boats when they dock, in time with
-     the sound." Before this, a bot's dock showed NO coin at all — his words on playing it: "there was
-     simply never coin when bots docked." The flippenator broadcasts this used to send paint only a
-     stage that is not up on another captain's turn. The tiny coin (src/ui/dockcoin.js, every number
-     his own from the coin tuner) is drawn over their hull, where the dig is happening.
-     WHAT IS UNCHANGED IS THE CLOCK. Same FLIP_SPIN_MS, same FLIP_LAND_HOLD_MS, same replay-aware
-     sleep lent to it, so item 18's "all flips should last the same amount of time" is still true
-     by construction. And this still RESOLVES before the caller narrates, which is the trap he
-     named in advance: "have that narration box showing the result of the coin flip wait until the
-     coin flip is over." */
-  await flipDockCoin(dockEv.p, !!dockEv.heads, sleep);
-  return;
-}
+/* A BOT'S DOCK COIN IS NOT DRAWN HERE ANY MORE. It was, until 2026-09-13 — in this turn loop, which
+   only the host runs and only for bots, so no human's dock ever drew one and a guest never drew its
+   own. It is drawn by the one event consumer (consumeEvent, src/orchestrator.js) for every dock whose
+   choice was not made on the watching screen. The flip's clock (FLIP_SPIN_MS + FLIP_LAND_HOLD_MS) is
+   unchanged, and the narration still waits for it — through eventDrawn(), on every device. */
 
 export async function botTurn(player){
   // (applyActiveSeat and the `turn` event now happen in takeTurn — the one door)
@@ -3204,7 +3189,6 @@ export async function botTurn(player){
   if(plan.type==="dock"&&g.adjPort(player)===plan.ing){
     const n0=g.events.length;
     if(g.doDock(player,plan.ing)){
-      await botDockCoin(g.events.slice(n0).find(ev=>ev.t==="dock"));   // item 18: the same coin, the same clock
       await botBeat();
       netHandlers().onBroadcastFlip("wait");
       return;
@@ -3219,7 +3203,6 @@ export async function botTurn(player){
   if(fallbackPort&&g.canDock(player,fallbackPort)){
     const n0=g.events.length;
     if(g.doDock(player,fallbackPort)){
-      await botDockCoin(g.events.slice(n0).find(ev=>ev.t==="dock"));   // item 18: same as the planned dock above
       await botBeat();
       netHandlers().onBroadcastFlip("wait");
       return;

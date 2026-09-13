@@ -194,8 +194,8 @@ shipped.
 ### The loop
 
 ```bash
-git checkout dev && git pull origin dev   # 1. ONE branch. Wyatt's ruling, 2026-09-06:
-                                          #    no branch per bug, no branch per session
+git checkout dev && git pull origin dev   # 1. dev is the source of truth. Short branches off it are fine
+                                          #    (Wyatt, 2026-09-13) — see "Branches off dev" below
 
 npm run bump                              # 2. BUMP THE BUILD — see the box below
 npm test                                  # 3. the gates — exit 0
@@ -538,3 +538,30 @@ MSG
 **The same trap applies to any long text going through a shell argument** — `gh pr create --body`,
 `--note`, an `echo` into a file. When the text contains prose, write it to a file or a heredoc and
 point the flag at that.
+
+## Branches off dev — Wyatt's ruling, 2026-09-13
+
+*"Apparently our claude.md rules state there should only be one branch off main (dev) -- this seems stupid
+to me for conflict reasons. i think there can be as many branches off dev as are helpful to you. dev should
+be the source of truth for all in-development work, and branches can break off then merge with it again."*
+
+**His reasoning checks out against this repo's own history.** The 2026-09-06 one-branch rule was a reaction
+to three things, and none of them was branching as such:
+- **work that never merged** — a Mac session archived mid-rebase held 40 hours of work and a hand-made
+  drawing for three days, existing on no other machine (CLAUDE.md, "two machines");
+- **long-lived parallel lines** — the tutorial and the sea lived apart until "dev carries both — one branch
+  again" (`aeeb7da0`), and a laser-cut line had to be brought 1,821 commits forward (`061f8971`);
+- **staging published from a branch** — a session took staging for its own line and the sheet had to say so
+  (`0d714612`).
+Meanwhile two machines and several sessions committing straight onto `dev` is exactly where his "conflict
+reasons" bite: two sessions writing the same `.planning/` files rebase into each other.
+
+**So branches are allowed, and these rules keep what the old one protected:**
+1. **Branch from `origin/dev`**, named `sepDD-topic` (folder and branch the same).
+2. **Push on the first commit.** A branch that exists on one machine is the 40-hour failure waiting.
+3. **Merge back into `dev` as soon as the piece works** — `git pull --rebase origin dev`, then merge. Days,
+   not weeks. Delete the branch after.
+4. **Staging deploys ONLY from `dev`.** `main` merges ONLY from `dev`, on his approval.
+5. **A report-only branch never merges** (a sea trial's own write-up, for example) — say so in its first
+   commit message, and delete it once the report has been read.
+6. `dev` is still where "is it in the game?" is answered; `node scripts/where_is_my_work.mjs` asks the sites.

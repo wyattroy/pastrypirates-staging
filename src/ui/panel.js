@@ -42,6 +42,7 @@ import {
   pn, boatXY, narrationHoldMs, chatBubbleHoldMs,
   sleepMs, describeFor, narrationVariants, NEUTRAL_VIEWER,
   pickNarrVariant, eventCeremony, voyageAground,
+  expectEventDrawing,
 } from "./util.js";
 import { escHtml } from "./recipe.js";
 import { netHandlers } from "./handlers.js";
@@ -222,7 +223,9 @@ export function liveRender(){
   let drained=_busy?_tail:DRAINED;
   if(_nh.onConsumeEvent){
     const batch=[];
-    while(appState.evConsumed<appState.game.events.length)batch.push(appState.game.events[appState.evConsumed++]);
+    /* each event is EXPECTED as it joins the batch, so anything that speaks about it waits for its turn
+       in the drain, not merely for its consumer to have started (util.js, expectEventDrawing) */
+    while(appState.evConsumed<appState.game.events.length){const q=appState.game.events[appState.evConsumed++];expectEventDrawing(q);batch.push(q);}
     if(batch.length){
       const run=e=>_nh.onConsumeEvent(e).catch(err=>voyageAground(err,"consumeEvent"));
       // started NOW, in this tick, when nothing is being shown; otherwise behind what is

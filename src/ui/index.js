@@ -8,6 +8,7 @@
 
 export * from "./recipe.js";
 export * from "./util.js";
+export * from "./dockcoin.js";   // 2026-09-13: the dock coin is drawn by the one event consumer
 export * from "./board.js";
 export * from "./panel.js";
 export * from "./lobby.js";

@@ -127,6 +127,7 @@ import {
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, applyActiveSeat, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
+  expectEventDrawing, finishEventDrawing, eventDrawn, flipDockCoin,
   sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
@@ -1828,6 +1829,13 @@ let stowedGate=null;
    and skips both impossible. */
 export async function consumeEvent(e){
   if(!e)return;
+  /* THE ONE CONSUMER SAYS WHEN IT IS FINISHED WITH AN EVENT. Every speaker about the event — the host's
+     narrator, a guest's watchNarr — waits on this (util.js, eventDrawn), so no device can describe a
+     thing its own board has not finished showing. Both drains mark the event EXPECTED as they queue it.
+     The whole body sits inside this one try, rather than in a second function, so this stays THE
+     consumer by name — one_event_consumer_check reads its drawing steps out of this function's body. */
+  expectEventDrawing(e);
+  try{
   if(!appState.isHost){
     // the guest's mirror of the host-authoritative state — see watchEvents' preserved history
     // below for the day the ribbon said DAY 1 while the board played day 2 (2026-08-19).
@@ -1933,6 +1941,24 @@ export async function consumeEvent(e){
   const moves=(e.draw&&Array.isArray(e.draw.route))||e.t==="tradewind";
   if(moves)forgetCourse();
   playForEvent(e, decisionIsLocal(e.p));
+  /* ⭐ THE TINY DOCK COIN IS DRAWN HERE, FOR EVERY CAPTAIN WHOSE CHOICE WAS NOT MADE ON THIS SCREEN —
+     Wyatt, 2026-09-13 (note 8): "the human players don't see each other's tiny docking coins when the
+     other is docking. they should... one engine, one display, different inputs. Don't just patch this,
+     fix its architecture." It used to be drawn in the bot's turn loop, which only the HOST runs and only
+     for BOTS — so no human's dock ever drew one. Here are the two inputs he named: the ENGINE's dock
+     event (who docked, heads or tails) and this device's LOCALITY (decisionIsLocal: false for a bot, for
+     a remote human, for anyone but the captain holding this screen). The captain who docked saw the big
+     coin they tapped; every other screen sees this one over their hull. Awaited — and the narration
+     about the dock waits on this consumer (eventDrawn) — so no line lands on a spinning coin. */
+  if(e.t==="dock"&&!appState.replaying&&!decisionIsLocal(e.p))await flipDockCoin(e.p,!!e.heads);
+  /* ⭐ AND THE CAMERA FRAMES WHOEVER'S TURN IT IS, ON EVERY DEVICE — Wyatt, 2026-09-13 (note 6): "Guest
+     camera director does not seem to be zooming in and out dynamically or correctly -- were these
+     changes somehow made only to the host?" They were: the sail-window frame lived in pickCell(), which
+     runs only on the machine running the engine. The turn event reaches every device through this
+     consumer and the engine can say where ANY captain may sail (reachableFrom, read by camFitSail), so
+     the frame is decided here, once, from the event. A captain's own sail prompt still refines it with
+     the pill's room (renderPickPrompt) — the same function, asked again with more to go on. */
+  if(e.t==="turn"&&!appState.replaying&&window.__pp4&&window.__pp4.sailCells)window.__pp4.sailCells(e.p);
   $("scrub").max=Math.max(0,appState.game.events.length-1);
   stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
   await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
@@ -1954,6 +1980,7 @@ export async function consumeEvent(e){
   render();
   spawnPops(e,boardCell());
   if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
+  } finally { finishEventDrawing(e); }
 }
 
 // remote: feed the broadcast event stream into the ONE consumer
@@ -1994,6 +2021,7 @@ export function watchEvents(){
        Stage 2); the rim sweep's known, accepted degradation stands: the guest's coin panels lag
        by the sweep's duration, an event arriving mid-sweep snaps the ship true on the next paint. */
     // QUEUED, not awaited here: this callback has already done the ordering-critical work above.
+    expectEventDrawing(e);   // queued: a narration naming it waits for its turn in this queue, not just its start
     _evQ = _evQ.then(() => consumeEvent(e)).catch(err => { console.error("consumeEvent", err); });
     await _evQ;
   });
@@ -2249,7 +2277,11 @@ export function watchNarr(){
            gives the feed a short grace period and then draws regardless — so the worst case is
            exactly today's behaviour, and the common case is in step. An older host sends no evN and
            this never engages at all. */
-        const drawIt=()=>{applySubject();return Promise.resolve(flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined)).catch(()=>{});};
+        /* the SAME wait the host's narrator makes (util.js narrateCurrent): the line about an event is drawn
+           only once this device's own consumer has finished drawing that event — so a guest cannot read
+           "HEADS!" over a coin still in the air. Capped inside eventDrawn, and the generation guard still
+           drops a line a newer one has overtaken. */
+        const drawIt=()=>{const ev=evAt(v.evN);return Promise.resolve(ev?eventDrawn(ev):null).then(()=>{if(appState.narrGen!==myGen)return;applySubject();return flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined);}).catch(()=>{});};
         if(v.evN!=null&&v.evN>=0&&(appState.evSeen==null||appState.evSeen<v.evN)){
           const until=Date.now()+NARR_EVENT_GRACE_MS;
           const tick=()=>{

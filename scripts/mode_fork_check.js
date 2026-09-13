@@ -47,7 +47,7 @@ const FORK = /\b(isHost|amHost|passAndPlay|mySeat|seatLocal|decisionIsLocal)\b/;
 const BASELINE = {
   "src/ui/audio.js":  0,
   "src/ui/board.js":  2,   // 3 -> 2: the recipe secrecy rules read who-is-looking ONCE, 2026-09-10
-  "src/ui/flow.js":  13,
+  "src/ui/flow.js":  11,
   "src/ui/lobby.js":  5,
   "src/ui/panel.js":  3,   // 4 -> 3: pause forks left at A-10, 2026-08-28
   "src/ui/stage.js":  9,
@@ -64,7 +64,17 @@ for (const [rel, allowed] of Object.entries(BASELINE)) {
   const full = path.join(REPO, rel);
   if (!fs.existsSync(full)) { console.log(`FAIL ${rel} — file is missing; the baseline names it`); failed = true; continue; }
   const lines = strip(fs.readFileSync(full, "utf8")).split("\n");
-  const hits = lines.map((l, i) => ({ l: l.trim(), n: i + 1 })).filter(o => FORK.test(o.l));
+  /* AN IMPORT IS NOT A FORK. This gate counts conditionals on who is playing; a line that merely BRINGS
+     IN the locality answer decides nothing. Counting imports made the right fix read as a new fork on
+     2026-09-13: passGate started asking decisionIsLocal (so the helm is never passed to a bot), and
+     the one new line in lobby.js was its import. Single-line import statements are skipped; a multi-
+     line import's name lines are too (they sit between `import {` and `} from`). */
+  let inImport = false;
+  const hits = lines.map((l, i) => ({ l: l.trim(), n: i + 1 })).filter(o => {
+    if (/^import\b/.test(o.l)) { inImport = !/\bfrom\s*["']/.test(o.l); return false; }
+    if (inImport) { if (/\bfrom\s*["']/.test(o.l)) inImport = false; return false; }
+    return FORK.test(o.l);
+  });
   total += hits.length; baseTotal += allowed;
   rows.push({ rel, count: hits.length, allowed, hits });
 }

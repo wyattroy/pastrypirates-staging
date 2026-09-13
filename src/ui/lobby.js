@@ -38,7 +38,7 @@ import {
   HEXCOL, DEVICE_IMG, ANCHOR_IMG, CLOCK_IMG, FLIP_SOCKET_IMG, HOURGLASS_IMG,
   CLOSE_X_IMG, iconImg, emojify, unusedDefaultName,
 } from "../shared/index.js";
-import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN } from "./util.js";
+import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN, decisionIsLocal } from "./util.js";
 // F2/UI-06 (2026-07-29): escHtml's only use here was the duplicate seat-name rendering that this
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
@@ -361,7 +361,17 @@ export function showGameView(){
 // outside Pass & Play, for the seat that already has the device, and during replay (a reload
 // should replay straight through with no hand-off prompts, same as every other decision).
 export function passGate(seatIdx){
-  if(!appState.passAndPlay||seatIdx===appState.mySeat)return Promise.resolve();
+  /* ⭐ THE HELM IS ONLY EVER PASSED TO A HUMAN AT THIS DEVICE — Wyatt, 2026-09-13: "I had to 'pass the
+     helm' to a bot player... why?! ... we need to more intelligently pass another variable about the
+     player -- is it bot or human?" The variable already exists and is already the ONE answer every
+     other part of the game asks: decisionIsLocal(seat) (src/ui/util.js -> isDecisionLocal in
+     src/shared/storyboard.js), which is true for a seat whose choice is made by a HUMAN on THIS
+     screen. This gate asked only "pass-and-play, and not the current holder", so any caller that
+     looped over every seat — the recipe draft's new single dispatcher (0462a113) is one — asked the
+     table to hand the phone to Flaky Jack. The fact lives HERE, in the gate, so all three callers
+     (and the next one) are right without each remembering it. A bot's seat also never becomes
+     mySeat, which is what the replay branch below used to do to it. */
+  if(!appState.passAndPlay||seatIdx===appState.mySeat||!decisionIsLocal(seatIdx))return Promise.resolve();
   if(appState.replaying){appState.mySeat=seatIdx;return Promise.resolve();} // silently keep mySeat in sync so it's
   // already correct the moment replay catches up to the live edge — no UI shown mid-replay
   // The outgoing captain's turn is over, so their checked recipe locks the moment the wheel
