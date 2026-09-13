@@ -1798,7 +1798,9 @@ export function render(){
       $("prowRecipe"+i).classList.remove("hasRecipe");
       const held=hold.slice().sort().map(x2=>`<span class="chip have" title="${iname(x2)}">${ingImg(x2)}</span>`);
       // @copy misc.board.emptyhold
-      newChipsHtml=held.join("")||`<span style="opacity:.4">empty hold</span>`;
+      /* an empty hold is an empty crate — his Q6 ruling, 2026-09-10 ("An empty crate silhouette"). The
+         words stay as its name, for a tooltip and a screen reader. */
+      newChipsHtml=held.join("")||`<span class="chip holdEmpty" title="empty hold" aria-label="empty hold" role="img"></span>`;
     }
     /* T-33 — the guard decided whether to PULSE, not whether to WRITE, so all four captains' hold
        chips were destroyed and rebuilt on every render: 600 fresh <img> elements in 210 seconds,

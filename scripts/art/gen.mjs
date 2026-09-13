@@ -82,9 +82,16 @@ function dims(buf) {
 const mime = arg("mime", "image/jpeg");
 if (/\.png$/i.test(out) && mime === "image/jpeg")
   console.error("gen: note — this model only returns JPEG, so " + out + " will hold JPEG bytes. Name it .jpeg.");
+/* --ref <image> (repeatable): a picture the model draws FROM — Wyatt's own sketch, most often. Wyatt,
+   2026-09-13: "use this drawing as a reference". Words describing a drawing are a paraphrase of it; the
+   drawing itself is not. JPEG, PNG or WebP; a phone's HEIC is converted first (sips -s format jpeg). */
+const refs = argv.flatMap((a, i) => a === "--ref" ? [argv[i + 1]] : []);
+for (const f of refs) if (!f || !fs.existsSync(f)) die(`--ref ${f} does not exist`);
+const refMime = f => /\.png$/i.test(f) ? "image/png" : /\.webp$/i.test(f) ? "image/webp" : "image/jpeg";
 const body = {
   model,
-  input: [{ type: "text", text: prompt }],
+  input: [...refs.map(f => ({ type: "image", mime_type: refMime(f), data: fs.readFileSync(f).toString("base64") })),
+          { type: "text", text: prompt }],
   response_format: { type: "image", mime_type: mime, aspect_ratio: ratio, image_size: size },
 };
 

@@ -24,7 +24,7 @@ import { killProfile } from "./lib/stray_probes.mjs";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { REPO, gameURL, PYTHON } from "./lib/chrome.mjs";
+import { REPO, gameURL, PYTHON, staticServerArgs } from "./lib/chrome.mjs";
 import { openChrome, sleep } from "./lib/cdp.mjs";
 /* THE SECOND ENGINE. Wyatt, 2026-08-26: "your fixes must be verified across Safari and Chrome."
    wk.mjs is a MOUNT, not a second driver — it returns the same handle shape openChrome() does, so
@@ -96,7 +96,7 @@ process.on("exit", killAll); for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) 
 // must NOT own servers: the contact sheet renders after a leg's Chrome closes, and a per-leg server
 // would already be dead by then. Do not edit game files while the gate runs — this serves the disk.
 import { spawn } from "node:child_process";
-const SRV = spawn(PYTHON, ["-m", "http.server", String(PORT0)], { cwd: REPO, stdio: "ignore" });
+const SRV = spawn(PYTHON, staticServerArgs(PORT0), { cwd: REPO, stdio: "ignore" });
 ownPorts.http.add(PORT0);
 process.on("exit", () => { try { SRV.kill("SIGKILL"); } catch {} });
 await sleep(900);
@@ -110,52 +110,128 @@ await sleep(900);
    handles and a real player who happens to type "test1" is never mistaken for the harness.
    Nothing in the game reads gamelogs back, so these rows cannot affect what any player sees. */
 const QA_PLAYER_ID = "qa-playtest-gate";
+/* WAIT FOR THE THING, NEVER FOR THE CLOCK. Wyatt, 2026-09-13, after the rig abandoned five of ten
+   voyages at the lobby: "it sounds like you need to write smarter code that doesn't use a timer,
+   but actually waits until things are loaded."
+
+   This path used to be `c.nav(...); await sleep(2600)` and then ONE look at the mode card. `nav`
+   only STARTS a navigation, so 2.6 s was a guess at how long the game takes to load, and that time
+   moves with how busy the machine is. At --parallel=10 on Wy-Blade (sea trial 2026-09-13, report
+   aab5fea0 on sep13-seatrial-blade) five Chrome legs looked while the game still showed "Hoisting
+   the sails..." and died with "solo card not clickable"; the same leg run alone reached DAY 3 in
+   two minutes. The 2.2 s sleep before resetting localStorage had the same shape one step earlier:
+   localStorage belongs to an ORIGIN, so clearing it before the game's page has arrived clears the
+   wrong one, the captain's id lands nowhere, and two browsers can become one seat (§5c).
+
+   So every step waits for the thing it is about to use, and says WHY when it gives up. __gate
+   already knows ("occluded by bootLoader"); the old bare "not clickable" threw that away.
+
+   BOOT_DEADLINE_MS is how long a boot may take before it is BROKEN, not how long it is expected to
+   take -- the same 30 s bootHost already allowed the room code. Every wait's duration goes into
+   the leg log, so this fix shows when it is load-bearing: a mode card that became ready later than
+   the old fixed wait is a voyage the old rig would have thrown away. */
+const BOOT_DEADLINE_MS = 30_000;
+const OLD_FIXED_WAIT_MS = 2600;   // the sleep this replaced; kept only so the log can say what it would have lost
+const gateJS = (id) => `(typeof __gate === 'function') ? __gate(document.getElementById(${JSON.stringify(id)})) : {ok:false, why:'no __gate on this page yet'}`;
+
+async function waitUntil(c, js, what, { card = false, deadlineMs = BOOT_DEADLINE_MS } = {}) {
+  const t0 = Date.now(); let last;
+  while (Date.now() - t0 < deadlineMs) {
+    last = await c.ev(js);
+    if (last && last.ok) {
+      (c.bootWaits ||= []).push({ what, ms: Date.now() - t0, card, sinceOpen: c.navReturnedAt ? Date.now() - c.navReturnedAt : null });
+      return last;
+    }
+    // a page that is still arriving has no __gate yet, and an evaluation can die with the old
+    // document mid-navigation; inject again and look again rather than reading either as an answer
+    if (!last || last.__err || /no __gate/.test(last.why || "")) await c.ev(GATE_SRC);
+    await sleep(200);
+  }
+  const why = (last && (last.why || last.__err)) || JSON.stringify(last);
+  throw new Error(`${what} not clickable after ${deadlineMs / 1000}s — last seen: ${why}`);
+}
+const waitGate = (c, id, what, opts) => waitUntil(c, gateJS(id), what, opts);
+
+/* A NEW DOCUMENT, NOT THE ONE WE ARE LEAVING. Navigating to the URL the tab is already on leaves
+   the old page answering questions until the new one commits -- and the old page's lobby is
+   already loaded and clickable, so a readiness check would pass on the page about to be thrown
+   away and the click would be lost with it. The mark is how the two pages are told apart. */
+async function navFresh(c, url) {
+  await c.ev("window.__ppLeaving = true; 1");
+  await c.nav(url);
+  /* THE CLOCK STARTS WHEN nav RETURNS, because that is when the old rig's fixed pause began -- and
+     the two engines return at different moments. cdp.mjs's nav is Page.navigate, which returns at
+     once; wk.mjs's is page.goto(url, {waitUntil: "load"}), which returns after the page has
+     loaded. Timed from before the call, every WebKit leg in the 2026-09-13 trial was logged "would
+     have thrown this voyage away" at 11.7-30.3 s, counting a load the old rig had already waited
+     out. The second navFresh overwrites this, and the second one is what the old pause followed. */
+  c.navReturnedAt = Date.now();
+  const origin = new URL(url).origin;
+  await waitUntil(c, `(() => { if (window.__ppLeaving) return {ok:false, why:'the previous page is still up'};
+    if (location.origin !== ${JSON.stringify(origin)}) return {ok:false, why:'still on ' + location.href};
+    return document.readyState === 'loading' ? {ok:false, why:'the game page is still loading'} : {ok:true}; })()`, "the game page");
+}
+
+function bootWaitSummary(c) {
+  const w = c.bootWaits || [];
+  const card = w.find(x => x.card);
+  const lost = card && card.sinceOpen > OLD_FIXED_WAIT_MS ? ` — the old rig looked once at ${OLD_FIXED_WAIT_MS}ms and would have thrown this voyage away` : "";
+  return w.map(x => `${x.what} ${x.ms}ms`).join(", ") + (card ? ` · mode card ready ${card.sinceOpen}ms after the page-open call returned${lost}` : "");
+}
+
 async function freshPage(c, idSuffix = "a") {
-  await c.nav(gameURL(c.httpPort)); await sleep(2200);
+  const url = gameURL(c.httpPort);
+  await navFresh(c, url);
   // each browser needs its OWN id or the second one rejoins as the first's seat (§5c) — the shared
   // prefix is what makes both filterable, the suffix is what keeps them distinct captains.
   await c.ev(`localStorage.clear(); localStorage.setItem('pp_id', ${JSON.stringify(QA_PLAYER_ID)} + '-' + ${JSON.stringify(idSuffix)}); 1`);
-  await c.nav(gameURL(c.httpPort)); await sleep(2600);
+  await navFresh(c, url);
   await c.ev(GATE_SRC);
 }
 async function nameModal(c, name) {
-  await sleep(800);
-  const g = await c.ev(`__gate(document.getElementById('nameModalInput'))`);
+  // docs/DRIVING-THE-GAME.md §3: btnNameConfirm is in the DOM from boot, so its existence says
+  // nothing; __gate asks whether it is on screen and on top, which is whether the modal has opened.
+  await waitGate(c, "btnNameConfirm", "name confirm");
+  const g = await c.ev(gateJS("nameModalInput"));
   if (g && g.ok) { await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x: g.x, y: g.y, button: "left", clickCount: 3 });
     await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: g.x, y: g.y, button: "left", clickCount: 3 });
     await c.type(name); }
-  const b = await c.ev(`__gate(document.getElementById('btnNameConfirm'))`);
-  if (!b || !b.ok) throw new Error("name confirm not clickable");
+  const b = await waitGate(c, "btnNameConfirm", "name confirm");
   await c.clickXY(b.x, b.y);
 }
 async function bootSolo(c, name) {
   await freshPage(c, "solo");
-  const g = await c.ev(`__gate(document.getElementById('choiceSolo'))`); if (!g || !g.ok) throw new Error("solo card not clickable");
+  const g = await waitGate(c, "choiceSolo", "solo card", { card: true });
   await c.clickXY(g.x, g.y); await nameModal(c, name);
 }
 async function bootPassPlay(c, names) {
   await freshPage(c, "pp");
-  const g = await c.ev(`__gate(document.getElementById('choicePassPlay'))`); if (!g || !g.ok) throw new Error("pass&play card not clickable");
-  await c.clickXY(g.x, g.y); await nameModal(c, names[0]); await sleep(700);
-  await c.ev(`(() => { const v = ${JSON.stringify(names)}; for (let i = 0; i < 4; i++) { const el = document.getElementById('ppName' + i); if (el) el.value = v[i] || ''; } return 1; })()`);
-  const s = await c.ev(`__gate(document.getElementById('btnStartPassPlay'))`); if (!s || !s.ok) throw new Error("pass&play start not clickable");
+  const g = await waitGate(c, "choicePassPlay", "pass&play card", { card: true });
+  await c.clickXY(g.x, g.y); await nameModal(c, names[0]);
+  // the names can only be written once the pass-and-play screen is up, so write them on every look
+  // (it is idempotent) and ask for the start button in the same breath -- no order to get wrong
+  const s = await waitUntil(c, `(() => { if (typeof __gate !== 'function') return {ok:false, why:'no __gate on this page yet'};
+    const v = ${JSON.stringify(names)}; let n = 0;
+    for (let i = 0; i < 4; i++) { const el = document.getElementById('ppName' + i); if (el) { el.value = v[i] || ''; n++; } }
+    if (!n) return {ok:false, why:'the pass-and-play names screen is not up yet'};
+    return __gate(document.getElementById('btnStartPassPlay')); })()`, "pass&play start");
   await c.clickXY(s.x, s.y);
 }
 async function bootHost(c, name) {
   await freshPage(c, "host");
-  const g = await c.ev(`__gate(document.getElementById('choiceHost'))`); if (!g || !g.ok) throw new Error("host card not clickable");
+  const g = await waitGate(c, "choiceHost", "host card", { card: true });
   await c.clickXY(g.x, g.y); await nameModal(c, name);
   // UI-05: hosting creates the room outright; wait for the 4-letter code
   const t0 = Date.now(); let code = "";
-  while (Date.now() - t0 < 30_000) { await sleep(600);
+  while (Date.now() - t0 < BOOT_DEADLINE_MS) { await sleep(600);
     code = await c.ev(`(document.getElementById('roomCode')||{textContent:''}).textContent.trim()`);
     if (/^[A-Z0-9]{4}$/.test(code)) return code; }
   throw new Error("room code never appeared: " + JSON.stringify(code));
 }
 async function bootJoin(c, name, code) {
   await freshPage(c, "guest");
-  const g = await c.ev(`__gate(document.getElementById('choiceJoin'))`); if (!g || !g.ok) throw new Error("join card not clickable");
-  await c.clickXY(g.x, g.y); await sleep(700);
+  const g = await waitGate(c, "choiceJoin", "join card", { card: true });
+  await c.clickXY(g.x, g.y);
   /* THE NAME MODAL IS GONE FROM THIS FLOW, and this line waited for it for two days.
      Wyatt's item 31, shipped 2026-08-24 (025f57cc): "'Join a crew' goes straight to the join
      screen -- the name modal in between is gone." The game changed; the rig did not. Every crew
@@ -165,13 +241,19 @@ async function bootJoin(c, name, code) {
      THIS IS THE RIG ROTTING AGAINST THE GAME, which is a failure mode worth naming: a harness that
      encodes a flow can be broken by a fix to that flow, and it fails in a way that looks like the
      GAME is broken. It is now tolerant -- the modal is used if it is there and skipped if it is
-     not -- so this particular rot cannot recur in either direction. */
-  const hasModal = await c.ev(`(()=>{const m=document.getElementById('nameModal');
-    return !!(m && getComputedStyle(m).display !== 'none');})()`);
-  if (hasModal) { await nameModal(c, name); await sleep(700); }
-  await c.ev(`(() => { const jc = document.getElementById('joinCode'); if (jc) jc.value = ${JSON.stringify(code)};
-    const jn = document.getElementById('joinName'); if (jn) jn.value = ${JSON.stringify(name)}; return 1; })()`);
-  const b = await c.ev(`__gate(document.getElementById('btnJoin'))`); if (!b || !b.ok) throw new Error("join button not clickable");
+     not -- so this particular rot cannot recur in either direction.
+
+     And it now waits for whichever of the two is actually UP before deciding. It used to sleep
+     700 ms and decide then, which under load decided before either had appeared. */
+  const next = await waitUntil(c, `(() => { if (typeof __gate !== 'function') return {ok:false, why:'no __gate on this page yet'};
+    const m = document.getElementById('nameModal'); if (m && getComputedStyle(m).display !== 'none') return {ok:true, modal:true};
+    const jc = document.getElementById('joinCode');
+    return (jc && jc.getBoundingClientRect().width > 4) ? {ok:true, modal:false} : {ok:false, why:'the join screen is not up yet'}; })()`, "join screen");
+  if (next.modal) await nameModal(c, name);
+  const b = await waitUntil(c, `(() => { if (typeof __gate !== 'function') return {ok:false, why:'no __gate on this page yet'};
+    const jc = document.getElementById('joinCode'); if (jc) jc.value = ${JSON.stringify(code)};
+    const jn = document.getElementById('joinName'); if (jn) jn.value = ${JSON.stringify(name)};
+    return __gate(document.getElementById('btnJoin')); })()`, "join button");
   await c.clickXY(b.x, b.y);
 }
 async function hostStart(c) {
@@ -328,7 +410,7 @@ async function contactSheet(rec, tag, idx) {
        the same mistake is LOUD instead of reassuring (docs/HARD-WON-LESSONS.md §3). */
     const sheetPort = PORT0 + 70 + idx;
     ownPorts.http.add(sheetPort);
-    const sheetSrv = spawn(PYTHON, ["-m", "http.server", String(sheetPort)], { cwd: OUT, stdio: "ignore" });
+    const sheetSrv = spawn(PYTHON, staticServerArgs(sheetPort), { cwd: OUT, stdio: "ignore" });
     await sleep(700);
     await c.nav(`http://127.0.0.1:${sheetPort}/contact-${tag}.html`); await sleep(1200);
     const widths = await c.ev("Promise.all([...document.images].map(i=>i.complete?i.naturalWidth:new Promise(r=>{i.onload=()=>r(i.naturalWidth);i.onerror=()=>r(0);})))");
@@ -441,6 +523,8 @@ async function runLeg(name, idx) {
       guest.httpPort = PORT0;
       await bootJoin(guest, "test2", code);
       log(`[${name}] test2 joined ${code}`);
+      log(`[${name}] lobby, host: ${bootWaitSummary(host)}`);
+      log(`[${name}] lobby, guest: ${bootWaitSummary(guest)}`);
       await hostStart(host);
       const recA = { screens: rec.screens, finished: false }, recB = { screens: rec.screens, finished: false };
       rec.seats = [recA, recB];
@@ -488,6 +572,7 @@ async function runLeg(name, idx) {
       const seat = { screens: rec.screens, finished: false }; rec.seats = [seat];
       if (name.startsWith("passplay-")) await bootPassPlay(host, ["Davy Scones", "Peg Leg Meg"]);
       else await bootSolo(host, "Davy Scones");   // the long name — the one that cliped, on purpose
+      log(`[${name}] lobby: ${bootWaitSummary(host)}`);
       await playSeat(host, name, seat);
       rec.finished = seat.finished;
     }

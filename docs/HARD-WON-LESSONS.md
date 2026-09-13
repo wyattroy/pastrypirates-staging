@@ -2009,3 +2009,25 @@ the one device in front of me.
 3. **Two windows before "done".** A visual feature is not finished until `scripts/qa/_crew_director_coin_check.mjs`
    (or its equivalent for that feature) has watched a host and a guest — one of them at his iPhone 13 mini
    size — and compared what each screen drew.
+
+## A local server that works on the Mac can break a whole page on the Blade (2026-09-13)
+
+**The sea trial lost half its voyages at the lobby on Wy-Blade**, and the first two explanations were wrong:
+"pages load slower than the rig's fixed 2.6s wait" (a 30s wait still lost 6 of 7), and "the build broke the
+lobby" (the same leg alone booted in 0.28s). A probe attached to each stuck Chrome found the truth in its own
+console: `net::ERR_CONNECTION_REFUSED` on `/src/orchestrator.js` and other modules — the page never received
+its code, so `boot()` never ran and the loader never lifted.
+
+**THE MECHANISM, measured on Wy-Blade:** `python -m http.server` inherits `socketserver.TCPServer.request_queue_size
+= 5`. When ten Chromes open their connections at once, that 5-deep accept backlog fills; **Windows answers the
+next connection with a refusal, where macOS and Linux quietly make the client retry** — and **Chrome does not
+retry a failed module script**. 60 simultaneous connections, three rounds: backlog 5 refused 1, 0 and 2; backlog
+512 refused none. The full ten-leg stress with only the server changed: no lobby deaths.
+
+**THE FIX (98c3dce5):** one definition, `staticServerArgs(port)` in `scripts/lib/chrome.mjs`, used by every
+spawner — the stock server with `request_queue_size = 512`. And the rig's lobby now waits for the page and each
+card under a deadline instead of a fixed sleep; three boots that night were ready at 4.5-6.1s, which the old
+2.6s look would have thrown away even with the server fixed.
+
+**The general lesson:** when a check condemns the game on one machine and not another, look first at what the
+rig and the OS do differently — and read the stuck page's own console before theorising about timing.

@@ -6,7 +6,7 @@ import { killProfile } from "./stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { CHROME, LINUX_ARGS, PYTHON } from "./chrome.mjs";
+import { CHROME, LINUX_ARGS, PYTHON, staticServerArgs } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -52,7 +52,7 @@ export function freshProfileDir(profileDir) {
   return alt;
 }
 export async function openChrome({ W, H, dbgPort, httpPort, serveRoot, profileDir, mobile = false, dsf = 1 }) {
-  const srv = httpPort ? spawn(PYTHON, ["-m", "http.server", String(httpPort)], { cwd: serveRoot, stdio: "ignore" }) : null;
+  const srv = httpPort ? spawn(PYTHON, staticServerArgs(httpPort), { cwd: serveRoot, stdio: "ignore" }) : null;
   profileDir = freshProfileDir(profileDir);
   const args = [...LINUX_ARGS, "--headless=new", "--mute-audio", `--remote-debugging-port=${dbgPort}`,
     `--user-data-dir=${profileDir}`, "--no-first-run", "--no-default-browser-check",

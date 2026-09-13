@@ -1530,8 +1530,8 @@
      merely resting in a bowl. Doing both with one node would mean flipping z-index mid-transition,
      which pops. Same shape and colours, so they read as the same object at two moments. */
   .bkoBack { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0;
-    border-radius: 7px; background: linear-gradient(160deg, #c98a4b, #9c6231);
-    border: 2px solid #6f4520; opacity: 0; transition: opacity .26s ease; }
+    background: url(assets/plaque/crate.webp) center/100% 100% no-repeat;
+    opacity: 0; transition: opacity .26s ease; }
   .bkoRow.bkoStudy .bkoBack { opacity: .5; }
   /* The dome is drawn, not an asset — there is no bowl art in assets/ and none needs commissioning
      to ship this. It sits ABOVE the ingredient and slides down over it.
@@ -1544,13 +1544,13 @@
      ingredients in — the board is covered in them and 📦 is the raid icon — so a teal dome was
      inventing a second container for the same idea. Square, because that is what he asked for and
      what reads as a crate at 56px; the slat lines are two flat gradients, no new art. */
+  /* ⭐ AND NOW THE REAL CRATE — his Q5 ruling, 2026-09-10: "use it for the end-game bake-off crates too." The
+     brown squares with two gradient slats were the stand-in until the crate art existed; the ghost crate
+     behind (.bkoBack) and the lid in front are the same approved picture the captain's box uses, so they
+     still read as one object at two moments. Opaque inside its outline, so a covered crate hides its
+     ingredient completely, as the 100% height rule above requires. */
   .bkoDome { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 2;
-    border-radius: 7px;
-    background:
-      linear-gradient(to bottom, transparent 30%, rgba(90,52,22,.55) 30%, rgba(90,52,22,.55) 34%, transparent 34%,
-                                 transparent 64%, rgba(90,52,22,.55) 64%, rgba(90,52,22,.55) 68%, transparent 68%),
-      linear-gradient(160deg, #c98a4b, #9c6231);
-    border: 2px solid #6f4520;
+    background: url(assets/plaque/crate.webp) center/100% 100% no-repeat;
     /* LIFT AND FADE, rather than the -118% eject first shipped. Ejecting moved the dome a full bowl
        height upward — straight over the recipe card, which the reveal screenshot showed obscuring
        steps 4 and 5 exactly when the player most wants to check them. A short rise plus a fade reads
@@ -3508,8 +3508,20 @@
   body.pp4Stage .prowTop .chips .chip { flex:0 0 auto; position:relative; }
   /* a crate that overlaps the one before it lifts off it — the soft edge from his page, so a bunch
      still reads as crates ye can count. Later crates sit on top by document order. */
-  body.pp4Stage .prowTop .chips .chip.ov { box-shadow:-2px 0 3px rgba(40,30,10,.22); }
+  body.pp4Stage .prowTop .chips .chip.ov { box-shadow:none; filter:drop-shadow(-2px 0 2px rgba(40,30,10,.35)); }
   body.pp4Stage .chip { width:26px; height:26px; border-radius:6px; }
+  /* ⭐ THE HOLD IS CRATES — his Q5 ruling, 2026-09-10 ("Crates. HE HAS ALREADY MADE THE CRATE ASSET"), BACKLOG
+     W4-10, and the crate he approved on 2026-09-11 (art-review/captains-box/crate-1.jpeg, keyed and cut to 256).
+     Every ingredient aboard sits on its own crate at 76% of it — the bake-off's own share (.bkoIng), so an
+     ingredient in a crate is one size wherever it appears. The soft edge on an overlapping crate (above) is a
+     drop-shadow now, so it follows the crate's outline instead of drawing a square.
+     SCOPED TO #players: the recipe band's ingredients stay box-less, his 2026-09-12 ruling. */
+  body.pp4Stage #players .chip { background:url(assets/plaque/crate.webp) center/100% 100% no-repeat; border:0; border-radius:0; padding:0; }
+  body.pp4Stage #players .chip img { width:76%; height:76%; }
+  /* ⭐ AN EMPTY HOLD IS AN EMPTY CRATE — his Q6 ruling, 2026-09-10: "An empty crate silhouette, matching the
+     empty ingredient silhouettes an island shows once its crate is bought." The crate's own outline filled
+     black (his brief: made from the approved crate, no new art), at the islands' 30%. */
+  body.pp4Stage #players .chip.holdEmpty { background-image:url(assets/plaque/crate-hollow.webp); opacity:.3; }
   /* ⭐ YOUR RECIPE, ACROSS THE TOP OF THE BOX — his Q4 ruling, 2026-09-10. The name (tap it for the
      full recipe card, the same link the captain's log uses) and the five ingredients, each ticked
      once it is aboard — the green tick is his mockup's. Filled by board.js under the game's secrecy

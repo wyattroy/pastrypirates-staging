@@ -26,7 +26,7 @@ import path from "node:path";
 import os from "node:os";
 import { pathToFileURL } from "node:url";
 import { freshProfileDir } from "./cdp.mjs";
-import { PYTHON } from "./chrome.mjs";
+import { PYTHON, staticServerArgs } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -89,7 +89,7 @@ export async function openWebKit({ W, H, httpPort, serveRoot, profileDir, mobile
       + `    mkdir -p ~/.pw && cd ~/.pw && npm i playwright && npx playwright install webkit\n`
       + `  scripts/lib/wk.mjs finds ~/.pw automatically; PW_DIR only overrides it.`);
   }
-  const srv = httpPort ? spawn(PYTHON, ["-m", "http.server", String(httpPort)], { cwd: serveRoot, stdio: "ignore" }) : null;
+  const srv = httpPort ? spawn(PYTHON, staticServerArgs(httpPort), { cwd: serveRoot, stdio: "ignore" }) : null;
   profileDir = freshProfileDir(profileDir);   // same answer as the Chrome mount -- see cdp.mjs
   await sleep(900);
 

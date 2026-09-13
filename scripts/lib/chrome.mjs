@@ -117,3 +117,33 @@ export const PYTHON = (() => {
   }
   console.error("FATAL: no python found — set PYTHON_BIN"); process.exit(1);
 })();
+
+/* ── A STATIC SERVER THAT DOES NOT TURN CALLERS AWAY ──────────────────────────────────────────
+   `python -m http.server` listens with Python's default accept backlog: socketserver's
+   request_queue_size = 5. When that queue is full, WINDOWS answers the next connection with a
+   reset, which Chrome reports as ERR_CONNECTION_REFUSED and does not retry for a module script.
+   macOS and Linux tend to drop the SYN instead, so the client retransmits and merely waits. That
+   difference is why this only ever bit on the Windows laptop.
+
+   What it cost, 2026-09-13: ten legs at --parallel=10 on Wy-Blade, and five to seven of the seven
+   Chrome legs sat on "Hoisting the sails..." for the whole run. A read-only probe found every stuck
+   page holding "Failed to load resource: net::ERR_CONNECTION_REFUSED" for its own /src/ modules --
+   the module graph never completed, so boot() never ran. The rig reported "solo card not
+   clickable", and the first fix, waiting longer for the card, still lost six of seven, because no
+   wait can finish a page that is missing orchestrator.js.
+
+   Measured before this was written: 60 simultaneous connections, three rounds, against the CLI
+   exactly as the rig started it, refused 1, 0 and 2. The identical CLI with only this backlog
+   raised refused 0, 0 and 0.
+
+   So every server that serves the tree goes through this ONE spelling, which runs the stock CLI
+   untouched except for the backlog. 512 is capacity, not a timing guess: comfortably above the
+   ~40 simultaneous connections ten Chromes open, and the OS clamps it to its own maximum anyway.
+   The argv still names http.server, but nothing identifies a server by argv: stray_probes.mjs
+   deliberately kills these as the child processes they are. */
+export const STATIC_SERVER_BACKLOG = 512;
+export const staticServerArgs = (port) => ["-c",
+  "import runpy, socketserver, sys; " +
+  `socketserver.TCPServer.request_queue_size = ${STATIC_SERVER_BACKLOG}; ` +
+  `sys.argv = ['http.server', '${+port}']; ` +
+  "runpy.run_module('http.server', run_name='__main__')"];

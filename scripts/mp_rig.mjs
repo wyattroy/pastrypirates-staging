@@ -28,7 +28,7 @@ import os from "node:os";
 import path from "node:path";
 
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
-import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON } from "./lib/chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON, staticServerArgs } from "./lib/chrome.mjs";
 import { reapOrphans } from "./lib/stray_probes.mjs";
 // screenshots: $MP_RIG_SHOTS, else ./mp-rig-shots under the caller's cwd (was a dead scratchpad path)
 export const SHOTS = process.env.MP_RIG_SHOTS || path.join(process.cwd(), "mp-rig-shots");
@@ -43,7 +43,7 @@ const ports = { dbg: [], http: [] };   // recorded for attach()/diagnostics — 
 const profiles = [];
 
 export function serve(port) {
-  const p = spawn(PYTHON, ["-m", "http.server", String(port)], { cwd: REPO, stdio: "ignore" });
+  const p = spawn(PYTHON, staticServerArgs(port), { cwd: REPO, stdio: "ignore" });
   procs.push(p); ports.http.push(port);
   return gameURL(port);
 }
