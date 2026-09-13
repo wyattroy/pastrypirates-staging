@@ -190,11 +190,12 @@ export function buildPlayerRows(){
    one crate tall, so the box's height is set by the number of captains alone.
    MEASURED at fit time, never assumed: the room is the hold's own width after the name and coin
    columns have taken theirs, and the crate's size is its drawn size (22px on a phone, 26 elsewhere). */
-/* ⭐ THE GAP IS A SHARE OF A CRATE, NOT A COUNT OF PIXELS — Wyatt, 2026-09-12: "I want the
-   ingredients to be 20% of their width gap from each other." A pixel means different things at 22px
-   and at 26px; a proportion does not. The CSS `gap` on .chips carries the same 20% (5px desktop,
-   4px phone), so the laid-out gap and the squeezed one can never disagree. */
-export const HOLD_GAP_RATIO=0.20, HOLD_MAX_OVERLAP=0.35;
+/* ⭐ THE GAP IS THE ROW'S OWN TOP/BOTTOM PADDING, AND IT IS READ OFF THE PAGE — Wyatt, 2026-09-13, from his
+   crate tuner: "Adjust the between-crate padding to match the row padding top/bottom for both modes." (It was 20%
+   of a crate's width, his 2026-09-12 number, superseded.) The number lives ONCE, in index.html's --capRowPad, which
+   sets both the row's padding and the hold's CSS `gap`; this function reads that same gap back from the laid-out
+   hold, so the laid-out spacing and the squeezed spacing cannot disagree — and it holds no second copy to go stale. */
+export const HOLD_MAX_OVERLAP=0.35;
 export function fitHold(el){
   if(!el)return;
   const chips=[...el.children].filter(c=>c.classList&&c.classList.contains("chip"));
@@ -203,7 +204,7 @@ export function fitHold(el){
   if(chips.length<2)return;
   const cs=chips[0].offsetWidth, room=el.clientWidth, n=chips.length;
   if(!(cs>0&&room>0))return;                              // not laid out yet — the next fit catches it
-  const gap=Math.round(cs*HOLD_GAP_RATIO);                // the same 20% the CSS gap uses
+  const gap=parseFloat(getComputedStyle(el).columnGap)||0; // the hold's own CSS gap — his row padding
   if(n*cs+(n-1)*gap<=room)return;                         // they fit: the CSS gap is the whole answer
   const floor=cs*(1-HOLD_MAX_OVERLAP);
   let step=(room-cs)/(n-1), scroll=false;

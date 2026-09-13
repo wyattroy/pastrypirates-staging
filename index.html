@@ -3488,7 +3488,7 @@
      exactly what he saw. Padding lives INSIDE the scroll box, so it gives the ring somewhere to be
      drawn without turning the scrolling off. The max-height grows by the same 4px so four captains
      still fit in the room they were measured into. */
-  body.pp4Stage #players { --rowH1:calc(26px + 2 * 5px + 2 * 2px); --rowGap:4px; padding:2px;
+  body.pp4Stage #players { --rowH1:calc(var(--capCrate) + 2 * var(--capRowPad) + 2 * 2px); --rowGap:4px; padding:2px;
     max-height:calc(4px + 4 * (var(--rowH1) + var(--rowGap))); overflow-y:auto; overscroll-behavior:contain; }
   body.pp4Stage .prowTop .coinsWrap { flex:0 0 auto; }
   /* ⭐ ONE LINE, ALWAYS — his check-9 note, 2026-09-11 ("scroll within the same line, not go onto two
@@ -3500,7 +3500,7 @@
      nowrap hold asks for its FULL width first, so a 10-crate hold jumped onto a line of its own and
      the row grew from 32px to 54px before fitHold ever saw it. From 0 it takes the room that is left
      on the captain's own line, which is exactly the room fitHold squeezes into. */
-  body.pp4Stage .prowTop .chips { flex:1 1 0; min-width:0; display:flex; flex-wrap:nowrap; gap:5px; justify-content:flex-end;
+  body.pp4Stage .prowTop .chips { flex:1 1 0; min-width:0; display:flex; flex-wrap:nowrap; gap:var(--capRowPad, 5px); justify-content:flex-end;
     overflow:hidden; }
   body.pp4Stage .prowTop .chips.holdScroll { justify-content:flex-start; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
     -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 14px),transparent); mask-image:linear-gradient(90deg,#000 calc(100% - 14px),transparent); }
@@ -3517,11 +3517,22 @@
      drop-shadow now, so it follows the crate's outline instead of drawing a square.
      SCOPED TO #players: the recipe band's ingredients stay box-less, his 2026-09-12 ruling. */
   body.pp4Stage #players .chip { background:url(assets/plaque/crate.webp) center/100% 100% no-repeat; border:0; border-radius:0; padding:0; }
-  body.pp4Stage #players .chip img { width:76%; height:76%; }
+  body.pp4Stage #players .chip img { width:calc(var(--capIng) * 100%); height:calc(var(--capIng) * 100%); }
   /* ⭐ AN EMPTY HOLD IS AN EMPTY CRATE — his Q6 ruling, 2026-09-10: "An empty crate silhouette, matching the
      empty ingredient silhouettes an island shows once its crate is bought." The crate's own outline filled
      black (his brief: made from the approved crate, no new art), at the islands' 30%. */
   body.pp4Stage #players .chip.holdEmpty { background-image:url(assets/plaque/crate-hollow.webp); opacity:.3; }
+  /* ⭐ HIS CRATE TUNER NUMBERS, EACH WRITTEN ONCE — Wyatt, 2026-09-13, dialled on the real captain's box at real size:
+     "crate 22→28px, ing 76→85%, rowPad 3→2px, padV 19→12px, padH 20→17px" (his iPhone 13 mini) and "crate 26→33px,
+     ing 76→84%, rowPad 5→3px, padV 24→18px, padH 30→22px" (his laptop window), plus "the ingredients in the recipe itself
+     ... this same size as the ingredients on the crates" and "the between-crate padding to match the row padding
+     top/bottom". So three numbers drive everything below and the phone block redefines only them: the crate, the
+     ingredient's share of it, and the row padding — which is also the gap between crates (and fitHold reads that gap
+     back off the page, src/ui/util.js). The plaque padding is on the plaque rules further down. Supersedes the
+     2026-09-11/12 sizes: 22/26px crates, 76%, 20% of a crate between crates, 88% of a crate in the recipe band. */
+  body.pp4Stage #pp4Cap { --capCrate:33px; --capIng:.84; --capRowPad:3px; }
+  body.pp4Stage #players .chip { width:var(--capCrate); height:var(--capCrate); }
+  body.pp4Stage #players .player-row { padding-top:var(--capRowPad); padding-bottom:var(--capRowPad); }
   /* ⭐ YOUR RECIPE, ACROSS THE TOP OF THE BOX — his Q4 ruling, 2026-09-10. The name (tap it for the
      full recipe card, the same link the captain's log uses) and the five ingredients, each ticked
      once it is aboard — the green tick is his mockup's. Filled by board.js under the game's secrecy
@@ -3544,7 +3555,7 @@
   #capRecipeBand.bandEmpty { visibility:hidden; }
   /* one height whatever it holds — the recipe's crates (26px) or the Check my recipe button — so a
      reveal cannot move the board by the difference: the crate, the band's padding and its rule */
-  #capRecipeBand { min-height:calc(26px + 2px + 7px + 2px); }
+  #capRecipeBand { min-height:calc(var(--capCrate, 26px) * var(--capIng, .88) + 2px + 7px + 2px); }
   #capRecipeBand .capRecipeName { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     font-size:15px; color:#5b3a1f; font-weight:800; font-family:Georgia,"Times New Roman",serif;
     letter-spacing:.3px; text-shadow:0 1px 0 rgba(255,250,235,.5);
@@ -3559,7 +3570,7 @@
     text-decoration-color:rgba(91,58,31,.55); -webkit-text-decoration-color:rgba(91,58,31,.55); }
   #capRecipeBand .capRecipeIng { display:flex; gap:4px; flex:0 0 auto; margin-left:auto; }
   #capRecipeBand .chip { position:relative; background:none; border:0; opacity:1; padding:0; border-radius:0;
-    width:23px; height:23px; }
+    width:calc(var(--capCrate, 26px) * var(--capIng, .88)); height:calc(var(--capCrate, 26px) * var(--capIng, .88)); }
   /* the tick sits ON the ingredient and INSIDE the card — it used to hang 5px past the crate's
      corner, which put it through the card's bottom edge once the card was only a little taller
      than its own ingredients (Wyatt, 2026-09-12: "they stay within the card"). */
@@ -3578,14 +3589,14 @@
      unchanged. Phone-width only: a tablet and a laptop have the room and keep 26.
      ⚠ PLACED AFTER THE BAND'S OWN RULES, on purpose: same selectors, so the later rule wins — the
      first cut sat above them and the band's 26px sizes quietly overrode the phone's. */
+  /* ⚠ SUPERSEDED 2026-09-13 BY HIS OWN DIALS: the derivation above chose 22px crates to fit four rows; he set 28px on the
+     real box at his phone's size, with the plaque's padding cut from 19 to 12 to pay for it. The four-rows check is
+     re-measured with his numbers (scripts/qa/_phone_box_rows_check.mjs's question), not re-derived here. */
   @media (max-width: 600px) {
-    body.pp4Stage #players { --rowH1:calc(22px + 2 * 3px + 2 * 2px); --rowGap:3px; }
-    body.pp4Stage #players .player-row { padding:3px 6px; }
-    body.pp4Stage #players .chip { width:22px; height:22px; }
-    body.pp4Stage .prowTop .chips { gap:4px; }                 /* 20% of a 22px crate */
-    #capRecipeBand .chip { width:18px; height:18px; }          /* 88% of a hold's crate, his number */
+    body.pp4Stage #pp4Cap { --capCrate:28px; --capIng:.85; --capRowPad:2px; }
+    body.pp4Stage #players { --rowGap:3px; }
     #capRecipeBand .chip.have::after { width:11px; height:11px; font-size:8px; line-height:11px; }
-    #capRecipeBand { min-height:calc(22px + 2px + 5px + 2px); padding:3px 7px; margin-bottom:4px; }
+    #capRecipeBand { min-height:calc(var(--capCrate) * var(--capIng) + 2px + 5px + 2px); padding:3px 7px; margin-bottom:4px; }
     #capRecipeBand .capRecipeName { font-size:13.5px; }
     body.pp4Stage #pp4Cap { padding-top:6px; padding-bottom:calc(6px + env(safe-area-inset-bottom)); }
   }
@@ -3644,7 +3655,7 @@
   body.pp4Stage #pp4Cap, body.pp4Stage:not(.pp4Side) #pp4Cap, body.pp4Stage.pp4Side #pp4Cap,
   body.pp4Stage.pp4Side #pp4Col > #pp4Cap { box-shadow: none; background-color: transparent; }
   body.pp4Stage #pp4Cap {
-    background: none; border-radius: 0; box-shadow: none; padding: 24px 30px;
+    background: none; border-radius: 0; box-shadow: none; padding: 18px 22px;   /* his tuner, 2026-09-13: was 24px 30px */
     border-style: solid; border-width: 0;
     border-image-source: url(assets/plaque/column.png);
     border-image-slice: 60 fill; border-image-width: 30px; border-image-repeat: round; }
@@ -3653,7 +3664,7 @@
       border-image-source: url(assets/plaque/tablet.png);
       border-image-slice: 55 fill; border-image-width: 34px; } }
   @media (max-width: 600px) {
-    body.pp4Stage #pp4Cap { padding: 19px 20px;
+    body.pp4Stage #pp4Cap { padding: 12px 17px;   /* his tuner, 2026-09-13: was 19px 20px */
       border-image-source: url(assets/plaque/phone.png);
       border-image-slice: 55 fill; border-image-width: 26px; } }
 

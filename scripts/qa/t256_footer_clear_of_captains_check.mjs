@@ -70,10 +70,10 @@ const TICK = `(()=>{
   pick.click();return 'act:'+pick.textContent.trim().slice(0,16);
 })()`;
 
-/* .chip is the real ingredient icon (src/ui/board.js:1731/1734/1745); an empty hold renders a
-   plain opacity-.4 <span> with NO .chip class, so counting any child would false-positive on the
-   very first render, before anyone owns a single crate. */
-const HAS_CARGO = `(()=>{return !!document.querySelector('#players .chips .chip');})()`;
+/* .chip is the real ingredient icon (src/ui/board.js). ⚠ SINCE 2026-09-13 AN EMPTY HOLD IS ALSO A .chip — the crate's
+   own silhouette, .chip.holdEmpty (his Q6 ruling) — so counting any .chip would read "cargo aboard" on the very first
+   render, before anyone owns a single crate. Cargo is a .chip that is not the empty crate. */
+const HAS_CARGO = `(()=>{return !!document.querySelector('#players .chips .chip:not(.holdEmpty)');})()`;
 
 const MEASURE = `JSON.stringify((()=>{
   const vis = e => { if(!e) return false; const r=e.getBoundingClientRect(); const s=getComputedStyle(e);
