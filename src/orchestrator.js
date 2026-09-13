@@ -1950,7 +1950,18 @@ export async function consumeEvent(e){
      a remote human, for anyone but the captain holding this screen). The captain who docked saw the big
      coin they tapped; every other screen sees this one over their hull. Awaited — and the narration
      about the dock waits on this consumer (eventDrawn) — so no line lands on a spinning coin. */
-  if(e.t==="dock"&&!appState.replaying&&!decisionIsLocal(e.p))await flipDockCoin(e.p,!!e.heads);
+  /* ⭐⭐ AND IT HANGS OFF THE FLIP ITSELF — 2026-09-13, his second note on it: "the coin appears to flip AFTER the
+     player has already ended their turn (by buying an ingredient)... it should be attached to the actual moment
+     of the coin being flipped." It was hung off the `dock` event, which the engine records only once the whole
+     dock is over. The engine now records a `coinflip` event the moment a flip is decided (Game.flip) — at a
+     human's tap, inside a bot's doDock — and this is what draws the coin. ARRIVAL FIRST: "bots begin docking
+     BEFORE they have arrived at their dock" — so the coin waits for the stage to be settled (the camera's
+     glide done and every ship drawn where the engine says it is) before it is thrown. */
+  if(e.t==="coinflip"&&e.why==="dock"&&!appState.replaying&&!decisionIsLocal(e.p)){
+    const settled=window.__pp4&&window.__pp4.settled;
+    if(settled)await settled();
+    await flipDockCoin(e.p,!!e.heads);
+  }
   /* ⭐ AND THE CAMERA FRAMES WHOEVER'S TURN IT IS, ON EVERY DEVICE — Wyatt, 2026-09-13 (note 6): "Guest
      camera director does not seem to be zooming in and out dynamically or correctly -- were these
      changes somehow made only to the host?" They were: the sail-window frame lived in pickCell(), which

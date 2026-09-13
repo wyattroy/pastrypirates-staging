@@ -93,6 +93,7 @@ export async function flipDockCoin(seat, heads, sleepFn){
   const CQ = v => (v / 640 * 100) + "cqw";
   const el = document.createElement("div");
   el.className = "dcoin";
+  el.dataset.seat = String(seat);   // which captain this coin belongs to — read by the arrival probe, harmless to the look
   el.style.left = CQ(pt[0]);
   el.style.top  = CQ(pt[1] - cell / 2);          // the boat's TOP edge; the rise happens from there
   /* ⚠ ONE ELEMENT WITH A BACKGROUND, WHICH IS EXACTLY WHAT THE BIG COIN DOES — and the first

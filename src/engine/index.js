@@ -313,7 +313,13 @@ class Game{
   isHome(c){return c[0]===this.home[0]&&c[1]===this.home[1];}
   shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(this.r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
   sample(a,k){const c=[...a];this.shuffle(c);return c.slice(0,k);}
-  flip(p){p.flips++;const h=this.r()<.5;if(h)p.heads++;return h;}
+  /* ⭐ A COIN FLIP IS AN EVENT AT THE MOMENT IT IS DECIDED — Wyatt, 2026-09-13: "the tiny coin should flip
+     WHEN the host's coin is flipping... create a legible, durable design for your code that links the event
+     that is being displayed TO THE ACTUAL EVENT... change the engine if you need to." Every flip in the game
+     is decided by this one line. When the caller says what the flip is FOR, the engine records it right
+     here — {t:"coinflip", p, heads, why} — so a screen that shows the flip is showing THIS moment, not the
+     dock that is summarised a turn-step later (after the buy). Battle flips pass no `why` and are unchanged. */
+  flip(p,why){p.flips++;const h=this.r()<.5;if(h)p.heads++;if(why)this.ev({t:"coinflip",p:p.idx,heads:h?1:0,why});return h;}
   key(c){return c[0]+","+c[1];}
   isIsland(c){return this.islands[c]!==undefined;}
   /* ⭐ CHOOSING A RECIPE IS A GAME FACT, SO THE ENGINE OWNS IT — Wyatt, 2026-09-09:
@@ -1069,7 +1075,7 @@ class Game{
     const ing=port,k=port; // ports are identified by ingredient name
     if(this.cfg.singleDock&&this.dockOccupiedBy(ing,p))return false;
     p.firstFlip.add(k);p.dockedNow.add(k);p.justDocked=true;
-    const h=this.flip(p);
+    const h=this.flip(p,"dock");   // recorded as a coinflip event NOW — before the buy, before the dock summary
     p.coins+=h?this.cfg.dockHeads:this.cfg.dockTails;
     const price=this.cratePrice(ing);
     // a bot buys when it needs the crate and can afford today's price — or, if it trades for a

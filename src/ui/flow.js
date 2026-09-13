@@ -308,7 +308,7 @@ export function localAsk(msg,opts,colors,sub,extra){
   // ONE renderer, nothing else. The drawing all lives in renderAskPrompt above.
   return new Promise(res=>{renderAskPrompt({msg,opts,colors,sub,slider:extra&&extra.slider},res);});
 }
-export async function humanFlip(player,label,allowBack,sub){
+export async function humanFlip(player,label,allowBack,sub,why){
   applyActiveSeat(player.idx);
   const opts=[{label:"🌕 FLIP!",value:1,flip:true}];
   if(allowBack)opts.push({label:"← Back",back:true,value:"back"});
@@ -317,6 +317,13 @@ export async function humanFlip(player,label,allowBack,sub){
   // @copy prompt.flip.fallback
   const v=await ask(label||"Flip the dubloon!",opts,null,sub);
   if(v==="back")return "back";
+  /* THE RESULT IS DECIDED AT THE TAP, AND EVERY OTHER SCREEN HEARS OF IT AT ONCE. It used to be decided 795ms
+     later, after this device's spin, and a dock's result reached nobody until the whole dock — buy included —
+     was over. Deciding it here draws exactly the same random number (nothing else draws between the tap and
+     the old line), and when the flip is FOR something the engine records a coinflip event, which is published
+     and drained immediately: other screens start their tiny coin as this captain's big coin starts spinning. */
+  const h=appState.game.flip(player,why);
+  if(why){publishNow();liveRender();}
   netHandlers().onBroadcastFlip("spin");
   /* D-49 — WAIT OUT THE REST OF THE FLIP, not a fixed 340ms from wherever this line happens to
      resume. The coin has already been spinning since the TAP (localAsk paints it in the tap's own
@@ -327,7 +334,6 @@ export async function humanFlip(player,label,allowBack,sub){
      the coin is on screen for FLIP_SPIN_MS however slow the chain was. Through this file's own
      `sleep`, so fast-forward, pause and reload-replay behave exactly as before. */
   await sleep(flipSpinLeftMs());
-  const h=appState.game.flip(player);
   netHandlers().onBroadcastFlip(h?"H":"T");
   // same fixed-3000ms leftover as narrateLastEvent() had — flash() scales the hold to this
   // (short) message's own length instead of a flat timer unrelated to how long it takes to read
@@ -1869,7 +1875,7 @@ export async function humanDock(player,port){
   // already puts explanatory text (and, per the standing top-to-bottom rule, is revealed last).
   // @copy misc.paramprompt.dockflip
   const h=await humanFlip(player,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
-    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy an ingredient.`);
+    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy an ingredient.`,"dock");
   if(h==="back")return "back";
   player.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
   let got=h?"treasure":"dockhand";

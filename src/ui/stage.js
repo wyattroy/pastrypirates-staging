@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.07.3-staging@6d4b721d";
+const PP4_STAMP = "2026.09.07.3-staging@b74d1da3";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -1413,6 +1413,35 @@ function pillHTML(){
    so the two can never drift. matchMedia reads the true viewport, which is exactly what the media
    query reads — never vwPx(), which on the stage is body's own capped column. */
 const pillRidesRibbon = () => { try { return matchMedia("(min-width: 601px)").matches; } catch (e) { return false; } };
+/* ⭐ THE FORECAST PILL RIDES THE TOP BAR WHENEVER THE BAR CAN HOLD IT — Wyatt, 2026-09-13, on a Safari window
+   just under 600px wide: "the day forecast goes onto its own line. Ideally it should be on the same line. you
+   can see the breakpoint here -- what's the reasoning?"
+   THE REASONING WAS A NUMBER STANDING IN FOR A MEASUREMENT: `min-width: 601px`, the phone breakpoint, chosen
+   when a phone's bar genuinely had no room and nothing in it could shrink. Since fitRibbon() the bar CAN
+   shrink, so the honest question is the one this asks: with the pill in it, does the whole bar fit at a size
+   still easy to read? PILL_ROW_FLOOR is that size — 80% — and it is the one taste number here (his to move).
+   80, not 85, because he has already SEEN and approved 84%: a 640px window whose whole bar, pill included,
+   zoomed to 0.84 ("The top bar fits on one line, everything shrinking together" — LOOKS RIGHT). A floor above
+   that would have quietly undone it. His iPhone 13 mini's bar would need ~72%, so the phone keeps its own
+   pill row; a 590px window needs no shrink at all, so the pill joins the bar. A little hysteresis (3%) so a window resized
+   right at the edge does not flick the pill in and out. pillRidesRibbon() stays for what it still decides —
+   whether the captain's card is inset — which is a layout breakpoint, not a fit. */
+const PILL_ROW_FLOOR = 0.80;
+function pillFitsRibbon(rib, pill){
+  const cs = getComputedStyle(rib);
+  if (cs.display === "none") return false;
+  const cur = parseFloat(rib.style.getPropertyValue("--ribFit")) || 1;
+  const inRib = pill.parentNode === rib;
+  const pillW = Math.max(pill.getBoundingClientRect().width, pill.scrollWidth) / (inRib ? cur : 1);
+  if (!pillW) return inRib;                                  // not drawn yet (or hidden): leave it where it is
+  const kids = [...rib.children].filter(k => k !== pill && getComputedStyle(k).display !== "none");
+  const gap = parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0;
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const natural = kids.reduce((w, k) => w + k.getBoundingClientRect().width / cur, 0) + pillW + gap * kids.length + pad;
+  const room = rib.clientWidth;
+  if (!room || natural <= pad) return inRib;
+  return (room - pad) / (natural - pad) >= (inRib ? PILL_ROW_FLOOR - 0.03 : PILL_ROW_FLOOR);
+}
 function pillTick(){
   const p = $("pp4Pill"); if (!p) return;
   /* THE PILL IS A REAL CHILD OF THE HEADER ROW WHEREVER THE ROW HAS SPACE FOR IT.
@@ -1426,7 +1455,7 @@ function pillTick(){
      the one tick a window actually crosses the boundary; the phone keeps its own fixed pill below
      the ribbon (D-18/D-31, the phone stays as it is). */
   const rib = $("pp4Ribbon");
-  const wantRibbon = !!rib && pillRidesRibbon();
+  const wantRibbon = !!rib && pillFitsRibbon(rib, p);
   if (wantRibbon && p.parentNode !== rib) rib.insertBefore(p, $("pp4FF") || rib.lastElementChild);
   else if (!wantRibbon && p.parentNode !== document.body) document.body.appendChild(p);
   const h = pillHTML();

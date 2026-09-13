@@ -30,7 +30,7 @@ await G.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 667, de
 
 const WATCH = `(()=>{
   if(window.__dc2)return "already";
-  const S=window.__dc2={turns:[],docks:[],seen:0,live:[]};
+  const S=window.__dc2={turns:[],docks:[],seen:0,live:[],spins:[],coins:[],coinSeen:new WeakSet(),wasSpin:false};
   const st=()=>{try{return __pp_app_state_debug()}catch(e){return null}};
   const vb=()=>{const b=document.getElementById('board');return b?b.getAttribute('viewBox'):''};
   const tick=()=>{
@@ -40,6 +40,12 @@ const WATCH = `(()=>{
       if(e.t==='turn') S.live.push({kind:'turn',p:e.p,t0:now,vb0:vb(),moved:false});
       if(e.t==='dock') S.live.push({kind:'dock',p:e.p,t0:now,mine:(a.mySeat===e.p),coin:false});
     }
+    /* 2026-09-13 later — "the tiny coin should flip WHEN the host's coin is flipping": when THIS screen's big coin
+       starts spinning (its own captain's flip), and when a tiny coin appears here for somebody else, both on the
+       wall clock the two windows share */
+    const fc=document.getElementById('flipCoinWrap'); const spinning=!!(fc&&fc.classList.contains('spin'));
+    if(spinning&&!S.wasSpin){ S.spins.push({t:Date.now(),seat:a&&a.mySeat}); } S.wasSpin=spinning;
+    document.querySelectorAll('#dockCoinHost .dcoin').forEach(c=>{ if(!S.coinSeen.has(c)){ S.coinSeen.add(c); S.coins.push({t:Date.now(),seat:+c.dataset.seat}); } });
     for(const L of S.live){
       if(L.kind==='turn'&&vb()!==L.vb0)L.moved=true;
       if(L.kind==='dock'&&document.querySelector('#dockCoinHost .dcoin'))L.coin=true;
@@ -53,7 +59,7 @@ const WATCH = `(()=>{
   };
   requestAnimationFrame(tick);
   return "watching";})()`;
-const READ = `JSON.stringify(window.__dc2?{turns:__dc2.turns,docks:__dc2.docks,me:(()=>{try{return __pp_app_state_debug().mySeat}catch(e){return null}})(),
+const READ = `JSON.stringify(window.__dc2?{turns:__dc2.turns,docks:__dc2.docks,spins:__dc2.spins,coins:__dc2.coins,me:(()=>{try{return __pp_app_state_debug().mySeat}catch(e){return null}})(),
   bots:(()=>{try{return __pp_app_state_debug().game.players.map(p=>p.strategy)}catch(e){return null}})()}:null)`;
 
 let bad = 0;
@@ -87,6 +93,19 @@ try {
     const mineCoin = docks.filter(d => d.mine && d.coin).length;
     if (mineCoin) fail(`${name}: ${mineCoin} of this screen's OWN docks drew the tiny coin — its captain already had the big one`);
   }
+  /* THE SYNC: each screen's own big-coin spin, paired with the tiny coin the OTHER screen drew for that captain */
+  const pairs = [];
+  for (const [flipper, watcher] of [[h, g], [g, h]]) {
+    if (!flipper || !watcher) continue;
+    for (const sp of flipper.spins) {
+      const tiny = watcher.coins.filter(c => c.seat === sp.seat && c.t >= sp.t - 400 && c.t <= sp.t + 8000).sort((a, b) => a.t - b.t)[0];
+      if (tiny) pairs.push({ seat: sp.seat, lagMs: tiny.t - sp.t });
+    }
+  }
+  console.log(`\n  big-coin spin -> other screen's tiny coin: ${JSON.stringify(pairs)}`);
+  if (!pairs.length) console.log("  (no human dock flip was paired in this run — the sync is not judged)");
+  else if (pairs.every(p => p.lagMs <= 1500)) pass(`every human dock flip appeared on the other screen within ${Math.max(...pairs.map(p => p.lagMs))}ms of the big coin starting to spin (${pairs.length} flips)`);
+  else fail(`a tiny coin lagged the flip it shows: ${JSON.stringify(pairs.filter(p => p.lagMs > 1500))}`);
 } catch (e) { console.log("PROBE FAILED: " + (e && e.message || e)); bad++; } finally { await killAll(); }
 console.log(bad ? `\nFAILED — ${bad}` : "\nPASSED — both windows frame every turn and see every other captain's dock coin");
 process.exit(bad ? 1 : 0);

@@ -40,7 +40,7 @@ async function startSolo(){
   await sleep(2600);
 }
 try {
-  for (const [w, h, m, label] of [[375, 667, 1, "his iPhone 13 mini"], [640, 720, 0, "narrow Safari window"], [711, 840, 0, "his laptop window"], [768, 1024, 1, "tablet"]]) {
+  for (const [w, h, m, label] of [[375, 667, 1, "his iPhone 13 mini"], [590, 800, 0, "his just-under-600 Safari window"], [640, 720, 0, "narrow Safari window"], [711, 840, 0, "his laptop window"], [768, 1024, 1, "tablet"]]) {
     await C.send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 2, mobile: !!m });
     await startSolo();
     console.log(`\n${label} ${w}x${h}`);
@@ -59,6 +59,10 @@ try {
     (rib.overflowRight <= 1 && rib.clipped.length === 0 && rib.roundH <= 24)
       ? pass(`the top bar fits on one line (zoom ${rib.fit}, "DAY" ${rib.roundH}px tall, nothing clipped)`)
       : fail(`the top bar does not fit: ${JSON.stringify(rib)}`);
+    /* 2026-09-13 later: "the day forecast goes onto its own line. Ideally it should be on the same line." */
+    const pillIn = await C.ev(`(()=>{const p=document.getElementById('pp4Pill');return !!(p&&p.parentNode&&p.parentNode.id==='pp4Ribbon');})()`);
+    if (w <= 400) (!pillIn ? pass("on his phone the forecast pill keeps its own row (the bar would need ~72% to hold it)") : fail("the forecast pill squeezed into a phone's top bar"));
+    else (pillIn ? pass("the forecast pill rides the top bar on this window") : fail(`the forecast pill dropped to its own line at ${w}px wide`));
     /* 3 — zoom the director onto boat 0, then put a board-layer coin on it */
     /* WAIT FOR THE DIRECTOR TO ZOOM BY ITSELF. Asking it to frame a seat on demand read 640 (no zoom) at
        every size on the first run — day one's turn-order ceremony owns the camera. The bots' own turns
