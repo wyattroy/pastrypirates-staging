@@ -113,6 +113,12 @@ The bots matched because those bots genuinely held two ingredients, which is pub
 
 **Why:** a rival's recipe is secret in every mode — that is a game rule, not a multiplayer artifact.
 
+> **⚠ Updated 2026-09-13 — the rule above stands; two of its pictures moved.** Since 2026-09-10 your recipe is drawn in the
+> band across the TOP of the captains panel, not in your own row, so every row — yours included — shows only what that
+> captain holds. And since 2026-09-13 an empty hold is a single faint crate silhouette, not the words "empty hold" (his Q6
+> ruling), with every held ingredient sitting on the approved crate. Where this section says a row "reads 'empty hold'",
+> read "shows the empty crate". The code is `src/ui/board.js`'s `chip holdEmpty`; the accepted line below says the same.
+
 **Citations:** `src/ui/board.js:1671` (`canReveal` — only your own seat, and in pass-and-play only
 after you tap *check my recipe*), `src/ui/board.js:1697` (a rival's row is `held.join("")` or
 `empty hold`). Wyatt, 2026-08-30: *"the hold is empty when it shows red squared grayed out
@@ -369,7 +375,7 @@ drift rule 23 exists to prevent, and it had already started.
 - a scrollable card or sheet may run past the bottom of the screen; being cut off at the bottom edge is how it tells you to scroll;
 - board artwork (the map, islands, ships, logo, decorative art) may be clipped at the edge of the board itself — the board is a camera view of a larger map, so its contents are cut off by design;
 - each viewer's own captain is listed FIRST in the captains panel, so two screens legitimately show different row orders;
-- the viewer's RECIPE sits in a band at the top of the captains panel, drawn as the RECIPE CARD the player chose — the picker's own parchment, its name in the picker's brown Georgia and underlined because tapping it opens the card. Its ingredients wear NO box and are NEVER dimmed (Wyatt, 2026-09-12: they sit on the recipe card, which already says they are the recipe); a green tick marks each one ye hold, and no tick is the only mark that ye do not. A long name is drawn smaller so it fits its card — sizes differ between recipes and between screens by design. Every ROW, the viewer's own included, shows only what that captain actually holds, or "empty hold";
+- the viewer's RECIPE sits in a band at the top of the captains panel, drawn as the RECIPE CARD the player chose — the picker's own parchment, its name in the picker's brown Georgia and underlined because tapping it opens the card. Its ingredients wear NO box and are NEVER dimmed (Wyatt, 2026-09-12: they sit on the recipe card, which already says they are the recipe); a green tick marks each one ye hold, and no tick is the only mark that ye do not. A long name is drawn smaller so it fits its card — sizes differ between recipes and between screens by design. Every ROW, the viewer's own included, shows only what that captain actually holds, each ingredient sitting on the approved wooden crate; an EMPTY hold is one faint crate silhouette at the right of the row, never the words "empty hold" (Wyatt's Q6 ruling, 2026-09-10: "An empty crate silhouette", built 2026-09-13) — a pale or ghosted crate there is that design, not a missing or greyed-out label;
 - on a shared (pass-and-play) device that band shows a "Check my recipe" button instead of the recipe, and between captains it can be a blank strip at the top of the panel — both keep one captain's recipe private from the next, and the blank strip keeps the panel from jumping;
 - one recipe card highlighted and another not is the two-tap selection state, not a rendering failure;
 - a captain's crates overlapping each other in the captains panel is DESIGNED (Wyatt, 2026-09-11): every hold stays on one line, spaced by 20% of a crate's width, and when they do not fit they slide together — up to 35% overlap, each with a soft edge — and past that the line scrolls sideways with a fade at its right edge. A fade or a half-covered crate there is never a clipping fault;

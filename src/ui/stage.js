@@ -42,7 +42,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.13.2-staging@8fea1e02";
+const PP4_STAMP = "2026.09.13.3-staging@d05187bc";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2274,6 +2274,7 @@ function recipeGuard(){
     if (!btn || !btn.querySelector(".recipeList")) return;
     if (focusBtn === btn) { clearGlow(); clearBake(); focusBtn = null; return; }  // second tap: let it through
     e.stopPropagation(); e.preventDefault();                          // first tap: focus + glow
+    if (rcSwapCancel) rcSwapCancel();   // a tap mid-swap keeps the tapped card in front (see cancelSwap in mountRecipeStack)
     focusBtn = btn;
     document.querySelectorAll("#actionPanel .apBtn").forEach(x => x.classList.toggle("pp4Focus", x === btn));
     clearGlow();
@@ -2388,6 +2389,7 @@ let rcKey = null;
    transform to whatever prompt came next.
    ══════════════════════════════════════════════════════════════════════════════════════════════ */
 let rcSwapFn = null;         // the live stack's own swap(), handed over by mountRecipeStack
+let rcSwapCancel = null;     // and its way to stop a swap mid-slide — a tap during the slide wins (recipeGuard)
 let rcFlightKey = null;      // the rcKey this flight belongs to — one flight per picker, ever
 let rcFlightTimers = [];
 /* ⚠ TRUE FOR THE WHOLE TIMELINE, INCLUDING THE 620ms THE TRANSFORM IS TRANSITIONING BACK TO NONE.
@@ -2729,13 +2731,14 @@ function mountRecipeStack(ap){
   /* HIS TUNER NUMBER (380ms) REPLACES THE 150 HE ASKED FOR ON 2026-09-08. Both are his; the later
      one wins, and the CSS transition below is derived from it rather than typed twice. */
   const SWAP_MS = REDUCED ? 0 : RC_SWAP_MS;
-  let swapping = false;
+  let swapping = false, swapTimer = null;
   const swap = () => {
     if (swapping || cards.length < 2) return;
     swapping = true;
     resetRecipeFocus();                      // his 6.7: a pending "Bake this!" is cancelled
     if (SWAP_MS) row.classList.add("rcSwapping");
-    setTimeout(() => {
+    swapTimer = setTimeout(() => {
+      swapTimer = null;
       /* THE COMMIT LANDS WITH NO TRANSITION — see .rcSnap in index.html. Exchanging data-rcpos
          changes each card's target transform, and with the transition live they animated a SECOND
          time from where they had just arrived. That double run IS the pause he described. The
@@ -2755,6 +2758,20 @@ function mountRecipeStack(ap){
       row.classList.remove("rcSnap");
       swapping = false;
     }, SWAP_MS);
+  };
+  /* ⭐ A TAP DURING THE SLIDE STOPS THE SLIDE — "THE DEMO SWAP NEVER FIGHTS THE PLAYER" (rcFlightShow), carried into
+     the 380ms the swap is moving. Posed 2026-09-13 after Wy-Blade's crate trial recorded three dead first taps on
+     Chrome phones: a real-mouse tap inside the self-swap selected the front card, the card slid behind, and the rule
+     above ("the back card can never be the one pending") cleared the choice — 6 of 6 taps lost on dev, and on main.
+     The card the captain tapped is the card they want, so the swap is abandoned before it commits: the front card
+     never changes, the cards slide back to where they were, and the tap goes on to select it. One rule for every
+     swap — the demo's, the circle's, the sliver's and the swipe's — because all four run through swap() above. */
+  const cancelSwap = () => {
+    if (!swapping || !swapTimer) return false;
+    clearTimeout(swapTimer); swapTimer = null;
+    row.classList.remove("rcSwapping");
+    swapping = false;
+    return true;
   };
 
   row.querySelectorAll(".pp4RcArrow, .pp4RcSwap, .pp4RcPeek").forEach(a => a.remove());
@@ -2817,6 +2834,7 @@ function mountRecipeStack(ap){
      the cancel-the-pending-bake and re-chart-the-course that come with it. A second, cosmetic
      version of this would be two things kept in step by nothing. */
   rcSwapFn = swap;
+  rcSwapCancel = cancelSwap;
   paint();
 }
 

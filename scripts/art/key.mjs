@@ -18,6 +18,13 @@
  *   node scripts/art/key.mjs in.png --out plaque.png --tol 40 --flat
  *
  * --flat keeps the background opaque-cropped instead of transparent (for art that sits on wood).
+ * ⚠ --tol 12 FOR A FLAT NEAR-BLACK GROUND WHEN THE ART HAS A DARK OUTLINE. Measured 2026-09-13 on the milk and sugar
+ *   rounds: at the default 38, a dark chocolate-brown outline sits "near" the #050505 key, so the flood fill walks
+ *   straight through it and the keyed icon's edge starts at the light fill — a 6-7px outline became 0, and three
+ *   rolls were set aside as "thin" that had been drawn thick. The same pictures on a WHITE ground kept their outline,
+ *   which is how it showed. At --tol 12 all four milk rolls kept theirs (3.0-3.5% of the frame). Check the edge
+ *   before judging a roll's outline: a keyed icon whose first opaque pixels are light has lost its line here, not in
+ *   the drawing.
  * --anywhere keys EVERY pixel near the key colour. The default keys only the background you can
  *   reach from the edge of the canvas, because a plank seam painted near-black is not background —
  *   see the note beside the flood fill for the picture that taught this.

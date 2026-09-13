@@ -2031,3 +2031,23 @@ card under a deadline instead of a fixed sleep; three boots that night were read
 
 **The general lesson:** when a check condemns the game on one machine and not another, look first at what the
 rig and the OS do differently — and read the stuck page's own console before theorising about timing.
+
+## A "dead" tap can be a choice an animation took back — pose it on the animation's own clock (2026-09-13)
+
+**What happened.** Wy-Blade's crate trial recorded three first taps on the recipe picker as changing nothing for 9s, all on
+Chrome phone legs, on a build that did not touch the picker. The first guess (art not yet loaded, W3-8) was disproved by the
+trial's own screenshots. Posing it settled it in minutes: a real-mouse tap on cards standing still selected 22 of 22 times,
+on dev and on main; a tap landing inside the cards' 380ms self-swap selected the card and then lost it, 5 of 5 on main. The
+swap's end-of-slide rule ("the back card can never be the one pending", 612a98d4) cleared a pick made during the slide. It had
+been in the live game since 2026-09-10; ten browsers at once simply moved the trial's taps into that window.
+
+**Two traps on the way, both about time.**
+- **The window was measured, not computed.** Adding up the code's constants put the swap 4.1s after the cards appear; the real
+  number, read off `.rcSwapping` on fresh loads, was 3.3s — the constants count from a different start than a probe can see.
+  A first dense run aimed at the computed window found nothing and could have been read as "not reproducible".
+- **A picture of "nothing happened" is not a picture of "nothing was registered".** The pick existed for about a third of a
+  second. A 450ms poll on either side of it sees the same screen twice.
+
+**The general form.** When a control "does nothing" only sometimes, list every animation that can be running at that moment,
+measure each one's start and end on the page's own clock, and tap inside each window on purpose. `scripts/qa/_picker_swap_tap_check.mjs`
+is the worked example: it measures the window first, then taps inside it, and is red on 43a133fc.
