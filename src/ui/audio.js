@@ -886,6 +886,13 @@ function playPop(step) {
   play("cork-pop", { from: s * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S });
 }
 
+/* Is this sound ready to play the instant it is asked for? True when it is decoded — and ALSO when sound cannot play here at
+   all (no audio context yet, or muted), so nothing ever waits on a sound that will not be heard. The pop-in's show asks
+   (stage.js): on a slow crew guest the sea trial's probe heard only 10 of 21 cork pops, because the file was still loading. */
+function soundReady(name) {
+  return !ctx || isMuted() || !!buffers[name];
+}
+
 // The single exported flip sound — every flip in the game passes through
 // src/ui/board.js's setFlipCoin() "spin" branch, on both host and guest (D-02/D-07).
 function playFlip() {
@@ -1418,6 +1425,7 @@ export {
      it returns immediately once `ctx` exists, so every gesture after the first reached no wake at
      all. That is precisely how a page could end up permanently silent. */
   wakeCtx,
+  soundReady,
   playPop,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,

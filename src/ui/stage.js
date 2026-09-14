@@ -15,7 +15,8 @@
 // Everything here is render-side. The engine, its RNG, and the dlog are never touched.
 "use strict";
 import { appState } from "../state/index.js";
-import { boardShipEls, setFlipCoin } from "./board.js";
+import { boardShipEls, setFlipCoin, boardArtReady } from "./board.js";
+import { soundReady } from "./audio.js";
 import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, refreshNameMarquees,
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
@@ -44,7 +45,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.14.2-staging@32c03061";
+const PP4_STAMP = "2026.09.14.3-staging@15a0f25b";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2452,6 +2453,8 @@ const RC_CARD_MAX = 400;
    the show a fact about a board that has stopped moving. His tuner numbers are untouched: they all
    run from the end of this wait. */
 const RC_DELAY_MS = 2000;    // board alone, before anything arrives
+const RC_ART_WAIT_MS = 5000; // the longest the show waits for the board's pictures and the pop's sound before it goes anyway
+let rcWaitKey = null, rcWaitFrom = 0;
 const RC_FADE_MS  = 1160;    // the entrance
 const RC_FROM     = 1.25;    // starts 25% LARGER and settles down — his choice, not a typo
 const RC_OVER     = 1.03;    // and dips a little past 1 on the way
@@ -2518,6 +2521,11 @@ function rcFlightRun(key, brd){
      picker did not appear at all, at any size. Return before touching any state: nothing has been
      reset and no key has been claimed, so this is simply "try again next tick". */
   if (!rcAlignReady) return;
+  /* …AND THE BOARD'S PICTURES AND THE POP'S SOUND MUST HAVE ARRIVED — Wy-Blade's sea trial of 2026.09.14.2 caught both crew
+     guests playing the pop-in over an empty grid, and a slow guest heard only 10 of its 21 pops. The sheet stays pinned
+     invisible while this declines, so waiting costs only time — and never more than RC_ART_WAIT_MS per picker. */
+  if (rcWaitKey !== key){ rcWaitKey = key; rcWaitFrom = performance.now(); }
+  if (performance.now() - rcWaitFrom < RC_ART_WAIT_MS && !(boardArtReady(Infinity) && soundReady("cork-pop"))) return;
   rcFlightReset();
   rcFlightKey = key;
 

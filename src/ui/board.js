@@ -258,8 +258,25 @@ function buildRimFlow(cellPx){
     host.appendChild(d);
   });
 }
+/* ⭐ HAS THE BOARD'S ART ARRIVED? — Wy-Blade's sea trial of 2026.09.14.2: both crew GUESTS played the pop-in over a board
+   whose pictures had not loaded ("sparkles over a bare grid with no sea, islands or ingredients"; "21 ingredients on open
+   water, no island land"). The host, whose pictures were already cached, looked right. So drawBoard counts the pictures it
+   starts — the sea, the islands, the crates — and boardArtReady() says when every one has loaded or failed. The recipe
+   picker's show waits on it (stage.js rcFlightRun), capped, so a slow connection delays the draft but can never hold it. */
+let artPending=0,artDrawnAt=0;
+function trackArt(im){
+  if(!im)return;
+  artPending++;
+  let settled=false;
+  const done=()=>{if(settled)return;settled=true;artPending=Math.max(0,artPending-1);};
+  im.addEventListener("load",done);im.addEventListener("error",done);
+}
+export function boardArtReady(maxWaitMs){
+  return artPending===0||(artDrawnAt>0&&performance.now()-artDrawnAt>maxWaitMs);
+}
 export function drawBoard(){
   const svg=$("board");svg.innerHTML="";
+  artPending=0;artDrawnAt=performance.now();
   // PERF-01 (2026-08-02): the boats live in their own SVG overlaying #board so they paint ABOVE the
   // ripple rings, which are HTML now and would otherwise cover them. Cleared in lockstep with
   // #board — emptying one and not the other would strand ghost boats from the previous board.
@@ -272,6 +289,7 @@ export function drawBoard(){
   // squares still read as distinct from open water. `home` (the plain Tortuga tile + anchor +
   // berths) fully hides once art loads, since that's baked into the art itself.
   const boardImg=el("image",{x:0,y:0,width:W,height:W,href:BOARD_IMG},svg);
+  trackArt(boardImg);
   boardImg.addEventListener("error",()=>boardImg.remove());
   const grid=el("g",{},svg);
   const home=el("g",{},svg);
@@ -333,7 +351,7 @@ export function drawBoard(){
     if(placement){
       const clipG=el("g",{"clip-path":`url(#${clipId})`},svg);
       const artG=el("g",{transform:placement.transform},clipG);
-      el("image",{x:0,y:0,width:placement.w,height:placement.h,"preserveAspectRatio":"none",href:placement.href},artG);
+      trackArt(el("image",{x:0,y:0,width:placement.w,height:placement.h,"preserveAspectRatio":"none",href:placement.href},artG));
     }
     // dock is drawn before the crate icons below so it always sits underneath them — it
     // stretches to the shared edge with the island and would otherwise occlude a crate there
@@ -363,6 +381,7 @@ export function drawBoard(){
         const scx=(c[0]+.5)*cell,scy=(c[1]+.5)*cell;
         const g=iconAt(svg,scx,scy,cell*.8,ING_IMG[ing]);
         g.id=`crate_${ing}_${idx}`;
+        trackArt(g.querySelector("image"));
         /* THE POP-IN READS ITS CRATES OFF WHAT WAS DRAWN — the square, the centre, the size, the picture — so there is no
            second copy of where a crate sits (BOARD-RENDERING §2). Until this voyage's pop-in lands, a crate is drawn but
            not shown: his "pop in the ingredients ... until the recipe picker cards appear" (src/ui/popin.js).
