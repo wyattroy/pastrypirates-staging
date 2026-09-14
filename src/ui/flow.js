@@ -2432,7 +2432,7 @@ export async function humanTrade(player){
       const swap=t.giveIng&&t.giveIng!==offer.giveIng;
       answerLines.push(say(swap?"trade.wantsInstead":"trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}));
       opts.push({label:say("trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}),
-        short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?`+${t.giveCoins}🌕`:""}`,
+        short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?say("trade.coinsShort",{n:t.giveCoins}):""}`,
         value:i,
         disabled:t.giveCoins>player.coins||!haveIng,
         why:!haveIng?sayText("trade.notCarrying",{ing:t.giveIng?iname(t.giveIng):say("trade.that",{})})

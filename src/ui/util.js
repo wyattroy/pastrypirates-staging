@@ -594,8 +594,8 @@ const EVENT_NARRATION={
     // D-08/D-25: each named trader reads it addressed to themselves — derived by words.js, not written twice.
     const txt=say("trade.struck",{a:seat(e.a),b:seat(e.b),gave:fmtItem(e.gave),got:fmtItem(e.got)},viewerSeat);
     return {cls:"trade",txt,
-      caps:[[e.a,`🤝 got ${fmtItem(e.got)}`],[e.b,`🤝 got ${fmtItem(e.gave)}`]],
-      pops:[[at(e.a),"🤝"],[at(e.b),"🤝"]]};
+      // no 🤝 stamp over the boats — his game feel audit, 2026-09-13: "This already happens, and it seems weird." → "Remove it"
+      caps:[[e.a,`🤝 got ${fmtItem(e.got)}`],[e.b,`🤝 got ${fmtItem(e.gave)}`]]};
   },
   // v2 rule 5: a call is free and pays a flat bounty. Nothing is ever lost on a wrong one, so
   // there is no "backed the wrong ship (−N🌕)" form any more.
@@ -756,7 +756,7 @@ const EVENT_NARRATION={
           .concat(e.held.concat(e.shipHeld).map(i=>[i,"⚓ held fast"]))};
   },
   pass:(e,at,cellPx,viewerSeat)=>({
-    txt:`🌊 ${seaLine(e.sea,e.p,viewerSeat)} <span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>`,
+    txt:say("muse.line",{sighting:seaLine(e.sea,e.p,viewerSeat),idea:`<span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>`},viewerSeat),
     // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
     // no separately-stored subject to lift out of it, and inventing one by parsing the prose is
     // exactly the kind of guessing this rewrite removed. (Nothing renders caps in v2 regardless.)

@@ -1264,7 +1264,10 @@ export async function flash(msg,ms,holdMs,variants,opts){
     const pre=window.__pp4.subjectSet
       ? {subj:window.__pp4.subject, evN:appState.narrEvIdx}
       : null;
-    const shown=appState.room?pickNarrVariant({html:msg,variants},appState.mySeat):msg;
+    /* THIS SCREEN READS ITS OWN VERSION, IN EVERY MODE — Wyatt, 2026-09-13: "Yes, \"ye\" everywhere". This used to pick only
+       when appState.room was set, so solo kept the neutral line ("Wyatt calls Dough Hook…") while a crew game showed each
+       screen its "ye" — two rules for one line, by mode. netNarrate below always picked; now both do. */
+    const shown=pickNarrVariant({html:msg,variants},appState.mySeat);
     const h=window.__pp4.flash(shown,ms,holdMs,variants,opts);
     if(h){if(appState.room){const _nh0=netHandlers();if(_nh0.onNetBroadcast)_nh0.onNetBroadcast(msg,variants,opts,pre);}
       appState.narrEvIdx=null;   // spent with the line it belonged to, whether or not it was sent

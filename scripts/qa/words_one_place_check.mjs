@@ -147,6 +147,36 @@ const stale = NOT_THE_GAME_SPEAKING.filter(([f, sub]) => sub && !fs.readFileSync
 stale.length ? fail(`exception(s) that match nothing any more — delete them: ${stale.map(([f, s]) => `${f} "${s}"`).join("; ")}`)
   : pass(`every one of the ${NOT_THE_GAME_SPEAKING.length} "not the game speaking" exceptions still names something real`);
 
+/* ---------- 3. no picture typed into a line in the code either ----------
+   Wyatt, 2026-09-13: "I want all of those images that were in the lines still there, I think the images are a really important
+   element of the game". A picture is part of its line, so it lives in words.js with the words — the word scan above cannot see a
+   lone 🌊, which is how one stayed typed into the Muse line's code. Pictures that are NOT part of a line are listed with a reason. */
+const { EMOJI_IMG } = await import(pathToFileURL(path.join(REPO, "src/shared/index.js")).href);
+const ART = Object.keys(EMOJI_IMG).sort((a, b) => b.length - a.length);
+const PICTURES_NOT_IN_A_LINE = [
+  ["src/ui/stage.js", "pp4Chat", "the top ribbon's chat and parrot BUTTONS — controls, not a line"],
+  ["src/ui/util.js", '"👑"', "the crown that pops over the winner's boat — a board effect, not a line"],
+];
+function scanPictures(rel, src) {
+  const code = stripComments(src), hits = [];
+  for (const m of code.matchAll(LITERAL)) {
+    const before = code.slice(Math.max(0, m.index - 160), m.index);
+    const stmt = before.slice(Math.max(before.lastIndexOf(";"), before.lastIndexOf("{"), before.lastIndexOf("}")) + 1);
+    if (!SINK.test(stmt)) continue;
+    const pics = ART.filter((e) => stripInterpolations(m[0]).includes(e));
+    if (!pics.length) continue;
+    if (PICTURES_NOT_IN_A_LINE.some(([f, sub]) => f === rel && m[0].includes(sub))) continue;
+    const at = src.indexOf(m[0].slice(0, 30));
+    hits.push(`${rel}:${at < 0 ? "?" : src.slice(0, at).split("\n").length}  ${pics.join(" ")}  ${m[0].slice(0, 80).replace(/\s+/g, " ")}`);
+  }
+  return hits;
+}
+const picHits = FILES.flatMap((rel) => scanPictures(rel, fs.readFileSync(path.join(REPO, rel), "utf8")));
+picHits.length ? fail(`${picHits.length} picture(s) are typed into a line in the game's code instead of src/shared/words.js:\n  ${picHits.join("\n  ")}`)
+  : pass(`no picture is typed into a line in the game's code — every line's pictures live in words.js with its words (${PICTURES_NOT_IN_A_LINE.length} controls/effects excepted, with reasons)`);
+const redPic = scanPictures("src/ui/util.js", 'function x(){ return {txt:`🌊 ${seaLine(e.sea)}`}; }').length;
+redPic === 1 ? pass("RED-PROOF: a picture typed in front of a line in the code is caught") : fail(`RED-PROOF: a typed picture was not caught (caught ${redPic})`);
+
 /* ---------- red-proof ---------- */
 const doctoredCode = 'async function x(p){ await flash("A sentence typed straight into the code."); opts.push({label:say("button.back",{}),value:1}); }';
 const redCode = scan("src/ui/flow.js", doctoredCode);

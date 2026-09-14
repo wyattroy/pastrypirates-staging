@@ -1011,7 +1011,7 @@ const COIN_PARENTHETICAL_SITES = [
     rel: path.join("src", "ui", "util.js"),
     // anchored at the start of the line, not on "Recipe idea!": the region is read FORWARD from the
     // anchor, so an anchor inside the span would never see the span's own opening tag
-    anchor: "${seaLine(e.sea,",
+    anchor: "sighting:seaLine(e.sea,",
     wraps: ['<span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>'],
   },
   /* "turn-order draw — waiting captains' consolation coin" stood here: his rewrite of 2026-09-13 ("{Crustbeard} goes first!

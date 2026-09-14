@@ -66,7 +66,8 @@ export function fill(template, facts, look) {
       continue;
     }
     if (v === undefined || v === null) { out += whole; continue; }
-    out += String(v) + (possessive || "");
+    // a plain name's possessive follows the same rule a captain's does: "Wyatt's", "Davy Scones'"
+    out += possessive ? String(v) + (String(v).replace(/<[^>]*>/g, "").trim().endsWith("s") ? "'" : "'s") : String(v);
   }
   out += template.slice(last);
   // an amount and its coin are one readable thing — "(+3🌕)", "−2🌕", "5🌕" never break apart. A fact that
@@ -98,15 +99,17 @@ export const WORDS = {
   /* ── THE COIN ────────────────────────────────────────────────────────────────────────────────────── */
   "flip.ask": "Flip the doubloon!",
 
-  /* ── DOCKING ─────────────────────────────────────────────────────────────────────────────────────── */
-  "dock.treasure": "{p} {p:finds|find} treasure (+{n}🌕) at {place}!",
-  "dock.treasure.buy": "{p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:buys|buy} {goods} (−{paid}🌕).",
-  "dock.treasure.black": "{p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:pays|pay} the black market for {goods} (−{paid}🌕).",
-  "dock.treasure.barter": "{p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:trades|trade} {gave} to the black market for {goods}.",
-  "dock.work": "{p} {p:earns|earn} {n}🌕 scrubbin' the docks at {place}.",
-  "dock.work.buy": "{p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:buys|buy} {goods} (−{paid}🌕).",
-  "dock.work.black": "{p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:pays|pay} the black market for {goods} (−{paid}🌕).",
-  "dock.work.barter": "{p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:trades|trade} {gave} to the black market for {goods}.",
+  /* ── DOCKING ──────────────────────────────────────────────────────────────────────────────────────────
+     The coin leads each result line — his ruling, 2026-09-13: the pictures stay in the lines ("I simply was not able to write emojis
+     in the comment boxes"). ⚪ heads found treasure, ⚫ tails scrubbed the docks. */
+  "dock.treasure": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place}!",
+  "dock.treasure.buy": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:buys|buy} {goods} (−{paid}🌕).",
+  "dock.treasure.black": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:pays|pay} the black market for {goods} (−{paid}🌕).",
+  "dock.treasure.barter": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:trades|trade} {gave} to the black market for {goods}.",
+  "dock.work": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks at {place}.",
+  "dock.work.buy": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:buys|buy} {goods} (−{paid}🌕).",
+  "dock.work.black": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:pays|pay} the black market for {goods} (−{paid}🌕).",
+  "dock.work.barter": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:trades|trade} {gave} to the black market for {goods}.",
   "dock.lastOne": "{p:That were the last of it|Ye took the last of it} — the shelves be bare!",
   "dock.gaveTwo": "{a} an' {b}",
   "dock.gaveTwoSame": "two {a}",
@@ -138,6 +141,7 @@ export const WORDS = {
   "list.ye": "ye",
 
   /* ── MUSING — the sighting itself is the sea creature's own sentence ──────────────────────────── */
+  "muse.line": "🌊 {sighting} {idea}",
   "muse.idea": "Recipe idea! (+{n}🌕)",
   "muse.unknown": "{p} {p:leans|lean} over the rail, and there's {what} down there.",
   "muse.somethin": "somethin' strange",
@@ -239,6 +243,7 @@ export const WORDS = {
   "trade.that": "that",
   "trade.notCarrying": "Ye're not carryin' {ing} any more.",
   "trade.tooDear": "That'd cost ye {n}🌕, and ye've only {coins}🌕 aboard.",
+  "trade.coinsShort": "+{n}🌕",
   "trade.walkAway": "🚫 Walk away",
   "trade.refuses": "{q} refuses outright",
   "trade.declines": "{q} declines",
@@ -299,10 +304,10 @@ export const WORDS = {
   "battle.showsHeads": "{a} shows HEADS — {d} must answer…",
   "battle.showsTails": "{a} shows TAILS — {d} must answer…",
   /* his pass, 2026-09-13 */
-  "battle.downwindHits": "{name}'s downwind shot hits!",
-  "battle.crosswindMiss": "No hit — cannonballs collide in the crosswind.",
+  "battle.downwindHits": "⚪ {name}'s downwind shot hits!",
+  "battle.crosswindMiss": "⚪ No hit — cannonballs collide in the crosswind.",
   "battle.hit": "{name} lands a hit!",
-  "battle.bothMiss": "Both miss.",
+  "battle.bothMiss": "⚫ Both miss.",
   "battle.fleeAsk": "{name}: both shots missed wildly! Slip away?",
   "battle.flee": "🏃 Flee!",
   "battle.stand": "⚔️ Stand yer ground",
@@ -408,8 +413,8 @@ export const WORDS = {
   "stats.noneHome": "no bakers home",
   "stats.oneHome": "1 baker home",
   "stats.manyHome": "{n} bakers home",
-  /* his pass, 2026-09-13: "Change the term "heads-luck" to "HEADS {heads-coin}"" */
-  "stats.heads": "{name} HEADS ⚪",
+  /* his pass, 2026-09-13: "Change the term "heads-luck" to "HEADS {heads-coin}"" — and possessive, his word the same night: "Wyatt's HEADS ⚪️" */
+  "stats.heads": "{name's} HEADS ⚪",
   "stats.headsValue": "{pct}% of {n} flips",
 
   /* ── THE TROPHIES — every captain gets one; the art is on the backlog (his ask, 2026-09-13) ─────────── */
