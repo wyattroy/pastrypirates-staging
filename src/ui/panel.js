@@ -1241,10 +1241,10 @@ export async function flash(msg,ms,holdMs,variants,opts){
      alone would have quietly demoted his own lines to the neutral wording — a copy regression
      hiding inside a timing fix. Picking here keeps what he reads identical.
 
-     ...and why only when `appState.room` is set: in solo there was never an echo, so the bubble's
-     neutral line IS the shipped solo wording. Picking unconditionally would have changed solo copy
-     nobody asked to change. The broadcast still sends the neutral `msg` so every other client picks
-     its own variant, exactly as before. */
+     IT PICKS IN EVERY MODE NOW. It used to pick only when `appState.room` was set, to keep solo's
+     neutral wording; his ruling of 2026-09-13 ("Yes, \"ye\" everywhere") retired that, so solo reads
+     "ye" on its own captain's lines exactly as crew does. The broadcast still sends the neutral `msg`
+     so every other client picks its own variant. */
   /* READ THE SUBJECT BEFORE THE LOCAL DRAW SPENDS IT — and this is one level up from where that
      lesson was learned, which is why it was still broken.
      MEASURED ON THE WIRE, 2026-08-29, two real browsers, 47 narration lines in one crew game:

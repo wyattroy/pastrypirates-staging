@@ -24,6 +24,7 @@ import { say, sayText } from "./util.js";   // every word from src/shared/words.
 import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
+import { startPopIn, releasePopIn } from "./popin.js";
 
 const $ = id => document.getElementById(id);
 const AR = { N: "↑", S: "↓", E: "→", W: "←" };
@@ -43,7 +44,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.14.1-staging@fb1da47f";
+const PP4_STAMP = "2026.09.14.2-staging@32c03061";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -512,7 +513,7 @@ function boatUXY(i){
 // belongs here — BOARD-RENDERING §3 calls adding it "the step that gets forgotten", and #rimHost
 // was forgotten exactly this way: the current stayed parked on the full-board layout while the
 // water zoomed away beneath it. A LIST, not named consts, for the same reason.
-const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost"];
+const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost", "popHost"];   // popHost: the ingredients popping onto the islands (popin.js)
 let ribHCache = 48, ribHAt = -1e9, lastVB = "", lastRipT = "";
 /* THE TOP BAND — where the board's top edge goes: the bottom of the ribbon, or of the wind pill
    when that sits lower (playtest 17, Wyatt: "the wind/forecast pip covers the top of the trade
@@ -1404,7 +1405,7 @@ function pillHTML(){
   const now = g.windNow, fc = g.forecastWind();
   const nowS = `${say("pill.now",{})} ${now}${AR[now]}`;
   const fcS = g.stormNext
-    ? ` · ${say("pill.forecast",{})} ⛈<span class="pp4Spin">↑</span>`
+    ? ` · ${say("pill.forecast",{})} ${say("pill.storm",{spin:`<span class="pp4Spin">↑</span>`})}`
     : (fc ? ` · ${say("pill.forecast",{})} ${fc}${AR[fc] || ""}` : "");
   return nowS + fcS;
 }
@@ -2525,8 +2526,11 @@ function rcFlightRun(key, brd){
      cannot flash un-animated; any path that does not attach the entrance owes it a release, or the
      picker is invisible for the rest of the voyage. Reduced motion is the loudest case: the whole
      show is skipped, so the sheet must simply BE there. */
-  const rcShow = () => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; };
-  if (REDUCED) { rcShow(); return; }        // parked, immediately, and no demo swap: the show IS motion
+  /* …and the dotted line waits for the cards: his "Don't draw the dotted line UNTIL the recipe cards appear"
+     (2026-09-13). A path that skips the entrance draws it at once; the entrance itself draws it when the cards have
+     faded fully in (see rcFlightShow) — measured, a line drawn as the fade merely began led the cards by a frame or two. */
+  const rcShow = (lineFollows) => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; if (!lineFollows) rcCourseRelease(); };
+  if (REDUCED) { releasePopIn(); rcShow(); return; }        // parked, immediately, and no demo swap: the show IS motion
 
   /* ⭐ THE WHOLE SHOW IS MEASURED WHEN IT STARTS, NOT WHEN IT IS SCHEDULED — and his two-second
      delay is what makes that possible. dx is computed ONCE and every beat hangs off it, so reading
@@ -2539,7 +2543,11 @@ function rcFlightRun(key, brd){
      between two different coordinate spaces is off by exactly the item-22 shift. Both sides in one
      space or neither. */
   rcInFlight = true;                 // from NOW: the sheet is the show's, and promptTick keeps off it
-  rcLater(() => rcFlightShow(box, brd, rcShow), RC_DELAY_MS);
+  /* ⭐ THE FIRST PICKER OF A VOYAGE WAITS FOR THE INGREDIENTS TO POP IN, AND NO LONGER. startPopIn() plays them and says
+     how long until the last one has landed plus his 300ms — that replaces the two-second wait, so the cards can never
+     arrive over a crate still popping. Every later picker (the next captain in pass-and-play) keeps the two seconds. */
+  const popWait = startPopIn();
+  rcLater(() => rcFlightShow(box, brd, rcShow), popWait != null ? popWait : RC_DELAY_MS);
 }
 
 /* The show itself, one tick of the clock after rcFlightRun claimed the picker. Split out so the
@@ -2588,7 +2596,8 @@ function rcFlightShow(box, brd, rcShow){
     { opacity: 1, transform: `${hold} scale(${RC_OVER})`, offset: .62 },
     { opacity: 1, transform: `${hold} scale(1)`,          offset: 1 },
   ], { duration: RC_FADE_MS, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" }));
-  rcShow();   // the keyframes own opacity from here — they fill backwards through the delay
+  rcShow(true);   // the keyframes own opacity from here — they fill backwards through the delay
+  rcLater(rcCourseRelease, Math.round(RC_FADE_MS * .62));   // the dotted line, once the cards are fully in (the .62 keyframe)
 
   /* AND IT HOLDS THERE. Without this the entrance's fill:both ends and the box snaps to its parked
      place the instant the fade finishes — a second animation pinned to the same transform is what
@@ -2649,6 +2658,7 @@ function rcChromeTeardown(box){
   const a0 = box.querySelector(".pp4RcAsk");  if (a0) a0.remove();
   const p0 = box.querySelector(".pp4RcHelp"); if (p0) p0.remove();
   rcFlightReset();        // a transform must never outlive the box it moved
+  rcCourseHeld = false; rcCourseCard = null;   // and a held dotted line never outlives its picker
   /* ⚠ AND NEITHER MAY THE OPACITY PIN. #pp4Prompt is the ONE box every prompt in the game is drawn
      in, so a picker torn down between "pinned to 0" and "the entrance took over" would hand the
      next question — a trade, a battle, the end card — a permanently invisible box. Same reasoning
@@ -2678,6 +2688,8 @@ function mountRecipeStack(ap){
   const key = cards.map(c => (c.querySelector(".recipeTitle") || {}).textContent || "").join("|");
   if (key === rcKey) return;
   rcKey = key;
+  rcCourseHeld = true;      // a new picker: its dotted line waits for its cards (rcCourseRelease)
+  rcCourseCard = null;
 
   /* ⭐ EACH TITLE RESERVES ITS PARTNER'S NAME, so a swap cannot move the stack — his 2026-09-10
      item 1, the jump he filmed. The front card is the one in flow, so whichever recipe is in FRONT
@@ -2841,7 +2853,18 @@ function mountRecipeStack(ap){
 
 /* The front card's docks, charted. Shared by the stack above and by recipeGuard's first tap, so
    "which docks does this recipe send me to" is answered in ONE place. */
+/* THE DOTTED LINE WAITS FOR THE CARDS — Wyatt, 2026-09-13: "Don't draw the dotted line UNTIL the recipe cards appear."
+   While a new picker's cards are still on their way, the request is remembered rather than drawn, and the show's
+   release (rcShow) charts whichever card is in front at that moment. */
+let rcCourseHeld = false, rcCourseCard = null;
+function rcCourseRelease(){
+  if (!rcCourseHeld) return;
+  rcCourseHeld = false;
+  const c = rcCourseCard; rcCourseCard = null;
+  if (c && c.isConnected) chartFrontRecipe(c);
+}
 function chartFrontRecipe(card){
+  if (rcCourseHeld) { rcCourseCard = card; return; }
   const g = appState.game; if (!g || !card) return;
   const ids = [...card.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
   const seat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
@@ -3740,6 +3763,9 @@ function capEmptyTick(){
       && appState.game.events.some(e => e && e.t === "recipeSet")) S.recipePicked = true;
   const want = (appState.game && !S.recipePicked) ? "hidden" : "";
   if (cap.style.visibility !== want) cap.style.visibility = want;
+  /* THE SAME FACT RELEASES THE CRATES: once the draft is over, a screen that never showed a picker (a voyage of bots, a
+     late guest, a reload) shows its ingredients at once. A no-op when the pop-in has played. */
+  if (S.recipePicked) releasePopIn();
 }
 function promptTick(force){
   const box = $("pp4Prompt"), ap = $("actionPanel");

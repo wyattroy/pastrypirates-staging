@@ -159,8 +159,8 @@ export function buildPlayerRows(){
     // F1 (Wyatt-approved 2026-07-29): the LABEL class — this tooltip points AT a row to say "this
     // one is the reader", so it is UI chrome rather than the game speaking, and takes plain "you".
     // See src/ui/lobby.js's renderSeatList for the full rule; ui_contract_check.js gates it.  [UNGATED-IN-4: ui_contract_check.js does not read 4/ — 03-UI-CONTRACT-TRIAGE.md, plan 03-02]
-    const who=s.id ? (i===appState.mySeat?`${escHtml(s.name)} — that's you!`:escHtml(s.name))
-                   : `🤖 bot (${s.strat||appState.game.cfg.strategies[i]})`;
+    const who=s.id ? (i===appState.mySeat?say("captains.youTip",{name:escHtml(s.name)}):escHtml(s.name))
+                   : say("captains.botTip",{strategy:s.strat||appState.game.cfg.strategies[i]});
     const displayName=pname(i);
     html+=`<div class="player-row" id="prow${i}" style="background:${HEXCOL[i]}18;--rowcol:${HEXCOL[i]}" title="${who}">
       <div class="prowTop">
@@ -424,7 +424,6 @@ export function sayText(id,facts,viewerSeat){
   return say(id,facts,viewerSeat).replace(/<[^>]*>/g,"");
 }
 export { seat };
-export function fl(h){return h?"⚪H":"⚫T";}
 // D-17 (Wyatt-approved 2026-07-29): ingredients render as the SAME custom art the islands and the
 // captain's box draw (ilabelImg -> ING_IMG), not as raw system emoji. None of the 7 in-play
 // ingredient emoji are EMOJI_IMG keys, so emojify() could never rescue them downstream — they were
@@ -440,20 +439,14 @@ export function fl(h){return h?"⚪H":"⚫T";}
 //     byte-for-byte.
 // D-17 is also explicit that the ~145 raw emoji elsewhere in narration source are deliberate
 // shorthand that emojify() converts at its two chokepoints — the defect was only this one branch.
-export function fmtItem(x){return /coin/.test(x)?x.replace(" coins","🌕").replace("coins","🌕"):(ING_IMG[x]?ilabelImg(x):(ING_EMOJI[x]||"")+" "+iname(x));}
-// Single source of truth for what an event says (long-log text), pops (board emoji/icon
-// animation), and caps (per-ship mini-log caption) — one function per event type instead of
-// three independent switches that used to drift out of sync with each other (see describe()/
-// spawnPops()/captions() below, all now thin wrappers over this table). `at` is a board-position
-// lookup — real when called from spawnPops (which needs coordinates), a harmless no-op stub
-// when called from describe()/captions() (which only ever read .txt/.caps, never the pop math).
-// notes/edits NARR-04: named for the direction the wind blows TOWARD, matching how DIRNAME and the
-// rest of the game already talk about wind.
-const WIND_ADJ={N:"northerly",S:"southerly",E:"easterly",W:"westerly"};
-export function windHoldPhrase(dir,streak){
-  const a=WIND_ADJ[dir]||"wind";
-  return (streak||2)>=3?`this ${a} won't quit`:`this ${a} is gusting`;
-}
+export function fmtItem(x){return /coin/.test(x)?x.replace(/(\d+) ?coins?/,(_,n)=>say("coin.amount",{n})):(ING_IMG[x]?ilabelImg(x):(ING_EMOJI[x]||"")+" "+iname(x));}
+// Single source of truth for what an event says (long-log text) and pops (board emoji/icon
+// animation) — one function per event type instead of independent switches that used to drift out
+// of sync (see describe()/spawnPops() below, thin wrappers over this table). `at` is a board-position
+// lookup — real when called from spawnPops (which needs coordinates), a harmless no-op stub when
+// called from describe() (which only reads .txt, never the pop math).
+// (The per-ship "caps" captions and windHoldPhrase() were deleted 2026-09-14: nothing had drawn a
+//  caption since v2 and the wind-streak phrase had no caller — dead words a reskin would trip on.)
 // BUG-2 (storm-push-not-rendered): did this player's ship actually move between the start of its
 // turn and the moment event `e` was recorded? A storm push is the very first thing a turn does
 // (humanTurn/botTurn both emit `turn` and then push), so the `turn` event that opened this seat's
@@ -542,7 +535,7 @@ const EVENT_NARRATION={
        · "It'll blow every ship 3 squares west"        — ruling 2 above
        · "Batten down the hatches, ye scurvy lot!" / "Fie, Poseidon!"  — the storm theatre
        · "this westerly is gusting" / "won't quit"     — the wind-streak flavour, which is why
-         windHoldPhrase() below now has no callers
+         windHoldPhrase() was deleted (2026-09-14)
      v2.1's rule SURVIVES and is the one thing here that is not merely shorter: a FORECAST storm
      still names no direction (`e.next` is null on exactly those rounds), so the tail reads
      "Tomorrow: a storm." and never guesses a heading.
@@ -584,25 +577,21 @@ const EVENT_NARRATION={
     let txt=say((e.heads?"dock.treasure":"dock.work")+how,facts,viewerSeat);
     // the purchase that empties a shelf is how the whole table learns it ran out
     if(how===".buy"&&e.wentDry)txt+=" "+say("dock.lastOne",facts,viewerSeat);
-    const cap=(e.heads?`⚪H 💰+${heads}🌕`:`⚫T +${tails}🌕`)+
-      (bought?(barter?` · ${e.paidIng.map(x=>ING_EMOJI[x]||"📦").join("")} → ${ING_EMOJI[e.ing]}`:` · buys ${ING_EMOJI[e.ing]} −${paid}🌕`):``);
-    return {txt,caps:[[e.p,cap]],
+    return {txt,
       pops:[[at(e.p),bought?ING_EMOJI[e.ing]:"🌕",false,bought?ING_IMG[e.ing]:null]]};
   },
   // v2 rule 4e: no harbor-tax refund any more, so no bonus clause to name.
   trade:(e,at,cellPx,viewerSeat)=>{
     // D-08/D-25: each named trader reads it addressed to themselves — derived by words.js, not written twice.
     const txt=say("trade.struck",{a:seat(e.a),b:seat(e.b),gave:fmtItem(e.gave),got:fmtItem(e.got)},viewerSeat);
-    return {cls:"trade",txt,
-      // no 🤝 stamp over the boats — his game feel audit, 2026-09-13: "This already happens, and it seems weird." → "Remove it"
-      caps:[[e.a,`🤝 got ${fmtItem(e.got)}`],[e.b,`🤝 got ${fmtItem(e.gave)}`]]};
+    // no 🤝 stamp over the boats — his game feel audit, 2026-09-13: "This already happens, and it seems weird." → "Remove it"
+    return {cls:"trade",txt};
   },
   // v2 rule 5: a call is free and pays a flat bounty. Nothing is ever lost on a wrong one, so
   // there is no "backed the wrong ship (−N🌕)" form any more.
   sidebet:(e,at,cellPx,viewerSeat)=>{
     // his pass, 2026-09-13: "{Player} called it wrong." — one line for a wrong call; nothing is ever lost on one.
-    if(e.won)return {cls:"trade",txt:say("call.right",{p:seat(e.p),n:e.delta},viewerSeat),
-      caps:[[e.p,`🔭 called it +${e.delta}🌕`]]};
+    if(e.won)return {cls:"trade",txt:say("call.right",{p:seat(e.p),n:e.delta},viewerSeat)};
     return {cls:"trade",txt:say("call.wrong",{p:seat(e.p)},viewerSeat)};
   },
   battle:(e,at,cellPx=0,viewerSeat)=>{
@@ -629,7 +618,6 @@ const EVENT_NARRATION={
     const txt=say(tookNothing?"battle.nothing":wonOnWind?"battle.downwind":"battle.takes",facts,viewerSeat);
     return {cls:"battle",
       txt,
-      caps:[[e.winner,`⚔️ wins! +${spoilText}`],[loser,"⚔️ loses 💸"]], // G3: the winner caption too
       pops:[[[(x1+x2)/2,Math.min(y1,y2)-cellPx*.15],"⚔️",true],[at(loser),"💸"],[at(e.winner),sp||"💰",false,spImg]]};
   },
   // NARR-01/D-25/D-38 (Wyatt-approved 2026-07-29): signed flee cost, "they/pays" dropped as
@@ -637,7 +625,7 @@ const EVENT_NARRATION={
   // mechanically to the defender-addressed and neutral forms.
   battleflee:(e,at,cellPx,viewerSeat)=>{
     // his pass, 2026-09-13: "Davy Scones slips away!" — the attack itself was announced when the fight opened.
-    return {cls:"battle",txt:say("battle.slipsAway",{d:seat(e.d)},viewerSeat),caps:[[e.d,"🏃 flees!"]],pops:[[at(e.d),"🏃"]]};
+    return {cls:"battle",txt:say("battle.slipsAway",{d:seat(e.d)},viewerSeat),pops:[[at(e.d),"🏃"]]};
   },
   // notes/edits UI-04: on a catch, the emoji that rises from the boat is the SUGARFISH itself, not
   // the fishing line — you just landed a fish, so show the fish coming up out of the boat.
@@ -653,7 +641,7 @@ const EVENT_NARRATION={
   // notes/edits EOV-01: the blue narration box no longer announces the win — it would duplicate the
   // dedicated one-off victory box (see endLive's flash) and the End of Voyage summary. The board
   // still gets a crown pop over the winner; the announcement itself lives in the celebratory box.
-  end:(e,at)=>({cls:"roundhdr",txt:"",caps:[],pops:e.winner===null?[]:[[at(e.winner),"👑",true,CROWN_IMG]]}),
+  end:(e,at)=>({cls:"roundhdr",txt:"",pops:e.winner===null?[]:[[at(e.winner),"👑",true,CROWN_IMG]]}),
   /* THE START OF ANY CAPTAIN'S TURN — ONE LINE, bot or human, every screen. Silent while "turn.start" is empty in
      src/shared/words.js, by his word (2026-09-13): "can we cut it and see how it feels?" · "make sure your change is
      architectural". It replaced two lines that were never the same line: a bot's "takes the wheel…" and a human's
@@ -661,7 +649,7 @@ const EVENT_NARRATION={
   turn:(e,at,cellPx,viewerSeat)=>{const txt=say("turn.start",{p:seat(e.p)},viewerSeat);return txt?{cls:"roundhdr",txt}:null;},
   /* A CAPTAIN LIGHTS THE OVENS — his rewrite of the retired final-round card ("Crustbeard fired up the bakery!"),
      on the moment a full recipe actually reaches Tortuga in today's game. */
-  ovens:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",txt:say("ovens.lit",{p:seat(e.p)},viewerSeat),caps:[[e.p,"🧁 fired up the bakery"]]}),
+  ovens:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",txt:say("ovens.lit",{p:seat(e.p)},viewerSeat)}),
   // RESTORED VERBATIM 2026-09-01 from 693c2b0b^ — the weather-line commit (693c2b0b, 2026-08-27)
   // deleted this entry as COLLATERAL in its table edit: its own "cut on purpose" list names the
   // storm theatre and the wind-streak flavour, never this. Five days of silent Muses later, Wyatt
@@ -751,18 +739,13 @@ const EVENT_NARRATION={
     const txt=byStorm.length
       ? (byCaptain.length?say("storm.summary.both",{storm:join(byStorm),captains:join(byCaptain)}):say("storm.summary",{storm:join(byStorm)}))
       : say("storm.summary.captains",{captains:join(byCaptain)});
-    return {cls:"storm",txt,
-      caps:e.moved.concat(e.blown,e.swept).map(i=>[i,"🌀 blown by the storm"])
-          .concat(e.held.concat(e.shipHeld).map(i=>[i,"⚓ held fast"]))};
+    return {cls:"storm",txt};
   },
   pass:(e,at,cellPx,viewerSeat)=>({
     txt:say("muse.line",{sighting:seaLine(e.sea,e.p,viewerSeat),idea:`<span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>`},viewerSeat),
-    // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
-    // no separately-stored subject to lift out of it, and inventing one by parsing the prose is
-    // exactly the kind of guessing this rewrite removed. (Nothing renders caps in v2 regardless.)
-    caps:[[e.p,"🌊 looks into the ocean"]],pops:[[at(e.p),"🌊",false,WAVE_IMG]]}),
+    pops:[[at(e.p),"🌊",false,WAVE_IMG]]}),
 };
-const NO_AT=()=>[0,0]; // describe()/captions() never need real board coordinates
+const NO_AT=()=>[0,0]; // describe() never needs real board coordinates
 // D-10: describeFor is the viewer-aware core; describe() below is now a thin wrapper
 // (viewerSeat undefined) so its own observable behaviour stays byte-identical to before this
 // wave. NOTE (D-24): syncLogLines()/the captain's log NO LONGER go through describe() — the log
@@ -903,11 +886,6 @@ export function islandXY(ing,cellPx){
   return isl?[(isl[0]+.5)*cellPx,(isl[1]+.5)*cellPx]:null;
 }
 
-export function captions(e){
-  const fn=EVENT_NARRATION[e.t];if(!fn)return [];
-  const r=fn(e,NO_AT);
-  return (r&&r.caps)||[];
-}
 // Derived entirely from the event log (including each event's captured position snapshot),
 // so it works identically for live play, a host-reload replay, or scrubbing a finished game —
 // no separate live-only counters to keep in sync.
@@ -1510,7 +1488,7 @@ export function optionButtonsHTML(items){
 // the small circular "‹" escape hatch that renders ABOVE the message rather than competing with
 // the real choices in the button row. Both call sites hand-built this identical string; same
 // reason as the row above, one definition.
-export function backButtonHTML(idx){return `<button class="apBack" data-i="${idx}" aria-label="Back">‹</button>`;}
+export function backButtonHTML(idx){return `<button class="apBack" data-i="${idx}" aria-label="${say("button.backAria",{})}">‹</button>`;}
 
 /* ================= ONE COIN SLIDER, BUILT AND WIRED IN ONE PLACE (05-01 Task 3, MP-08) =========
 
@@ -1623,7 +1601,7 @@ export function ask(msg,opts,colors,sub,extra){
     if(appState.dlogIdx<appState.dlog.length){appState.dlogN++;return Promise.resolve(resolveOpt(opts,appState.dlog[appState.dlogIdx++],0).opt.value);}
     netHandlers().onEndReplay();
   }
-  const seat=appState.curSeat;
+  const askSeat=appState.curSeat;
   /* THE SHOT CLOCK IS TEMPORARILY OUT OF THE GAME — Wyatt, 2026-08-28, choosing removal over
      engineering the one-activity-engine convergence around it: "i'd prefer to do it even if it
      breaks shot clock, and to temporarily remove the shot clock from the game." What stood here
@@ -1655,12 +1633,12 @@ export function ask(msg,opts,colors,sub,extra){
      and fires the next real line, which is his own wording for item 19: "it should disappear when
      their teammates have played". It is fire-and-forget — nothing awaits it — which is what makes
      an un-deadlined bubble safe here (see stageFlash). */
-  netHandlers().onBroadcast(say("wait.deciding",{name:pn(seat)}),[{seat,html:msg}],{wait:true});
+  netHandlers().onBroadcast(sayAll("wait.deciding",{p:seat(askSeat)}).html,[{seat:askSeat,html:msg}],{wait:true});
   const isFlip=opts.length===1&&!!opts[0].flip;
   // `sub` is optional helper text rendered under the button row; an option flagged `disabled`
   // renders greyed and non-clickable (notes/edits #5) — used for the too-poor Attack button.
-  const base=decisionIsLocal(seat)?netHandlers().onLocalAsk(msg,opts,colors,sub,extra)
-    :netHandlers().onRemotePrompt(seat,{kind:"ask",msg,labels:opts.map(o=>o.label),
+  const base=decisionIsLocal(askSeat)?netHandlers().onLocalAsk(msg,opts,colors,sub,extra)
+    :netHandlers().onRemotePrompt(askSeat,{kind:"ask",msg,labels:opts.map(o=>o.label),
        colors:colors?colors.map(c=>c||""):null,classes:opts.map(o=>o.cls||""),
        // playtest 21 item 5: `why` rides across with `disabled`, because the two are one fact and
        // a guest that got the greying without the reason would show a dead circle that answers

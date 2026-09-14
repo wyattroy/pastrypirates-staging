@@ -151,7 +151,7 @@ import {
   // the decorative board's demo log line, and that board no longer renders. Dead imports are
   // forbidden in this codebase (D-33/D-34/D-40) and no gate catches them, so they go with the code
   // that used them rather than being left behind as plausible-looking dependencies.
-  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say,
+  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say, seat,
   fitHold,   // 2026-09-11: every hold on one line (his check-9 note)
   fitRecipeName,   // 2026-09-12: the recipe's name at the largest size that fits its card
 } from "./util.js";
@@ -159,6 +159,7 @@ import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
 import { playFlip, startFlipSpinSound, stopFlipSpinSound } from "./audio.js";
+import { popInHolds } from "./popin.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
 // see the file header's deviation note.
@@ -362,6 +363,13 @@ export function drawBoard(){
         const scx=(c[0]+.5)*cell,scy=(c[1]+.5)*cell;
         const g=iconAt(svg,scx,scy,cell*.8,ING_IMG[ing]);
         g.id=`crate_${ing}_${idx}`;
+        /* THE POP-IN READS ITS CRATES OFF WHAT WAS DRAWN — the square, the centre, the size, the picture — so there is no
+           second copy of where a crate sits (BOARD-RENDERING §2). Until this voyage's pop-in lands, a crate is drawn but
+           not shown: his "pop in the ingredients ... until the recipe picker cards appear" (src/ui/popin.js).
+           ⚠ VISIBILITY, NOT OPACITY: render() below writes every crate's opacity on every render (a taken crate greys to
+           .45), and measured, that un-hid all 21 crates within 700ms of the show starting. */
+        Object.assign(g.dataset,{gx:c[0],gy:c[1],cx:scx,cy:scy,size:cell*.8,ing,idx});
+        if(popInHolds())g.style.visibility="hidden";
       });
       // 🏴 THE BLACK MARKET FLAG (draft art — emoji until Wyatt commissions a proper flag): flies
       // over the dock when the shelf is empty — the same promise the ceremony card makes, that a
@@ -2167,7 +2175,7 @@ export function showStats(){
   // strings with two separate ids — the extractor binds one marker per assignment site, and folding
   // them into one template would make both ids point at the same site.
   // @copy misc.board.eovbanner
-  const banner=w===null?say("end.nobodyBanner",{icon:iconImg(HOURGLASS_IMG)}):say("end.winsBanner",{icon:iconImg(CROWN_IMG),name:pn(w)});
+  const banner=w===null?say("end.nobodyBanner",{icon:iconImg(HOURGLASS_IMG)}):say("end.winsBanner",{icon:iconImg(CROWN_IMG),w:seat(w)});
   // The winner's recipe is read defensively, and that is NOT belt-and-braces — it is a guest-path
   // requirement. This code used to live in endLive() (src/orchestrator.js), which only ever runs on
   // the HOST after a real finished game, so a recipe was guaranteed. showStats() is different: the
@@ -2177,7 +2185,7 @@ export function showStats(){
   // screen down with it: no banner, no awards, no stats. Caught exactly that way in a browser.
   const winRecipe=w===null?null:(appState.game.players[w]||{}).recipe;
   // @copy adhoc.voyageend.victory
-  const victoryLine=!winRecipe?"":`<div class="victoryText">${say("end.victory",{name:pn(w),article:(a=>a?a+" ":"")(recipeArticle(winRecipe)),recipe:winRecipeSpan(w)})}</div>`;
+  const victoryLine=!winRecipe?"":`<div class="victoryText">${say("end.victory",{w:seat(w),article:(a=>a?a+" ":"")(recipeArticle(winRecipe)),recipe:winRecipeSpan(w)})}</div>`;
   const wi=winRecipe?recipeInfo(winRecipe):null;
   const victoryPic=wi&&wi.img?`<img class="victoryRecipe" src="${wi.img}" alt="">`:""; // art, not copy
   const luck=appState.game.players.map(player=>player.flips?(player.heads/player.flips):0);
@@ -2523,7 +2531,7 @@ export function setFlipActive(onClick){
   // tint layer on top keeps the text legible over the image.
   // notes/edits UI-09: drop the heavy orange tint over the whole coin — show the clean heads face
   // and make just the word "FLIP" orange instead (see #flipCoinWrap.active CSS).
-  if(onClick){el.classList.add("active");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent="FLIP";el.onclick=onClick;}
+  if(onClick){el.classList.add("active");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent=say("flip.word",{});el.onclick=onClick;}
   // A PLAIN DISARM CLEARS THE WORD TOO. Every other coin state sets textContent; this one did not,
   // so a disarmed coin kept the caption "FLIP" over a blank chip (playtest 22). The coin that has
   // just been TAPPED goes straight to the spin instead — see localAsk, which owns that distinction:

@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["battle-swords", "battle-won", "bells", "cannon", "coin-flip", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["battle-swords", "battle-won", "bells", "cannon", "coin-flip", "cork-pop", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -68,6 +68,9 @@ const SFX_VOLUME = {
   "bells": 1,
   "cannon": 1,
   "drumroll": 1,
+  /* THE CORK POP — also 1, and for a stronger reason than q7: his 55% is already IN the file. It was rendered from the
+     pop-in tuner's own recipe at the volume he dialled, so at 1 it plays exactly as loud as the tuner played it. */
+  "cork-pop": 1,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -867,8 +870,20 @@ function play(name, opts) {
   /* (opts.loop stood here for one day, for the looping storm. His 2026-09-08 ruling replaced that
      loop with scattered thunder — see stormScatterStart — and nothing else ever asked to loop, so
      the branch is deleted rather than left as a feature with no caller.) */
-  src.start();
+  /* opts.from/opts.dur play ONE SLICE of a file — the cork pop is one file holding every pitch its climb reaches. */
+  if (opts && opts.from != null) src.start(0, opts.from, opts.dur); else src.start();
   return { src, gain };
+}
+
+/* ⭐ THE POP-IN'S SOUND — his cork pop, one per ingredient, climbing a semitone each (src/ui/popin.js).
+   sfx/cork-pop.mp3 holds 19 slots of 300ms: slot s is the pop pitched s semitones above his starting pitch, each
+   rendered from the tuner's own recipe (.planning/research/audio-sourcing/render_cork_run.mjs) — so a high pop is as
+   long as a low one, which a sped-up sample would not be. Each pop starts 40ms into its slot; playback starts 10ms
+   before it, so an mp3 decoder's priming delay can shift the pop but never clip its attack. */
+const POP_SLOT_S = 0.3, POP_START_S = 0.04, POP_SLOTS = 19;
+function playPop(step) {
+  const s = Math.max(0, Math.min(POP_SLOTS - 1, Math.round(step || 0)));
+  play("cork-pop", { from: s * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S });
 }
 
 // The single exported flip sound — every flip in the game passes through
@@ -1403,6 +1418,7 @@ export {
      it returns immediately once `ctx` exists, so every gesture after the first reached no wake at
      all. That is precisely how a page could end up permanently silent. */
   wakeCtx,
+  playPop,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

@@ -117,7 +117,7 @@ function ffEndNow(){
 // buys > trades > dock work > a plain sail. Covers only what he did NOT witness — anything that
 // halted the skip played live in front of him. Draft copy — Wyatt rewrites.
 function ffRecapLine(g,from){
-  const by=new Map();
+  const by=new Map();   // the recap is read on THIS screen, so say() words each captain as this screen sees them
   const note=(seat,w,txt)=>{
     if(seat==null||seat===(appState.mySeat??0))return;
     const cur=by.get(seat);if(!cur||w>cur.w)by.set(seat,{w,txt});
@@ -125,20 +125,20 @@ function ffRecapLine(g,from){
   for(const e of g.events.slice(Math.max(0,from))){
     if(e.t==="battle"){
       const loser=e.winner===e.a?e.d:e.a;
-      note(e.winner,5,say("recap.bested",{q:pn(loser)}));
-      note(loser,4,say("recap.lost",{q:pn(e.winner)}));
+      note(e.winner,5,say("recap.bested",{p:seat(e.winner),q:seat(loser)}));
+      note(loser,4,say("recap.lost",{p:seat(loser),q:seat(e.winner)}));
     }
     else if(e.t==="dock"&&e.got==="bought")
       note(e.p,e.black?4:3,e.black
-        ?say("recap.black",{icon:iconImg(ING_IMG[e.ing])})
-        :say("recap.bought",{icon:iconImg(ING_IMG[e.ing]),place:dockPlace(e.ing)}));
-    else if(e.t==="trade"){note(e.a,3,say("recap.traded",{q:pn(e.b)}));note(e.b,3,say("recap.traded",{q:pn(e.a)}));}
-    else if(e.t==="dock")note(e.p,2,say("recap.docks",{place:dockPlace(e.ing)}));
-    else if(e.t==="sail"||e.t==="pass")note(e.p,1,say("recap.sailed",{}));
+        ?say("recap.black",{p:seat(e.p),icon:iconImg(ING_IMG[e.ing])})
+        :say("recap.bought",{p:seat(e.p),icon:iconImg(ING_IMG[e.ing]),place:dockPlace(e.ing)}));
+    else if(e.t==="trade"){note(e.a,3,say("recap.traded",{p:seat(e.a),q:seat(e.b)}));note(e.b,3,say("recap.traded",{p:seat(e.b),q:seat(e.a)}));}
+    else if(e.t==="dock")note(e.p,2,say("recap.docks",{p:seat(e.p),place:dockPlace(e.ing)}));
+    else if(e.t==="sail"||e.t==="pass")note(e.p,1,say("recap.sailed",{p:seat(e.p)}));
   }
   if(!by.size)return null;
   // @copy adhoc.ff.recap — APPROVED as written, Wyatt 2026-08-14
-  return say("recap.line",{list:[...by.entries()].map(([s,v])=>`${pn(s)} ${v.txt}`).join("; ")});
+  return say("recap.line",{list:[...by.values()].map(v=>v.txt).join("; ")});
 }
 
 /* ================= turn-flow + interaction ================= */
@@ -799,7 +799,7 @@ export function pickCell(player,cells){
   // explanation, which is the exact complaint item 19 is. Stage 1 built the no-deadline wait line
   // and wired it to the recipe draft; this per-turn line never got it. Fire-and-forget, so it meets
   // the flag's stated safety condition (see stageFlash's note: a wait line must never be awaited).
-  netHandlers().onBroadcast(say("wait.sailing",{name:pn(player.idx)}),[{seat:player.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(sayAll("wait.sailing",{p:seat(player.idx)}).html,[{seat:player.idx,html:""}],{wait:true});
   /* EVERY CAPTAIN'S SQUARES ARE CHECKED, NOT JUST THE ONES ON THIS DEVICE. G6 (Wyatt-approved
      2026-07-30) is "yes, build this check and apply it to all situations", and it was applied to
      one: sailSelfCheck ran inside localPickCell, so it covered a captain whose decision is LOCAL
@@ -912,7 +912,7 @@ export async function bakeoffPrompt(player,setup,fallback){
   applyActiveSeat(player.idx);
   // {wait:true} — same fault, found by the rule-8 sweep rather than by Wyatt: this is the other
   // per-turn spectator line whose subject is "nothing is happening yet". Also fire-and-forget.
-  netHandlers().onBroadcast(say("wait.ovens",{name:pn(player.idx)}),[{seat:player.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(sayAll("wait.ovens",{p:seat(player.idx)}).html,[{seat:player.idx,html:""}],{wait:true});
   /* THE ONE SPEC, BUILT ONCE, HANDED TO BOTH BRANCHES — pickCell()'s tracer pattern verbatim
      (see the `const spec={kind:"pick",...}` comment 60 lines up). The local render and the remote
      wire payload cannot drift apart because they are literally the same object, and the captain in
@@ -2105,7 +2105,7 @@ async function counterOffer(q,player,offer){
     const opts=theirs.map(i=>crateOpt(player.ing,i));
     // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost
     opts.push({label:say("counter.coin",{}),short:say("counter.coinShort",{}),value:"__coinsonly__",disabled:room<1,
-      why:sayText("counter.noCoin",{name:pn(player.idx)})});
+      why:sayText("counter.noCoin",{p:seat(player.idx)},q.idx)});
     opts.push({label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"__deny__"});
     opts.push({label:say("button.back",{}),back:true,value:"__back__"});
     // @copy prompt.trade.counterwant — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
@@ -2115,7 +2115,7 @@ async function counterOffer(q,player,offer){
     // the first line of the first counter prompt. That is the whole of playtest 22's counter stall —
     // see the note above counterOffer.
     const pick=await ask(say("counter.ask",{q:pn(q.idx),whose:poss(player.idx)}),opts,null,
-      theirs.length?null:say("counter.noCargo",{name:pn(player.idx)}));
+      theirs.length?null:say("counter.noCargo",{p:seat(player.idx)},q.idx));
     if(appState.turnExpired)return null;
     if(pick==null||pick==="__back__")return "__back__";
     if(pick==="__deny__")return "deny";
@@ -2140,7 +2140,7 @@ async function counterOffer(q,player,offer){
       if(askIng)return {askIng,askCoins:0};
       continue;                                  // coin-only asked for but there is none — re-pick
     }
-    const bits=n=>[askIng?ilabelImg(askIng):null,n?`${n}🌕`:null].filter(Boolean).join(" + ");
+    const bits=n=>[askIng?ilabelImg(askIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
     // @copy prompt.trade.countercoins — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
     const n=await coinSlider(q.idx,
       k=>say("counter.asking",{q:pn(q.idx),what:bits(k)||say("trade.nothin",{}),want:ilabelImg(offer.want)}),
@@ -2294,7 +2294,7 @@ export async function humanTrade(player){
         await ask(say("trade.nothingToOffer",{}),[{label:say("button.back",{}),back:true,value:-1}]);
         step=1;continue;
       }
-      const giveBits=n=>[st.baseIng?ilabelImg(st.baseIng):null,n?`${n}🌕`:null].filter(Boolean).join(" + ");
+      const giveBits=n=>[st.baseIng?ilabelImg(st.baseIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
       // @copy prompt.trade.addcoins
       // playtest 21 item 7: the slider here too, not only in the counter. Wyatt's rule is about the
       // ARC, not about one prompt — leaving ±1 circles on the offer-building step and removing them
@@ -2356,17 +2356,17 @@ export async function humanTrade(player){
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(say("trade.offered",{q:pn(q.idx),p:pn(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)}),[
+        const v=await ask(say("trade.offered",{q:pn(q.idx),p:seat(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)},q.idx),[
           {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
           {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
             disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:sayText("trade.nothingElse",{name:pn(player.idx)})},
+            why:sayText("trade.nothingElse",{p:seat(player.idx)},q.idx)},
           {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?say("trade.noSweetener",{name:pn(player.idx)}):null);
+          room<1?say("trade.noSweetener",{p:seat(player.idx)},q.idx):null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
@@ -2410,15 +2410,15 @@ export async function humanTrade(player){
          never be read as "just tap the name". Short means SHORTER, not silent. */
   const opts=[];
   const termsOf=r=>counterTerms(offer,r);
-  const bitsOf=t=>[t.giveIng?ilabelImg(t.giveIng):null,t.giveCoins?`${t.giveCoins}🌕`:null]
+  const bitsOf=t=>[t.giveIng?ilabelImg(t.giveIng):null,t.giveCoins?say("coin.amount",{n:t.giveCoins}):null]
     .filter(Boolean).join(" + ");
   const answerLines=[];
   for(let i=0;i<responses.length;i++){
     const r=responses[i];
     if(r.kind==="accept"){
       const b=bitsOf(offer);
-      answerLines.push(say("trade.takes",{icon:iconImg(CHECKMARK_IMG),q:pn(r.q.idx),what:b||say("trade.offer",{})}));
-      opts.push({label:say("trade.accepts",{icon:iconImg(CHECKMARK_IMG),q:pn(r.q.idx)}),
+      answerLines.push(say("trade.takes",{icon:iconImg(CHECKMARK_IMG),q:seat(r.q.idx),what:b||say("trade.offer",{})},player.idx));
+      opts.push({label:say("trade.accepts",{icon:iconImg(CHECKMARK_IMG),q:seat(r.q.idx)},player.idx),
         short:`${iconImg(CHECKMARK_IMG)}<br>${pn(r.q.idx)}`,value:i});
     }
     else if(r.kind==="counter"){
@@ -2430,8 +2430,8 @@ export async function humanTrade(player){
       const haveIng=!t.giveIng||player.ing.includes(t.giveIng);
       // a counter that swaps the give side is the dangerous one — say "instead" out loud
       const swap=t.giveIng&&t.giveIng!==offer.giveIng;
-      answerLines.push(say(swap?"trade.wantsInstead":"trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}));
-      opts.push({label:say("trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}),
+      answerLines.push(say(swap?"trade.wantsInstead":"trade.wants",{q:seat(r.q.idx),what:bits||say("trade.nothin",{})},player.idx));
+      opts.push({label:say("trade.wants",{q:seat(r.q.idx),what:bits||say("trade.nothin",{})},player.idx),
         short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?say("trade.coinsShort",{n:t.giveCoins}):""}`,
         value:i,
         disabled:t.giveCoins>player.coins||!haveIng,
@@ -2969,7 +2969,7 @@ export async function humanTurn(player){
       if(evWind){publishNow();await liveRender();await narrateLastEvent();}
       // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
       // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
-      else if(appState.game.onRim(player.pos))await flash(say("rim.head",{name:pn(player.idx)}));
+      else if(appState.game.onRim(player.pos))await sayFlash("rim.head",{p:seat(player.idx)});
     }
   }
   if(appState.turnExpired){appState.activeTurnSeat=null;return;}
@@ -3023,17 +3023,17 @@ export async function botOpenTradeLive(player){
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(say("trade.offered",{q:pn(q.idx),p:pn(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)}),[
+        const v=await ask(say("trade.offered",{q:pn(q.idx),p:seat(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)},q.idx),[
           {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
           {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
             disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:sayText("trade.nothingElse",{name:pn(player.idx)})},
+            why:sayText("trade.nothingElse",{p:seat(player.idx)},q.idx)},
           {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?say("trade.noSweetener",{name:pn(player.idx)}):null);
+          room<1?say("trade.noSweetener",{p:seat(player.idx)},q.idx):null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
@@ -3548,8 +3548,12 @@ export function battleFooter(o){
       opts.map((op,i)=>`<button class="apBtn btlBtn" data-i="${i}"${apBtnStyle(colors&&colors[i])}>${op.label}</button>`).join("")+
       `</div></div>`;
   }
-  if(o.waiting)return `<div class="btl-wait">${say("battle.waiting",{who:o.waiting})}</div>`;
-  return `<div class="btl-result">${o.result||"&nbsp;"}</div>`;
+  if(o.waiting!=null)return `<div class="btl-wait">${say("battle.waiting",{who:seat(o.waiting)})}</div>`;
+  /* A LINE ABOUT A CAPTAIN CROSSES THE WIRE AS ITS WORDS — {id, facts} — and EVERY screen words it for itself, so the
+     battle card on a guest reads "ye" exactly where the host's does. A line about nobody is still a plain string.
+     `cls` is the result's colour ("score"). */
+  const r=o.result, txt=r&&typeof r==="object"?say(r.id,r.facts):r;
+  return `<div class="btl-result">${r&&r.cls?`<span class="${r.cls}">${txt}</span>`:(txt||"&nbsp;")}</div>`;
 }
 // The Lookout's Call: every spectator MUST call a winner from the crow's nest —
 // it's free, and a correct call earns a Spotter's Bounty (+1🌕) from the ship's

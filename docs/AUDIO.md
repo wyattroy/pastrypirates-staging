@@ -340,6 +340,22 @@ The two for ElevenLabs, after two rounds of searching each: **a ship's bell** (f
 cowbells, bell trees and waiters' bells — none is a bell hung in a rolling sea) and **your turn**
 (wants a bosun's pipe; nothing free has one).
 
+### The cork pop — his pop-in's sound (2026-09-13)
+
+He picked it on the pop-in tuner: *"sound: Cork pop, starting pitch 1 st, climb 1 st per pop, stops after 18 pops,
+volume 55%"*, and *"make the sound play when the ingredient appears -- not when the sparkle appears"*.
+
+- **`sfx/cork-pop.mp3` is one file of 19 slots**, 300ms each: slot *s* is the pop *s* semitones above his starting
+  pitch. Each is rendered from the tuner's own recipe by
+  [`render_cork_run.mjs`](../.planning/research/audio-sourcing/render_cork_run.mjs), so a high pop lasts as long as a
+  low one — pitching one sample up with `playbackRate` would have shortened it by up to 2.8×.
+- **Its level is his 55%, baked into the file** — `SFX_VOLUME["cork-pop"]` is 1, so it plays as loud as the tuner did.
+  Measured with `volumedetect` (trap 4: EBU R128 cannot read a 160ms clip): one pop −27.9 dB mean / −8.1 dB peak,
+  against `store-ingredient` at its game gain, −21.9 / −3.5. Part of the one levelling pass (q7) like every other stem.
+- **Timed off the crate's animation, not beside it** (`src/ui/popin.js`): an animation starts on the next frame, and
+  timers set beside it ran ~30ms ahead of the eye. Measured at 375×812: every sound starts within 15ms of its crate
+  appearing.
+
 ### Open questions — genuinely his, do not decide these
 
 1. **Does "your turn" break the hear-the-whole-table rule?** `audio.js` D-07 says every captain is

@@ -62,8 +62,10 @@ if (typeof EVENT_NARRATION.pass !== "function") {
   else bad(`legacy sea payload broken — got: "${legacy.slice(0, 90)}"`);
 
   const entry = EVENT_NARRATION.pass({ t: "pass", p: 0, sea }, at, 40, 1);
-  if (entry.caps && entry.caps.length && /looks into the ocean/.test(entry.caps[0][1])) ok("the captain's-log line survives");
-  else bad("no captain's-log caps line");
+  /* The per-ship "caps" caption ("🌊 looks into the ocean") was DELETED on 2026-09-14 with every other caption: nothing had
+     drawn one since v2, and a CEO review found them as dead words a reskin would trip on. This now holds the deletion. */
+  if (!entry.caps) ok("no dead caption rides along with the Muse line (captions deleted 2026-09-14 — nothing drew them)");
+  else bad(`a caps caption came back — nothing draws it: ${JSON.stringify(entry.caps).slice(0, 80)}`);
   if (entry.pops && entry.pops.length) ok("the wave pop survives");
   else bad("no wave pop");
 }

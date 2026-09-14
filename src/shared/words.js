@@ -18,7 +18,19 @@
        🌕 ⚪ ⚫ 🦜 🧁 …   stand for the game's own art, swapped in on screen. An amount of coin is never
                         split from its number across a line break.
        ""               the game says nothing at this moment.
-     Written ONCE, as another captain would read it. The "ye" forms are derived by fill(), never typed.
+     Written ONCE, as another captain would read it. The "ye" forms are derived by fill(), never typed — with one
+     exception that still lives outside this file: the sea-creature sightings in src/shared/index.js are typed twice
+     by hand ("ye peep into…" / "…peeps into…"). They move here with the rest of the theme text, when he says so
+     (2026-09-14: "don't do anything yet -- this is just context for you to help design scalable architecture").
+
+   A CAPTAIN FACT OR A NAME — the two ways a line holds a captain, and they are not interchangeable:
+       {p} {a} {d} {q} {w} …   a captain the line TELLS ABOUT — seat() in code. It becomes "ye" on that captain's own
+                               screen, so every verb is written both ways: "{p} {p:is|are} deciding…". Use this for
+                               every line about a captain, even one only other screens read today.
+       {name}                  a captain's name as a LABEL — the line is put TO them by name ("{name}, choose yer
+                               recipe:"), or names them on a badge, a tally or a table ("{name's} HEADS"). A name
+                               never becomes "ye", which is the point of it. words_one_place_check holds the list of
+                               lines allowed a name, so a line about a captain cannot quietly take one.
 
    THE RULE THIS FILE EXISTS TO HOLD: A BOT AND A HUMAN ARE DESCRIBED IN THE SAME WORDS. A captain's type
    decides how a move is CHOSEN, never which sentence describes it; which screen is reading decides "ye".
@@ -153,16 +165,19 @@ export const WORDS = {
 
   /* ── BUTTONS ANY QUESTION CAN CARRY ──────────────────────────────────────────────────────────────── */
   "button.back": "← Back",
+  "button.backAria": "Back",
   "button.nah": "Nah",
   "button.accept": "{icon} Accept",
   "button.deny": "{icon} Deny",
   "flip.button": "🌕 FLIP!",
+  "flip.word": "FLIP",
+  "coin.amount": "{n}🌕",
   "parrot.ok": "🦜 Aye aye",
 
   /* ── WAITING — what every other screen reads while one captain decides ─────────────────────────── */
-  "wait.deciding": "{name} is deciding…",
-  "wait.sailing": "{name} is choosing where to sail…",
-  "wait.ovens": "{name} steps up to the ovens…",
+  "wait.deciding": "{p} {p:is|are} deciding…",
+  "wait.sailing": "{p} {p:is|are} choosing where to sail…",
+  "wait.ovens": "{p} {p:steps|step} up to the ovens…",
   "wait.mateys": "⚓ Waiting for yer mateys…",
   "battle.waiting": "⏳ Waiting for {who}…",
 
@@ -170,7 +185,7 @@ export const WORDS = {
   "sail.tap": "tap to sail",
   "sail.ask": "{name}: {what}",
   "sail.stay": "Stay put",
-  "rim.head": "🌀 {name} rides at the head o' the current — she's got nowhere to carry ye from here.",
+  "rim.head": "🌀 {p} {p:rides|ride} at the head o' the current — she's got nowhere to carry {p:'em|ye} from here.",
 
   /* ── THE OPENING CARDS ─────────────────────────────────────────────────────────────────────────────── */
   "intro.ahoy": "⚓ Ahoy! Choose a recipe, gather each ingredient, then sail home first to win!",
@@ -228,16 +243,16 @@ export const WORDS = {
   "trade.coinOnTop": "Would ye offer any coin on top?",
   "trade.howMany": "How many coins?",
   "trade.offerGo": "Offer it!",
-  "trade.offered": "{q}: {p} offers {offer} for yer {want}.",
+  "trade.offered": "{q}: {p} {p:offers|offer} {offer} for yer {want}.",
   "trade.counter": "💰 Ask for summat else",
   "trade.counterShort": "💰 Counter",
-  "trade.nothingElse": "{name} has nothin' else aboard and no coin — ye can take it or leave it.",
-  "trade.noSweetener": "{name} has no coin left to sweeten the deal — ye can take it or leave it.",
+  "trade.nothingElse": "{p} {p:has|have} nothin' else aboard and no coin — ye can take it or leave it.",
+  "trade.noSweetener": "{p} {p:has|have} no coin left to sweeten the deal — ye can take it or leave it.",
   "trade.silence": "Not a soul answers {p's} hail.",
-  "trade.takes": "{icon} {q} takes yer {what}",
-  "trade.accepts": "{icon} {q} accepts",
-  "trade.wants": "💰 {q} wants {what}",
-  "trade.wantsInstead": "💰 {q} wants {what} <i>instead</i>",
+  "trade.takes": "{icon} {q} {q:takes|take} yer {what}",
+  "trade.accepts": "{icon} {q} {q:accepts|accept}",
+  "trade.wants": "💰 {q} {q:wants|want} {what}",
+  "trade.wantsInstead": "💰 {q} {q:wants|want} {what} <i>instead</i>",
   "trade.offer": "offer",
   "trade.nothin": "nothin'",
   "trade.that": "that",
@@ -253,9 +268,9 @@ export const WORDS = {
   "trade.declined": "{q} {q:declines|decline} {p's} offer!",
   "counter.coin": "💰 Coin instead",
   "counter.coinShort": "💰 Coin",
-  "counter.noCoin": "{name} has no coin at all — it must be an ingredient.",
+  "counter.noCoin": "{p} {p:has|have} no coin at all — it must be an ingredient.",
   "counter.ask": "{q}: what o' {whose} will ye have instead?",
-  "counter.noCargo": "{name} has no other cargo — ye can ask for coin, or deny.",
+  "counter.noCargo": "{p} {p:has|have} no other cargo — ye can ask for coin, or deny.",
   "counter.asking": "{q}: ye're ASKIN' {what} for yer {want}",
   "counter.go": "Ask it!",
 
@@ -271,13 +286,13 @@ export const WORDS = {
 
   /* ── WHILE YE LOOKED AWAY — the recap after a skip ─────────────────────────────────────────────── */
   "recap.line": "⏩ While ye looked away: {list}.",
-  "recap.bested": "bested {q} in battle",
-  "recap.lost": "lost a battle to {q}",
-  "recap.black": "paid the black market for {icon}",
-  "recap.bought": "bought {icon} at {place}",
-  "recap.traded": "struck a trade with {q}",
-  "recap.docks": "scrubbed the docks at {place}",
-  "recap.sailed": "sailed on",
+  "recap.bested": "{p} bested {q} in battle",
+  "recap.lost": "{p} lost a battle to {q}",
+  "recap.black": "{p} paid the black market for {icon}",
+  "recap.bought": "{p} bought {icon} at {place}",
+  "recap.traded": "{p} struck a trade with {q}",
+  "recap.docks": "{p} scrubbed the docks at {place}",
+  "recap.sailed": "{p} sailed on",
 
   /* ── WHEN SOMETHING GOES WRONG ──────────────────────────────────────────────────────────────────── */
   "restore.unreadable": "We couldn't reach the crew's log for this voyage, so we can't tell how much of it is missing. Carrying on may put ye out of step with the rest of the crew.",
@@ -296,15 +311,15 @@ export const WORDS = {
   "battle.crosswindTag": "CROSSWIND · ties collide",
   "battle.downwindTag": "⬇ {name} FIRES DOWNWIND — WINS TIES",
   "battle.opening": "⚔️ {a} {a:attacks|attack} {d}!",
-  "battle.waitDefend": "⚔️ {a} attacks {d}! Waiting for {name} to defend…",
-  "battle.waitFor": "⚔️ {a} attacks {d} — waiting for {name}…",
-  "battle.loads": "{name} loads the cannon…",
+  "battle.waitDefend": "⚔️ {a} {a:attacks|attack} {d}! Waiting for {d} to defend…",
+  "battle.waitFor": "⚔️ {a} {a:attacks|attack} {d} — waiting for {who}…",
+  "battle.loads": "{a} {a:loads|load} the cannon…",
   "battle.fire": "⚔️ {name} (attacker) — fire!",
-  "battle.defend": "⚔️ {name} attacks ye — defend! FLIP",
-  "battle.showsHeads": "{a} shows HEADS — {d} must answer…",
-  "battle.showsTails": "{a} shows TAILS — {d} must answer…",
+  "battle.defend": "⚔️ {a} {a:attacks|attack} ye — defend! FLIP",
+  "battle.showsHeads": "{a} {a:shows|show} HEADS — {d} must answer…",
+  "battle.showsTails": "{a} {a:shows|show} TAILS — {d} must answer…",
   /* his pass, 2026-09-13 */
-  "battle.downwindHits": "⚪ {name}'s downwind shot hits!",
+  "battle.downwindHits": "⚪ {w's} downwind shot hits!",
   "battle.crosswindMiss": "⚪ No hit — cannonballs collide in the crosswind.",
   "battle.hit": "{name} lands a hit!",
   "battle.bothMiss": "⚫ Both miss.",
@@ -315,7 +330,7 @@ export const WORDS = {
   "battle.fireAgain": "🔥 Fire again −{n}🌕",
   "battle.fireAgainFlip": "🔥 Fire again!",
   "battle.breakOff": "🏳️ Break off",
-  "battle.refireHits": "The second broadside tells — {name} lands it!",
+  "battle.refireHits": "The second broadside tells — {a} {a:lands|land} it!",
   "battle.refireMiss": "The shot goes wide.",
   "battle.plunder": "{name}, choose yer plunder!",
   "ceremony.broadside": "⚔️ Broadside!",
@@ -330,7 +345,7 @@ export const WORDS = {
   "draft.choose": "{name}, choose yer recipe:",
   "draft.pickSay": ", pick yer recipe:",
   "draft.everyone": "⚓ Everyone's choosing their recipe…",
-  "draft.one": "{name} is choosing a recipe…",
+  "draft.one": "{p} {p:is|are} choosing a recipe…",
   "draft.chosen": "⚓ Recipe chosen! Waiting for the rest of the crew…",
   "draft.tapHint": "Tap a recipe to see its route",
   "recipe.check": "🔍 Check my recipe",
@@ -341,6 +356,8 @@ export const WORDS = {
   "hold.aboard": " — aboard",
   "hold.surplus": "surplus cargo: {ing}",
   "hold.empty": "empty hold",
+  "captains.youTip": "{name} — that's you!",
+  "captains.botTip": "🤖 bot ({strategy})",
 
   /* ── THE TOP OF THE SCREEN ─────────────────────────────────────────────────────────────────────────── */
   "ribbon.day": "DAY {n}",
@@ -349,6 +366,7 @@ export const WORDS = {
   "ribbon.parrot": "Yer parrot",
   "pill.now": "WIND NOW:",
   "pill.forecast": "FORECAST:",
+  "pill.storm": "⛈{spin}",
   "peek.tapHold": "Tap and hold",
   "peek.clickHold": "Click and hold",
   "peek.hint": "{verb} the sea to reveal the board",
@@ -375,7 +393,7 @@ export const WORDS = {
   "bake.title": "The Bake-Off",
   "bake.titleWatching": "{who}'s Bake-Off",
   "bake.titleMine": "{who}, Yer Bake-Off",
-  "bake.watching": "{name} is at the ovens — watch the crates.",
+  "bake.watching": "{p} {p:is|are} at the ovens — watch the crates.",
   "bake.attempt": "attempt {n}",
   "bake.watchAgain": "Watch again {icon}1",
   /* his words, 2026-08-08 and 2026-08-25 */
@@ -402,8 +420,13 @@ export const WORDS = {
   /* ── THE END OF THE VOYAGE ──────────────────────────────────────────────────────────────────────────── */
   "end.nobody": "⏳ Nobody finished the voyage.",
   "end.nobodyBanner": "{icon} Nobody finished!",
-  "end.winsBanner": "{icon} {name} wins!",
-  "end.victory": "{name} baked {article}{recipe} and won <b>Best Baker in the Caribbean!</b>",
+  "end.winsBanner": "{icon} {w} {w:wins|win}!",
+  "end.victory": "{w} baked {article}{recipe} and won <b>Best Baker in the Caribbean!</b>",
+  "recipe.link": "📜 {title}",
+  "recipe.pdf": "Download PDF",
+  "recipe.email": "Email to myself",
+  "recipe.yield": "Yield: {amount}",
+  "recipe.steps": "Steps",
   "end.playAgain": "🔁 Play again!",
   "stats.days": "Days",
   "stats.battles": "Battles",
@@ -463,6 +486,7 @@ export const WORDS = {
   /* his rewrite, 2026-09-13 */
   "lobby.waitCaption": "{icon} Yer mateys will appear when they join. Wait for them before ye hit start.",
   "lobby.waitHost": "Waiting for the host to start the voyage…",
+  "lobby.rename": "Change yer name",
   "lobby.nameTaken": "Arrgh — a captain aboard already sails as {name}. Pick another name, matey.",
   "error.noConnection": "Can't reach the Sugar Seas — check yer connection, wifi, and ad blockers, then try again matey.",
   "error.gameGone": "That game no longer exists.",

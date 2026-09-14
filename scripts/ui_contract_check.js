@@ -310,9 +310,18 @@ const REGISTER_CHROME_EXCEPTIONS = [
   },
   {
     kind: "label",
+    rel: path.join("src", "shared", "words.js"),
+    anchor: `"captains.youTip": "{name} — that's you!"`,
+    why: "buildPlayerRows' player-row tooltip — a LABEL identifying the reader's own row, not a sentence the game speaks. F1. (Its words moved from src/ui/util.js to src/shared/words.js on 2026-09-14, with every other word.)",
+  },
+  {
+    kind: "label",
     rel: path.join("src", "ui", "util.js"),
     anchor: `— that's you!`,
-    why: "buildPlayerRows' player-row tooltip — a LABEL identifying the reader's own row, not a sentence the game speaks. F1.",
+    /* CLASSIC ONLY since 2026-09-14: the live game's words for this tooltip moved to src/shared/words.js (the entry
+       above); the frozen classic/ game still types them in util.js. */
+    trees: ["classic"],
+    why: "the same player-row tooltip, in the frozen classic game. F1.",
   },
   {
     kind: "label",
@@ -1386,6 +1395,7 @@ function drill() {
     ].join("\n"));
     fixture("src/ui/recipe.js", "export const d = 'melt-in-your-mouth shortbread';\n");
     fixture("src/ui/lobby.js", `    if(s.id)label=me?"you":"";\n    else label="🤖 bot";\n`);
+    fixture("src/shared/words.js", `  "captains.youTip": "{name} — that's you!",\n`);
     // G16: the fixture carries the kind:"notice" anchor — the credits paragraph, real player-visible
     // index.html text using the plain pronoun — so it is the notice kind's positive control AND
     // satisfies checkChromeExceptionsFresh. (The privacy line it also carried left index.html on

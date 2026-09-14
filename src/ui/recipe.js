@@ -16,6 +16,11 @@
    table and something else may yet want it — but nothing reads it today. */
 import { ASSET_BASE, ING_NAME, iname, ingImg } from "../shared/index.js";
 import { appState } from "../state/index.js";
+/* THE WORDS, STRAIGHT FROM src/shared/words.js. util.js (the words door, say()) imports THIS file, so importing it back
+   would close an import cycle; words.js imports nothing, so reading it here is safe. No line here names a captain, so
+   there is no "ye" to decide and fill() needs no view of the table. */
+import { WORDS, fill } from "../shared/words.js";
+const word = (id, facts) => fill(WORDS[id], facts || {}, { me: () => false });
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863),
 // used ~129 times across the still-classic region — far beyond this cluster's own two consumers
@@ -353,7 +358,7 @@ export function recipeArticle(recipe){
 export function winRecipeSpan(idx){
   const p=appState.game&&appState.game.players&&appState.game.players[idx];
   if(!p||!p.recipe)return "";
-  return `<span class="narrRecipeLink" data-idx="${idx}">📜 ${escHtml(recipeTitle(p.recipe))}</span>`;
+  return `<span class="narrRecipeLink" data-idx="${idx}">${word("recipe.link",{title:escHtml(recipeTitle(p.recipe))})}</span>`;
 }
 /* R2, his ruling 18: "picture, name, ingredient icons. NOTHING ELSE."
    It came with the bluntest note on the whole list — "Your recipe cards look terrible. I'm sorry."
@@ -436,8 +441,8 @@ export function recipeModalHTML(recipe){
   // in wireRecipeModal() below rather than by a one-shot onclick at boot — an id handler attached
   // once would be attached to a button that no longer exists the second time the modal is opened.
   const head=`<div class="recipeModalTitleRow"><h2>${escHtml(title)}</h2>`+
-    `<button class="recipeIconBtn" data-recipeact="pdf" type="button" title="Download PDF" aria-label="Download PDF">${PRINT_SVG}</button>`+
-    `<button class="recipeIconBtn" data-recipeact="email" type="button" title="Email to myself" aria-label="Email to myself">${MAIL_SVG}</button>`+
+    `<button class="recipeIconBtn" data-recipeact="pdf" type="button" title="${word("recipe.pdf")}" aria-label="${word("recipe.pdf")}">${PRINT_SVG}</button>`+
+    `<button class="recipeIconBtn" data-recipeact="email" type="button" title="${word("recipe.email")}" aria-label="${word("recipe.email")}">${MAIL_SVG}</button>`+
     `</div>`;
   const thumb=info&&info.img
     ?`<div class="recipeModalThumbWrap"><img class="recipeModalThumb" src="${info.img}" alt=""></div>`:"";
@@ -450,9 +455,9 @@ export function recipeModalHTML(recipe){
   const stepsHTML=r.steps.map(s=>`<li>${escHtml(s)}</li>`).join("");
   return head+`<div class="recipeModalIn">`+thumb+
     `<div class="recipeModalDesc">${escHtml(info.desc)}</div>`+
-    `<div class="recipeModalYield">Yield: ${escHtml(r.yield)}</div>`+
+    `<div class="recipeModalYield">${word("recipe.yield",{amount:escHtml(r.yield)})}</div>`+
     `<ul>${ingredientsHTML}</ul>`+
-    `<div class="recipeModalYield">Steps</div>`+
+    `<div class="recipeModalYield">${word("recipe.steps")}</div>`+
     `<ol>${stepsHTML}</ol></div>`;
 }
 let recipeModalCurrent=null; // {title,plain} for the open modal — read by the print/email buttons

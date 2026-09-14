@@ -22,6 +22,7 @@ All five live inside `#boardwrap`, which is `position: relative` and `container-
 | — | `#board` | **SVG** | ocean art, islands, docks, grid, emoji pops |
 | 1 | `#rimHost` | HTML | the trade-wind current (drifting arrows, turning whirlpools) |
 | 2 | `#sailHost` | HTML | the legal-move squares |
+| 2 | `#popHost` | HTML | the ingredients popping onto the islands as a voyage begins (`src/ui/popin.js`) — each hands itself back to its SVG crate the moment it lands |
 | 3 | `#rippleHost` | HTML | the active-turn sonar ring |
 | 4 | `#boardShips` | **SVG** | the boats — above the rings, which is the point of the split |
 
@@ -59,7 +60,7 @@ composed into it as a transform — `rendered = scale(640/w) then translate(-v *
 `transform-origin: 0 0`.
 
 ```js
-const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost"];   // stage.js
+const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost", "popHost"];   // stage.js
 ```
 
 > **A LIST, NOT A SET OF NAMED CONSTS — this is the trap.** It was two hand-written consts, beside

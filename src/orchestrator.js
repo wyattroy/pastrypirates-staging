@@ -406,7 +406,7 @@ function benchWatch(snap){
   let resolveStarted,resolveDone,pickCb=null,picks=snap.picks||[];
   const ctl={
     // @copy misc.bakeoff.watching
-    hint:say("bake.watching",{name:pname(snap.seat)}),
+    hint:sayText("bake.watching",{p:seat(snap.seat)}),
     started:new Promise(r=>{resolveStarted=r;}),
     done:new Promise(r=>{resolveDone=r;}),
     onPicks:(cb)=>{pickCb=cb;},
@@ -556,15 +556,15 @@ export function battleAsk(player,o,msg,opts,colors){
     endReplay();
   }
   applyActiveSeat(player.idx);
-  const seat=player.idx;
+  const askSeat=player.idx;
   const isFlip=opts.length===1&&!!opts[0].flip;
   // spectators (and, crucially, the OTHER combatant) get a battle-aware nudge that names who's
   // attacking whom instead of a bare "…is deciding" — so when a bot attacks a human on the bot's
   // turn, the table can see it's the human's defend flip and nudge them (see #11).
-  const spectMsg=(o&&o.att&&o.def)
-    ?(seat===o.def.idx?say("battle.waitDefend",{a:pn(o.att.idx),d:pn(o.def.idx),name:pname(o.def.idx)})
-      :say("battle.waitFor",{a:pn(o.att.idx),d:pn(o.def.idx),name:pname(seat)}))
-    :say("wait.deciding",{name:pn(seat)});
+  const spect=(o&&o.att&&o.def)
+    ?(askSeat===o.def.idx?sayAll("battle.waitDefend",{a:seat(o.att.idx),d:seat(o.def.idx)})
+      :sayAll("battle.waitFor",{a:seat(o.att.idx),d:seat(o.def.idx),who:seat(askSeat)}))
+    :sayAll("wait.deciding",{p:seat(askSeat)});
   // D-10 DELIVERY (F7): the spectator line is the neutral broadcast, the asked seat's own prompt is
   // that seat's variant, and each client selects for itself through the mechanism that already ships.
   //
@@ -573,9 +573,9 @@ export function battleAsk(player,o,msg,opts,colors){
   // asked: does guest-side code AUTHOR its own text? It does not. This gate asks a different
   // question — does the broadcast REACH the right viewer? — which that sweep never examined. One
   // message cannot express a per-viewer difference, however correctly it was authored.
-  netBroadcast(spectMsg,[{seat,html:msg}]);
+  netBroadcast(spect.html,[...spect.variants.filter(v=>v.seat!==askSeat),{seat:askSeat,html:msg}]);
   let idxP;
-  if(decisionIsLocal(seat)){
+  if(decisionIsLocal(askSeat)){
     idxP=new Promise(res=>{
       if(isFlip){
         // the scoreboard just shows state — the flippenator is the actual control
@@ -590,8 +590,8 @@ export function battleAsk(player,o,msg,opts,colors){
       }
     });
   }else{
-    battlePublish(Object.assign({},o,{waiting:pn(seat)}));
-    idxP=remotePrompt(seat,{kind:"ask",msg,labels:opts.map(x=>x.label),
+    battlePublish(Object.assign({},o,{waiting:askSeat}));   // a seat, so each screen words it for itself
+    idxP=remotePrompt(askSeat,{kind:"ask",msg,labels:opts.map(x=>x.label),
       colors:colors?colors.map(c=>c||""):null,classes:opts.map(()=>""),
       flip:isFlip,battle:battleSnapshot(o)});
   }
@@ -707,24 +707,23 @@ async function asyncBattleRun(att,def){
   };
   // ---- THE round ----
   round=1;
-  battlePublish(base({atState:"wait",dfState:"wait",live:"a",result:say("battle.loads",{name:nm(att.idx)})}));
+  battlePublish(base({atState:"wait",dfState:"wait",live:"a",result:{id:"battle.loads",facts:{a:seat(att.idx)}}}));
   await sleep(beat*0.5);
   const ah=hA?await hFlip("a",att,say("battle.fire",{name:nm(att.idx)}),{dfState:"wait"}):await bFlip("a",att,{dfState:"wait"});
   battlePublish(base({atState:ah?"H":"T",dfState:"wait",live:"a"}));
   await sleep(beat*0.6);
   battlePublish(base({atState:ah?"H":"T",dfState:"wait",live:"d",
-    result:say(ah?"battle.showsHeads":"battle.showsTails",{a:nm(att.idx),d:nm(def.idx)})}));
+    result:{id:ah?"battle.showsHeads":"battle.showsTails",facts:{a:seat(att.idx),d:seat(def.idx)}}}));
   await sleep(beat);
-  const dh=hD?await hFlip("d",def,say("battle.defend",{name:nm(att.idx)}),{atState:ah?"H":"T"}):await bFlip("d",def,{atState:ah?"H":"T"});
+  const dh=hD?await hFlip("d",def,say("battle.defend",{a:seat(att.idx)},def.idx),{atState:ah?"H":"T"}):await bFlip("d",def,{atState:ah?"H":"T"});
   // ---- resolve ----
   let scorer=null,rmsg,winner=null;
   if(ah&&dh){
     if(downwind){
       scorer=downwind;
       if(downwind==="a"){a++;winner=att;}else{d++;winner=def;}
-      const dwName=downwind==="a"?nm(att.idx):nm(def.idx);
       // @copy misc.battleline.bothheadsdownwind
-      rmsg=`<span class="score">${say("battle.downwindHits",{name:dwName})}</span>`;
+      rmsg={id:"battle.downwindHits",facts:{w:seat(downwind==="a"?att.idx:def.idx)},cls:"score"};
     // @copy misc.battleline.bothheadscrosswind
     }else rmsg=`<span class="cancel">${say("battle.crosswindMiss",{})}</span>`;
   }else if(ah||dh){
@@ -828,7 +827,7 @@ async function asyncBattleRun(att,def){
         rounds.push([rh?1:0,null,0,rh?"a":null]);
         if(rh){a++;winner=att;
           // @copy misc.battleline.refirehits
-          battlePublish(base({atState:"H",dfState:dh?"H":"T",live:null,winCoin:"a",result:`<span class="score">${say("battle.refireHits",{name:nm(att.idx)})}</span>`}));
+          battlePublish(base({atState:"H",dfState:dh?"H":"T",live:null,winCoin:"a",result:{id:"battle.refireHits",facts:{a:seat(att.idx)},cls:"score"}}));
         }else{
           // @copy misc.battleline.refiremisses
           battlePublish(base({atState:"T",dfState:dh?"H":"T",live:null,result:`<span class="cancel">${say("battle.refireMiss",{})}</span>`}));
@@ -1042,7 +1041,7 @@ export async function recipeDraftNet(){
     const byIdx={};pending.forEach(player=>{byIdx[player.idx]=player;});
     // @copy misc.draftwait.recipechoosing
     // @copy misc.draftwait.recipechoosing
-    const announce={html:pending.length>1?say("draft.everyone",{}):say("draft.one",{name:pn(pending[0].idx)}),
+    const announce={html:pending.length>1?say("draft.everyone",{}):sayAll("draft.one",{p:seat(pending[0].idx)}).html,
       variants:pending.map(q=>({seat:q.idx,html:""}))};
     // @copy misc.draftwait.recipechosen
     // a wait line: it holds until the crew actually finishes, not for 2.5 seconds (item 19)
@@ -2190,8 +2189,8 @@ let _liveBakePromptId=null;
    function only runs in the guest branch of beginGame's fork). The host's own screen is still drawn
    locally and synchronously — it never reads itself back through Firebase, which is what keeps solo
    and pass-and-play alive.
-   THE RAW PAYLOAD IS PASSED, NOT A PICKED ONE: flash() calls pickNarrVariant itself when
-   appState.room is set, so handing it v.html + v.variants picks exactly once, as before. An old
+   THE RAW PAYLOAD IS PASSED, NOT A PICKED ONE: flash() calls pickNarrVariant itself — in every mode
+   since his 2026-09-13 "ye everywhere" ruling — so handing it v.html + v.variants picks exactly once. An old
    payload with no `variants` key still degrades to v.html.
    `wait` is item 19's flag — a wait line registers no dismissal deadline (see stageFlash). */
 /* Q-18's two clocks. A GRACE PERIOD, not a deadline: the guest is waiting for a message already in

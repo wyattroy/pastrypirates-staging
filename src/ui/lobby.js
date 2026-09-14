@@ -466,7 +466,7 @@ export function renderSeatList(seats){
     // It is rebuilt on every seats update, so its click cannot be bound once at wire time. The
     // handler is DELEGATED from #seatList in src/orchestrator.js; nothing here binds it, which also
     // keeps this file free of the net-calling code its purity bar (D-07) forbids.
-    const rename=me?`<button class="seatRename" type="button" id="btnChangeName">Change yer name</button>`:"";
+    const rename=me?`<button class="seatRename" type="button" id="btnChangeName">${say("lobby.rename",{})}</button>`:"";
     html+=`<div class="seat ${me?"me":""}">
       <span class="nm">${pn(i)}${label?` — ${label}`:""}</span>${rename}</div>`;
   }
