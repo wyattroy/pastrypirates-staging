@@ -19,13 +19,17 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 /* ONE STRIPPER (2026-08-29). Every gate carried its own copy that deletes BLOCK comments
    first — so a LINE comment containing the characters that open one swallowed 152 lines of
    src/orchestrator.js, the whole import block included. MEASURED: it also blinded 10 lines
    of src/shared/index.js and 10 of src/ui/util.js. scripts/qa/lib/strip_comments.mjs. */
 import { stripComments as sharedStrip } from "./lib/strip_comments.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+/* The game's words live in src/shared/words.js (2026-09-13). It has no imports, so a check can load it without
+   starting the game, and evaluate a label exactly as the game fills it in. */
+const { WORDS, fill } = await import(pathToFileURL(path.join(REPO, "src/shared/words.js")).href);
+const say = (id, facts) => fill(WORDS[id], facts, { me: () => false, name: String, poss: String });
 let fails = 0;
 const pass = m => console.log("PASS " + m);
 const fail = m => { console.log("FAIL " + m); fails++; };
@@ -77,9 +81,10 @@ const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || [, ""])[1].replace
      assertion passed against the unfixed tree. (That "Nah" is also why his choice is the consistent
      one: the game already says it for exactly this.) */
   const flat = flow.replace(/\n/g, " ");
-  const offerCall = (flat.match(/coinSlider\([^;]*?"Offer it!"[^;]*?\)/) || [""])[0];
-  const offer = !!offerCall;
-  const nah = /"Nah"/.test(offerCall);
+  // the two labels are src/shared/words.js entries now ("trade.offerGo", "button.nah"); the WORD must still reach the call
+  const offerCall = (flat.match(/coinSlider\([^;]*?(?:"Offer it!"|say\("trade\.offerGo",\{\}\))[^;]*\)/) || [""])[0];
+  const offer = !!offerCall && (/"Offer it!"/.test(offerCall) || WORDS["trade.offerGo"] === "Offer it!");
+  const nah = /"Nah"/.test(offerCall) || (/say\("button\.nah",\{\}\)/.test(offerCall) && WORDS["button.nah"] === "Nah");
   if (nah) pass("the offer's empty-purse button reads \"Nah\" — his word, on the caller whose sentence is a question");
   else fail("nothing supplies \"Nah\" — his expectation was \"the button reads 'Nah' instead of 'Offer it!'\"");
   if (!offer) fail("the offer caller no longer passes \"Offer it!\" — re-anchor assertion 3, the label pair is what this item is about");
@@ -90,7 +95,7 @@ const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/) || [, ""])[1].replace
    counter rather than declining the coin. The mechanism is shared; the copy belongs to the sentence. */
 {
   const fn = (flow.match(/async function coinSlider\([\s\S]*?\n\}/) || [""])[0];
-  const hardcoded = /"Nah"/.test(fn);
+  const hardcoded = /"Nah"|say\("button\.nah"/.test(fn);
   if (hardcoded) fail("\"Nah\" is hardcoded inside coinSlider, so it would also land on the counter-offer, whose sentence states a fact rather than asking a question — the word would read as cancelling the counter");
   else pass("the decline label is supplied by the caller, so each sentence keeps its own answer (the rule-8 exception is recorded in CTO-QUESTIONS.md, not decided in code)");
 }

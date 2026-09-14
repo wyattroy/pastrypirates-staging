@@ -27,7 +27,7 @@ import { panel, setNeedsAction, GHOST_FADE_MS } from "./panel.js";
 // util.js sits BELOW panel.js in the graph (panel.js imports this same function from it, and util.js
 // imports neither panel.js nor this file), so this adds no cycle — see the note beside the bake-off's
 // export in ./index.js, updated in this same commit.
-import { narrationHoldMs } from "./util.js";
+import { narrationHoldMs, say, sayText } from "./util.js";
 
 const $=(id)=>document.getElementById(id);
 // module-local, as every other src/ui/ file keeps its own
@@ -137,7 +137,7 @@ function benchHTML(bake,slots){
   return `<div class="bkoRow">`+slots.map((ing,pos)=>{
     const lk=bake.locked[pos];
     return `<button class="bkoBowl${lk?" locked":""}" data-pos="${pos}" type="button"
-       aria-label="${lk?`Crate ${pos+1}, step ${step[pos]}, already placed`:`Crate ${pos+1}`}">
+       aria-label="${lk?sayText("bake.crateLocked",{n:pos+1,step:step[pos]}):sayText("bake.crate",{n:pos+1})}">
        <span class="bkoBack"></span>
        <img class="bkoIng" src="${ING_IMG[ing]}" alt="">
        <span class="bkoDome"></span>
@@ -165,7 +165,7 @@ function paintBadges(bowls,openSteps,picks){
 function listSteps(steps){
   const n=steps.map(k=>k+1);
   if(n.length<=1)return String(n[0]||"");
-  return n.slice(0,-1).join(", ")+" and "+n[n.length-1];
+  return n.slice(0,-1).join(", ")+" "+say("bake.and",{})+" "+n[n.length-1];
 }
 
 // `p` used to be the first argument here and was never read in the body — the whole shell is
@@ -179,13 +179,13 @@ function listSteps(steps){
    published by an older client still renders a sensible heading rather than "undefined's". */
 function bakeTitle(bake,watching){
   const who=bake&&bake.baker;
-  if(!who)return "The Bake-Off";
+  if(!who)return say("bake.title",{});
   /* ONE SPAN, NOT THREE. `.bkoHd` is display:flex with gap:6px, so every child is a flex ITEM:
      returning `<span>Name</span>, Yer Bake-Off` made the coloured name one item and the rest an
      anonymous second one, separated by the row gap -- "Davy Probe , Yer Bake-Off", with the comma
      adrift. Caught on the rendered card by bakeoff_surface.mjs, which read the title back as
      "Davy Probe\n, Yer Bake-Off". Wrapping makes the whole heading a single item again. */
-  const inner=watching?`${who}'s Bake-Off`:`${who}, Yer Bake-Off`;
+  const inner=say(watching?"bake.titleWatching":"bake.titleMine",{who});
   return `<span class="bkoWho">${inner}</span>`;
 }
 /* ⭐ WHICH PASTRY IS THIS, ACTUALLY — Wyatt, 2026-09-09: "Add the recipe name to the bakeoff under
@@ -209,13 +209,13 @@ function shellHTML(bake,slots,hint,btnLabel,btnEnabled,watching){
      watcher has nothing to answer. That is the whole shape of this convergence: the response
      mechanism is what differs between tiers, never the drawing. */
   return `<div class="bko${watching?" bkoWatching":""}">
-    <div class="bkoHd">${iconImg(CUPCAKE_IMG)} ${bakeTitle(bake,watching)}<span class="bkoAtt">attempt ${att}</span></div>
+    <div class="bkoHd">${iconImg(CUPCAKE_IMG)} ${bakeTitle(bake,watching)}<span class="bkoAtt">${say("bake.attempt",{n:att})}</span></div>
     ${bakeRecipeName(bake)}
     ${cardHTML(bake)}
     ${benchHTML(bake,slots)}
     <div class="bkoHint" id="bkoHint">${hint}</div>
     ${watching?"":`<div class="bkoBtns">
-      <button class="apBtn bkoWatch" id="bkoWatch" type="button" hidden>Watch again ${iconImg(COIN_IMG)}1</button>
+      <button class="apBtn bkoWatch" id="bkoWatch" type="button" hidden>${say("bake.watchAgain",{icon:iconImg(COIN_IMG)})}</button>
       <button class="apBtn bkoGo" id="bkoGo" type="button"${btnEnabled?"":" disabled"}>${btnLabel}</button>
     </div>`}
   </div>`;
@@ -268,12 +268,11 @@ function bakeoffIntroCard(bake){
        standing rule two comments up. Note for him rather than a silent edit: the line above already
        says "addin' them in the correct order", so the two sit close together — his call whether to
        tighten, not mine. */
-    panel(`<div class="apMsg">${iconImg(CUPCAKE_IMG)} The ovens be roarin'! Yer ingredients be
-      waitin'. Ye must bake yer recipe by addin' them in the <b>correct order</b>.<br><br>
-      <b>${escHtml(recipeTitle(bake.order))} Recipe</b>
+    panel(`<div class="apMsg">${say("bake.introLead",{icon:iconImg(CUPCAKE_IMG)})}<br><br>
+      <b>${say("bake.recipeName",{name:escHtml(recipeTitle(bake.order))})}</b>
       ${cardHTML(bake)}<br>
-      Add them in this exact order or it's a ruined mess.</div>
-      <div class="apBtns bkoIntroBtns"><button class="apBtn" id="bkoIntroGo" type="button">Get bakin'!</button></div>`,true);
+      ${say("bake.introWarn",{})}</div>
+      <div class="apBtns bkoIntroBtns"><button class="apBtn" id="bkoIntroGo" type="button">${say("bake.introGo",{})}</button></div>`,true);
     const go=$("bkoIntroGo");
     if(!go){res();return;}
     go.onclick=()=>{go.onclick=null;res();};
@@ -441,8 +440,8 @@ export async function playBakeoffLive(spec,io){
   // disabled and enabling it at the exact moment it works removes the dead window instead of hiding
   // it. Found by a probe that clicked at 800ms and hung.
   panel(shellHTML(bake,shown,
-    watch?watch.hint:"Study the order. Start the shuffle when yer ready.",
-    "Ready to bake!",false,!!watch),true);
+    watch?watch.hint:say("bake.study",{}),
+    say("bake.ready",{}),false,!!watch),true);
   // the shell is in the DOM and carries .bko — from here the content keeps the stage lit, so the
   // intro's flag can go (see the note at the top of this function)
   delete $("actionPanel").dataset.pp4Stage;
@@ -462,7 +461,7 @@ export async function playBakeoffLive(spec,io){
     for(const b of bowls) b.addEventListener("click",()=>{
       if(!hint)return;
       if(hint._t)clearTimeout(hint._t); else hint._was=hint.textContent;
-      hint.textContent="Now yer just watchin'";   // his words, exactly
+      hint.textContent=sayText("bake.justWatching",{});   // his words, exactly
       hint._t=setTimeout(()=>{hint.textContent=hint._was||"";hint._t=null;},1800);
     });
   }
@@ -664,8 +663,8 @@ export async function playBakeoffLive(spec,io){
   // player playing.
   if(hint)hint.textContent=watch?watch.hint
     :openSteps.length===n
-    ?"Tap the crates in recipe order. Tap again to undo."
-    :`${openSteps.length} left — tap them for step${openSteps.length>1?"s":""} ${listSteps(openSteps)}. Tap again to undo.`;
+    ?sayText("bake.tapOrder",{})
+    :sayText(openSteps.length>1?"bake.leftMany":"bake.leftOne",{n:openSteps.length,steps:listSteps(openSteps)});
 
   /* ---- THE WATCHER'S HALF OF PHASE 4 (04-01 Task 3, MP-05) ----
      Everything above ran identically. What a watcher does not have is a hand on the bench: no
@@ -695,7 +694,7 @@ export async function playBakeoffLive(spec,io){
   // The same button served as "Ready to bake!"; it becomes the confirm control now, disabled until
   // every open step has been assigned.
   const goBtn=$("bkoGo");
-  if(goBtn){goBtn.textContent="Bake it!";goBtn.disabled=true;}
+  if(goBtn){goBtn.textContent=sayText("bake.go",{});goBtn.disabled=true;}
 
   let rewatches=0;                        // paid replays, logged so a resume charges the same coins
 
@@ -745,7 +744,7 @@ export async function playBakeoffLive(spec,io){
       paintButtons();
       const hintEl=$("bkoHint");
       const was=hintEl?hintEl.textContent:"";
-      if(hintEl)hintEl.textContent="Watch closely — the crates move again.";
+      if(hintEl)hintEl.textContent=sayText("bake.watchClosely",{});
       paintBench(shown);
       row.classList.add("bkoStudy");
       bowls.forEach(b=>{ if(!b.classList.contains("locked"))b.classList.remove("covered"); });
@@ -849,8 +848,8 @@ export async function bakeoffReveal(view,result){
   // clickable right through the reveal (visible in the 360px screenshot), inviting a second press on
   // a decision that has already resolved.
   const go=$("bkoGo");
-  if(go){go.disabled=true;go.textContent="In the oven…";}
-  if(hint)hint.textContent="Opening the crates…";
+  if(go){go.disabled=true;go.textContent=sayText("bake.inOven",{});}
+  if(hint)hint.textContent=sayText("bake.opening",{});
   for(let k=0;k<bake.order.length;k++){
     const bowl=bake.slots.indexOf(bake.order[k]);
     const el=bowls[bowl];
@@ -886,8 +885,8 @@ export async function bakeoffReveal(view,result){
   }
   if(hint){
     const got=result.correct.filter(Boolean).length;
-    hint.textContent=result.perfect?"Every crate in its place — ye baked it!"
-      :`${got} of 5 in place. Those stay put; the rest get shuffled again tomorrow.`;
+    hint.textContent=result.perfect?sayText("bake.perfect",{})
+      :sayText("bake.partial",{got,of:result.correct.length});
   }
   // THE VERDICT'S HOLD IS SIZED BY ITS OWN WORDS, and it has to be now that the card LEAVES at the
   // end of it. Until this change the flat VERDICT_MS did not have to be long enough to read by —

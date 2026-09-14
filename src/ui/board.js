@@ -142,7 +142,7 @@ import {
   STORM_CLOUD_IMG,
   HOURGLASS_IMG, CROISSANT_IMG, CAKE_SLICE_IMG, DONUT_IMG, CUPCAKE_IMG,
   FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG,
-  iconImg, iname, ingImg,
+  iconImg, iname, ingImg, emojify,
   devHost,
 } from "../shared/index.js";
 import {
@@ -151,7 +151,7 @@ import {
   // the decorative board's demo log line, and that board no longer renders. Dead imports are
   // forbidden in this codebase (D-33/D-34/D-40) and no gate catches them, so they go with the code
   // that used them rather than being left behind as plausible-looking dependencies.
-  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx,
+  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say,
   fitHold,   // 2026-09-11: every hold on one line (his check-9 note)
   fitRecipeName,   // 2026-09-12: the recipe's name at the largest size that fits its card
 } from "./util.js";
@@ -467,7 +467,7 @@ export function drawBoard(){
     fill:"#fffdf0",stroke:"#29a3b2","stroke-width":2},forecastPulse);
   forecastLabel=el("text",{x:-FC_W/2+FC_PAD,y:FC_H*0.70,"text-anchor":"start","font-size":15,
     "font-weight":"bold",fill:"#1f4249"},forecastPulse);
-  forecastLabel.textContent="FORECAST:";
+  forecastLabel.textContent=say("pill.forecast",{});
   // the game's own storm art, not a Unicode glyph — the same icon the narration uses, so the chip
   // looks like the rest of the game rather than like whatever emoji font the phone happens to have
   // sits immediately left of the direction with a real gap — measured at 170 units wide the
@@ -1769,13 +1769,13 @@ export function render(){
         const bh=[...st[i].ing];
         const want=appState.game.players[i].recipe.map(ing=>{
           const k=bh.indexOf(ing); const have=k>=0; if(have)bh.splice(k,1);
-          return `<span class="chip ${have?"have":""}" title="${iname(ing)}${have?" — aboard":""}">${ingImg(ing)}</span>`;
+          return `<span class="chip ${have?"have":""}" title="${iname(ing)}${have?say("hold.aboard",{}):""}">${ingImg(ing)}</span>`;
         }).join("");
         bandHtml=`<span class="narrRecipeLink capRecipeName" data-idx="${i}">${recipeTitle(appState.game.players[i].recipe)}</span>`+
           `<span class="capRecipeIng">${want}</span>`;
       }else if(offerCheckBtn){
         // @copy misc.board.checkrecipebtn
-        bandHtml=`<button type="button" class="checkRecipeBtn" onclick="revealMyRecipe()" style="background:${HEXCOL[i]};color:#fff;border-color:${HEXCOL[i]}">🔍 Check my recipe</button>`;
+        bandHtml=`<button type="button" class="checkRecipeBtn" onclick="revealMyRecipe()" style="background:${HEXCOL[i]};color:#fff;border-color:${HEXCOL[i]}">${say("recipe.check",{})}</button>`;
       }
     }
     if(canReveal&&!bandSeat){
@@ -1789,7 +1789,7 @@ export function render(){
         return `<span class="chip ${have?"have":""}" title="${iname(ing)}">${ingImg(ing)}</span>`;
       });
       // @copy misc.board.surplustooltip
-      const extras=hold.map(x2=>`<span class="chip extra" title="surplus cargo: ${iname(x2)}">${ingImg(x2)}</span>`);
+      const extras=hold.map(x2=>`<span class="chip extra" title="${say("hold.surplus",{ing:iname(x2)})}">${ingImg(x2)}</span>`);
       // @copy misc.board.prowcargorow
       newChipsHtml=chips.join("")+(extras.length?`<span style="opacity:.4">·</span>`:"")+extras.join("");
     }else{
@@ -1800,7 +1800,7 @@ export function render(){
       // @copy misc.board.emptyhold
       /* an empty hold is an empty crate — his Q6 ruling, 2026-09-10 ("An empty crate silhouette"). The
          words stay as its name, for a tooltip and a screen reader. */
-      newChipsHtml=held.join("")||`<span class="chip holdEmpty" title="empty hold" aria-label="empty hold" role="img"></span>`;
+      newChipsHtml=held.join("")||`<span class="chip holdEmpty" title="${say("hold.empty",{})}" aria-label="${say("hold.empty",{})}" role="img"></span>`;
     }
     /* T-33 — the guard decided whether to PULSE, not whether to WRITE, so all four captains' hold
        chips were destroyed and rebuilt on every render: 600 fresh <img> elements in 210 seconds,
@@ -2167,7 +2167,7 @@ export function showStats(){
   // strings with two separate ids — the extractor binds one marker per assignment site, and folding
   // them into one template would make both ids point at the same site.
   // @copy misc.board.eovbanner
-  const banner=w===null?`${iconImg(HOURGLASS_IMG)} Nobody finished!`:`${iconImg(CROWN_IMG)} ${pn(w)} wins!`;
+  const banner=w===null?say("end.nobodyBanner",{icon:iconImg(HOURGLASS_IMG)}):say("end.winsBanner",{icon:iconImg(CROWN_IMG),name:pn(w)});
   // The winner's recipe is read defensively, and that is NOT belt-and-braces — it is a guest-path
   // requirement. This code used to live in endLive() (src/orchestrator.js), which only ever runs on
   // the HOST after a real finished game, so a recipe was guaranteed. showStats() is different: the
@@ -2177,7 +2177,7 @@ export function showStats(){
   // screen down with it: no banner, no awards, no stats. Caught exactly that way in a browser.
   const winRecipe=w===null?null:(appState.game.players[w]||{}).recipe;
   // @copy adhoc.voyageend.victory
-  const victoryLine=!winRecipe?"":`<div class="victoryText">${pn(w)} baked ${(a=>a?a+" ":"")(recipeArticle(winRecipe))}${winRecipeSpan(w)} and won <b>Best Baker in the Caribbean!</b></div>`;
+  const victoryLine=!winRecipe?"":`<div class="victoryText">${say("end.victory",{name:pn(w),article:(a=>a?a+" ":"")(recipeArticle(winRecipe)),recipe:winRecipeSpan(w)})}</div>`;
   const wi=winRecipe?recipeInfo(winRecipe):null;
   const victoryPic=wi&&wi.img?`<img class="victoryRecipe" src="${wi.img}" alt="">`:""; // art, not copy
   const luck=appState.game.players.map(player=>player.flips?(player.heads/player.flips):0);
@@ -2211,11 +2211,11 @@ export function showStats(){
   const bakersHome = appState.game.players.filter(player => player.baking || player.done).length;
   // @copy misc.board.statsheadings
   const statsTable=`<table>
-    <tr><td>Days</td><td>${appState.game.round}</td></tr>
-    <tr><td>Battles</td><td>${appState.game.battles} (attacker won ${appState.game.battles?Math.round(100*appState.game.attWins/appState.game.battles):0}%)</td></tr>
-    <tr><td>Trades</td><td>${appState.game.trades}</td></tr>
-    <tr><td>Bakeries</td><td>${bakersHome===0?"no bakers home":bakersHome===1?"1 baker home":bakersHome+" bakers home"}</td></tr>
-    ${appState.game.players.map((player,i)=>`<tr><td style="color:${HEXCOL[i]}">${pname(i)} heads-luck</td><td>${player.flips?Math.round(100*luck[i]):0}% of ${player.flips} flips</td></tr>`).join("")}
+    <tr><td>${say("stats.days",{})}</td><td>${appState.game.round}</td></tr>
+    <tr><td>${say("stats.battles",{})}</td><td>${say("stats.battlesValue",{n:appState.game.battles,pct:appState.game.battles?Math.round(100*appState.game.attWins/appState.game.battles):0})}</td></tr>
+    <tr><td>${say("stats.trades",{})}</td><td>${appState.game.trades}</td></tr>
+    <tr><td>${say("stats.bakeries",{})}</td><td>${say(bakersHome===0?"stats.noneHome":bakersHome===1?"stats.oneHome":"stats.manyHome",{n:bakersHome})}</td></tr>
+    ${appState.game.players.map((player,i)=>`<tr><td style="color:${HEXCOL[i]}">${emojify(say("stats.heads",{name:pname(i)}))}</td><td>${say("stats.headsValue",{pct:player.flips?Math.round(100*luck[i]):0,n:player.flips})}</td></tr>`).join("")}
     </table>`;
   $("statsPanel").innerHTML=`<div class="winner-banner">${banner}${victoryPic}${victoryLine}</div>
     <div class="awardsRow">${awards}</div>

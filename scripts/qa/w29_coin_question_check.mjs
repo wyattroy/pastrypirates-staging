@@ -4,9 +4,15 @@
    Reads the real source and evaluates the real label closure, so it cannot pass on a comment. */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // derived, never typed — same reason as w21_weather_line_check.mjs
-const SRC = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".."), "src/ui/flow.js");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const SRC = path.join(ROOT, "src/ui/flow.js");
+/* The game's words live in src/shared/words.js (2026-09-13). It has no imports, so a check can load it without
+   starting the game, and evaluate a label exactly as the game fills it in. */
+const { WORDS, fill } = await import(pathToFileURL(path.join(ROOT, "src/shared/words.js")).href);
+const say = (id, facts) => fill(WORDS[id], facts, { me: () => false, name: String, poss: String });
+
 const s=fs.readFileSync(SRC,"utf8");
 
 /* Pull the label expression actually passed to coinSlider in buildOffer's step 2.
@@ -23,7 +29,7 @@ const s=fs.readFileSync(SRC,"utf8");
    unnecessarily lazy code"). Nothing about the coin question changed. A gate that depends on a
    LOCAL VARIABLE'S NAME is asserting about spelling rather than behaviour, and it blocks exactly
    the readability work it should be indifferent to. */
-const m=s.match(/const n=await coinSlider\(\w+\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,"Offer it!"[^;]*\);/);
+const m=s.match(/const n=await coinSlider\(\w+\.idx,\s*\n\s*(k=>[^\n]*?),\s*\n\s*minC,minC,maxC,(?:"Offer it!"|say\("trade\.offerGo",\{\}\))[^;]*\);/);
 let fails=0; const ok=m=>console.log("  PASS  "+m); const bad=m=>{fails++;console.log("  FAIL  "+m);};
 if(!m){ bad("could not find the coinSlider label in buildOffer — check is pointed at the wrong place"); }
 else{
@@ -34,7 +40,7 @@ else{
      ["coins ONLY (baseIng null)", {baseIng:null},  "How many coins?"],
      ["an ingredient PLUS coin",   {baseIng:"cocoa"},"Would ye offer any coin on top?"]]){
     let got;
-    try{ got=new Function("st",`return (${expr})(0)`)(st); }catch(e){ got="THREW: "+e.message; }
+    try{ got=new Function("st","say",`return (${expr})(0)`)(st,say); }catch(e){ got="THREW: "+e.message; }
     got===want ? ok(`${what.padEnd(28)} -> "${got}"`)
                : bad(`${what.padEnd(28)} -> "${got}"   (expected "${want}")`);
   }

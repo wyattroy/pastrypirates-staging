@@ -38,7 +38,7 @@ import {
   HEXCOL, DEVICE_IMG, ANCHOR_IMG, CLOCK_IMG, FLIP_SOCKET_IMG, HOURGLASS_IMG,
   CLOSE_X_IMG, iconImg, emojify, unusedDefaultName,
 } from "../shared/index.js";
-import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN, decisionIsLocal } from "./util.js";
+import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN, decisionIsLocal, say, sayText } from "./util.js";
 // F2/UI-06 (2026-07-29): escHtml's only use here was the duplicate seat-name rendering that this
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
@@ -169,7 +169,7 @@ export function wireNameWarnings(){
 // About page are the only places that are not). It names the name back so there is no doubt WHICH
 // one is spoken for, and it promises nothing the 18-character cap would then refuse — it asks for
 // another name rather than suggesting a way to decorate this one.
-export const nameTakenMsg=(nm)=>`Arrgh — a captain aboard already sails as ${nm}. Pick another name, matey.`;
+export const nameTakenMsg=(nm)=>sayText("lobby.nameTaken",{name:nm});
 
 /* ================= name modal (FIX-01) ================= */
 // D-03: the same modal appears before all four mode cards. Each caller in wireWelcome() opens it
@@ -283,7 +283,7 @@ export function wireNameModal(){
   if(card&&!card.querySelector(".modalX")){
     card.style.position="relative";
     const x=document.createElement("button");
-    x.className="modalX";x.type="button";x.innerHTML=iconImg(CLOSE_X_IMG);x.setAttribute("aria-label","Close");
+    x.className="modalX";x.type="button";x.innerHTML=iconImg(CLOSE_X_IMG);x.setAttribute("aria-label",sayText("button.close",{}));
     x.onclick=()=>{cancelName();};
     card.insertBefore(x,card.firstChild);
   }
@@ -405,33 +405,21 @@ export function passGate(seatIdx){
       ap.dataset.pp4Hand="1";
       if(window.__pp4&&window.__pp4.stageCenterNow)window.__pp4.stageCenterNow();
       // @copy misc.lobby.passmessage4 — APPROVED as written, Wyatt 2026-08-14
-      panel(`<div class="apMsg">${iconImg(DEVICE_IMG)} Pass the wheel to
+      panel(`<div class="apMsg">${say("pass.to",{icon:iconImg(DEVICE_IMG)})}
         <b style="color:${HEXCOL[seatIdx]}">${pname(seatIdx)}</b></div>
         <div class="apBtns"><button class="apBtn" id="passHelmGo" type="button"
-          style="border-color:${HEXCOL[seatIdx]};color:${HEXCOL[seatIdx]}">At the helm!</button></div>`,true);
+          style="border-color:${HEXCOL[seatIdx]};color:${HEXCOL[seatIdx]}">${say("pass.go",{})}</button></div>`,true);
       const go=$("passHelmGo");
       const took=()=>{delete ap.dataset.pp4Stage;delete ap.dataset.pp4Hand;panel("");appState.mySeat=seatIdx;res();};
       if(!go){took();return;}
       go.onclick=()=>{go.onclick=null;took();};
     });
   }
-  return new Promise(res=>{
-    $("game").classList.add("bg-blurred");
-    // NARR-01/D-25 (Wyatt-approved 2026-07-29).
-    // @copy misc.lobby.passmessage
-    $("passOverlayMsg").innerHTML=`${iconImg(DEVICE_IMG)} Pass the board to<br><span style="color:${HEXCOL[seatIdx]}">${pname(seatIdx)}</span>`;
-    const btn=$("passHelmBtn");
-    // @copy misc.lobby.passbutton
-    btn.innerHTML=`${iconImg(ANCHOR_IMG)} ${pname(seatIdx)} at the helm!`;
-    btn.style.background=HEXCOL[seatIdx];btn.style.borderColor=HEXCOL[seatIdx];
-    $("passOverlay").style.display="flex";
-    btn.onclick=()=>{
-      $("passOverlay").style.display="none";
-      $("game").classList.remove("bg-blurred");
-      appState.mySeat=seatIdx;
-      res();
-    };
-  });
+  /* THE OLD "Pass the board to…" OVERLAY STOOD HERE — the fallback for a game with no stage. Every voyage builds the stage
+     (stage.js buildStage), so no player could reach it. His pass, 2026-09-13: "I've never seen this in pass-and-play --
+     are you sure it's in the game? cut it if not." With no stage there is no card to show; the device changes hands. */
+  appState.mySeat=seatIdx;
+  return Promise.resolve();
 }
 
 export function renderSeatList(seats){
@@ -488,10 +476,10 @@ export function renderSeatList(seats){
     // NARR-01/D-25/D-50 (Wyatt-approved 2026-07-29): applied verbatim; {clock/stopwatch} resolves
     // to the hourglass (D-50 RESOLVED — this is a "waiting for players" moment, not a control).
     // @copy misc.lobby.waitcaption
-    $("waitMsg").innerHTML=`${iconImg(HOURGLASS_IMG)} Yer mateys will appear above as they join. Wait for them before clicking start. Empty seats are played by botpirates — and they're feisty.`;
+    $("waitMsg").innerHTML=say("lobby.waitCaption",{icon:iconImg(HOURGLASS_IMG)});
   }else{
     $("btnStart").style.display="none";
-    $("waitMsg").textContent="Waiting for the host to start the voyage…";
+    $("waitMsg").textContent=sayText("lobby.waitHost",{});
   }
 }
 

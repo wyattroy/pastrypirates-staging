@@ -38,6 +38,10 @@ const fail = m => { console.log("FAIL " + m); fails++; };
    See scripts/qa/lib/strip_comments.mjs for the measurement. */
 import { stripComments as strip } from "./lib/strip_comments.mjs";
 const panel = strip(fs.readFileSync(path.join(REPO, "src/ui/panel.js"), "utf8"));
+/* THE NARRATOR MOVED (2026-09-13). When a bot's beat and a human's action stopped being narrated by two different
+   functions, the one that remained — narrateEvent — went to src/ui/util.js, and it is where the subject is read and
+   marked for EVERY captain's event now. These assertions follow it there rather than going green on absence. */
+const narrator = strip(fs.readFileSync(path.join(REPO, "src/ui/util.js"), "utf8"));
 const stage = strip(fs.readFileSync(path.join(REPO, "src/ui/stage.js"), "utf8"));
 /* THE RULE MOVED, AND THAT IS THE POINT (Q-18, 2026-08-29). It used to be inlined in panel.js and
    its ANSWER shipped to the guest as a wire field. It now lives ONCE, in the module both tiers
@@ -57,11 +61,11 @@ const shared = strip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "ut
   const test = (fn.match(/twoCaptains\s*=\s*([^;]+);/) || [, ""])[1];
   const real = /\be\.d\b/.test(test) && /\be\.a\b/.test(test) && /!==|!=/.test(test) && !/\bfalse\b/.test(test);
   const used = /twoCaptains\s*\?\s*null/.test(fn);
-  const hostCalls = /__pp4\.subject\s*=\s*subjectOf\(e\)/.test(panel);
+  const hostCalls = /__pp4\.subject\s*=\s*subjectOf\(e\)/.test(narrator);
   if (fn && exported && real && used && hostCalls)
-    pass(`a fight takes no subject — src/shared/index.js's subjectOf consults both fighters and compares them (${test.replace(/\s+/g, " ").slice(0, 60)}), it is exported, and panel.js calls it rather than spelling the rule out again`);
+    pass(`a fight takes no subject — src/shared/index.js's subjectOf consults both fighters and compares them (${test.replace(/\s+/g, " ").slice(0, 60)}), it is exported, and the one narrator (util.js narrateEvent) calls it rather than spelling the rule out again`);
   else
-    fail(`the two-captain rule is not one shared function (found in shared:${!!fn} exported:${exported} consults both and compares:${real} yields null:${used} panel calls it:${hostCalls}; test = \`${test.replace(/\s+/g, " ").slice(0, 60)}\`) — a battle event {t:"battle",a,d} would anchor its result to the ATTACKER. Measured in a crew game: 44px off centre on BOTH seats`);
+    fail(`the two-captain rule is not one shared function (found in shared:${!!fn} exported:${exported} consults both and compares:${real} yields null:${used} the narrator calls it:${hostCalls}; test = \`${test.replace(/\s+/g, " ").slice(0, 60)}\`) — a battle event {t:"battle",a,d} would anchor its result to the ATTACKER. Measured in a crew game: 44px off centre on BOTH seats`);
 }
 
 /* (2) A DECIDED SUBJECT BEATS THE COLOUR SNIFF — and this is the half that made the first fix
@@ -76,7 +80,7 @@ const shared = strip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "ut
      that set a plain property on the bridge, never arrived, `decided` was always false, the colour
      sniff always ran, and the battle result was re-anchored exactly as before. */
   const bridged = /set subjectSet\(v\)\s*\{\s*S\.subjectSet\s*=\s*v/.test(stage);
-  const marks = /__pp4\.subjectSet\s*=\s*true/.test(panel) && bridged;
+  const marks = /__pp4\.subjectSet\s*=\s*true/.test(narrator) && bridged;
   const honours = /const\s+decided\s*=\s*!!S\.subjectSet/.test(stage) && /!decided\s*&&\s*subj\s*==\s*null/.test(stage);
   const consumed = /S\.subjectSet\s*=\s*false/.test(stage);
   if (marks && honours && consumed)
@@ -135,7 +139,8 @@ const shared = strip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "ut
 /* (5) THE TWO HALVES OF ONE BATTLE ARE DRAWN ALIKE (rule 8). */
 {
   const orch2 = strip(fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8"));
-  const open = orch2.match(/await flash\(`[^`]*attacks \$\{pn\(def\.idx\)\}[^`]*`[^;]*\)/);
+  // the opening's words live in src/shared/words.js ("battle.opening") since 2026-09-13; the line is the sayAll + flash pair
+  const open = orch2.match(/const opening=sayAll\("battle\.opening"[^;]*;\s*await flash\(opening\.html[^;]*\)/);
   if (!open) fail("could not find the battle's opening narration in orchestrator.js — re-anchor this assertion");
   else if (/subject/.test(open[0]))
     fail("the battle's OPENING line now sets a subject while the result withholds one — the two halves of one fight drawn two ways again");

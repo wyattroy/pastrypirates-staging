@@ -53,7 +53,7 @@ import {
   FLIP_SOCKET_IMG, COIN_SPIN_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG,
   // T-33: the greyed-crate art, warmed alongside ING_IMG rather than fetched cold mid-voyage
   ING_HOLE_IMG,
-  SEA_CREATURES, buildRoster,
+  SEA_CREATURES, buildRoster, subjectOf,
 } from "../shared/index.js";
 /* THE WHOLE MODULE, as well as the names above — this is what makes preloadAssets() DERIVED rather
    than a list somebody maintains. See its note: every hand-kept version of that list has drifted. */
@@ -73,6 +73,8 @@ import { escHtml, RECIPE_BOOK } from "./recipe.js";
 // zero net/sibling-rendering dependencies of its own, and src/ui/board.js (which calls it) already
 // imports this file directly, so a plain import is strictly simpler than a seam entry here.
 import { netHandlers } from "./handlers.js";
+/* EVERY WORD THE GAME SAYS lives in src/shared/words.js — say()/sayAll() below are the one door to it. */
+import { WORDS, fill, seat } from "../shared/words.js";
 
 /* ---------- board geometry ---------- */
 
@@ -397,6 +399,31 @@ export function rawName(i){
 export function pn(i){return `<b style="color:${HEXCOL[i]}">${pname(i)}</b>`;}
 // possessive form for narration addressed to spectators of someone else's turn, e.g. "Davy Scones' turn"
 export function poss(i){const nm=pname(i);return `<b style="color:${HEXCOL[i]}">${nm}${nm.endsWith("s")?"'":"'s"}</b>`;}
+/* ⭐ THE ONE DOOR TO THE GAME'S WORDS — Wyatt, 2026-09-13: "All the narration should be re-architected to live in
+   one place" · "we use one engine, that accepts as arguments the action taken, the player type (human/bot), the
+   location of the player (this browser/remote), and serves an event."
+   `viewerSeat` is WHICH SCREEN is reading, in the three states describeFor() already takes: a seat, NEUTRAL_VIEWER
+   (every other screen), or undefined (this device's own seat). That is the LOCATION half of his sentence. The PLAYER
+   TYPE half is deliberately absent: nothing here can ask whether a captain is a bot, so a bot and a human are
+   described in the same words by construction. */
+export function say(id,facts,viewerSeat){
+  const t=WORDS[id];
+  if(t===undefined)throw new Error(`src/shared/words.js has no line "${id}"`);
+  return fill(t,facts,{me:s=>isLocalTo(s,viewerSeat),name:pn,poss});
+}
+/* One line for every screen at once — what every other screen reads, plus the "ye" version for each captain the
+   line names: exactly the {html, variants} shape flash() and the wire already carry. */
+export function sayAll(id,facts){
+  const html=say(id,facts,NEUTRAL_VIEWER);
+  const seats=[...new Set(Object.values(facts||{}).filter(v=>v&&typeof v==="object"&&"seat" in v).map(v=>v.seat))];
+  return {html,variants:seats.map(s=>({seat:s,html:say(id,facts,s)})).filter(v=>v.html!==html)};
+}
+/* THE PLAIN-TEXT DOOR — for words drawn with textContent, like a greyed button's reason (showWhy). A coloured name or a
+   no-break span would reach the screen there as literal markup, so both are taken off. */
+export function sayText(id,facts,viewerSeat){
+  return say(id,facts,viewerSeat).replace(/<[^>]*>/g,"");
+}
+export { seat };
 export function fl(h){return h?"⚪H":"⚫T";}
 // D-17 (Wyatt-approved 2026-07-29): ingredients render as the SAME custom art the islands and the
 // captain's box draw (ilabelImg -> ING_IMG), not as raw system emoji. None of the 7 in-play
@@ -475,17 +502,16 @@ export function movedSinceTurnStart(e){
 // guessed, no verb agreement is derived — the deleted seaSighting() did all three and got the
 // plurals wrong; a leading-clause rule would additionally have missed the SECOND verb in a
 // compound sentence ("leans over the rail, and spots six clownfish").
-function seaLine(sea,mine,name){
+function seaLine(sea,p,viewerSeat){
   // A pre-2026-08-06 solo save stores `sea` as a bare creature name, and a save from earlier the
   // same day stores {o,s,v}. Both are replayed verbatim on resume, so both must still narrate.
   // "there's X down there" needs neither an article nor number agreement, so every old name reads
   // correctly without resurrecting the inference this change removed.
   if(!sea||typeof sea==="string"||!sea.y){
-    const w=(sea&&sea.s)||(typeof sea==="string"?sea:null)||"somethin' strange";
-    return mine?`${name} — ye lean over the rail, and there's ${w} down there.`
-               :`${name} leans over the rail, and there's ${w} down there.`;
+    const w=(sea&&sea.s)||(typeof sea==="string"?sea:null)||say("muse.somethin",{});
+    return say("muse.unknown",{p:seat(p),what:w},viewerSeat);
   }
-  return mine?`${name} — ${sea.y}`:sea.t.replace("{}",name);
+  return isLocalTo(p,viewerSeat)?`${pn(p)} — ${sea.y}`:sea.t.replace("{}",pn(p));
 }
 export
 const EVENT_NARRATION={
@@ -529,63 +555,35 @@ const EVENT_NARRATION={
      off at every width tested, 430px included. At 35-46 characters there is no atomic unit left to
      protect, and a span that cannot wrap is a liability the moment a line grows again. */
   newround:e=>{
-    const tail=e.nextStorm?" Tomorrow: a storm.":(e.next?` Tomorrow: ${DIRNAME[e.next]}.`:"");
-    /* A-9 (Wyatt, 2026-08-28): option (b) — calm days stay short, a STORM day keeps a sentence of
-       its own carrying the rule, because this is the ONLY place a player is ever told how far a
-       storm moves them. His example verbatim: "It'll blow every ship 3 squares WEST." Distance
-       and direction both DERIVED (rule 9): STORM_PUSH is the same constant the engine pushes
-       with, DIRNAME is the one CAPS spelling every wind surface shares. This reverses the
-       2026-08-27 "minus 3 squares" cut on his own later word — the graveyard note below stands
-       as the history of that day, not the ruling in force. */
-    const head=e.storm
-      ? `Day ${e.round}: Storm ${e.streak>=2?"still":"blowin\u2019"} ${DIRNAME[e.dir]}. It\u2019ll blow every ship ${STORM_PUSH} squares ${DIRNAME[e.dir]}.`
-      : `Day ${e.round}: Wind ${DIRNAME[e.dir]}.`;
-    return {cls:"roundhdr",txt:head+tail};
+    /* HIS PASS, 2026-09-13 (supersedes A-9's storm sentence): "Wind still" for any repeated direction; a storm is
+       blowin', now blowin' (it goes on and the wind has turned) or still blowin' (it goes on, same way). The
+       "It'll blow every ship 3 squares" sentence is gone — the storm summary names the squares when it pushes.
+       "Tomorrow" stays, his pick. Every word in src/shared/words.js; only WHICH line is decided here. */
+    const dir=DIRNAME[e.dir];
+    const id=!e.storm?(e.windStreak>=2?"day.windStill":"day.wind")
+      :e.streak>=2?(e.windStreak>=2?"day.stormStill":"day.stormNow"):"day.storm";
+    const tail=e.nextStorm?say("day.tomorrowStorm",{}):(e.next?say("day.tomorrow",{dir:DIRNAME[e.next]}):"");
+    return {cls:"roundhdr",txt:say(id,{day:e.round,dir})+(tail?" "+tail:"")};
   },
   dock:(e,at,cellPx,viewerSeat)=>{
-    const place=dockPlace(e.ing),goods=dockFlavorIcon(e.ing);
     const heads=appState.game.cfg.dockHeads,tails=appState.game.cfg.dockTails;
     const paid=e.price!=null?e.price:"";
     const bought=(e.got==="bought");
-    // black-market buys and the purchase that empties a shelf each get their clause — the dry
-    // notice is how the whole table learns a shelf ran out (draft copy, Wyatt rewrites)
-    // THE BLACK MARKET'S TWO PRICES read as two different sentences, because they are two
-    // different bargains: coin buys the crate, but a barter SPENDS two crates the whole table can
-    // see leave the hold — and they leave the game with them, so the line has to name them.
+    /* THE BLACK MARKET'S TWO PRICES read as two different sentences, because they are two different bargains:
+       coin buys the crate, but a barter SPENDS two crates the whole table can see leave the hold. Paying with
+       two of the SAME crate is legal and common, and "Cacao Pods an' Cacao Pods" reads like a stutter. */
     const barter=bought&&e.paidIng&&e.paidIng.length===2;
-    // paying with two of the SAME crate is legal and common (a hold of junk duplicates is exactly
-    // what the barter is for), and "trades Cacao Pods an' Cacao Pods" reads like a stutter
-    const gave=barter
-      ?(e.paidIng[0]===e.paidIng[1]?`two ${fmtItem(e.paidIng[0])}`:e.paidIng.map(fmtItem).join(" an' "))
-      :``;
-    /* W2-5 — ONE FORMAT FOR COIN IN THIS SENTENCE, NOT TWO. The dig above already names the gain
-       as a signed parenthetical, `(+3🌕)`; the purchase in the SAME breath read "for 12🌕". Money
-       arriving and money leaving were dressed differently a dozen words apart.
-       THE MINUS IS U+2212 "−", NEVER ASCII "-" — the same character the broadside line and the
-       captain's-log capsule below already use; a hyphen here is the drift this whole clause exists
-       to stop. `.nobrk` because the coin is an <img>, and a replaced element hands the browser a
-       break opportunity immediately after it — the reason a full stop turned up alone on its own
-       line twice. Built ONCE and spent by both the third-person and the addressed form, so the two
-       can never say the amount differently. The barter clause takes no `spent`: it pays in crates,
-       and inventing a coin figure where no coin moved would be a lie the whole table can read. */
-    const spent=`<span class="nobrk">(−${paid}🌕)</span>`;
-    const buyTail=bought
-      ?(barter?` — then trades ${gave} to the black market for ${goods}.`
-        :e.black?` — then pays the black market for ${goods} ${spent}.`
-        :` — then buys ${goods} ${spent}.`+(e.wentDry?` That were the last of it — the shelves be bare!`:``))
-      :``;
-    const buyTailYou=bought
-      ?(barter?` — then ye trade ${gave} to the black market for ${goods}.`
-        :e.black?` — then ye pay the black market for ${goods} ${spent}.`
-        :` — then ye buy ${goods} ${spent}.`+(e.wentDry?` Ye took the last of it — the shelves be bare!`:``))
-      :``;
-    const txt=isLocalTo(e.p,viewerSeat)
-      ?(e.heads
-        ?`⚪ HEADS! Ye dig deep at ${place} and strike buried treasure <span class="nobrk">(+${heads}🌕)</span>${buyTailYou}`
-        :`⚫ TAILS — ye spend the turn workin' the docks at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTailYou}`)
-      :(e.heads
-        ?`⚪ HEADS! ${pn(e.p)} digs deep at ${place} and strikes buried treasure <span class="nobrk">(+${heads}🌕)</span>${buyTail}`
-        :`⚫ TAILS — ${pn(e.p)} spends the turn workin' the docks at ${place} <span class="nobrk">(+${tails}🌕)</span>${buyTail}`);
+    const gave=!barter?"":e.paidIng[0]===e.paidIng[1]
+      ?say("dock.gaveTwoSame",{a:fmtItem(e.paidIng[0])})
+      :say("dock.gaveTwo",{a:fmtItem(e.paidIng[0]),b:fmtItem(e.paidIng[1])});
+    /* HIS PASS, 2026-09-13: "Crustbeard finds treasure (+N) at the Flour Patch!" · "Crustbeard earns 1{coin}
+       scrubbin' the docks and buys a crate of Wheat Sheaves (−N)." The HEADS!/TAILS words are gone — the coin
+       itself shows the face. Every amount still comes off cfg and the event, never typed (W2-4). */
+    const how=!bought?"":barter?".barter":e.black?".black":".buy";
+    const facts={p:seat(e.p),n:e.heads?heads:tails,place:dockPlace(e.ing),goods:dockFlavorIcon(e.ing),paid,gave};
+    let txt=say((e.heads?"dock.treasure":"dock.work")+how,facts,viewerSeat);
+    // the purchase that empties a shelf is how the whole table learns it ran out
+    if(how===".buy"&&e.wentDry)txt+=" "+say("dock.lastOne",facts,viewerSeat);
     const cap=(e.heads?`⚪H 💰+${heads}🌕`:`⚫T +${tails}🌕`)+
       (bought?(barter?` · ${e.paidIng.map(x=>ING_EMOJI[x]||"📦").join("")} → ${ING_EMOJI[e.ing]}`:` · buys ${ING_EMOJI[e.ing]} −${paid}🌕`):``);
     return {txt,caps:[[e.p,cap]],
@@ -593,11 +591,8 @@ const EVENT_NARRATION={
   },
   // v2 rule 4e: no harbor-tax refund any more, so no bonus clause to name.
   trade:(e,at,cellPx,viewerSeat)=>{
-    // D-08/D-25: each named trader reads it addressed to themselves.
-    let txt;
-    if(isLocalTo(e.a,viewerSeat))txt=`🤝 ${pn(e.a)} — ye trade ${fmtItem(e.gave)} to ${pn(e.b)} for ${fmtItem(e.got)}`;
-    else if(isLocalTo(e.b,viewerSeat))txt=`🤝 ${pn(e.a)} trades ${fmtItem(e.gave)} to ye for ${fmtItem(e.got)}`;
-    else txt=`🤝 ${pn(e.a)} trades ${fmtItem(e.gave)} to ${pn(e.b)} for ${fmtItem(e.got)}`;
+    // D-08/D-25: each named trader reads it addressed to themselves — derived by words.js, not written twice.
+    const txt=say("trade.struck",{a:seat(e.a),b:seat(e.b),gave:fmtItem(e.gave),got:fmtItem(e.got)},viewerSeat);
     return {cls:"trade",txt,
       caps:[[e.a,`🤝 got ${fmtItem(e.got)}`],[e.b,`🤝 got ${fmtItem(e.gave)}`]],
       pops:[[at(e.a),"🤝"],[at(e.b),"🤝"]]};
@@ -605,187 +600,33 @@ const EVENT_NARRATION={
   // v2 rule 5: a call is free and pays a flat bounty. Nothing is ever lost on a wrong one, so
   // there is no "backed the wrong ship (−N🌕)" form any more.
   sidebet:(e,at,cellPx,viewerSeat)=>{
-    const you=isLocalTo(e.p,viewerSeat);
-    if(e.won)return {cls:"trade",txt:you
-      ?`🔭 ${pn(e.p)} — ye called it! <span class="nobrk">(+${e.delta}🌕)</span>`
-      :`🔭 ${pn(e.p)} called it! <span class="nobrk">(+${e.delta}🌕)</span>`,
+    // his pass, 2026-09-13: "{Player} called it wrong." — one line for a wrong call; nothing is ever lost on one.
+    if(e.won)return {cls:"trade",txt:say("call.right",{p:seat(e.p),n:e.delta},viewerSeat),
       caps:[[e.p,`🔭 called it +${e.delta}🌕`]]};
-    return {cls:"trade",txt:you
-      ?`🔭 ${pn(e.p)} — ye called the wrong ship. No bounty.`
-      :`🔭 ${pn(e.p)} called the wrong ship — no bounty.`};
+    return {cls:"trade",txt:say("call.wrong",{p:seat(e.p)},viewerSeat)};
   },
   battle:(e,at,cellPx=0,viewerSeat)=>{
-    // count by who actually scored (r[3]) rather than the raw flip pattern — a both-heads
-    // downwind round scores a point but isn't "a XOR d landed heads", so filtering on the flips
-    // alone silently drops it and undercounts the displayed score.
-    const aP=e.rounds.filter(r=>r[3]==="a").length,dP=e.rounds.filter(r=>r[3]==="d").length;
-    const rn=e.rounds.length; // BATL-01/02: broadside-round count dropped from the narration (always 0 now)
     const loser=e.winner===e.a?e.d:e.a;
     const [x1,y1]=at(e.a),[x2,y2]=at(e.d);
     const sp=e.spoilIng?ING_EMOJI[e.spoilIng]:"💰"; // e.spoil is HTML (ilabelImg) now — never parse it for a pop icon
     const spImg=e.spoilIng?ING_IMG[e.spoilIng]:null; // #3: won ingredient rises from the boat as art, not emoji
-    // G3 (Wyatt-approved 2026-07-30): *"'Gives up all they have: 2 coins' should be 'gives up all
-    // they have: 2🌕'"*. And, on being told the string came from the engine: *"why does this need to
-    // touch the engine, but all our other narration doesn't? that seems badly designed, or worth
-    // rechecking."* He is right, and that anomaly is real — `spoil` is one of only two fields in the
-    // engine's whole event contract that carry RENDERED TEXT rather than data. Fixing it properly
-    // means changing what the engine emits, which invalidates all 31 determinism fixtures and needs
-    // a gated re-record; that work is specified in docs/DETERMINISM-RERECORD-NEXT.md and must ride
-    // along the next time a re-record happens anyway. THIS is the interim display-layer fix, and it
-    // leaves src/engine/index.js with an empty diff.
-    //
-    // ONE const, used at every site that interpolates the spoil. Three cases, in this order:
-    //   1. Crate win — render from the DATA field and ignore e.spoil entirely. `spoilIng` already
-    //      exists beside `spoil` as a proper data field, and art-review/narration-core.js:267-278
-    //      already asserts the paired invariant `spoil === ilabelImg(spoilIng)` at every real emit
-    //      site (D-51), so this renders byte-identically today while removing the crate half's
-    //      dependence on pre-rendered engine text.
-    //   2. Coin win — reuse fmtItem, the single place that already decides how a coin amount is
-    //      spelled (D-17), rather than inventing a rival regex here. "5 coins" -> "5🌕", and the
-    //      engine-only "2 coins (all they had)" -> "2🌕 (all they had)".
-    //   3. Anything else — pass through UNTOUCHED. Load-bearing, not defensive padding: the raider
-    //      spoil is `take+"c (raider)"` (src/engine/index.js:568), which contains no "coin"
-    //      substring at all, so a blanket fmtItem() would fall through its /coin/ test into the
-    //      INGREDIENT branch and render garbage. `asym` is hardcoded false in roundCfg and set
-    //      nowhere in the codebase, so that branch is config-dead — but a config-dead branch must
-    //      not be silently broken. Its deletion is queued in DETERMINISM-RERECORD-NEXT.md.
+    /* G3 (Wyatt, 2026-07-30): a crate is rendered from the DATA field (`spoilIng`), never the engine's pre-rendered
+       `spoil` text; a coin amount goes through fmtItem, the one place a coin amount is spelled; anything else passes
+       through untouched (the config-dead raider spoil, queued for deletion in DETERMINISM-RERECORD-NEXT.md). */
     const spoilText=e.spoilIng?ilabelImg(e.spoilIng):(/ coins/.test(e.spoil)?fmtItem(e.spoil):e.spoil);
-    // ingredient spoils read as the winner taking a crate — untouched by the split below.
-    //
-    // NARR-04/D-12 (Wyatt-approved 2026-07-29): a coin spoil used to read as a single "bribe"
-    // clause regardless of amount. Both real spoil-generation paths — src/orchestrator.js's asyncBattle
-    // (every real game) and the offline-simulator-only src/engine/index.js — clamp the coin take
-    // to at most 5. So when the loser holds no crate and the leading number in e.spoil reached
-    // that full 5, they had a full purse and chose to pay rather than give one up: a genuine
-    // bribe (today's wording, unchanged). When it's below 5, the live path guarantees the loser
-    // also held zero crates (holding one would have routed to the ingredient branch above instead)
-    // — there was nothing left to bargain with, so the winner simply takes what was left: cleaned
-    // out, not bribed. This is the real-wording form of the simulator-only "(all they had)"
-    // parenthetical the plan asked to fold into prose rather than ever carry as a trailing aside.
-    //
-    // e.spoil is HTML for the ingredient case and is NEVER parsed there; only here, for the coin
-    // case, is its LEADING NUMBER parsed — a different operation from parsing it for a pop icon
-    // (spoilClause never does that either). Guarded so an absent, empty, or non-numeric spoil
-    // falls through to the cleaned-out framing (the one that claims least) rather than ever
-    // rendering `undefined`/NaN — the cleaned-out line also never mocks or piles on the loser
-    // (T-15-08/the plan's own values prohibition), it just reports the outcome.
-    // G3: these two deliberately parse the RAW e.spoil, NOT spoilText. The bribe test asks "did the
-    // coin take reach the full 5" — a numeric question about the event, entirely unrelated to how
-    // the amount is spelled on screen. Do not tidy the two together.
-    const spoilN=e.spoilIng?null:parseInt(e.spoil,10);
-    // FIX-07 (Wyatt-ruled 2026-07-31): spoilN>=5 alone can't tell a genuine bribe (had a crate AND
-    // 5+ coins, chose to pay) apart from an empty-hold loser who never had a choice — both clamp to
-    // the same "5 coins"/spoilIng:null shape. src/orchestrator.js now carries the real signal as
-    // e.spoilChosen, set true ONLY inside its canCoins&&hasIng branch. Engine-generated events
-    // (replays, the simulator, all 31 determinism fixtures) carry no such key at all — hasChoice is
-    // the fork that keeps every one of THOSE rendering byte-identically to before this change,
-    // falling back to the old coin-count proxy exactly as it did before spoilChosen existed.
-    const hasChoice=typeof e.spoilChosen==="boolean";
-    // the amount gate (spoilN>=5) stays load-bearing in BOTH forks — a fabricated sub-5 event with
-    // spoilChosen:true is not a shape the real game ever produces (canCoins&&hasIng only sets
-    // spoilChosen true when lose.coins>=5, which clamps the take to exactly 5), but the fix must not
-    // depend on that never happening: a sub-5 spoil always falls to the all-they-have framing,
-    // regardless of spoilChosen.
-    const isBribe=e.spoilIng==null&&Number.isFinite(spoilN)&&spoilN>=5&&(hasChoice?e.spoilChosen===true:true);
-    // the empty-hold case: a real choice existed (hasChoice), the loser did NOT choose coins over a
-    // crate (they had none to choose from), and the coin take still reached the clamp ceiling.
-    const isEmptyHoldFive=e.spoilIng==null&&hasChoice&&e.spoilChosen===false&&Number.isFinite(spoilN)&&spoilN>=5;
-    // D-08 (Wyatt-approved 2026-07-29): the attacker and the defender each read the outcome
-    // addressed to themselves — a third-party viewer (including NEUTRAL_VIEWER) reads the
-    // third-person text. Only ever one of aAddr/dAddr can be true (distinct seats), so the spoil
-    // clause below resolves against whichever of winner/loser the viewer actually is.
-    const aAddr=isLocalTo(e.a,viewerSeat),dAddr=isLocalTo(e.d,viewerSeat);
-    const winIsA=e.winner===e.a;
-    // NARR-01/D-25 (Wyatt-approved 2026-07-29): the result line drops "attacks {name}!" and the
-    // round count — the battle OPENER (src/orchestrator.js's asyncBattle) already named both
-    // combatants, so restating it here was exactly the redundancy this phase exists to remove.
-    let mainClause;
-    if(aAddr)mainClause=`⚔️ ${pn(e.a)} — ye ${winIsA?"win":"lose"} ${aP}–${dP}.`;
-    else if(dAddr)mainClause=`⚔️ ${pn(e.d)} — ye ${winIsA?"lose":"win"} ${aP}–${dP}.`;
-    else mainClause=`⚔️ ${pn(e.winner)} wins ${aP}–${dP}.`;
-    const viewerIsWinner=isLocalTo(e.winner,viewerSeat),viewerIsLoser=isLocalTo(loser,viewerSeat);
-    // playtest 20 (Mando: "There's a bug in the battles - we both rolled heads but he still took
-    // something from me"). It was not a bug — rule 9 gives a two-heads tie to the DOWNWIND ship —
-    // but nothing on the durable line ever said so, and both cannons land heads in ~25% of fights,
-    // so roughly ONE BATTLE IN FOUR ended with no stated reason. Wyatt, 2026-08-13, on where to
-    // explain it: after the battle (this), plus a badge on the battle card and a line in the flip
-    // ceremony. The loser's wording below is his approved copy verbatim; the winner-addressed and
-    // neutral forms are the mechanical person-swap of it, same as D-54 did for the base line.
-    //
-    // The DECIDING round is the last one that scored — a crosswind tie can re-fire, so earlier
-    // rounds may have no scorer at all. `downwind` rides the event (src/orchestrator.js).
+    /* playtest 20: rule 9 gives a two-heads tie to the DOWNWIND ship, and roughly one battle in four ends that
+       way — so the line says why. The deciding round is the last one that scored (`downwind` rides the event). */
     const decidedRound=e.rounds&&e.rounds.filter(r=>r&&r[3]).pop();
     const wonOnWind=!!(e.downwind&&decidedRound&&decidedRound[0]===1&&decidedRound[1]===1&&decidedRound[3]===e.downwind);
-    const windHeadThird=`⚔️ Both cannons land — but ${pn(e.winner)} fires downwind, and the wind carries the shot home.`;
-    const windHeadYe=`⚔️ Both cannons land — but ye're firin' downwind, and the wind carries the shot home.`;
-    // playtest 20 (Wyatt: "losers of a battle without a crate don't always give 'all they have' —
-    // sometimes they don't even give all their doubloons"). They give NONE, and that is correct:
-    // RULES-V2 line 180 is "Prize: one crate, winner's choice. No coin alternative", so an empty
-    // hold means the winner leaves with nothing. The ENGINE (awardSpoil returns null) and the live
-    // path (`pick` is undefined) both already do exactly that. The BUG WAS THIS FUNCTION.
-    //
-    // The isBribe / isEmptyHoldFive / "all ye have" branches below are survivors of the OLDER
-    // ruleset, where a beaten captain could pay in coin. With no coin spoil possible any more,
-    // spoilN parses to NaN, both coin branches go false, and every empty-hold loss fell through to
-    // the "gives up all they have" fallback — which is a lie, and reads exactly like the game
-    // failing to take something. Measured before the fix:
-    //   live path   "Wyargh wins 0–1 — ye give up all ye have."
-    //   engine path "Wyargh wins 0–1 — ye give up all ye have: nothing."
-    // Detected on the DATA (a null/"nothing" spoil) rather than by assuming coins are impossible,
-    // so a future ruleset that restores a coin prize cannot silently inherit this line.
+    /* playtest 20 (Wyatt: "losers of a battle without a crate don't always give 'all they have'"): an empty hold
+       means the winner leaves with nothing, and the line says so — detected on the DATA, so a future coin prize
+       cannot silently inherit it. Checked before the wind: "where did my crate go" is the question a loser asks. */
     const tookNothing=e.spoilIng==null&&(e.spoil==null||e.spoil==="nothing"||e.spoil==="");
-    let spoilClause;
-    // G3: every ${e.spoil} below became ${spoilText}. Not one sentence, clause order or word
-    // changed — the only difference is how the spoil AMOUNT is spelled.
-    if(e.spoilIng)spoilClause=viewerIsWinner?`Ye take ${spoilText}.`:`${pn(e.winner)} takes ${spoilText}.`;
-    else if(isBribe)spoilClause=viewerIsLoser?`Ye bribe yer way out of giving away an ingredient with ${spoilText}.`:`${pn(loser)} bribes their way out of giving away an ingredient with ${spoilText}.`;
-    // FIX-07 (ruled 2026-07-31, verbatim): an empty-hold loser reads this third line, not the bribe
-    // wording and not the all-they-have fallback below.
-    else if(isEmptyHoldFive)spoilClause=viewerIsLoser?`Ye give up ${spoilText}.`:`${pn(loser)} gives up ${spoilText}.`;
-    else if(viewerIsLoser)spoilClause=`Ye give up all ye have${spoilText?`: ${spoilText}`:""}.`;
-    else if(viewerIsWinner)spoilClause=`Ye take all ${pn(loser)} has${spoilText?`: ${spoilText}`:""}.`;
-    else spoilClause=`${pn(loser)} gives up all they have${spoilText?`: ${spoilText}`:""}.`;
-    // D-54/D-25/D-16 (Wyatt-approved 2026-07-29): his three approved rewrites of the LOSER's own
-    // view (table:battle / ~cleaned / ~crate in 15-ADDRESSED2-APPROVED.json) all restructure the
-    // sentence, so the loser gets a composite of its own rather than the mainClause+spoilClause
-    // join. Three deliberate differences, applied verbatim: the WINNER is named (not the loser),
-    // the clauses join with " — "/" and" into ONE sentence (not two), and the wording is his —
-    // elided "givin'", possessive "takes yer", and no trailing period on the crate line. The
-    // leading ⚔️ is re-attached (his note could not carry inline markup). The winner-addressed and
-    // neutral renderings below are byte-unchanged, and the spoilN/isBribe guard is reused as-is so
-    // a non-numeric or absent spoil still falls through to the cleaned-out framing, never NaN.
-    let txt;
-    if(viewerIsLoser){
-      const head=`⚔️ ${pn(e.winner)} wins ${aP}–${dP}`;
-      // @copy misc.battle.emptyhold — verbatim as Wyatt wrote it, 2026-08-13. Checked BEFORE the
-      // wind branch: when nothing was taken, why the tie fell one way is not what the player is
-      // asking; "where did my crate go" is, and the answer is that there was never one to take.
-      if(tookNothing)txt=`⚔️ ${pn(e.winner)} wins — but ye've nothing in the hold to plunder.`;
-      else if(wonOnWind){
-        // his approved line: "Both cannons land — but X fires downwind, and the wind carries the
-        // shot home. X takes yer cocoa." The spoil is a SECOND sentence here, not the em-dash
-        // continuation the score-led head uses, because the head already ends in a full stop.
-        if(e.spoilIng)txt=`${windHeadThird} ${pn(e.winner)} takes yer ${spoilText}.`;
-        else if(isBribe)txt=`${windHeadThird} Ye bribe yer way out of givin' away an ingredient with ${spoilText}.`;
-        else if(isEmptyHoldFive)txt=`${windHeadThird} Ye give up ${spoilText}.`;
-        else txt=`${windHeadThird} Ye give up all ye have${spoilText?`: ${spoilText}`:""}.`;
-      }
-      else if(e.spoilIng)txt=`${head} and takes yer ${spoilText}`;
-      else if(isBribe)txt=`${head} — ye bribe yer way out of givin' away an ingredient with ${spoilText}.`;
-      // FIX-07: mechanical person-swap of the ruled "Ye give up {spoil}." line into this composite's
-      // own em-dash-continuation shape, matching the pattern the bribe/all-they-have branches above
-      // already use in this same chain.
-      else if(isEmptyHoldFive)txt=`${head} — ye give up ${spoilText}.`;
-      else txt=`${head} — ye give up all ye have${spoilText?`: ${spoilText}`:""}.`;
-    }else if(tookNothing){
-      // @copy misc.battle.emptyhold — Wyatt's own wording, 2026-08-13. It deliberately drops the
-      // "1–0" score the other lines carry: nothing changed hands, so the scoreline is the least
-      // interesting thing about the outcome. Winner-addressed and neutral are the person-swap.
-      txt=viewerIsWinner
-        ? `⚔️ Ye win — but there's nothing in ${pn(loser)}'s hold to plunder.`
-        : `⚔️ ${pn(e.winner)} wins — but there's nothing in ${pn(loser)}'s hold to plunder.`;
-    }
-    else txt=`${wonOnWind?(viewerIsWinner?windHeadYe:windHeadThird):mainClause} ${spoilClause}`;
+    /* HIS PASS, 2026-09-13: "Crustbeard wins and takes Cacao Pods." The score went, and so did the bribe and the
+       "gives up all they have" branches — v2 rule 9d makes the prize a crate, full stop, so a coin prize could no
+       longer reach a player. Who reads "ye" or "yer" is words.js's business, from the seats named here. */
+    const facts={winner:seat(e.winner),loser:seat(loser),spoil:spoilText};
+    const txt=say(tookNothing?"battle.nothing":wonOnWind?"battle.downwind":"battle.takes",facts,viewerSeat);
     return {cls:"battle",
       txt,
       caps:[[e.winner,`⚔️ wins! +${spoilText}`],[loser,"⚔️ loses 💸"]], // G3: the winner caption too
@@ -795,19 +636,14 @@ const EVENT_NARRATION={
   // redundant once signed; comma+"but" structure per his approved actor-addressed sample, extended
   // mechanically to the defender-addressed and neutral forms.
   battleflee:(e,at,cellPx,viewerSeat)=>{
-    const aAddr=isLocalTo(e.a,viewerSeat),dAddr=isLocalTo(e.d,viewerSeat);
-    let txt;
-    // v2 rule 2: fleeing is FREE now, so every (−1🌕) toll comes off these three lines and the capsule.
-    if(aAddr)txt=`🏃 ${pn(e.a)} — ye attack ${pn(e.d)}, but both shots miss wildly and ${pn(e.d)} slips away!`;
-    else if(dAddr)txt=`🏃 ${pn(e.a)} attacks ye, but both shots miss wildly and ye slip away!`;
-    else txt=`🏃 ${pn(e.a)} attacks ${pn(e.d)}, but both shots miss wildly and ${pn(e.d)} slips away!`;
-    return {cls:"battle",txt,caps:[[e.d,"🏃 flees!"]],pops:[[at(e.d),"🏃"]]};
+    // his pass, 2026-09-13: "Davy Scones slips away!" — the attack itself was announced when the fight opened.
+    return {cls:"battle",txt:say("battle.slipsAway",{d:seat(e.d)},viewerSeat),caps:[[e.d,"🏃 flees!"]],pops:[[at(e.d),"🏃"]]};
   },
   // notes/edits UI-04: on a catch, the emoji that rises from the boat is the SUGARFISH itself, not
   // the fishing line — you just landed a fish, so show the fish coming up out of the boat.
   // NARR-01/D-25/D-38 (Wyatt-approved 2026-07-29): signed catch amounts.
-  finish:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",txt:isLocalTo(e.p,viewerSeat)?`🏁 ${pn(e.p)} — ye return to the Isle of Tortuga with a full recipe!`:`🏁 ${pn(e.p)} returns to the Isle of Tortuga with a full recipe!`,
-    caps:[[e.p,"🏁 recipe done!"]],pops:[[at(e.p),"🏁",true]]}),
+  /* (`finish` — "returns to the Isle of Tortuga with a full recipe!" — stood here. Only the classic day emitted it, and the
+     classic day is gone by his word of 2026-09-13; a captain home with a full recipe lights the ovens, and `ovens` says it.) */
   /* The `shotclock` (20s coin penalty) and `shotclockskip` (30s turn skip, Wyatt's "Dozed at the
      helm!" wording) rows stood here — removed 2026-08-28 with the shot clock itself (see ask()).
      Nothing emits either event any more; the wordings and their approval history live in git. */
@@ -818,7 +654,14 @@ const EVENT_NARRATION={
   // dedicated one-off victory box (see endLive's flash) and the End of Voyage summary. The board
   // still gets a crown pop over the winner; the announcement itself lives in the celebratory box.
   end:(e,at)=>({cls:"roundhdr",txt:"",caps:[],pops:e.winner===null?[]:[[at(e.winner),"👑",true,CROWN_IMG]]}),
-  turn:()=>null,
+  /* THE START OF ANY CAPTAIN'S TURN — ONE LINE, bot or human, every screen. Silent while "turn.start" is empty in
+     src/shared/words.js, by his word (2026-09-13): "can we cut it and see how it feels?" · "make sure your change is
+     architectural". It replaced two lines that were never the same line: a bot's "takes the wheel…" and a human's
+     "Ahoy, yer turn!". */
+  turn:(e,at,cellPx,viewerSeat)=>{const txt=say("turn.start",{p:seat(e.p)},viewerSeat);return txt?{cls:"roundhdr",txt}:null;},
+  /* A CAPTAIN LIGHTS THE OVENS — his rewrite of the retired final-round card ("Crustbeard fired up the bakery!"),
+     on the moment a full recipe actually reaches Tortuga in today's game. */
+  ovens:(e,at,cellPx,viewerSeat)=>({cls:"roundhdr",txt:say("ovens.lit",{p:seat(e.p)},viewerSeat),caps:[[e.p,"🧁 fired up the bakery"]]}),
   // RESTORED VERBATIM 2026-09-01 from 693c2b0b^ — the weather-line commit (693c2b0b, 2026-08-27)
   // deleted this entry as COLLATERAL in its table edit: its own "cut on purpose" list names the
   // storm theatre and the wind-streak flavour, never this. Five days of silent Muses later, Wyatt
@@ -877,11 +720,12 @@ const EVENT_NARRATION={
     /* "ye" wherever the local player is in the group, exactly as the trade and battle lines do —
        a summary that calls you by name while addressing everyone else in second person is the
        inconsistency rule "one display path" exists to stop. */
+    const AND=say("list.and",{});
     const list=(seats)=>{
-      const names=seats.map(i=>isLocalTo(i,viewerSeat)?"<b>ye</b>":pn(i));
+      const names=seats.map(i=>isLocalTo(i,viewerSeat)?`<b>${say("list.ye",{})}</b>`:pn(i));
       if(names.length<=1)return names[0]||"";
-      if(names.length===2)return `${names[0]} an' ${names[1]}`;
-      return `${names.slice(0,-1).join(", ")} an' ${names[names.length-1]}`;
+      if(names.length===2)return `${names[0]} ${AND} ${names[1]}`;
+      return `${names.slice(0,-1).join(", ")} ${AND} ${names[names.length-1]}`;
     };
     /* Second person takes the plural verb ("ye drop"), so a group is singular ONLY when it is one
        captain who is not you. THIS IS THE BUG THE HARNESS CAUGHT: the first draft built every
@@ -894,25 +738,25 @@ const EVENT_NARRATION={
        the dash. Wyatt's own shape, chosen from the question UI 2026-09-06:
          "The storm drives Flaky Jack and Wyargh WEST — Crustbeard drops anchor and holds fast…" */
     const byStorm=[],byCaptain=[];
-    if(e.moved.length) byStorm.push(`drives ${list(e.moved)} ${STORM_PUSH} squares ${dir}`);
-    if(e.blown.length) byStorm.push(`blows ${list(e.blown)} clean off the dock`);
-    if(e.swept.length) byStorm.push(`sweeps ${list(e.swept)} into the trade winds`);
-    if(e.held.length)  byCaptain.push(`${list(e.held)} ${sng(e.held)?"drops":"drop"} anchor an' ${sng(e.held)?"holds":"hold"} fast`);
-    if(e.shipHeld.length)byCaptain.push(`${list(e.shipHeld)} ${sng(e.shipHeld)?"is":"are"} pinned by the hull ahead`);
-    const join=(a)=>a.length<=1?(a[0]||""):a.length===2?`${a[0]} an' ${a[1]}`:`${a.slice(0,-1).join(", ")} an' ${a[a.length-1]}`;
+    if(e.moved.length) byStorm.push(say("storm.drives",{who:list(e.moved),n:STORM_PUSH,dir}));
+    if(e.blown.length) byStorm.push(say("storm.blowsOff",{who:list(e.blown)}));
+    if(e.swept.length) byStorm.push(say("storm.sweeps",{who:list(e.swept)}));
+    if(e.held.length)  byCaptain.push(say(sng(e.held)?"storm.holds.one":"storm.holds.many",{who:list(e.held)}));
+    if(e.shipHeld.length)byCaptain.push(say(sng(e.shipHeld)?"storm.pinned.one":"storm.pinned.many",{who:list(e.shipHeld)}));
+    const join=(a)=>a.length<=1?(a[0]||""):a.length===2?`${a[0]} ${AND} ${a[1]}`:`${a.slice(0,-1).join(", ")} ${AND} ${a[a.length-1]}`;
     /* The engine already refuses to emit this event when every bucket is empty ("say nothing
        rather than narrate an absence"), so one of these two is always populated — but a narration
        builder that CAN return an empty sentence is one bad merge away from showing him "🌀 !". */
     if(!byStorm.length&&!byCaptain.length)return null;
     const txt=byStorm.length
-      ? `🌀 The storm ${join(byStorm)}${byCaptain.length?` — ${join(byCaptain)}`:""}!`
-      : `🌀 The storm blows through — ${join(byCaptain)}!`;
+      ? (byCaptain.length?say("storm.summary.both",{storm:join(byStorm),captains:join(byCaptain)}):say("storm.summary",{storm:join(byStorm)}))
+      : say("storm.summary.captains",{captains:join(byCaptain)});
     return {cls:"storm",txt,
       caps:e.moved.concat(e.blown,e.swept).map(i=>[i,"🌀 blown by the storm"])
           .concat(e.held.concat(e.shipHeld).map(i=>[i,"⚓ held fast"]))};
   },
   pass:(e,at,cellPx,viewerSeat)=>({
-    txt:`🌊 ${seaLine(e.sea,isLocalTo(e.p,viewerSeat),pn(e.p))} <span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>`,
+    txt:`🌊 ${seaLine(e.sea,e.p,viewerSeat)} <span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>`,
     // Generic rather than naming the creature: the sighting is one hand-written sentence now, with
     // no separately-stored subject to lift out of it, and inventing one by parsing the prose is
     // exactly the kind of guessing this rewrite removed. (Nothing renders caps in v2 regardless.)
@@ -951,6 +795,11 @@ export function narrationSubjects(e){
   if(e.t==="battle"||e.t==="battleflee"){if(e.a!=null)seats.add(e.a);if(e.d!=null)seats.add(e.d);}
   if(e.t==="parley"||e.t==="trade"||e.t==="collab"){if(e.a!=null)seats.add(e.a);if(e.b!=null)seats.add(e.b);}
   if(e.t==="blocked"&&e.other!=null)seats.add(e.other);
+  /* THE STORM SUMMARY NAMES EVERY CAPTAIN IT MOVED OR HELD, and each of them reads "ye" for themselves — its builder has
+     always said so (list() asks isLocalTo per captain), but no captain was counted here, so no screen ever received its
+     own version and everyone read the names. Found in a two-window crew game, 2026-09-13: the guest read "The storm
+     drives HOSTCAP, GUESTCAP an' Flaky Jack…" about itself. */
+  if(e.t==="stormSummary")for(const k of ["moved","blown","swept","held","shipHeld"])(e[k]||[]).forEach(i=>{if(i!=null)seats.add(i);});
   return [...seats].sort((a,b)=>a-b);
 }
 // D-10: the host computes this ONCE per broadcast narration line — the viewer-neutral default
@@ -1118,18 +967,18 @@ export function computeAwards(){
 // that category, so assignBadges() can compare across categories with different units. `key` selects
 // the per-player stat array (computeAwards() output, plus a synthesised `tails`).
 const BADGE_POOL=[
-  {key:"battlesWon",   img:"cutlass",  name:"The Cutlass of a Thousand Notches", byline:"One notch per fallen foe, carved into the hilt.",                 stat:"Most battles won",   unit:"",         scale:3},
+  {key:"battlesWon",   img:"cutlass",  name:say("trophy.cutlass.name",{}), byline:say("trophy.cutlass.byline",{}),                 stat:say("trophy.cutlass.stat",{}),   unit:say("trophy.cutlass.unit",{}),         scale:3},
   // v2 rule 3: no fishing, so the Golden Herring is retired. In its place, the award that
   // actually measures a v2 captain — who spent the most at the docks now that every crate on the
   // board has a price on it (rules 10/11).
-  {key:"cratesBought", img:"doubloon", name:"The Open Purse",                      byline:"Paid the harbourmaster more than any captain on the Sugar Seas.", stat:"Most ingredients bought", unit:"",         scale:4},
-  {key:"dist",         img:"compass",  name:"The Horizon-Chaser's Compass",      byline:"For the salt-crusted soul who sailed further than sense allowed.", stat:"Farthest traveled",  unit:" sq",      scale:45},
-  {key:"longestBattle",img:"medal",    name:"The Iron Gut Medal",                byline:"For the crew that refused to sink.",                               stat:"Longest battle",     unit:" rounds",  scale:4},
-  {key:"tails",        img:"blackspot",name:"The Black Spot of Bad Tides",       byline:"Survived the curse — worst luck on the Sugar Seas.", stat:"Most tails flipped", unit:" tails", scale:16},
-  {key:"hottestStreak",img:"herring",  name:"The Lucky Streak",                  byline:"Heads, then heads, then heads again — Lady Luck rode on their shoulder.", stat:"Hottest streak", unit:" heads", scale:4},
-  {key:"trades",       img:"ledger",   name:"The Silver-Tongued Ledger",         byline:"Struck more deals than a Tortuga fishmonger on market day.",       stat:"Most trades struck", unit:"",         scale:3},
-  {key:"timesAttacked",img:"target",   name:"The Painted Target",                byline:"Somehow every cannon in the Caribbean swung their way.",           stat:"Most set upon",      unit:"",         scale:3},
-  {key:"battlesLost",  img:"timbers",  name:"The Splintered Timbers",            byline:"Took a right drubbing and lived to grumble about it.",             stat:"Most battles lost",  unit:"",         scale:3},
+  {key:"cratesBought", img:"doubloon", name:say("trophy.doubloon.name",{}),                      byline:say("trophy.doubloon.byline",{}), stat:say("trophy.doubloon.stat",{}), unit:say("trophy.doubloon.unit",{}),         scale:4},
+  {key:"dist",         img:"compass",  name:say("trophy.compass.name",{}),      byline:say("trophy.compass.byline",{}), stat:say("trophy.compass.stat",{}),  unit:say("trophy.compass.unit",{}),      scale:45},
+  {key:"longestBattle",img:"medal",    name:say("trophy.medal.name",{}),                byline:say("trophy.medal.byline",{}),                               stat:say("trophy.medal.stat",{}),     unit:say("trophy.medal.unit",{}),  scale:4},
+  {key:"tails",        img:"blackspot",name:say("trophy.blackspot.name",{}),       byline:say("trophy.blackspot.byline",{}), stat:say("trophy.blackspot.stat",{}), unit:say("trophy.blackspot.unit",{}), scale:16},
+  {key:"hottestStreak",img:"herring",  name:say("trophy.herring.name",{}),                  byline:say("trophy.herring.byline",{}), stat:say("trophy.herring.stat",{}), unit:say("trophy.herring.unit",{}), scale:4},
+  {key:"trades",       img:"ledger",   name:say("trophy.ledger.name",{}),         byline:say("trophy.ledger.byline",{}),       stat:say("trophy.ledger.stat",{}), unit:say("trophy.ledger.unit",{}),         scale:3},
+  {key:"timesAttacked",img:"target",   name:say("trophy.target.name",{}),                byline:say("trophy.target.byline",{}),           stat:say("trophy.target.stat",{}),      unit:say("trophy.target.unit",{}),         scale:3},
+  {key:"battlesLost",  img:"timbers",  name:say("trophy.timbers.name",{}),            byline:say("trophy.timbers.byline",{}),             stat:say("trophy.timbers.stat",{}),  unit:say("trophy.timbers.unit",{}),         scale:3},
   /* "The Barnacle Brain" (slowest to decide) left with the shot clock, 2026-08-28 — its tally
      counted shotclock/shotclockskip events nothing emits now; kept, every seat would score 0 and
      the award would be handed out by tie-break, a visibly wrong End of Voyage screen. */
@@ -1137,7 +986,7 @@ const BADGE_POOL=[
 // Guaranteed fallback for a captain who earned no standout stat (rare — everyone at least sails, so
 // "Farthest traveled" is nearly always claimable — but this ensures EVERY captain gets one award).
 // It still carries a real number: how many ingredients they finished the voyage holding.
-const FALLBACK_BADGE={img:"anchor",name:"Good Mate",byline:"Pirated for the love of the game.",stat:"Number of ingredients plundered",unit:""};
+const FALLBACK_BADGE={img:"anchor",name:say("trophy.anchor.name",{}),byline:say("trophy.anchor.byline",{}),stat:say("trophy.anchor.stat",{}),unit:say("trophy.anchor.unit",{})};
 // notes/edits EOV-04: every captain gets exactly ONE award, and no two share a category. Build all
 // (captain, category) claims with a positive stat, rank them by value/scale (so a 57-square voyage
 // and a 4-win rampage compare fairly), then greedily hand each captain their single most impressive
@@ -1806,7 +1655,7 @@ export function ask(msg,opts,colors,sub,extra){
      and fires the next real line, which is his own wording for item 19: "it should disappear when
      their teammates have played". It is fire-and-forget — nothing awaits it — which is what makes
      an un-deadlined bubble safe here (see stageFlash). */
-  netHandlers().onBroadcast(`${pn(seat)} is deciding…`,[{seat,html:msg}],{wait:true});
+  netHandlers().onBroadcast(say("wait.deciding",{name:pn(seat)}),[{seat,html:msg}],{wait:true});
   const isFlip=opts.length===1&&!!opts[0].flip;
   // `sub` is optional helper text rendered under the button row; an option flagged `disabled`
   // renders greyed and non-clickable (notes/edits #5) — used for the too-poor Attack button.
@@ -1939,8 +1788,8 @@ export function voyageAground(err,where){
     const onReplay=!!(appState&&appState.replaying);
     const hasLog=!!(appState&&appState.dlog&&appState.dlog.length);
     const advice=onReplay||hasLog
-      ? "Refreshin' will sail ye back onto the same rock — start a fresh voyage."
-      : "A refresh may set ye right.";
+      ? sayText("aground.freshVoyage",{})
+      : sayText("aground.refresh",{});
     console.error("VOYAGE AGROUND"+(where?" ("+where+")":""),err);
     const box=document.createElement("div");
     box.id="ppAground";
@@ -1949,8 +1798,8 @@ export function voyageAground(err,where){
       "font:14px/1.45 system-ui,sans-serif;color:#123;box-shadow:0 8px 30px rgba(0,0,0,.35)";
     const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
     box.innerHTML=
-      `<div style="font-weight:800;margin-bottom:6px">🪨 The voyage has run aground</div>`+
-      `<div style="margin-bottom:8px">Somethin' broke below decks and the game can sail no further. `+
+      `<div style="font-weight:800;margin-bottom:6px">${say("aground.title",{})}</div>`+
+      `<div style="margin-bottom:8px">${say("aground.body",{})} `+
       `${esc(advice)}</div>`+
       `<div style="opacity:.6;font-size:11px;margin-bottom:6px">${esc(stamp)}`+
       `${where?" · "+esc(where):""}</div>`+
@@ -1960,7 +1809,7 @@ export function voyageAground(err,where){
   }catch(e){
     // the surface itself failed — say it the one way that cannot also fail
     console.error("voyageAground() could not render",e,"original:",err);
-    try{alert("The voyage has run aground. "+String(err));}catch(_){}
+    try{alert(sayText("error.aground",{err:String(err)}));}catch(_){}
   }
 }
 // used only to derive flip/spin animation-pacing constants (asyncBattle, asyncBakeoff, fishCast)
@@ -2042,25 +1891,99 @@ export function eventDrawn(e,capMs=9000){
   if(!rec)return Promise.resolve();
   return Promise.race([rec.pr,new Promise(r=>setTimeout(r,capMs))]);
 }
-export async function narrateCurrent(){
-  const e=appState.game.events[appState.evIdx];if(!e)return;
+/* ⭐ ONE NARRATOR FOR EVERY EVENT, BOT OR HUMAN — Wyatt, 2026-09-13: "there should be no separate track of dialogy
+   for botTurn() -- re-architect this away. we use one engine, that accepts as arguments the action taken, the player
+   type (human/bot), the location of the player (this browser/remote), and serves an event."
+   THERE WERE TWO, AND THEY SAID DIFFERENT THINGS. A human's action was narrated by panel.js's narrateLastEvent(): the
+   line every other screen reads PLUS a "ye" version for each captain it named. A bot's action went through this file's
+   narrateCurrent(), which read the captain's-log line — third person only, no "ye" versions — and opened every bot turn
+   with its own "takes the wheel…" banner that no human turn had. So when a bot attacked or traded with a person, that
+   person was told about it as a bystander. Both are now this one function: the event decides the words, the screen
+   decides "ye", and who chose the move never enters. narrateLastEvent() and narrateCurrent() are only WHICH event. */
+export async function narrateEvent(e){
+  if(!e)return;
   await eventDrawn(e);   // the board finishes the event (a dock coin's flip and hold) before a word of it
-  await narrateCurrentBody(e);
-  // his item 7: a bot's dock reaches the black-market ceremony by the same door a human's does
+  // settleSideBets() already flashes one aggregate "Lookout's Call settles" message covering
+  // every bettor — re-narrating the last individual sidebet event here would just duplicate it.
+  if(e.t==="sidebet")return;
+  const apNow=document.getElementById("actionPanel");
+  if(apNow&&apNow.classList.contains("needsAction"))return;
+  // D-10: the BROADCAST payload is built from the viewer-NEUTRAL rendering (never the ambient
+  // appState.mySeat-flavored one) plus per-seat variants — netNarrate on the receiving end (the
+  // host's own screen) and watchNarr on every guest both select their own line via
+  // pickNarrVariant, so building this from anything OTHER than the neutral default would leak
+  // the host's own personalised phrasing into every other seat's broadcast.
+  const L=describeFor(e,NEUTRAL_VIEWER);if(!L){await eventCeremony(e);return;}
+  /* W4-2 (Wyatt): "Guest battle narration box is not centred", narrowed by him to the BATTLE box
+     because the tap-to-sail box was correctly centred on the same screen.
+     MEASURED IN A REAL CREW GAME BEFORE CHANGING THIS, and it corrects his premise once and sharpens
+     it once: NOT guest-only — the battle result sat 44px right of centre on BOTH seats — and within
+     ONE battle two lines were drawn two ways, "Dough Hook attacks Flaky Jack!" centred at offset 0
+     and "Dough Hook wins 1–0" anchored at 44.
+     THE CAUSE IS THIS LINE. A bubble with a subject anchors to that captain's boat and grows a tail,
+     which is right for "Flaky Jack takes the wheel". A battle event is {t:"battle", a:attacker,
+     d:defender}, so `e.a` handed the RESULT to the attacker — one of the two fighters, arbitrarily.
+     THE RULE IS DERIVED FROM THE EVENT'S OWN SHAPE, never a list of event names that would need
+     editing every time a new two-captain event appears: AN EVENT THAT NAMES TWO CAPTAINS IS NOT
+     ABOUT ONE OF THEM, so it takes no subject and its bubble is ambient — centred, like the opening
+     line of the same fight already is.
+     This is also what the codebase already says out loud about fights, in the camera hold a few
+     hundred lines away in stage.js: "the director should focus battles on the players fighting, not
+     the player calling the battle." Anchoring the result to one fighter was the same fault one
+     layer down. Held by scripts/qa/w42_battle_bubble_check.mjs. */
+  if(window.__pp4){
+    /* ONE RULE, ONE PLACE (Wyatt's Q-18 ruling, 2026-08-29; CEO Review 24). This test used to be
+       spelled out here and its ANSWER shipped to the guest as a wire field, which is two things
+       kept in step by nothing — rule 23's exact shape. `subjectOf` lives in src/shared/index.js,
+       the one module both this tier and the orchestrator already import, and the guest now runs
+       the SAME function over the event it already holds. Neither seat owns the rule any more. */
+    window.__pp4.subject = subjectOf(e);
+    /* AND WHICH EVENT IT WAS READ FROM. CEO Review 25: the first cut sent `events.length-1` with
+       EVERY narration line, but only THIS function is about the last event — every other flash()
+       in the game (prompts, dock lines, ceremonies, bot turn banners, the battle play-by-play)
+       went out carrying a serial for an event it had nothing to do with. The guest then resolved
+       that unrelated event, anchored the bubble to whichever captain it named, and marked the
+       subject DECIDED, while the host left the same sentence to the colour sniff. A host/guest
+       divergence in bubble placement, created by the fix meant to end host/guest divergence, in
+       the very family Wyatt reported (W4-2). THE SERIAL AND THE SUBJECT ARE ONE FACT AND NOW
+       TRAVEL AS ONE: a line that did not read an event sends neither. */
+    appState.narrEvIdx = appState.game.events.lastIndexOf(e);
+    /* DECIDED IS NOT THE SAME AS ABSENT, and conflating them is why the first cut of W4-2 changed
+       nothing on either seat. stageFlash falls back to sniffing the sentence for captain colours
+       whenever the subject is null — a fallback that exists for turn-start lines, which carry no
+       event at all. A battle result names exactly ONE captain (the winner), so the sniff cheerfully
+       re-anchored the very line this rule had just decided to centre. The flag says "an event was
+       read and it yielded no subject", which the sniff must not override. */
+    window.__pp4.subjectSet = true;
+    window.__pp4.evType=e.t;
+  }
+  const variants=narrationVariants(e);
+  // notes/edits #1 follow-up: this used to be netNarrate()+a flat 3000ms sleep, a leftover from
+  // before the typewriter/hold/fade system existed. That fixed window never accounted for reveal
+  // time at all, so a long multi-sentence line (battle results especially — often 120-160+ chars)
+  // could burn the ENTIRE 3s just typing itself in, leaving no time to actually read it before the
+  // next event overwrote it. flash() awaits real reveal completion, then holds for length*80ms —
+  // scaling with the text instead of a one-size-fits-all timer.
+  await netHandlers().onFlash(L.txt,undefined,undefined,variants);
+  // THE BLACK MARKET'S ONE LESSON (Wyatt, 2026-08-12, "ceremony + marker"): the first time any
+  // shelf on the board empties, a once-per-voyage centre-stage beat teaches that sold-out islands
+  // still sell, at cfg.blackMarket's flat price — after this it is only the 🏴 marker and the
+  // dock's own whisper. (The price is NOT repeated here on purpose: it moved once already and a
+  // number typed into a comment cannot move with it.) Keyed on
+  // the event's firstDry stamp (engine sets it exactly once), so a replayed voyage re-derives the
+  // same single showing. Hand-built stage barrier, same pattern as the bake-off intro card —
+  // panel.js may not import flow.js's localAsk (layering), and needs none of it.
+  //
+  // HIS ITEM 7: THE GATE ITSELF MOVED OUT OF THIS FUNCTION. It used to be an inline
+  // `if(e.firstDry&&!appState.replaying)` right here, in the HUMAN narration path only — and a
+  // bot's dock narrates through util.js's narrateCurrent(), a structurally separate function that
+  // knew nothing about it. A bot claims the first dry shelf in 76% of solo voyages, and in every
+  // one of those the ceremony was swallowed for good. The gate is now eventCeremony() in util.js,
+  // which BOTH narration paths call — rule 23's "make the FIRST one go through the new path too",
+  // rather than a second copy of the check that would have to be kept in step by discipline.
   await eventCeremony(e);
 }
-async function narrateCurrentBody(e){
-  // D-07/D-25 (Wyatt-approved 2026-07-29): the one ad-hoc (non-EVENT_NARRATION-table) narration
-  // line that lives here in util.js itself — the neutral-plus-variants shape, same as every other
-  // ad-hoc flash() site in src/ui/flow.js.
-  // @copy adhoc.turn.botbanner
-  if(e.t==="turn"){await netHandlers().onFlash(`🧭 ${pn(e.p)} takes the wheel…`,undefined,undefined,[{seat:e.p,html:`🧭 ${pn(e.p)} — ye take the wheel…`}]);return;}
-  // settleSideBets() already flashed one aggregate message covering every bettor — skip the
-  // duplicate individual re-narration (same reasoning as narrateLastEvent()).
-  if(e.t==="sidebet")return;
-  // @copy adhoc.turn.boteventpassthrough
-  const L=appState.logLines[appState.evIdx];if(L)await netHandlers().onFlash(L.txt);
-}
+export async function narrateCurrent(){ await narrateEvent(appState.game.events[appState.evIdx]); }
 /* NOT EXPORTED (2026-08-31). One fact, one writer: the only caller is applyActiveSeat below,
    which also moves S.activeSeat — the value stage.js:1206 draws FIRST. Sixteen call sites used
    to import this directly and leave the ribbon pointing at the previous captain; they now call

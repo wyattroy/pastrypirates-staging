@@ -26,6 +26,7 @@
 // Read .claude/memory/DECISIONS.md "THE TUTORIAL" for the 29 rulings behind the copy.
 
 import { devHost } from "../shared/host.js";
+import { PILOT } from "../shared/words.js";
 
 const KEY = "pp4_pilot";
 const VERSION = 1;
@@ -46,127 +47,9 @@ const VERSION = 1;
    prices rise" -> "Ingredient prices rise" on the rules page). These seven lines were written while
    the rename was landing elsewhere and were missed by it: the Pilot is the FIRST voice a new
    captain hears, so it was teaching a vocabulary the rest of the game had already dropped. */
-export const LADDERS = {
-  // ---- the sail moment. The wind rule is the single most important sentence in the game, and
-  // it rides HERE rather than getting a ladder of its own, because the sail prompt is the only
-  // moment where the wind is the answer to the question on screen.
-  //
-  // Wyatt SET ASIDE his own 2026-08-25 deletion of wind text for exactly this rung:
-  //   "ignore my previous ruling, it was about a different matter and we are solving it with our
-  //    rung system". That ruling still governs PERMANENT wind text; it does not govern a clause
-  //    that deletes itself after three turns.
-  //
-  // The wind clause goes in `sub`, which lands in sailPanelHTML's `hint` — a parameter that was
-  // deliberately kept on the wire when the red debug shout was deleted on 2026-08-25, so the spec
-  // shape and the guest payload are unchanged. No new field, no new parity risk.
-  "sail.pick": [
-    /* ⭐ HIS WORDS, 2026-09-07 playtest item 3, replacing my draft ("Sailin' into the wind is
-       slower — half sail, half the squares"). He kept the rung and rewrote the sentence: the old
-       one made a player parse two halves to reach one fact. */
-    { msg: "Tap a gold square to sail — head for a dock.", sub: "Sailin' into the wind only gets ye half the distance." },
-    { msg: "Tap a gold square to sail toward a dock." },
-    { msg: "Tap a gold square to sail." },
-    null,
-  ],
-
-  // ---- the act menu: docking, and the fact that ye must
-  "act.menu": [
-    "Ingredients come off the islands — tie up at a dock to take one aboard.",
-    "Tie up at a dock to take an ingredient aboard.",
-    null,
-  ],
-
-  // ---- first sighting of each button. Driven by FIRST SIGHTING of that option, never by turn
-  // count, so a captain offered their first battle on day nine still meets rung 0.
-  "act.attack": [
-    "One broadside each — heads beats tails, and the winner takes an ingredient off the loser.",
-    "One broadside each — heads beats tails, winner takes an ingredient.",
-    null,
-  ],
-  "act.trade": [
-    "A hail reaches the whole table, not one captain — name what ye want and what ye'll give.",
-    "A hail reaches the whole table — name what ye want and what ye'll give.",
-    null,
-  ],
-  "act.muse": [
-    "Nothin' worth doin' today? Muse on it and pocket a dubloon.",
-    "Nothin' worth doin'? Muse on it and pocket a dubloon.",
-    null,
-  ],
-
-  // ---- the recipe draft. Two of his nine topics are true at the same instant — which
-  // ingredients ye need, and which every captain holds — so they are one sentence, not two beats.
-  //
-  // He rejected adding text here: "The recipe choice moment has a lot of text in it already, and
-  // it's pretty overwhelming -- even as is. Adding more text is not the solution to this." So this
-  // ladder is SHORT and the real teaching at this moment is the dotted course (src/ui/course.js),
-  // which is a picture rather than a paragraph.
-  /* ⚠ SHORTENED AFTER LOOKING AT IT. Rung 0 was two sentences and wrapped to THREE LINES above the
-     card — on the one screen he singled out for having too much text already. That is not a length
-     I get to defend; it is his ruling being broken by my own copy. The dropped clause (every
-     captain's hold sits below) is not lost: recipe.stowed says it a moment later, at the instant
-     the hold actually appears, which is where it belongs. */
-  /* ⭐ HIS WORDS, 2026-09-09: "change 'Tap a recipe to highlight its docks' to 'tap a recipe to see
-     its route'". THE WHOLE LADDER MOVES WITH IT — a rung still saying "docks" would teach a
-     different noun for the same picture, which is the drift this ladder exists to prevent. And the
-     lowercase is his, typed inside his own quotes; the pill is small italic text where it reads
-     as a whisper rather than a heading. CAPITALISED on his second look, 2026-09-09 — the lowercase
-     was mine, read back off the quotes in his message rather than asked about. */
-  "recipe.draft": [
-    "Tap a recipe to see its route — those five docks are what ye must gather.",
-    "Tap a recipe to see its route.",
-    null,
-  ],
-
-  // ---- THE ONE LADDER THAT ADDS A LINE. Nothing is said at this moment today, so its bottom
-  // rung is SILENCE rather than today's copy — and a veteran's game is still byte-identical.
-  // It earns the exception: the answer to "where did my recipe go?" is "look down there", and
-  // nothing currently points down there. The captains box flashes once as the line lands; a
-  // sentence saying `below` and a box that blinks are the same instruction twice, and the second
-  // one works without being read.
-  "recipe.stowed": [
-    "Yer recipe's stowed below, {name} — five ingredients to find. Each gets a tick when ye hold it, and every captain's hold sits right beside yers.",
-    "Yer recipe's stowed below — five ingredients to find, ticked as ye hold 'em.",
-    "Yer recipe's stowed below.",
-    null,
-  ],
-
-  // ---- the one square that takes two taps. Wyatt, 2026-09-11, playtest note 3: "'blue squares
-  // take 2 taps' should be a rung on the tutorial ladder -- not always present." It had been on
-  // every sail line that offered a blue square, for every captain, forever (W2-8). Like
-  // recipe.stowed, its bottom rung is SILENCE: nothing is said here at all once it has been
-  // learned, or with the parrot off. Counted by SIGHTING — only a sail line that actually offers a
-  // blue square shows it (and spends it). Rung 0 says why there are two taps; the words after it
-  // are his, unchanged from W2-8. How many sightings is his call, and it is on his sheet.
-  "sail.twotap": [
-    "Blue squares take two taps — the first shows ye the ride.",
-    "Blue squares take two taps.",
-    null,
-  ],
-
-  // ---- the trade winds, taught the first time the rim actually carries somebody
-  "rim.sweep": [
-    // ⭐ HIS WORDS, 2026-09-08, replacing my draft — it names the rim, the direction AND where ye
-    // end up, which the old line left ye to work out from a moving picture.
-    "Sail into the trade winds along the rim and they'll carry ye clockwise to the next whirlpool",
-    null,
-  ],
-
-  // ---- the storm. Wyatt ruled it IN, 2026-09-02: it moves every ship three squares with no
-  // explanation, and it hits about one first voyage in five.
-  "storm.hit": [
-    "A storm takes the whole crew — every ship runs three squares afore anyone acts.",
-    null,
-  ],
-
-  // ---- the price of a crate. Also ruled IN. The Buy button already says −3🌕; what it never
-  // says is that the number climbs as the island empties, which is why getting there first
-  // matters. Legal under the editorial law: the button states the price, not that it moves.
-  "dock.buy": [
-    "Ingredients come dearer as an island empties — the early bird pays least.",
-    null,
-  ],
-};
+/* THE LADDERS' WORDS MOVED TO src/shared/words.js (PILOT), 2026-09-13 — every word the game says lives there. The shape
+   rules above still hold, and scripts/qa/pilot_gates.mjs still reads them through this name. */
+export const LADDERS = PILOT;
 
 /* THE MOMENTS, in one list, for the gates and for the toggle. Derived from LADDERS so a new
    ladder cannot be forgotten by a second list that has to be kept in step. */

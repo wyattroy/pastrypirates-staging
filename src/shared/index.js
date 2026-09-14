@@ -525,16 +525,10 @@ function rulesFacts(cfg){
 // `?bakeoff=0` / `?bakeoff=1` overrides the constant for one session so both rulesets can be
 // A/B'd on a phone without a redeploy. Guarded so a file:// page or a storage-blocked context
 // falls back to the constant instead of throwing.
-let bakeoffOn=null;
 function bakeoffEnabled(){
-  if(bakeoffOn!==null)return bakeoffOn;
-  let on=BAKEOFF_ENABLED;
-  try{
-    if(location.search.indexOf("bakeoff=1")!==-1)on=true;
-    else if(location.search.indexOf("bakeoff=0")!==-1)on=false;
-  }catch(err){}
-  bakeoffOn=on;
-  return bakeoffOn;
+  /* ALWAYS ON. The ?bakeoff=0 switch back to the classic ruleset went with the classic day, by his word (2026-09-13):
+     "players keep playing until someone wins the bakeoff. clean this up from the game." */
+  return BAKEOFF_ENABLED;
 }
 /* ================= ?ovens=1 — the bake-off playtest shortcut =================
 

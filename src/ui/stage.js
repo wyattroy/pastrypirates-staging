@@ -20,6 +20,7 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
+import { say, sayText } from "./util.js";   // every word from src/shared/words.js
 import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
@@ -42,7 +43,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.13.5-staging@21c13ef9";
+const PP4_STAMP = "2026.09.13.6-staging@915247b0";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -583,10 +584,10 @@ let peekArmedAt = 0;
 function peekUses(){ try { return +localStorage.getItem(PEEK_KEY) || 0; } catch (e) { return PEEK_LEARNED; } }
 function notePeekUse(){ try { localStorage.setItem(PEEK_KEY, String(Math.min(PEEK_LEARNED, peekUses() + 1))); } catch (e) {} }
 function holdVerb(){
-  try { return matchMedia("(pointer: coarse)").matches ? "Tap and hold" : "Click and hold"; }
-  catch (e) { return "Tap and hold"; }
+  try { return matchMedia("(pointer: coarse)").matches ? say("peek.tapHold",{}) : say("peek.clickHold",{}); }
+  catch (e) { return say("peek.tapHold",{}); }
 }
-export function peekHintText(){ return `${holdVerb()} the sea to reveal the board`; }
+export function peekHintText(){ return say("peek.hint",{verb:holdVerb()}); }
 /* Shows/hides the hint inside whichever prompt box is up. Placed at the FOOT of the board band so
    it never joins the crowd around the boat (which is where D-38 has just sent everything else). */
 function peekHintTick(box){
@@ -1399,12 +1400,12 @@ function wireEovDrag(){
    taller until the first wind landed and shoved everything down, once, in every single voyage.
    Saying "?" costs one line and makes the band constant from the first frame. */
 function pillHTML(){
-  const g = appState.game; if (!g || !g.windNow || !AR[g.windNow]) return "WIND NOW: ? · FORECAST: ?";
+  const g = appState.game; if (!g || !g.windNow || !AR[g.windNow]) return `${say("pill.now",{})} ? · ${say("pill.forecast",{})} ?`;
   const now = g.windNow, fc = g.forecastWind();
-  const nowS = `WIND NOW: ${now}${AR[now]}`;
+  const nowS = `${say("pill.now",{})} ${now}${AR[now]}`;
   const fcS = g.stormNext
-    ? ` · FORECAST: ⛈<span class="pp4Spin">↑</span>`
-    : (fc ? ` · FORECAST: ${fc}${AR[fc] || ""}` : "");
+    ? ` · ${say("pill.forecast",{})} ⛈<span class="pp4Spin">↑</span>`
+    : (fc ? ` · ${say("pill.forecast",{})} ${fc}${AR[fc] || ""}` : "");
   return nowS + fcS;
 }
 /* WHERE THE WIND PILL LIVES — ONE DECISION, READ TWICE (D-47 + D-52, rule 23).
@@ -1513,7 +1514,7 @@ function syncHelpChip(){
   const on = pilotIsOn();
   b.classList.toggle("off", !on);
   b.setAttribute("aria-pressed", String(on));
-  b.title = on ? "Yer parrot's watchin'" : "Yer parrot's restin'";
+  b.title = sayText(on ? "parrot.watching" : "parrot.resting",{});
 }
 
 /* ================= ribbon ================= */
@@ -1525,7 +1526,7 @@ function ribbonTick(){
   // whole stage, not two that can drift apart.
   if (Date.now() - S.geomAt > 900) computeStageGeometry();
   const r = $("pp4Round"), g = appState.game;
-  if (r && g) r.textContent = "DAY " + (g.round || 1);
+  if (r && g) r.textContent = sayText("ribbon.day",{n:g.round || 1});
   const boats = document.querySelectorAll("#pp4Ribbon .pp4Boat");
   const act = (S.activeSeat != null) ? S.activeSeat : (appState.curSeat ?? -1);
   // playtest 15 item 1: the circles read LEFT TO RIGHT in the drawn TURN ORDER, not seat order
@@ -1586,7 +1587,7 @@ function ribbonTick(){
   const sw = $("statsWrap");
   if (sw && sw.style.display !== "none" && !sw.querySelector(".pp4Again")){
     const again = document.createElement("button");
-    again.className = "pp4Again"; again.type = "button"; again.textContent = "🔁 Play again!";
+    again.className = "pp4Again"; again.type = "button"; again.textContent = sayText("end.playAgain",{});
     again.onclick = () => { const orig = $("btnPlayAgain"); if (orig && orig.onclick) orig.onclick(); };
     /* APPENDED TO THE WRAP, NOT THE PANEL — it is a FOOTER now, a flex sibling of #statsScroll
        rather than the last child of the scrolling content. That is the whole fix for the button
@@ -2193,7 +2194,7 @@ function flipArmed(el, onClick){
     veil = document.createElement("div"); veil.id = "pp4Veil";
     // playtest 15 item 5: no "CALL IN THE AIR…" header — the coin and the stakes say it all
     veil.innerHTML = `<div id="pp4CerSlot"></div>
-      <div class="pp4CerSub">Tap the coin, captain — let fate decide.</div>`;
+      <div class="pp4CerSub">${say("ceremony.tapCoin",{})}</div>`;
     document.body.appendChild(veil);
     veil.addEventListener("pointerdown", ev => {
       const coin = $("flipCoinWrap");
@@ -2243,7 +2244,7 @@ function flipArmed(el, onClick){
          the comment above always claimed and did not have.
          Gate: scripts/qa/flip_ceremony_names_the_wind_check.mjs (RED before this line changed). */
       const who = dwTag ? btl.querySelector(".btl-col.dw .who") : null;
-      t.textContent = "⚔️ Broadside!";
+      t.textContent = sayText("ceremony.broadside",{});
       st.textContent = "";
       if (who){
         const b = document.createElement("b");
@@ -2251,9 +2252,9 @@ function flipArmed(el, onClick){
         b.style.color = who.style.color || "";      // the captain's own boat colour, as everywhere else
         st.appendChild(b);
         // @copy misc.ceremony.windstakes — APPROVED as written, Wyatt 2026-08-14
-        st.appendChild(document.createTextNode(" is firin' downwind — two heads and the tie is theirs."));
+        st.appendChild(document.createTextNode(" "+sayText("ceremony.downwind",{})));
       } else {
-        st.textContent = "Crosswind — two heads and the cannonballs collide.";
+        st.textContent = sayText("ceremony.crosswind",{});
       }
     }
   });
@@ -2294,7 +2295,7 @@ function recipeGuard(){
       bake.className = "pp4Bake";
       // @copy misc.stage.bakethis — APPROVED as written, Wyatt 2026-08-14. In-world register (the voice boundary:
       // this is the game speaking to a captain, not the credits).
-      bake.textContent = "Bake this!";
+      bake.textContent = sayText("recipe.bakeThis",{});
       btn.appendChild(bake);
     }
     const g = appState.game; if (!g) return;
@@ -2782,7 +2783,7 @@ function mountRecipeStack(ap){
     const stop = (fn) => (e) => { e.preventDefault(); e.stopPropagation(); fn(); };
     const sw = document.createElement("button");
     sw.type = "button"; sw.className = "pp4RcSwap";
-    sw.setAttribute("aria-label", "Show the other recipe");
+    sw.setAttribute("aria-label", sayText("recipe.swapAria",{}));
     /* HIS OWN ARROW, DRAWN — never a glyph (see .pp4RcSwap svg in index.html for why a character
        cannot be vertically centred). A return arrow: across, round, and back on itself. */
     sw.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" ' +
@@ -2955,11 +2956,11 @@ function buildStage(){
   // ribbon
   const rib = document.createElement("div"); rib.id = "pp4Ribbon";
   const order = [0, 1, 2, 3];
-  rib.innerHTML = `<span id="pp4Round">DAY 1</span>
+  rib.innerHTML = `<span id="pp4Round">${sayText("ribbon.day",{n:1})}</span>
     <span class="pp4Boats">${order.map(i => `<img class="pp4Boat" src="${BOAT_IMG[i]}">`).join("")}</span>
-    <button id="pp4FF" type="button" title="Skip to yer next turn">⏩</button>
-    <button id="pp4Chat" type="button" title="Scuttlebutt">💬<span id="pp4ChatDot"></span></button>
-    <button id="pp4Help" type="button" title="Yer parrot">${emojify("🦜?")}</button>
+    <button id="pp4FF" type="button" title="${sayText("ribbon.ff",{})}">⏩</button>
+    <button id="pp4Chat" type="button" title="${sayText("ribbon.chat",{})}">💬<span id="pp4ChatDot"></span></button>
+    <button id="pp4Help" type="button" title="${sayText("ribbon.parrot",{})}">${emojify("🦜?")}</button>
     <button id="pp4Menu" type="button">☰</button>`;
   document.body.appendChild(rib);
   /* THE PARROT IS A TWO-STATE TOGGLE — his ruling, chosen over a three-step, because an
@@ -2996,7 +2997,7 @@ function buildStage(){
        the moment he was most likely to press it. Polly gets her own element and her own place
        (pinned under the ribbon, never in the narration column), so there is nothing left to
        collide with and the suppression can go. Named `polly`, not `narr`, at his instruction. */
-    pollySay(on ? "🦜 Polly's helping!" : "🦜 Polly's not helping");
+    pollySay(say(on ? "parrot.helping" : "parrot.notHelping",{}));
   };
   syncHelpChip();
   // FAST-FORWARD (Wyatt's spec, 2026-08-12): ONE tap arms ONE skip — everything paces instantly
@@ -4225,7 +4226,7 @@ function promptTick(force){
          max-content, and its content includes a name being capped at a fraction of the result. As
          two real flex items — an unshrinkable tail and a name that takes the rest — the split is
          MEASURED by the browser instead of guessed by me, and "Wyargh phone" simply fits. */
-      const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span><span class="pp4RcSay">, pick yer recipe:</span>`;
+      const askHtml = `<span class="pp4RcWho" style="color:${HEXCOL[who] || "#1f2d33"}">${pname(who)}</span><span class="pp4RcSay">${say("draft.pickSay",{})}</span>`;
       if (ask.dataset.rcAsk !== askHtml){ ask.dataset.rcAsk = askHtml; ask.innerHTML = emojify(askHtml); }
     }
     /* THE SEA HINT SITS OUT THE SHOW. peekHintTick() places this pill by dodging whatever else is
@@ -4269,7 +4270,7 @@ function promptTick(force){
       box.appendChild(help);          // last child of the column: under the cards, and it travels with them
     }
     {
-      const words = pilotMsg("recipe.draft", "Tap a recipe to see its route");
+      const words = pilotMsg("recipe.draft", say("draft.tapHint",{}));
       const sp = help.firstElementChild;
       if (sp.textContent !== words){ sp.textContent = words; pilotSee("recipe.draft"); }
     }

@@ -134,13 +134,18 @@ const shared = read("src/shared/index.js");
    Both ends are held, because either alone leaves an older client holding. */
 {
   const panel = read("src/ui/panel.js");
-  const boundToSubject = /appState\.narrEvIdx\s*=\s*appState\.game\.events\.length\s*-\s*1/.test(panel)
-    && /window\.__pp4\.subject\s*=\s*subjectOf\(e\)/.test(panel);
+  /* THE NARRATOR THAT READS THE EVENT MOVED to src/ui/util.js (narrateEvent, 2026-09-13), when a bot's beat and a
+     human's action became one narrator. It names the event it read — `events.lastIndexOf(e)`, because a bot's beat
+     narrates the event under the cursor, not necessarily the newest — and panel.js's flash still spends it. */
+  const narrator = read("src/ui/util.js");
+  const SET = /appState\.narrEvIdx\s*=\s*appState\.game\.events\.(?:length\s*-\s*1|lastIndexOf\(e\))/;
+  const boundToSubject = SET.test(narrator)
+    && /window\.__pp4\.subject\s*=\s*subjectOf\(e\)/.test(narrator);
   /* ONE SET AND ONE SPEND. panel.js sets it beside the subject and clears it once the line has
      been handed to the broadcast — a second SET would be a second opinion about which event a
      sentence belongs to, which is the fault this assertion exists to stop; the clear is the
      one-shot lifetime and is required, not merely tolerated. */
-  const setsIt = (panel.match(/appState\.narrEvIdx\s*=\s*appState\.game\.events\.length\s*-\s*1/g) || []).length;
+  const setsIt = ((narrator + panel).match(new RegExp(SET.source, "g")) || []).length;
   const clearsIt = (panel.match(/appState\.narrEvIdx\s*=\s*null/g) || []).length;
   const onlyWriter = setsIt === 1 && clearsIt === 1;
   /* readSubject() must take BOTH from the same one-shot flag, refuse a negative, and spend it. */
@@ -151,7 +156,7 @@ const shared = read("src/shared/index.js");
   const spent = /appState\.narrEvIdx=null;/.test(rs);
   const guestRefuses = /v\.evN\s*!=\s*null\s*&&\s*v\.evN\s*>=\s*0/.test(orch);
   if (boundToSubject && onlyWriter && rs && gatedOnFlag && refusesNegative && spent && guestRefuses)
-    pass("found: panel.js sets appState.narrEvIdx beside `subject = subjectOf(e)` once, and spends it once when the line has gone; readSubject() reads it only when subjectSet is true, requires `raw>=0`, and assigns it null before returning; the guest guard text is `v.evN != null && v.evN >= 0`");
+    pass("found: the one narrator (util.js narrateEvent) sets appState.narrEvIdx beside `subject = subjectOf(e)` once, and panel.js spends it once when the line has gone; readSubject() reads it only when subjectSet is true, requires `raw>=0`, and assigns it null before returning; the guest guard text is `v.evN != null && v.evN >= 0`");
   else
     fail(`the serial is not bound to the subject (panel sets it beside the subject:${boundToSubject} panel sets it once and spends it once:${onlyWriter} (sets:${setsIt} clears:${clearsIt}) readSubject found:${!!rs} gated on the subjectSet flag:${gatedOnFlag} refuses a negative:${refusesNegative} spends it:${spent} guest guard requires >= 0:${guestRefuses}) — a serial sent with a line that never read an event points the guest at an unrelated event, and it anchors the bubble to whichever captain that event names while the host does not`);
 }
@@ -306,7 +311,8 @@ const shared = read("src/shared/index.js");
     && /pre\?\{subj:pre\.subj,evN:\(typeof pre\.evN==="number"&&pre\.evN>=0\)\?pre\.evN:null\}:readSubject\(\)/.test(orch);
   /* P6: exactly one write to the subject on the host side. A second one, crew-only, anchors every
      bubble to one seat on the host while the guest computes correctly — pure divergence. */
-  const subjWrites = (panel2.match(/window\.__pp4\.subject\s*=(?!=)/g) || []).length;
+  // host side = panel.js's flash plus the one narrator in util.js; exactly one write between them
+  const subjWrites = ((panel2 + read("src/ui/util.js")).match(/window\.__pp4\.subject\s*=(?!=)/g) || []).length;
   /* P4: inside readSubject the CLEAR must come after the READ, or no line ever carries a serial. */
   const rs2 = (orch.match(/function readSubject\(\)\{[\s\S]*?return \{subj,evN\};\}/) || [""])[0];
   const readAt = rs2.search(/const raw=has\?appState\.narrEvIdx:null/);
@@ -315,7 +321,7 @@ const shared = read("src/shared/index.js");
   /* P5: the wire writes the serial it was given, not an arithmetic of it. */
   const writesVerbatim = /payload\.evN\s*=\s*evN\s*;/.test(writers);
   if (capSound && inOrder && handedOver && accepted && subjWrites === 1 && spentAfterRead && writesVerbatim)
-    pass(`found: the capture expression is \`${cap.replace(/\s+/g, " ").slice(0, 72)}\` — a ternary on window.__pp4.subjectSet yielding window.__pp4.subject and appState.narrEvIdx, with no true/false/&&/|| in it; it sits at offset ${capAt}, before the local draw at ${drawAt}; window.__pp4.subject is assigned exactly 1 time in panel.js; readSubject reads narrEvIdx before assigning it null; and writers.js contains \`payload.evN = evN;\``);
+    pass(`found: the capture expression is \`${cap.replace(/\s+/g, " ").slice(0, 72)}\` — a ternary on window.__pp4.subjectSet yielding window.__pp4.subject and appState.narrEvIdx, with no true/false/&&/|| in it; it sits at offset ${capAt}, before the local draw at ${drawAt}; window.__pp4.subject is assigned exactly 1 time on the host side (panel.js + util.js); readSubject reads narrEvIdx before assigning it null; and writers.js contains \`payload.evN = evN;\``);
   else
     fail(`the decision is not captured intact before the draw (capture expression sound:${capSound} (\`${cap.replace(/\s+/g, " ").slice(0, 60)}\`) capture precedes draw:${inOrder} handed over:${handedOver} broadcast accepts it:${accepted} panel writes the subject ${subjWrites}x (must be 1) readSubject reads before it spends:${spentAfterRead} writers writes evN verbatim:${writesVerbatim}) — two characters appended to that expression switch this whole fix off and put the wire back to carrying nothing, which is how it sat for days`);
 }

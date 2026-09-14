@@ -80,11 +80,22 @@ if (/const\s+W\s*=\s*vwPx\(\)\s*,\s*s2\s*=/.test(stage))
 else pass("camFrame pans the HTML board layers by the board window's own width");
 
 /* 5. NARRATION: every speaker waits for the one consumer to finish the event it describes */
-const narr = fnBody(util, "narrateCurrent") || "";
+const narr = fnBody(util, "narrateEvent") || "";
 const wn = fnBody(orch, "watchNarr") || "";
 if (/eventDrawn\s*\(/.test(narr) && /eventDrawn\s*\(/.test(wn))
-  pass("both narrators (the host's narrateCurrent and a guest's watchNarr) wait on eventDrawn");
+  pass("both narrators (the host's one narrateEvent and a guest's watchNarr) wait on eventDrawn");
 else fail("a narrator does not wait for its event to be drawn — a line can land on a coin still in the air on that device");
+
+/* 6. ONE NARRATOR, WHOEVER CHOSE THE MOVE — Wyatt, 2026-09-13: "there should be no separate track of dialogy for
+   botTurn() -- re-architect this away." A bot's beat (narrateCurrent) and a human's action (narrateLastEvent) only
+   say WHICH event; both hand it to narrateEvent. Two bodies is how a bot's attack on a person reached that person in
+   the third person, and how a bot's turn opened with a banner no human turn had. */
+const panelSrc = strip(read("src/ui/panel.js"));
+const botRoute = /narrateEvent\s*\(/.test(fnBody(util, "narrateCurrent") || "");
+const humanRoute = /narrateEvent\s*\(/.test(fnBody(panelSrc, "narrateLastEvent") || "");
+if (narr && botRoute && humanRoute)
+  pass("a bot's beat (narrateCurrent) and a human's action (narrateLastEvent) both go through the one narrator, narrateEvent");
+else fail(`two narration tracks (narrateEvent exists:${!!narr} bot beat routes to it:${botRoute} human action routes to it:${humanRoute}) — a bot's move and a human's are described by different code again`);
 
 console.log(fails ? `\nFAILED — ${fails} door(s) open` : "\nPASSED — every reaction lives behind the one display door");
 process.exit(fails ? 1 : 0);

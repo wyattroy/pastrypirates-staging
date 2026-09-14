@@ -42,7 +42,7 @@ import {
   pn, boatXY, narrationHoldMs, chatBubbleHoldMs,
   sleepMs, describeFor, narrationVariants, NEUTRAL_VIEWER,
   pickNarrVariant, eventCeremony, voyageAground,
-  expectEventDrawing,
+  expectEventDrawing, narrateEvent, say, sayText,
 } from "./util.js";
 import { escHtml } from "./recipe.js";
 import { netHandlers } from "./handlers.js";
@@ -133,12 +133,12 @@ export function setClockUI(){
        ARIA-PRESSED IS GONE ON PURPOSE: it is a BINARY, and it would announce "sound off" or
        "sound on" for a mode that is neither. aria-label carries the whole state instead, which is
        the treatment that works on touch as well as desktop (see MUTE-01 above). */
-    const muteLabel=diag==="muted"?"Sound is off. Tap for sound and music."
-                   :diag==="nomusic"?"Sound on, music off. Tap to mute."
+    const muteLabel=diag==="muted"?sayText("sound.muted",{})
+                   :diag==="nomusic"?sayText("sound.noMusic",{})
                    // the stalled state names itself here too, or the row and the label disagree at
                    // the one moment a player is actually looking for an explanation
-                   :diag==="stalled"?"Sound is on but yer browser has stalled it. Tap the board twice."
-                   :"Sound and music on. Tap to turn the music off.";
+                   :diag==="stalled"?sayText("sound.stalled",{})
+                   :sayText("sound.on",{});
     setIf(muteEl,"title",muteLabel);
     setAttrIf(muteEl,"aria-label",muteLabel);
     if(muteEl.hasAttribute("aria-pressed"))muteEl.removeAttribute("aria-pressed");
@@ -1133,85 +1133,8 @@ export function showChatBubble(i,text){
 // yet, so overwriting the panel would wipe out the very buttons they need to click. Awaits a
 // beat after narrating so the outcome is actually readable before the next thing overwrites it.
 export async function narrateLastEvent(){
-  const e=appState.game.events[appState.game.events.length-1];if(!e)return;
-  // settleSideBets() already flashes one aggregate "Lookout's Call settles" message covering
-  // every bettor — re-narrating the last individual sidebet event here would just duplicate it.
-  if(e.t==="sidebet")return;
-  if($("actionPanel").classList.contains("needsAction"))return;
-  // D-10: the BROADCAST payload is built from the viewer-NEUTRAL rendering (never the ambient
-  // appState.mySeat-flavored one) plus per-seat variants — netNarrate on the receiving end (the
-  // host's own screen) and watchNarr on every guest both select their own line via
-  // pickNarrVariant, so building this from anything OTHER than the neutral default would leak
-  // the host's own personalised phrasing into every other seat's broadcast.
-  const L=describeFor(e,NEUTRAL_VIEWER);if(!L)return;
-  /* W4-2 (Wyatt): "Guest battle narration box is not centred", narrowed by him to the BATTLE box
-     because the tap-to-sail box was correctly centred on the same screen.
-     MEASURED IN A REAL CREW GAME BEFORE CHANGING THIS, and it corrects his premise once and sharpens
-     it once: NOT guest-only — the battle result sat 44px right of centre on BOTH seats — and within
-     ONE battle two lines were drawn two ways, "Dough Hook attacks Flaky Jack!" centred at offset 0
-     and "Dough Hook wins 1–0" anchored at 44.
-     THE CAUSE IS THIS LINE. A bubble with a subject anchors to that captain's boat and grows a tail,
-     which is right for "Flaky Jack takes the wheel". A battle event is {t:"battle", a:attacker,
-     d:defender}, so `e.a` handed the RESULT to the attacker — one of the two fighters, arbitrarily.
-     THE RULE IS DERIVED FROM THE EVENT'S OWN SHAPE, never a list of event names that would need
-     editing every time a new two-captain event appears: AN EVENT THAT NAMES TWO CAPTAINS IS NOT
-     ABOUT ONE OF THEM, so it takes no subject and its bubble is ambient — centred, like the opening
-     line of the same fight already is.
-     This is also what the codebase already says out loud about fights, in the camera hold a few
-     hundred lines away in stage.js: "the director should focus battles on the players fighting, not
-     the player calling the battle." Anchoring the result to one fighter was the same fault one
-     layer down. Held by scripts/qa/w42_battle_bubble_check.mjs. */
-  if(window.__pp4){
-    /* ONE RULE, ONE PLACE (Wyatt's Q-18 ruling, 2026-08-29; CEO Review 24). This test used to be
-       spelled out here and its ANSWER shipped to the guest as a wire field, which is two things
-       kept in step by nothing — rule 23's exact shape. `subjectOf` lives in src/shared/index.js,
-       the one module both this tier and the orchestrator already import, and the guest now runs
-       the SAME function over the event it already holds. Neither seat owns the rule any more. */
-    window.__pp4.subject = subjectOf(e);
-    /* AND WHICH EVENT IT WAS READ FROM. CEO Review 25: the first cut sent `events.length-1` with
-       EVERY narration line, but only THIS function is about the last event — every other flash()
-       in the game (prompts, dock lines, ceremonies, bot turn banners, the battle play-by-play)
-       went out carrying a serial for an event it had nothing to do with. The guest then resolved
-       that unrelated event, anchored the bubble to whichever captain it named, and marked the
-       subject DECIDED, while the host left the same sentence to the colour sniff. A host/guest
-       divergence in bubble placement, created by the fix meant to end host/guest divergence, in
-       the very family Wyatt reported (W4-2). THE SERIAL AND THE SUBJECT ARE ONE FACT AND NOW
-       TRAVEL AS ONE: a line that did not read an event sends neither. */
-    appState.narrEvIdx = appState.game.events.length - 1;
-    /* DECIDED IS NOT THE SAME AS ABSENT, and conflating them is why the first cut of W4-2 changed
-       nothing on either seat. stageFlash falls back to sniffing the sentence for captain colours
-       whenever the subject is null — a fallback that exists for turn-start lines, which carry no
-       event at all. A battle result names exactly ONE captain (the winner), so the sniff cheerfully
-       re-anchored the very line this rule had just decided to centre. The flag says "an event was
-       read and it yielded no subject", which the sniff must not override. */
-    window.__pp4.subjectSet = true;
-    window.__pp4.evType=e.t;
-  }
-  const variants=narrationVariants(e);
-  // notes/edits #1 follow-up: this used to be netNarrate()+a flat 3000ms sleep, a leftover from
-  // before the typewriter/hold/fade system existed. That fixed window never accounted for reveal
-  // time at all, so a long multi-sentence line (battle results especially — often 120-160+ chars)
-  // could burn the ENTIRE 3s just typing itself in, leaving no time to actually read it before the
-  // next event overwrote it. flash() awaits real reveal completion, then holds for length*80ms —
-  // scaling with the text instead of a one-size-fits-all timer.
-  await flash(L.txt,undefined,undefined,variants);
-  // THE BLACK MARKET'S ONE LESSON (Wyatt, 2026-08-12, "ceremony + marker"): the first time any
-  // shelf on the board empties, a once-per-voyage centre-stage beat teaches that sold-out islands
-  // still sell, at cfg.blackMarket's flat price — after this it is only the 🏴 marker and the
-  // dock's own whisper. (The price is NOT repeated here on purpose: it moved once already and a
-  // number typed into a comment cannot move with it.) Keyed on
-  // the event's firstDry stamp (engine sets it exactly once), so a replayed voyage re-derives the
-  // same single showing. Hand-built stage barrier, same pattern as the bake-off intro card —
-  // panel.js may not import flow.js's localAsk (layering), and needs none of it.
-  //
-  // HIS ITEM 7: THE GATE ITSELF MOVED OUT OF THIS FUNCTION. It used to be an inline
-  // `if(e.firstDry&&!appState.replaying)` right here, in the HUMAN narration path only — and a
-  // bot's dock narrates through util.js's narrateCurrent(), a structurally separate function that
-  // knew nothing about it. A bot claims the first dry shelf in 76% of solo voyages, and in every
-  // one of those the ceremony was swallowed for good. The gate is now eventCeremony() in util.js,
-  // which BOTH narration paths call — rule 23's "make the FIRST one go through the new path too",
-  // rather than a second copy of the check that would have to be kept in step by discipline.
-  await eventCeremony(e);
+  // the ONE narrator lives in util.js (narrateEvent) — bots and humans both reach it; this names which event
+  return narrateEvent(appState.game.events[appState.game.events.length-1]);
 }
 // exported so the composition root (src/main.js) can hand it to eventCeremony() through the
 // handlers seam — util.js is imported BY this file and can never import it back.
@@ -1233,10 +1156,9 @@ export function dryCeremony(){
     // it instead of quietly lying to a captain about what the crate costs. Reached unguarded for
     // the same reason board.js reaches it unguarded: no client ever draws without appState.game.
     const bmPrice=appState.game.cfg.blackMarket;
-    panel(`<div class="apMsg">🏴 <b>The shelves be bare…</b><br><br>
-      Sold-out islands fly the black market flag. They'll find ye one more
-      ingredient — for <b>${bmPrice}🌕.</b></div>
-      <div class="apBtns"><button class="apBtn" id="bmCerGo" type="button">Arrgh!</button></div>
+    panel(`<div class="apMsg">${say("market.bareTitle",{})}<br><br>
+      ${say("market.bareBody",{price:bmPrice})}</div>
+      <div class="apBtns"><button class="apBtn" id="bmCerGo" type="button">${say("market.bareGo",{})}</button></div>
       `,true);   /* the "Steep, aye…" helper line is gone — his call, 2026-08-25 */
     const go=$("bmCerGo");
     if(!go){delete ap.dataset.pp4Stage;res();return;}

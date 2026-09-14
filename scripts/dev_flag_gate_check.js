@@ -30,7 +30,6 @@ const bad = (m) => { fails++; console.log("  FAIL  " + m); };
 
 // Flags that may be ungated, each with the reason it cannot hand a player a shortcut.
 const UNGATED = {
-  "bakeoff": "an A/B switch between two complete rulesets — neither one skips anything",
   "wind":    "same: turns the wind prototype on/off, both states are a whole playable game",
   "usage":   "opt out of usage pings; a privacy control, not a shortcut",
 };

@@ -40,26 +40,28 @@ const check = (label, cond, detail) => {
 const src = fs.readFileSync(path.join(REPO, "src", "ui", "flow.js"), "utf8");
 
 /* The attack ask, located by its own copy key so the assertion survives reformatting. */
-const seg = src.split('"Attack whom?"')[1] || "";
+/* the ask's words moved to src/shared/words.js ("act.whom" = "Attack whom?") on 2026-09-13; the call is located by it */
+const KEY = 'say("act.whom",{})';
+const seg = src.split(KEY)[1] || "";
 const menuExpr = seg.slice(0, seg.indexOf("HEXCOL") > -1 ? seg.indexOf("HEXCOL") : 400);
 
 const assertions = [
   ["the Attack whom? prompt exists at one call site",
-    (s) => s.split('"Attack whom?"').length === 2],
+    (s) => s.split(KEY).length === 2],
   ["each attackable captain's option carries its OWN seat (seat:o.idx beside value:o)",
     () => /attackable\.map\(o=>\(\{label:pn\(o\.idx\),value:o,seat:o\.idx\}\)\)/.test(seg)],
   ["the Back option carries the CHOOSER's seat (all-or-nothing contract preserved)",
-    () => /\{label:"← Back",back:true,value:null,seat:player\.idx\}/.test(seg)],
+    () => /\{label:say\("button\.back",\{\}\),back:true,value:null,seat:player\.idx\}/.test(seg)],
 ];
 console.log("attack_buttons_on_target_check — the attack menu joins the one anchored-boats rule\n");
 for (const [label, test] of assertions) check(label, test(src), "flow.js's attack menu is not fully seat-bearing");
 
 /* RED-PROOF: the pre-fix shape (no seat on captains, no seat on Back) must fail assertions 2-3. */
-const doctored = 'await ask("Attack whom?",attackable.map(o=>({label:pn(o.idx),value:o})).concat([{label:"← Back",back:true,value:null}]), attackable.map(o=>HEXCOL[o.idx]));';
-const dSeg = doctored.split('"Attack whom?"')[1];
+const doctored = 'await ask(say("act.whom",{}),attackable.map(o=>({label:pn(o.idx),value:o})).concat([{label:say("button.back",{}),back:true,value:null}]), attackable.map(o=>HEXCOL[o.idx]));';
+const dSeg = doctored.split(KEY)[1];
 const dFails = [
   /attackable\.map\(o=>\(\{label:pn\(o\.idx\),value:o,seat:o\.idx\}\)\)/.test(dSeg),
-  /\{label:"← Back",back:true,value:null,seat:player\.idx\}/.test(dSeg),
+  /\{label:say\("button\.back",\{\}\),back:true,value:null,seat:player\.idx\}/.test(dSeg),
 ].filter((x) => !x).length;
 check("red-proof: the pre-fix seatless menu fails both seat assertions", dFails === 2, `only ${dFails} fired`);
 

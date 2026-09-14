@@ -69,7 +69,10 @@ import {
   vwPx, fixedRect,
   clearSoloState, clearSession,   // ?pilot=new starts a NEW voyage; these own the two saved blobs
   buildPlayerRows,                // endReplay: the captains' rows, rebuilt once in sailing order
+  say, sayAll, sayText, seat,     // the one door to src/shared/words.js
 } from "./util.js";
+/* A line every screen reads its own way, in one call: the words and their "ye" versions come from words.js. */
+const sayFlash=(id,facts,ms)=>{const w=sayAll(id,facts);return flash(w.html,ms,undefined,w.variants);};
 import { passGate, requireName, showStep, openNameModal, confirmName, wireNameModal, setNameWarning } from "./lobby.js";
 import { playBakeoffLive } from "./bakeoff.js";
 import { netHandlers } from "./handlers.js";
@@ -120,23 +123,22 @@ function ffRecapLine(g,from){
     const cur=by.get(seat);if(!cur||w>cur.w)by.set(seat,{w,txt});
   };
   for(const e of g.events.slice(Math.max(0,from))){
-    if(e.t==="finish")note(e.p,6,`made it home with a full recipe`);
-    else if(e.t==="battle"){
+    if(e.t==="battle"){
       const loser=e.winner===e.a?e.d:e.a;
-      note(e.winner,5,`bested ${pn(loser)} in battle`);
-      note(loser,4,`lost a battle to ${pn(e.winner)}`);
+      note(e.winner,5,say("recap.bested",{q:pn(loser)}));
+      note(loser,4,say("recap.lost",{q:pn(e.winner)}));
     }
     else if(e.t==="dock"&&e.got==="bought")
       note(e.p,e.black?4:3,e.black
-        ?`paid the black market for ${iconImg(ING_IMG[e.ing])}`
-        :`bought ${iconImg(ING_IMG[e.ing])} at ${dockPlace(e.ing)}`);
-    else if(e.t==="trade"){note(e.a,3,`struck a trade with ${pn(e.b)}`);note(e.b,3,`struck a trade with ${pn(e.a)}`);}
-    else if(e.t==="dock")note(e.p,2,`worked the docks at ${dockPlace(e.ing)}`);
-    else if(e.t==="sail"||e.t==="pass")note(e.p,1,`sailed on`);
+        ?say("recap.black",{icon:iconImg(ING_IMG[e.ing])})
+        :say("recap.bought",{icon:iconImg(ING_IMG[e.ing]),place:dockPlace(e.ing)}));
+    else if(e.t==="trade"){note(e.a,3,say("recap.traded",{q:pn(e.b)}));note(e.b,3,say("recap.traded",{q:pn(e.a)}));}
+    else if(e.t==="dock")note(e.p,2,say("recap.docks",{place:dockPlace(e.ing)}));
+    else if(e.t==="sail"||e.t==="pass")note(e.p,1,say("recap.sailed",{}));
   }
   if(!by.size)return null;
   // @copy adhoc.ff.recap — APPROVED as written, Wyatt 2026-08-14
-  return `⏩ While ye looked away: `+[...by.entries()].map(([s,v])=>`${pn(s)} ${v.txt}`).join("; ")+`.`;
+  return say("recap.line",{list:[...by.entries()].map(([s,v])=>`${pn(s)} ${v.txt}`).join("; ")});
 }
 
 /* ================= turn-flow + interaction ================= */
@@ -310,12 +312,12 @@ export function localAsk(msg,opts,colors,sub,extra){
 }
 export async function humanFlip(player,label,allowBack,sub,why){
   applyActiveSeat(player.idx);
-  const opts=[{label:"🌕 FLIP!",value:1,flip:true}];
-  if(allowBack)opts.push({label:"← Back",back:true,value:"back"});
+  const opts=[{label:say("flip.button",{}),value:1,flip:true}];
+  if(allowBack)opts.push({label:say("button.back",{}),back:true,value:"back"});
   // `sub` is the italic helper line beneath the buttons — used by the dock flip to explain what
   // the two faces of the coin actually pay (Wyatt, 2026-08-05).
   // @copy prompt.flip.fallback
-  const v=await ask(label||"Flip the dubloon!",opts,null,sub);
+  const v=await ask(label||say("flip.ask",{}),opts,null,sub);
   if(v==="back")return "back";
   /* THE RESULT IS DECIDED AT THE TAP, AND EVERY OTHER SCREEN HEARS OF IT AT ONCE. It used to be decided 795ms
      later, after this device's spin, and a dock's result reached nobody until the whole dock — buy included —
@@ -335,10 +337,12 @@ export async function humanFlip(player,label,allowBack,sub,why){
      `sleep`, so fast-forward, pause and reload-replay behave exactly as before. */
   await sleep(flipSpinLeftMs());
   netHandlers().onBroadcastFlip(h?"H":"T");
-  // same fixed-3000ms leftover as narrateLastEvent() had — flash() scales the hold to this
-  // (short) message's own length instead of a flat timer unrelated to how long it takes to read
-  // @copy adhoc.flip.announce
-  await flash(`${pn(player.idx)} flips ${h?"⚪ HEADS!":"⚫ TAILS"}`,undefined,undefined,[{seat:player.idx,html:`${pn(player.idx)} — ye flip ${h?"⚪ HEADS!":"⚫ TAILS"}`}]);
+  /* NO "Crustbeard flips HEADS!" LINE ANY MORE — his pass, 2026-09-13: "We can all now see what the coin flips to --
+     i think we can cut this". Checked: this captain sees the big coin land, and every other screen draws the small
+     coin over the boat (dockcoin.js) from the coinflip event published at the tap. The face HOLDS for
+     FLIP_LAND_HOLD_MS — the one hold every other flip already waits out (a battle's, a bot's dock coin) — where it
+     used to hold for however long a sentence nobody needed took to read. */
+  await sleep(FLIP_LAND_HOLD_MS);
   netHandlers().onBroadcastFlip("wait");
   return h;
 }
@@ -445,7 +449,7 @@ export function sailSelfCheck(player,cells){
    (holdVerb(), src/ui/stage.js:445) is private to that module, so there is no shared way to say
    tap-or-click from here. Re-testing `matchMedia("(pointer: coarse)")` in this file would be a
    second copy of the same rule to keep in step. Export holdVerb() and both lines can read it. */
-export function sailPickMsg(seat,cells,base="tap to sail"){
+export function sailPickMsg(seat,cells,base=say("sail.tap",{})){
   // v2 rule 2: sailing is FREE, so the (−1🌕) parenthetical is gone.
   /* `base` IS THE ONLY THING THE PILOT REPLACES, and its DEFAULT is the shipped clause — so every
      existing caller, and the wire payload, get byte-for-byte the line this built before.
@@ -456,7 +460,7 @@ export function sailPickMsg(seat,cells,base="tap to sail"){
      device and this line travels on the wire: built here, a veteran host would have spoken for — or
      silenced — a first-time guest. */
   // /4 playtest 6: one line — the card must stay small
-  return `${pn(seat)}: ${base}`;
+  return say("sail.ask",{name:pn(seat),what:base});
 }
 /* The sail line, plus the two-taps rung when THIS device's ladder still has one and a blue square
    is actually on offer — the same g.onRim test sailHighlightRect() paints blue with, so the words
@@ -509,7 +513,7 @@ export function sailPanelHTML(msg,hint){
      message, buttons, helper text. */
   const sub=hint?`<div class="apSub">${hint}</div>`:"";
   return `<div class="apMsg">${msg}</div>`+
-    `<div class="apBtns"><button class="apBtn" id="apStay" style="display:none">Stay put</button></div>`+
+    `<div class="apBtns"><button class="apBtn" id="apStay" style="display:none">${say("sail.stay",{})}</button></div>`+
     sub;
 }
 /* THE WIND HINT IS GONE (Wyatt, 2026-08-25): "Remove the sail prompt saying wind blows east
@@ -710,7 +714,7 @@ export function renderPickPrompt(spec,answer){
      Only above it does this device build its own longer line, and `sailPickMsg` composes it from
      the same parts (the name, the swept clause) so the two can never drift. */
   const seat=spec.seat!=null?spec.seat:(appState.mySeat??0);
-  const rung=pilotLine("sail.pick","tap to sail");
+  const rung=pilotLine("sail.pick",say("sail.tap",{}));
   const teaching=pilotRung("sail.pick")<pilotDepth("sail.pick")-1;
   const msg=withTwoTapRung(teaching?sailPickMsg(seat,spec.cells,rung.msg):(spec.msg||sailPickMsg(seat,spec.cells)),spec.cells);
   panel(sailPanelHTML(msg,rung.sub||null),true);
@@ -795,7 +799,7 @@ export function pickCell(player,cells){
   // explanation, which is the exact complaint item 19 is. Stage 1 built the no-deadline wait line
   // and wired it to the recipe draft; this per-turn line never got it. Fire-and-forget, so it meets
   // the flag's stated safety condition (see stageFlash's note: a wait line must never be awaited).
-  netHandlers().onBroadcast(`${pn(player.idx)} is choosing where to sail…`,[{seat:player.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(say("wait.sailing",{name:pn(player.idx)}),[{seat:player.idx,html:""}],{wait:true});
   /* EVERY CAPTAIN'S SQUARES ARE CHECKED, NOT JUST THE ONES ON THIS DEVICE. G6 (Wyatt-approved
      2026-07-30) is "yes, build this check and apply it to all situations", and it was applied to
      one: sailSelfCheck ran inside localPickCell, so it covered a captain whose decision is LOCAL
@@ -908,7 +912,7 @@ export async function bakeoffPrompt(player,setup,fallback){
   applyActiveSeat(player.idx);
   // {wait:true} — same fault, found by the rule-8 sweep rather than by Wyatt: this is the other
   // per-turn spectator line whose subject is "nothing is happening yet". Also fire-and-forget.
-  netHandlers().onBroadcast(`${pn(player.idx)} steps up to the ovens…`,[{seat:player.idx,html:""}],{wait:true});
+  netHandlers().onBroadcast(say("wait.ovens",{name:pn(player.idx)}),[{seat:player.idx,html:""}],{wait:true});
   /* THE ONE SPEC, BUILT ONCE, HANDED TO BOTH BRANCHES — pickCell()'s tracer pattern verbatim
      (see the `const spec={kind:"pick",...}` comment 60 lines up). The local render and the remote
      wire payload cannot drift apart because they are literally the same object, and the captain in
@@ -1308,7 +1312,7 @@ export async function pilotGate(id,tweak){
   // aye button -- make the bird bigger!" The parrot itself was already the game art (emojify maps
   // 🦜 to assets/icons/parrot.png and panel() runs it over every prompt); it was arriving at
   // .narrIcon's 18px, which is a footnote size on a full-stage circle.
-  await localAsk(text,[{label:"🦜 Aye aye",value:0,cls:"primary ahoyGlow pp4AyeAye",stage:true}],null,line.sub||null);
+  await localAsk(text,[{label:say("parrot.ok",{}),value:0,cls:"primary ahoyGlow pp4AyeAye",stage:true}],null,line.sub||null);
   return true;
 }
 export function animateRimSweepIfAny(ev){
@@ -1836,11 +1840,11 @@ async function pickBarterCrates(player,ing){
     const pool=player.ing.slice();
     if(first!==null){const at=pool.indexOf(first);if(at>=0)pool.splice(at,1);}
     const opts=[...new Set(pool)].map(i=>crateOpt(pool,i));
-    opts.push({label:"← Back",back:true,value:"__back__"});
+    opts.push({label:say("button.back",{}),back:true,value:"__back__"});
     // @copy misc.blackmarket.pick1 / pick2 — draft, Wyatt rewrites
     const msg=first===null
-      ?`The black market'll take any 2 ingredients fer ${dockFlavorIcon(ing)} — what's the first?`
-      :`Givin' ${ilabelImg(first)} an' one more fer ${dockFlavorIcon(ing)} — what's the second?`;
+      ?say("market.first",{goods:dockFlavorIcon(ing)})
+      :say("market.second",{first:ilabelImg(first),goods:dockFlavorIcon(ing)});
     /* THE LAST SHARED HELPER LINE IS GONE (Wyatt, 2026-08-25). It read "Both crates leave the
        Sugar Seas fer good." on the first pick and "Tap it an' the bargain's struck — both crates
        leave the Sugar Seas fer good." on the second. The message above already says the market
@@ -1874,8 +1878,8 @@ export async function humanDock(player,port){
   // message stays short and the rules go in the helper line, which is where the narration box
   // already puts explanatory text (and, per the standing top-to-bottom rule, is revealed last).
   // @copy misc.paramprompt.dockflip
-  const h=await humanFlip(player,`Docking at ${iconImg(ING_IMG[ing])} ${dockPlace(ing)} — dig for treasure!`,true,
-    `⚪ HEADS strikes buried treasure <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span> · ⚫ TAILS is a turn workin' the docks <span class="nobrk">(+${g.cfg.dockTails}🌕)</span>. Either way, ye may then buy an ingredient.`,"dock");
+  const h=await humanFlip(player,say("dock.flipAsk",{icon:iconImg(ING_IMG[ing]),place:dockPlace(ing)}),true,
+    say("dock.flipHelp",{heads:g.cfg.dockHeads,tails:g.cfg.dockTails}),"dock");
   if(h==="back")return "back";
   player.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
   let got=h?"treasure":"dockhand";
@@ -1920,15 +1924,15 @@ export async function humanDock(player,port){
          honest sentence states the cost and the purse, and it is written ONCE: the same string is
          the button's tap-why and the italic helper line, so the two can never tell two stories
          about one greyed circle (rule 23). */
-      const shortWhy=`It costs ${price}🌕 and ye've ${player.coins}🌕 — ${price-player.coins}🌕 short.`;
+      const shortWhy=sayText("dock.shortWhy",{price,coins:player.coins,short:price-player.coins});
       const opts=[
-        {label:`Buy ${ilabelImg(ing)} <span class="nobrk">−${price}🌕</span>`,short:`Buy ${iconImg(ING_IMG[ing])} −${price}🌕`,value:"coin",disabled:!canBuy,
+        {label:say("dock.buy",{ing:ilabelImg(ing),price}),short:say("dock.buy",{ing:iconImg(ING_IMG[ing]),price}),value:"coin",disabled:!canBuy,
           why:shortWhy},
       ];
       // @copy misc.blackmarket.barterbtn — draft, Wyatt rewrites
-      if(black)opts.push({label:`Trade any 2 ingredients fer ${ilabelImg(ing)}`,short:`2 → ${iconImg(ING_IMG[ing])}`,value:"barter",disabled:!canBarter,
-        why:`The barter takes 2 ingredients off yer hands, and ye're carryin' ${player.ing.length}.`});
-      opts.push({label:"Nah",value:false});
+      if(black)opts.push({label:say("market.barter",{ing:ilabelImg(ing)}),short:say("market.barterShort",{icon:iconImg(ING_IMG[ing])}),value:"barter",disabled:!canBarter,
+        why:sayText("market.barterWhy",{n:player.ing.length})});
+      opts.push({label:say("button.nah",{}),value:false});
       // @copy misc.blackmarket.whisper — draft, Wyatt rewrites
       /* HIS COPY PASS, 2026-08-25. The black-market whisper said in a sentence what the two
          buttons beneath it already say; "Last one on the island!" was deleted outright. What is
@@ -1965,7 +1969,7 @@ export async function humanDock(player,port){
          (U+FE0F) — every other flip, here and in util.js, uses the bare ⚪/⚫. Same family as the
          minus sign that must be U+2212: a character nobody can see is still a difference the font
          renders. */
-      const v=await ask(`${h?`⚪ TREASURE <span class="nobrk">(+${g.cfg.dockHeads}🌕)</span>!`:`⚫ TAILS <span class="nobrk">(+${g.cfg.dockTails}🌕)</span> — a turn workin' the docks.`} Buy ${dockFlavorIcon(ing)}?`,opts,null,sub);
+      const v=await ask(say(h?"dock.buyAsk.treasure":"dock.buyAsk.work",{n:h?g.cfg.dockHeads:g.cfg.dockTails,goods:dockFlavorIcon(ing)}),opts,null,sub);
       if(appState.turnExpired)break;
       // D-40 safety net: buyCrate re-reads the purse itself — `canBuy` was computed BEFORE the
       // await, and the shot clock's penalty can take a coin while this prompt sits open. One
@@ -2100,18 +2104,18 @@ async function counterOffer(q,player,offer){
     if(appState.turnExpired)return null;
     const opts=theirs.map(i=>crateOpt(player.ing,i));
     // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost
-    opts.push({label:`💰 Coin instead`,short:`💰 Coin`,value:"__coinsonly__",disabled:room<1,
-      why:`${pn(player.idx)} has no coin at all — it must be an ingredient.`});
-    opts.push({label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"__deny__"});
-    opts.push({label:"← Back",back:true,value:"__back__"});
+    opts.push({label:say("counter.coin",{}),short:say("counter.coinShort",{}),value:"__coinsonly__",disabled:room<1,
+      why:sayText("counter.noCoin",{name:pn(player.idx)})});
+    opts.push({label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"__deny__"});
+    opts.push({label:say("button.back",{}),back:true,value:"__back__"});
     // @copy prompt.trade.counterwant — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
     // poss() TAKES A SEAT INDEX, exactly as pn() does — it renders the name itself. Passing it
     // pn(p.idx) fed a finished <b> string to pname(), where `NAMES[i].replace(...)` is evaluated
     // UNCONDITIONALLY on an array indexed by that string: undefined.replace, a TypeError, thrown on
     // the first line of the first counter prompt. That is the whole of playtest 22's counter stall —
     // see the note above counterOffer.
-    const pick=await ask(`${pn(q.idx)}: what o' ${poss(player.idx)} will ye have instead?`,opts,null,
-      theirs.length?null:`${pn(player.idx)} has no other cargo — ye can ask for coin, or deny.`);
+    const pick=await ask(say("counter.ask",{q:pn(q.idx),whose:poss(player.idx)}),opts,null,
+      theirs.length?null:say("counter.noCargo",{name:pn(player.idx)}));
     if(appState.turnExpired)return null;
     if(pick==null||pick==="__back__")return "__back__";
     if(pick==="__deny__")return "deny";
@@ -2139,8 +2143,8 @@ async function counterOffer(q,player,offer){
     const bits=n=>[askIng?ilabelImg(askIng):null,n?`${n}🌕`:null].filter(Boolean).join(" + ");
     // @copy prompt.trade.countercoins — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
     const n=await coinSlider(q.idx,
-      k=>`${pn(q.idx)}: ye're ASKIN' ${bits(k)||"nothin'"} for yer ${ilabelImg(offer.want)}`,
-      minC,minC,maxC,"Ask it!");
+      k=>say("counter.asking",{q:pn(q.idx),what:bits(k)||say("trade.nothin",{}),want:ilabelImg(offer.want)}),
+      minC,minC,maxC,say("counter.go",{}));
     if(n==null)return null;
     if(n==="__back__")continue;                  // BACK MEANS BACK — return to the crate picker
     return {askIng,askCoins:n};
@@ -2207,7 +2211,7 @@ async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declin
     const nothingOffered = min === 0;
     const opts=[{label:(nothingOffered && declineLabel) || confirmLabel,value:"ok",cls:"primary"}];
     if(extraOpt)opts.push(extraOpt);
-    opts.push({label:"← Back",back:true,value:"__back__"});
+    opts.push({label:say("button.back",{}),back:true,value:"__back__"});
     const v0=await ask(msgFor(min),opts,null,null,{slider:{min,max:min,start:min,ref:{value:min},fmt:msgFor,aria:"Coins",disabled:true}});
     if(appState.turnExpired)return null;
     if(v0==="ok")return logQuantity(min);
@@ -2217,7 +2221,7 @@ async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declin
   const ref={value:start};
   const opts=[{label:confirmLabel,value:"ok",cls:"primary"}];
   if(extraOpt)opts.push(extraOpt);
-  opts.push({label:"← Back",back:true,value:"__back__"});
+  opts.push({label:say("button.back",{}),back:true,value:"__back__"});
   const v=await ask(msgFor(start),opts,null,null,{slider:{min,max,start,ref,fmt:msgFor,aria:"Coins"}});
   if(appState.turnExpired)return null;
   if(v==="ok"){
@@ -2240,7 +2244,7 @@ export async function humanTrade(player){
   // deeper with no way out. humanAct's own canOffer gate (the button itself) is the real fix and
   // makes this unreachable through the normal menu; this guard exists for any other caller.
   // @copy adhoc.trade.nothingtogive
-  if(!player.coins&&!player.ing.length){await flash(`${pn(player.idx)} has nothin' to trade.`);return false;}
+  if(!player.coins&&!player.ing.length){await sayFlash("trade.nothingAtAll",{p:seat(player.idx)});return false;}
   const st={want:undefined,baseIng:undefined,extraCoins:undefined};
   let step=0;
   while(step<3){
@@ -2253,29 +2257,29 @@ export async function humanTrade(player){
         // playtest 21 item 5: the greyed crate says which crate it is and why it is out of reach,
         // so the reason survives even when the shared helper line is explaining something else
         return {label:ilabelImg(i),value:i,disabled:!holders.length,
-          why:`No captain on the water is carryin' ${iname(i)}.`};
+          why:sayText("trade.nobodyHas",{ing:iname(i)})};
       });
       const anyHeld=opts.some(o=>!o.disabled);
       // @copy adhoc.trade.nocargo
-      if(!anyHeld){await flash("No one has cargo to trade for.");return false;}
-      opts.push({label:"← Back",back:true,value:"__back__"});
+      if(!anyHeld){await flash(say("trade.noCargo",{}));return false;}
+      opts.push({label:say("button.back",{}),back:true,value:"__back__"});
       // @copy prompt.trade.want
       // no shared helper line: every greyed crate above carries "No captain on the water is
       // carryin' <that crate>", which names the crate the general sentence could not (2026-08-25).
-      const want=await ask("What do ye WANT from the table?",opts);
+      const want=await ask(say("trade.want",{}),opts);
       if(want==="__back__"||want==null)return false;
       st.want=want;step=1;
     }else if(step===1){
       // An offer is a crate, coins, or both — sweeten a crate with a few coins on top.
       const canOfferCoins=player.coins>0;
       const ingOpts=[...new Set(player.ing)].map(i=>crateOpt(player.ing,i));
-      ingOpts.push({label:"— coins only —",value:"__coinsonly__",disabled:!canOfferCoins,
-        why:`Yer purse is empty — ye've no coin to offer, so it must be an ingredient.`});
-      ingOpts.push({label:"← Back",back:true,value:"__back__"});
+      ingOpts.push({label:say("trade.coins",{}),value:"__coinsonly__",disabled:!canOfferCoins,
+        why:sayText("trade.emptyPurse",{})});
+      ingOpts.push({label:say("button.back",{}),back:true,value:"__back__"});
       // no shared helper line: the greyed "— coins only —" option already carries "Yer purse is
       // empty — ye've no coin to offer, so it must be a crate." (2026-08-25)
       // @copy prompt.trade.give
-      const baseIng=await ask(`What will ye GIVE for ${ilabelImg(st.want)}?`,ingOpts);
+      const baseIng=await ask(say("trade.give",{want:ilabelImg(st.want)}),ingOpts);
       if(baseIng==="__back__"){step=0;continue;}
       if(baseIng==null)return false;
       st.baseIng=(baseIng==="__coinsonly__")?null:baseIng;step=2;
@@ -2287,7 +2291,7 @@ export async function humanTrade(player){
       const minC=st.baseIng?0:1; // a coins-only offer needs at least 1 coin
       if(maxC<minC){
         // @copy prompt.trade.nothingtooffer
-        await ask("Ye don't have any to offer!",[{label:"← Back",back:true,value:-1}]);
+        await ask(say("trade.nothingToOffer",{}),[{label:say("button.back",{}),back:true,value:-1}]);
         step=1;continue;
       }
       const giveBits=n=>[st.baseIng?ilabelImg(st.baseIng):null,n?`${n}🌕`:null].filter(Boolean).join(" + ");
@@ -2308,8 +2312,8 @@ export async function humanTrade(player){
          picked "— coins only —" (:1806), and `minC` at :1812 was already branching on it to raise
          the floor to 1. The control knew; only the sentence did not. Nothing new is computed here. */
       const n=await coinSlider(player.idx,
-        k=>st.baseIng?`Would ye offer any coin on top?`:`How many coins?`,
-        minC,minC,maxC,"Offer it!",null,"Nah");
+        k=>say(st.baseIng?"trade.coinOnTop":"trade.howMany",{}),
+        minC,minC,maxC,say("trade.offerGo",{}),null,say("button.nah",{}));
       if(n==null)return false;
       if(n==="__back__"){step=1;continue;}
       st.extraCoins=n;step=3;
@@ -2352,17 +2356,17 @@ export async function humanTrade(player){
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(`${pn(q.idx)}: ${pn(player.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
-          {label:`${iconImg(CHECKMARK_IMG)} Accept`,value:"accept"},
+        const v=await ask(say("trade.offered",{q:pn(q.idx),p:pn(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)}),[
+          {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
-          {label:"💰 Ask for summat else",short:"💰 Counter",value:"counter",
+          {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
             disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:`${pn(player.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
-          {label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"deny"}],null,
+            why:sayText("trade.nothingElse",{name:pn(player.idx)})},
+          {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?`${pn(player.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
+          room<1?say("trade.noSweetener",{name:pn(player.idx)}):null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
@@ -2383,7 +2387,7 @@ export async function humanTrade(player){
   applyActiveSeat(player.idx);
   if(!responses.length){
     // @copy adhoc.trade.silence
-    await flash(`Not a soul answers ${pn(player.idx)}'s hail.`,undefined,undefined,[{seat:player.idx,html:`Not a soul answers yer hail.`}]);
+    await sayFlash("trade.silence",{p:seat(player.idx)});
     return true;
   }
 
@@ -2413,8 +2417,8 @@ export async function humanTrade(player){
     const r=responses[i];
     if(r.kind==="accept"){
       const b=bitsOf(offer);
-      answerLines.push(`${iconImg(CHECKMARK_IMG)} ${pn(r.q.idx)} takes yer ${b||"offer"}`);
-      opts.push({label:`${iconImg(CHECKMARK_IMG)} ${pn(r.q.idx)} accepts`,
+      answerLines.push(say("trade.takes",{icon:iconImg(CHECKMARK_IMG),q:pn(r.q.idx),what:b||say("trade.offer",{})}));
+      opts.push({label:say("trade.accepts",{icon:iconImg(CHECKMARK_IMG),q:pn(r.q.idx)}),
         short:`${iconImg(CHECKMARK_IMG)}<br>${pn(r.q.idx)}`,value:i});
     }
     else if(r.kind==="counter"){
@@ -2426,41 +2430,40 @@ export async function humanTrade(player){
       const haveIng=!t.giveIng||player.ing.includes(t.giveIng);
       // a counter that swaps the give side is the dangerous one — say "instead" out loud
       const swap=t.giveIng&&t.giveIng!==offer.giveIng;
-      answerLines.push(`💰 ${pn(r.q.idx)} wants ${bits||"nothin'"}${swap?" <i>instead</i>":""}`);
-      opts.push({label:`💰 ${pn(r.q.idx)} wants ${bits||"nothin'"}`,
+      answerLines.push(say(swap?"trade.wantsInstead":"trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}));
+      opts.push({label:say("trade.wants",{q:pn(r.q.idx),what:bits||say("trade.nothin",{})}),
         short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?`+${t.giveCoins}🌕`:""}`,
         value:i,
         disabled:t.giveCoins>player.coins||!haveIng,
-        why:!haveIng?`Ye're not carryin' ${t.giveIng?iname(t.giveIng):"that"} any more.`
-          :`That'd cost ye ${t.giveCoins}🌕, and ye've only ${player.coins}🌕 aboard.`});
+        why:!haveIng?sayText("trade.notCarrying",{ing:t.giveIng?iname(t.giveIng):say("trade.that",{})})
+          :sayText("trade.tooDear",{n:t.giveCoins,coins:player.coins})});
     }
   }
   const denials=responses.filter(r=>r.kind==="deny");
   const colors=opts.map(o=>HEXCOL[responses[o.value].q.idx]);
-  opts.push({label:"🚫 Walk away",value:-1});colors.push(null);
+  opts.push({label:say("trade.walkAway",{}),value:-1});colors.push(null);
   const denyNote=denials.length
-    ?denials.map(r=>`${pn(r.q.idx)} ${r.why==="blocking"?"refuses outright":"declines"}`).join(" · ")
+    ?denials.map(r=>say(r.why==="blocking"?"trade.refuses":"trade.declines",{q:pn(r.q.idx)})).join(" · ")
     :null;
   if(!opts.some(o=>o.value!==-1&&!o.disabled)){
     // nobody said anything ye can act on
     g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
     liveRender();
     // @copy adhoc.trade.alldeclined
-    await flash(`No captain will part with ${ilabelImg(offer.want)} for that.`,undefined,undefined,
-      [{seat:player.idx,html:`No captain will part with ${ilabelImg(offer.want)} for that offer of yers.`}]);
+    await sayFlash("trade.allDeclined",{p:seat(player.idx),want:ilabelImg(offer.want)});
     return true;
   }
   // @copy prompt.trade.pick — APPROVED as written, Wyatt 2026-08-14. One captain per line: the whole point is that
   // the price is readable BEFORE a finger moves, so this deliberately does not compress.
   const pick=await ask(
-    `Fer yer ${ilabelImg(offer.want)} the table answers:<br>${answerLines.join("<br>")}<br>Take a deal, or walk away?`,
+    say("trade.answers",{want:ilabelImg(offer.want),lines:answerLines.join("<br>")}),
     opts,colors,denyNote);
   if(appState.turnExpired)return false;
   if(pick===-1||pick==null){
     g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
     liveRender();
     // @copy adhoc.trade.walkaway
-    await flash(`${pn(player.idx)} walks away from the table.`,undefined,undefined,[{seat:player.idx,html:`Ye walk away from the table.`}]);
+    await sayFlash("trade.walksAway",{p:seat(player.idx)});
     return true;
   }
   const chosen=responses[pick];
@@ -2473,7 +2476,7 @@ export async function humanTrade(player){
   // path below rather than half-completing.
   if(!g.settleTrade(player,chosen.q,terms,extra)){
     // @copy adhoc.trade.refusalhuman
-    await flash(`${pn(chosen.q.idx)} declines ${pn(player.idx)}'s offer!`,undefined,undefined,[{seat:player.idx,html:`${pn(chosen.q.idx)} declines yer offer!`}]);
+    await sayFlash("trade.declined",{q:seat(chosen.q.idx),p:seat(player.idx)});
     return true;
   }
   await narrateLastEvent();
@@ -2571,7 +2574,7 @@ export async function humanAct(player,sailCtx){
      with it for the same glance, and it named a reward the button does not actually hand out (the
      dock's coin depends on the flip). Both forms lose it together — long and short are one control
      wearing two widths, and a difference between them is the consistency rule as a bug. */
-  if(canDock)opts.push({label:`Dock at ${iconImg(ING_IMG[port])} ${dockPlace(port)}`,short:`${iconImg(ING_IMG[port])} Dock`,value:"dock"});
+  if(canDock)opts.push({label:say("act.dock",{icon:iconImg(ING_IMG[port]),place:dockPlace(port)}),short:say("act.dockShort",{icon:iconImg(ING_IMG[port])}),value:"dock"});
   // #5b/#5d: shorter label, and the Attack button always shows when there's a target — greyed out
   // (disabled) rather than hidden when you can't afford powder.
   // playtest 21 item 5: a greyed circle carries its OWN reason, spoken at the circle when tapped.
@@ -2579,19 +2582,14 @@ export async function humanAct(player,sailCtx){
   // is checked first because it is the one the captain can actually do something about.
   // @copy adhoc.why.* — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine").
   if(targets.length)
-    opts.push({label:`⚔️ Attack${appState.game.cfg.powder?` <span class="nobrk">−${appState.game.cfg.powder}🌕</span>`:""}`,value:"attack",disabled:!canAfford||!attackable.length,
-      why:!canAfford?`Ye can't afford the powder — ${appState.game.cfg.powder}🌕 a broadside, and yer purse won't stretch.`
-        :`Their holds are empty — there's nothin' aboard worth takin'.`});
+    opts.push({label:say(appState.game.cfg.powder?"act.attack":"act.attackFree",{n:appState.game.cfg.powder}),value:"attack",disabled:!canAfford||!attackable.length,
+      why:!canAfford?sayText("act.noPowder",{n:appState.game.cfg.powder})
+        :sayText("act.emptyHolds",{})});
   // @copy adhoc.why.nothingtotrade
-  opts.push({label:"🤝 Trade",value:"trade",disabled:!canTrade,
-    why:!canOffer?`Ye've nothin' to trade — an empty hold and an empty purse.`
-      :`Not a captain on the water is carryin' cargo to trade for.`});
-  // v2.1: dead under the bake-off, and gated EXPLICITLY rather than left to be dead by accident.
-  // The bake-off lights the ovens from the turn loop the moment a full recipe reaches Tortuga, so
-  // this button can never be the thing that starts a bakery — offering it would promise a finish
-  // the engine no longer grants on a click.
-  if(!appState.game.cfg.bakeoff&&!appState.game.needs(player).length&&man(player.pos,appState.game.home)<=1)
-    opts.unshift({label:`${iconImg(CUPCAKE_IMG)} Start yer bakery!`,short:`${iconImg(CUPCAKE_IMG)} Bakery!`,value:"bakery"});
+  opts.push({label:say("act.trade",{}),value:"trade",disabled:!canTrade,
+    why:!canOffer?sayText("act.nothingToTrade",{})
+      :sayText("act.noCargoOnWater",{})});
+  // (the classic "Start yer bakery!" button stood here — the classic day is gone, his word of 2026-09-13)
   // THE OVENS BUTTON (Wyatt, 2026-08-09: "Where did the button go? This is a celebratory moment!
   // It feels terrible to have to click 'pass'").
   //
@@ -2612,7 +2610,7 @@ export async function humanAct(player,sailCtx){
   // the dead option back on screen next to the live one.
   const canOvens=appState.game.cfg.bakeoff&&appState.game.canBake(player);
   // @copy adhoc.act.fireovens
-  if(canOvens)opts.unshift({label:`${iconImg(CUPCAKE_IMG)} Fire up the ovens!`,short:`${iconImg(CUPCAKE_IMG)} Fire ovens!`,value:"ovens",cls:"primary ahoyGlow"});
+  if(canOvens)opts.unshift({label:say("act.ovens",{icon:iconImg(CUPCAKE_IMG)}),short:say("act.ovensShort",{icon:iconImg(CUPCAKE_IMG)}),value:"ovens",cls:"primary ahoyGlow"});
   // v2 rule 3: Fish is gone from the menu, and rule 4's Trade is table-wide rather than
   // adjacency-gated. Together that made it possible for EVERY option to be unavailable at once —
   // not on a dock, nobody adjacent to fight, nobody holding cargo yet, recipe unfinished — which
@@ -2627,7 +2625,7 @@ export async function humanAct(player,sailCtx){
   // put by accident" complaint. Sailing is free now (rule 2), so there is no purse test.
   const canMoveInstead=sailCtx&&
     player.pos[0]===sailCtx.preSailPos[0]&&player.pos[1]===sailCtx.preSailPos[1];
-  if(canMoveInstead)opts.push({label:"← Actually, move instead",back:true,value:"moveInstead"});
+  if(canMoveInstead)opts.push({label:say("act.moveInstead",{}),back:true,value:"moveInstead"});
   // RULE-01: the button states what a pass pays, built exactly like Attack's cost above — same
   // conditional shape, same no-break wrapping, same read off the live round config, and the coin
   // left raw for panel()'s emojify chokepoint (D-50). Never hand-rolled markup for a coin.
@@ -2675,8 +2673,8 @@ export async function humanAct(player,sailCtx){
      A real WAVE_IMG, not the 🌊 emoji, because he asked for an image and the asset already exists.
      The coin still comes off cfg.passCoin — a payout is not a constant (rule 9). */
   if(!canOvens){
-    const museCoin=appState.game.cfg.passCoin?`<br><span class="nobrk">+${appState.game.cfg.passCoin}🌕</span>`:"";
-    const museFace=`${iconImg(WAVE_IMG)}<br>Muse${museCoin}`;
+    const museCoin=appState.game.cfg.passCoin?`<br>${say("act.museCoin",{n:appState.game.cfg.passCoin})}`:"";
+    const museFace=`${iconImg(WAVE_IMG)}<br>${say("act.muse",{})}${museCoin}`;
     opts.push({label:museFace,short:museFace,value:"pass"});
   }
   // #5c/D-41: helper text under the buttons explains why a greyed button is greyed — Attack's own
@@ -2741,7 +2739,7 @@ export async function humanAct(player,sailCtx){
   const helpId=actLadder(opts);
   const sub=helpId?(pilotMsg(helpId,null)||null):null;
   if(helpId)pilotSee(helpId);
-  const prompt=`${pn(player.idx)}, what'll ye do:`;
+  const prompt=say("act.ask",{name:pn(player.idx)});
   // @copy prompt.act.menu
   const v=await ask(prompt,opts,null,sub);
   if(appState.turnExpired)return;
@@ -2802,8 +2800,6 @@ export async function humanAct(player,sailCtx){
   // Ends the turn and nothing else — runLiveDayBakeoff lights the ovens the instant this returns,
   // and narrates it. See the option's own note above for why the click must not do it itself.
   if(v==="ovens")return;
-  // @copy adhoc.act.bakerystart
-  if(v==="bakery"){await flash("🧁 Firing up the ovens on the Isle of Tortuga!",1200);return;}
   if(v==="dock"){
     const r=await humanDock(player,port);
     if(r==="back"){await humanAct(player,sailCtx);return;}
@@ -2812,7 +2808,7 @@ export async function humanAct(player,sailCtx){
     // #5d: safety net — the button is disabled when you can't afford powder, but guard the action
     // too (e.g. a forced/edge selection) so we never enter a battle you can't pay for.
     // @copy adhoc.act.nopowder
-    if(player.coins<appState.game.cfg.powder||!attackable.length){await flash(`${pn(player.idx)} can't attack.`,1400,undefined,[{seat:player.idx,html:`Ye can't attack — no powder, or nothin' in their holds.`}]);await humanAct(player,sailCtx);return;}
+    if(player.coins<appState.game.cfg.powder||!attackable.length){await sayFlash("act.cantAttack",{p:seat(player.idx)},1400);await humanAct(player,sailCtx);return;}
     const t=attackable.length===1?attackable[0]:
       // @copy prompt.act.attacktarget
       // SEAT-ANCHORED, joining the ONE placement rule (Wyatt, 2026-09-01, from the Glass: attack
@@ -2824,7 +2820,7 @@ export async function humanAct(player,sailCtx){
       // carries the CHOOSER's seat because the anchored mode is all-or-nothing — one seatless
       // button would silently drop the whole menu back into the fan. Held by
       // scripts/qa/attack_buttons_on_target_check.mjs, proven red on the seatless shape.
-      await ask("Attack whom?",attackable.map(o=>({label:pn(o.idx),value:o,seat:o.idx})).concat([{label:"← Back",back:true,value:null,seat:player.idx}]),
+      await ask(say("act.whom",{}),attackable.map(o=>({label:pn(o.idx),value:o,seat:o.idx})).concat([{label:say("button.back",{}),back:true,value:null,seat:player.idx}]),
         attackable.map(o=>HEXCOL[o.idx]));
     if(t===null){await humanAct(player,sailCtx);return;}
     await netHandlers().onAsyncBattle(player,t);
@@ -2835,7 +2831,7 @@ export async function humanAct(player,sailCtx){
     // has nothing to offer or no one else holds cargo, but guard the action too (e.g. a
     // forced/edge selection) so we never enter a trade P cannot possibly complete.
     // @copy adhoc.act.notrade
-    if(!canTrade){await flash(`${pn(player.idx)} can't trade.`,1400,undefined,[{seat:player.idx,html:`Ye can't trade — nothin' to offer, or no cargo on the water.`}]);await humanAct(player,sailCtx);return;}
+    if(!canTrade){await sayFlash("act.cantTrade",{p:seat(player.idx)},1400);await humanAct(player,sailCtx);return;}
     const done=await humanTrade(player);if(!done){await humanAct(player,sailCtx);}return;
   }
 }
@@ -2888,6 +2884,11 @@ export async function takeTurn(player){
      It used to sit undrawn until the next drain, which is why the host needed its own private camera
      call in pickCell. The same pair every other turn-level event in this file already uses. */
   publishNow();await liveRender();
+  /* THE TURN'S OPENING LINE, SPOKEN HERE FOR EVERY CAPTAIN — Wyatt, 2026-09-13: "make sure your change is
+     architectural -- not changing the bot line AND the human line". A bot's turn opened with "takes the wheel…" and a
+     human's with "Ahoy, yer turn!", from two different functions. Now the `turn` event is narrated once, at the door
+     both pass through, from one entry in words.js. */
+  await narrateLastEvent();
   return (player.strategy==="human"?humanTurn:botTurn)(player);
 }
 export async function humanTurn(player){
@@ -2918,15 +2919,8 @@ export async function humanTurn(player){
   // turn is genuinely live (see render()) — any reveal from a prior turn is already gone.
   appState.activeTurnSeat=player.idx;appState.recipeRevealed=false;
   liveRender();   // draws the `turn` event takeTurn just emitted, now that the seat flags are set
-  // NARR-03/D-25: the round header already announced the wind moments ago, so the neutral banner
-  // does not restate it; only the captain whose turn it is gets the reminder.
-  // v2 rule 7: the storm has ALREADY happened by the time a turn begins — it blew the whole table
-  // at the top of the round. So the turn banner no longer pre-announces a push that is about to
-  // land on this one captain; there is nothing left for it to warn about.
-  const neutralBanner=`⛵ Ahoy, ${poss(player.idx)} turn!`;
-  const addressedBanner=`⛵ Ahoy, ${pn(player.idx)} — yer turn! The wind blows <b>${DIRNAME[appState.game.windNow]}</b> this round.`;
-  // @copy adhoc.turn.banner
-  await flash(neutralBanner,1500,undefined,[{seat:player.idx,html:addressedBanner}]);
+  /* (The human-only "Ahoy, yer turn!" banner stood here. The start of every captain's turn now says ONE line, from
+     takeTurn — the one door — through the one narrator: "turn.start" in src/shared/words.js, silent by his word.) */
   // the clock only starts once the player actually reaches a decision (wind response, sail
   // pick, action choice, ...) — not from the raw top of the turn, since the wind step itself
   // eats no time. (Each ask()/pickCell() call re-armed it fresh while the clock lived.)
@@ -2975,7 +2969,7 @@ export async function humanTurn(player){
       if(evWind){publishNow();await liveRender();await narrateLastEvent();}
       // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
       // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
-      else if(appState.game.onRim(player.pos))await flash(`🌀 ${pn(player.idx)} rides at the head o' the current — she's got nowhere to carry ye from here.`);
+      else if(appState.game.onRim(player.pos))await flash(say("rim.head",{name:pn(player.idx)}));
     }
   }
   if(appState.turnExpired){appState.activeTurnSeat=null;return;}
@@ -3029,17 +3023,17 @@ export async function botOpenTradeLive(player){
       let answered=false;
       while(!answered){
         if(appState.turnExpired)return false;
-        const v=await ask(`${pn(q.idx)}: ${pn(player.idx)} offers ${offerDisplay} for yer ${ilabelImg(offer.want)}.`,[
-          {label:`${iconImg(CHECKMARK_IMG)} Accept`,value:"accept"},
+        const v=await ask(say("trade.offered",{q:pn(q.idx),p:pn(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)}),[
+          {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
           // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
           // crates instead. So it is live whenever they hold anything at all to give, not only
           // when they have coin spare, and the label says what it now does.
-          {label:"💰 Ask for summat else",short:"💰 Counter",value:"counter",
+          {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
             disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:`${pn(player.idx)} has nothin' else aboard and no coin — ye can take it or leave it.`},
-          {label:`${iconImg(CANCEL_X_IMG)} Deny`,value:"deny"}],null,
+            why:sayText("trade.nothingElse",{name:pn(player.idx)})},
+          {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
           // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?`${pn(player.idx)} has no coin left to sweeten the deal — ye can take it or leave it.`:null);
+          room<1?say("trade.noSweetener",{name:pn(player.idx)}):null);
         // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
         // is Accept. Without this guard a captain who merely ran out of time is recorded as
         // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
@@ -3123,9 +3117,9 @@ export async function botOpenTradeLive(player){
    unchanged, and the narration still waits for it — through eventDrawn(), on every device. */
 
 export async function botTurn(player){
-  // (applyActiveSeat and the `turn` event now happen in takeTurn — the one door)
+  // (applyActiveSeat, the `turn` event and its one opening line now happen in takeTurn — the one door. A bot's
+  // turn used to open with its own botBeat() here, which narrated that event a second time.)
   const g=appState.game;
-  await botBeat();
   // v2.1: no turn is ever lost to weather, so a bot has no forfeit branch either.
   if(!g.adjPort(player))player.dockedNow.clear();
   // PRINCIPLE 1: the WHOLE turn is decided here, before a square is crossed — the square to finish
@@ -3365,7 +3359,7 @@ export async function netIntroBarrier(msg,btnLabel,localOpts,{localMsg=null,fork
   // rest of the crew finishes reading — same idea as recipeDraftNet's "waiting for the crew" beat.
   // (On a shared device the dispatcher never shows it: nobody is waiting for anybody.)
   // @copy misc.draftwait.introwait
-  const waitMsg=humans.length>1?"⚓ Waiting for yer mateys…":null;
+  const waitMsg=humans.length>1?say("wait.mateys",{}):null;
   // FORK 5 IS THE PUBLIC CASE — one showing for a shared device (Wyatt 2026-08-08), every human
   // concurrently when each has their own screen. The whole pass-and-play/networked branch pair that
   // stood here lives in draftDispatch now, where fork 4 shares it.
@@ -3378,7 +3372,7 @@ export async function netIntroBarrier(msg,btnLabel,localOpts,{localMsg=null,fork
      It was right to: a file whose job is to draw had grown a fresh conditional on who is playing,
      and the honest fix is not a bigger baseline but not needing to ask. */
   let mine=null;
-  const results=await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:()=>msg,optsFor:()=>opts,waitMsg,
+  const results=await draftDispatch({seats:humans.map(player=>player.idx),isPublic:true,msgFor:seatReading=>typeof msg==="function"?msg(seatReading):msg,optsFor:()=>opts,waitMsg,
     localMsgFor:localMsg?(()=>localMsg):null,
     localOptsFor:localOpts?(seat=>{ if(mine==null)mine=seat; return localOpts; }):null});
   return mine==null?undefined:results[mine];
@@ -3406,7 +3400,7 @@ export async function showAhoyIntro(){
   // intro) is the very next screen. The old wording described gathering before he had a recipe to
   // gather for. The leading ⚓ is KEPT again here: D-16 requires removal stated in words, and he
   // named no icon. D-53 (a `--` becomes an em dash) is a no-op check on this string — it has none.
-  const msg=`⚓ Ahoy! Choose a recipe, gather each ingredient, then sail home first to win!`;
+  const msg=say("intro.ahoy",{});
   /* ── THE FORK, and it is a STARTING RUNG rather than a yes/no ──────────────────────────────
      Shown only on a device that has never played — the absence of the Pilot's one storage key IS
      the "never played" test, so one key answers both questions it needs to.
@@ -3479,7 +3473,7 @@ export async function showAhoyIntro(){
      the lessons, and a veteran guest could not turn them off. Seen in the 2026-09-10 sea trial's
      crew-phone screenshots, host and guest side by side. `forkable` marks the card so the guest's
      own device can ask its own captain (orchestrator.js, watchDraftPrompt). */
-  const knows=await netIntroBarrier(msg,"⚓ Arrgh!",fork?fork.opts:null,{localMsg:fork?fork.msg:null,forkable:true});
+  const knows=await netIntroBarrier(msg,say("intro.ahoyGo",{}),fork?fork.opts:null,{localMsg:fork?fork.msg:null,forkable:true});
   if(fork)fork.apply(knows);
 }
 /* ⭐ THE PILOT'S OPENING, ONE FUNCTION FOR EVERY DEVICE. Decay, then — only on a device that has
@@ -3497,10 +3491,10 @@ export function pilotOpeningFork(baseMsg){
   if(!pilotFirstTime())return null;
   // @copy misc.introbarrier.pilotfork — his words, 2026-09-07.
   return {
-    msg:`${baseMsg}<br><br>Do ye know how to play?`,
+    msg:`${baseMsg}<br><br>${say("intro.knowHow",{})}`,
     opts:[
-      {label:"⚓️ Yarrgh!",value:0,cls:"primary ahoyGlow",stage:true},
-      {label:"🦜 Nah",value:1,cls:"primary ahoyGlow",stage:true},
+      {label:say("intro.yes",{}),value:0,cls:"primary ahoyGlow",stage:true},
+      {label:say("intro.no",{}),value:1,cls:"primary ahoyGlow",stage:true},
     ],
     apply:answer=>{ if(answer===1)pilotStartFromTheTop(); else pilotSkipToVeteran(); },
   };
@@ -3511,21 +3505,12 @@ export function pilotOpeningFork(baseMsg){
 // a flashed message.
 // NARR-01/D-25 (Wyatt-approved 2026-07-29): applied verbatim.
 export async function showTurnOrderIntro(order){
-  const lead=pn(order[0]);
-  // G27 (Wyatt-approved 2026-07-30, spotted mid-playtest): the waiting captains' consolation is an
-  // amount of MONEY, so it carries the coin like every other amount in the game — "(+1🌕)", not a bare
-  // "(+1)". Emoji shorthand, not hand-rolled markup: emojify() swaps it for COIN_IMG at panel()'s
-  // chokepoint (D-50), the same path every other 🌕 in this file takes. No sign change — D-38 already
-  // has this one right, it is a gain and it was already signed.
-  // P7 (Wyatt, 2026-08-01, second pass): "other numbers and coin combos do split, which they
-  // shouldn't." The nobrk span covered only the parenthetical, so the amount stayed intact but
-  // detached from the captain it belongs to — "…Davy Scones" / "(+2🌕), Dough Hook…" across a
-  // line break. A name and its amount are ONE readable unit; the span wraps both.
-  const rest=order.slice(1).map((i,k)=>`<span class="nobrk">${pn(i)} (+${k+1}🌕)</span>`).join(", ");
-  const msg=`${iconImg(DICE_IMG)} The crew draws lots for sailing order — ${lead} first!<br><br>`+
-    `No fretting, patience pays — ${rest} all cast off with extra dubloons.`;
+  /* HIS REWRITE, 2026-09-13: "{Crustbeard} goes first! The rest o' ye get {coin}." — no per-captain amounts, his pick
+     ("As I wrote it"). The card is handed over as a function of WHICH SEAT IS READING it, so the lead captain's own
+     card reads "ye go first" and everyone else's names them — derived by words.js, never written twice. */
+  const msg=seatReading=>say("intro.order",{icon:iconImg(DICE_IMG),lead:seat(order[0])},seatReading);
   // @copy misc.introbarrier.turnorder
-  await netIntroBarrier(msg,"🦜 Start");
+  await netIntroBarrier(msg,say("intro.orderGo",{}));
 }
 export function coinHTML(state,bs,win){
   const b=bs?`<span class="bs">🔥</span>`:"";
@@ -3563,7 +3548,7 @@ export function battleFooter(o){
       opts.map((op,i)=>`<button class="apBtn btlBtn" data-i="${i}"${apBtnStyle(colors&&colors[i])}>${op.label}</button>`).join("")+
       `</div></div>`;
   }
-  if(o.waiting)return `<div class="btl-wait">⏳ Waiting for ${o.waiting}…</div>`;
+  if(o.waiting)return `<div class="btl-wait">${say("battle.waiting",{who:o.waiting})}</div>`;
   return `<div class="btl-result">${o.result||"&nbsp;"}</div>`;
 }
 // The Lookout's Call: every spectator MUST call a winner from the crow's nest —
@@ -3589,17 +3574,17 @@ export async function collectSideBets(att,def){
       // A battle's brewing!'"). The caller is a SPECTATOR of someone else's fight, so nothing about
       // whose turn it is tells you the screen is now asking you. The name is the only thing that does.
       // @copy prompt.sidebet.call
-      const who=await ask(`⚔️ ${ns(s.idx)} — a battle's brewing! Call the winner — it's free, and ye get ${appState.game.cfg.callBounty}🌕 if yer right.`,
+      const who=await ask(say("call.ask",{name:ns(s.idx),n:appState.game.cfg.callBounty}),
         // `seat` puts each circle ON THE BOAT IT NAMES (Wyatt's pick, playtest 22) rather than
         // fanning both around the caller's own ship, which the director no longer has on screen.
-        [{label:`Call ${ns(att.idx)}`,value:"a",seat:att.idx},{label:`Call ${ns(def.idx)}`,value:"d",seat:def.idx}],
+        [{label:say("call.button",{name:ns(att.idx)}),value:"a",seat:att.idx},{label:say("call.button",{name:ns(def.idx)}),value:"d",seat:def.idx}],
         [HEXCOL[att.idx],HEXCOL[def.idx]]);
       bets.push({idx:s.idx,on:who});
       // D-08: a call names two seats — the caller AND the captain called — so both get an
       // addressed variant, not just the actor.
       const calledIdx=who==="a"?att.idx:def.idx;
       // @copy adhoc.sidebet.freecall
-      await flash(`🔭 ${pn(s.idx)} calls ${pn(calledIdx)} from the crow's nest.`,900,undefined,[{seat:s.idx,html:`🔭 ${pn(s.idx)} — ye call ${pn(calledIdx)} from the crow's nest.`},{seat:calledIdx,html:`🔭 ${pn(s.idx)} calls ye to win from the crow's nest.`}]);
+      await sayFlash("call.made",{p:seat(s.idx),called:seat(calledIdx)},900);
     }else{
       // Bots read the same board a player does: the wind decides a both-heads round, so the
       // downwind ship is the sharper call — then the fuller purse as a tiebreak.
@@ -3622,12 +3607,12 @@ export async function settleSideBets(bets,winSide){
     const delta=won?bounty:0;
     player.coins+=delta;
     appState.game.ev({t:"sidebet",p:bet.idx,won,on:bet.on,delta});
-    parts.push(won?`${pn(bet.idx)} +${delta}🌕`:`${pn(bet.idx)} no bounty`);
+    parts.push(say(won?"call.paid":"call.unpaid",{name:pn(bet.idx),n:delta}));
   }
   liveRender();
   // D-25/D-26 (Wyatt-approved 2026-07-29): "The Lookout settles". 🔭 kept per D-16.
   // @copy adhoc.sidebet.settle
-  await flash("🔭 The Lookout settles — "+parts.join(" · "),1600);
+  await flash(say("call.settle",{parts:parts.join(" · ")}),1600);
 }
 /* v2 rule 12: there is no bakeoff. asyncBakeoff() and its whole head-to-head flip ladder are
    deleted. When more than one captain gets home they COLLABORATE on a single bakery, and Best
@@ -3835,8 +3820,8 @@ export function endReplay(){
 export function showRestoreFail(sf){
   const why=$("restoreFailWhy");
   if(why)why.textContent = sf.reason==="read-failed"
-    ? "We couldn't reach the crew's log for this voyage, so we can't tell how much of it is missing. Carrying on may put ye out of step with the rest of the crew."
-    : `We rebuilt this voyage but came up ${sf.shortfall} event${sf.shortfall===1?"":"s"} short. Carrying on may put ye out of step with the rest of the crew.`;
+    ? sayText("restore.unreadable",{})
+    : sayText(sf.shortfall===1?"restore.shortOne":"restore.short",{n:sf.shortfall});
   const m=$("restoreFailModal");if(m)m.style.display="flex";
 }
 export function wireRestoreFail(){

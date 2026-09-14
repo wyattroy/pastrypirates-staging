@@ -13,8 +13,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+/* The game's words live in src/shared/words.js (2026-09-13). It has no imports, so a check can load it without
+   starting the game, and evaluate a label exactly as the game fills it in. */
+const { WORDS, fill } = await import(pathToFileURL(path.join(ROOT, "src/shared/words.js")).href);
+const say = (id, facts) => fill(WORDS[id], facts, { me: () => false, name: String, poss: String });
 const flow  = fs.readFileSync(path.join(ROOT, "src/ui/flow.js"),  "utf8");
 const lobby = fs.readFileSync(path.join(ROOT, "src/ui/lobby.js"), "utf8");
 
@@ -34,7 +38,8 @@ console.log("\nThe action-menu button that ends a turn quietly");
 if (!line) bad("no option with value:\"pass\" found — this check is pointed at the wrong place");
 else {
   console.log("  " + line.slice(0, 150));
-  /Muse/.test(line)            ? ok('it says "Muse"')                    : bad('it does not say "Muse"');
+  (/Muse/.test(line) || (/say\("act\.muse",/.test(line) && WORDS["act.muse"] === "Muse"))
+                               ? ok('it says "Muse" (src/shared/words.js "act.muse")') : bad('it does not say "Muse"');
   !/🌊 Pass|>Pass|`Pass/.test(line) ? ok('the old "Pass" label is gone')  : bad('the old "Pass" label is still there');
   /iconImg\(WAVE_IMG\)/.test(line) ? ok("it uses the wave IMAGE (WAVE_IMG), not the 🌊 emoji")
                                    : bad("no iconImg(WAVE_IMG) — he asked for a wave image");
@@ -48,8 +53,8 @@ else {
     const mCoin = (flow.match(/const museCoin=([^;]+);/) || [])[1];
     const mFace = (flow.match(/const museFace=([^;]+);/) || [])[1];
     if (!mCoin || !mFace) return null;
-    const museCoin = new Function("appState", `return ${mCoin}`)(appState);
-    return new Function("iconImg", "WAVE_IMG", "museCoin", `return ${mFace}`)(iconImg, "wave.png", museCoin);
+    const museCoin = new Function("appState", "say", `return ${mCoin}`)(appState, say);
+    return new Function("iconImg", "WAVE_IMG", "museCoin", "say", `return ${mFace}`)(iconImg, "wave.png", museCoin, say);
   };
   const face = evalFace();
   if (!face) bad("could not build the button face — museCoin/museFace not found");
@@ -67,8 +72,11 @@ else {
 }
 
 console.log("\nThe rename did NOT bleed into pass-and-play's device hand-off");
-/Pass the wheel to/.test(lobby)  ? ok('lobby still says "Pass the wheel to…"')  : bad('lobby\'s "Pass the wheel to…" was renamed — that is handing the device over, not the Muse action');
-/Pass the board to/.test(lobby)  ? ok('lobby still says "Pass the board to…"')  : bad('lobby\'s "Pass the board to…" was renamed — same fault');
+/* the hand-off card's words live in src/shared/words.js ("pass.to"); the dead "Pass the board to…" fallback card was cut
+   by his pass of 2026-09-13, so only the live card is held here */
+(/Pass the wheel to/.test(WORDS["pass.to"] || "") && /say\("pass\.to"/.test(lobby))
+  ? ok('the hand-off card still says "Pass the wheel to…" (words.js "pass.to")')  : bad('the hand-off card\'s "Pass the wheel to…" was renamed — that is handing the device over, not the Muse action');
+!Object.values(WORDS).some(v => /Muse the/.test(v)) ? ok('no "Muse the wheel/board" in words.js')     : bad('found "Muse the …" in words.js — the rename was over-applied');
 !/Muse the/.test(lobby)          ? ok('no "Muse the wheel/board" anywhere')     : bad('found "Muse the …" — the rename was over-applied');
 
 console.log(fails ? `\nFAIL — ${fails}\n` : "\nPASS — Muse reads as three lines, and 'Pass the wheel' survived\n");

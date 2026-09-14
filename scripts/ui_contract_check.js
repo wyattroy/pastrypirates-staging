@@ -996,26 +996,15 @@ export function checkStormRainSeeded(root) {
    util.js and flow.js produce TODAY is on this list — checked by grepping "🌕)" in both. */
 const COIN_PARENTHETICAL_SITES = [
   {
-    name: "dock — the buy it pays for, and the coin flip's heads and tails, both viewers",
-    rel: path.join("src", "ui", "util.js"),
-    anchor: "const spent=",
-    wraps: ['<span class="nobrk">(−${paid}🌕)</span>'],
-    counts: {
-      '<span class="nobrk">(+${heads}🌕)</span>': 2,
-      '<span class="nobrk">(+${tails}🌕)</span>': 2,
-    },
-  },
-  {
-    name: "sidebet won, free call — you",
-    rel: path.join("src", "ui", "util.js"),
-    anchor: "— ye called it! <span",
-    wraps: ['— ye called it! <span class="nobrk">(+${e.delta}🌕)</span>'],
-  },
-  {
-    name: "sidebet won, free call — third person",
-    rel: path.join("src", "ui", "util.js"),
-    anchor: "🔭 ${pn(e.p)} called it! <span",
-    wraps: ['🔭 ${pn(e.p)} called it! <span class="nobrk">(+${e.delta}🌕)</span>'],
+    /* RE-ANCHORED 2026-09-13, NOT DELETED. The dock line and both called-it lines no longer spell their own
+       "(+N🌕)" — every sentence the game says now comes out of src/shared/words.js, and fill() there is the ONE
+       place an amount is held to its coin. So FIX-21 is protected at that one place, for every line at once,
+       instead of at three sites a new line could forget. scripts/qa/words_one_place_check.mjs renders every
+       entry and fails if any amount comes out unwrapped. */
+    name: "every line from src/shared/words.js — fill() holds each amount to its coin",
+    rel: path.join("src", "shared", "words.js"),
+    anchor: 'return out.split(/(<span class="nobrk">',
+    wraps: ['`<span class="nobrk">${s}</span>`', "\\(?[+−]?\\d+🌕\\)?"],
   },
   {
     name: "muse — the passing coin (what fishing became)",
@@ -1023,19 +1012,10 @@ const COIN_PARENTHETICAL_SITES = [
     // anchored at the start of the line, not on "Recipe idea!": the region is read FORWARD from the
     // anchor, so an anchor inside the span would never see the span's own opening tag
     anchor: "${seaLine(e.sea,",
-    wraps: ['<span class="nobrk">Recipe idea! (+${appState.game.cfg.passCoin}🌕)</span>'],
+    wraps: ['<span class="nobrk">${say("muse.idea",{n:appState.game.cfg.passCoin})}</span>'],
   },
-  {
-    name: "turn-order draw — waiting captains' consolation coin",
-    rel: path.join("src", "ui", "flow.js"),
-    anchor: "const rest=order.slice(1).map(",
-    // P7 (Wyatt, 2026-08-01, second pass): the span used to cover the parenthetical ALONE, which
-    // kept "(+2🌕)" intact but let it detach from the captain it belongs to across a line break —
-    // "…Davy Scones" / "(+2🌕), Dough Hook…". The expectation is now the STRONGER form: the name
-    // and its amount inside one span, as a single readable unit. Tightened deliberately, not
-    // relaxed — this still fails if the wrapper disappears entirely.
-    wraps: ['<span class="nobrk">${pn(i)} (+${k+1}🌕)</span>'],
-  },
+  /* "turn-order draw — waiting captains' consolation coin" stood here: his rewrite of 2026-09-13 ("{Crustbeard} goes first!
+     The rest o' ye get {coin}.") names no amount per captain, so there is no parenthetical left to wrap. */
 ];
 
 /* THE FROZEN classic/ GAME KEEPS ITS OWN LIST — the ten sites exactly as they were before the
