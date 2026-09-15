@@ -59,6 +59,8 @@ export const MEASURE = `(() => {
       rcpos: el.classList.contains('recipeCard') ? (el.dataset.rcpos || 'unmounted') : null,
       // WHAT covers it, not just THAT it is covered — a finding you cannot act on is half a finding.
       coveredBy: top ? null : (hit ? ((hit.id ? '#'+hit.id : '') + '.' + String(hit.className||'').trim().split(/\s+/).slice(0,2).join('.') + ' <' + hit.tagName.toLowerCase() + '>').slice(0,60) : 'nothing (outside any element)'),
+      /* covered by a NARRATION BUBBLE — which Wyatt ruled is not a fault over a sail square (see rules 2 and 6 below) */
+      underNarration: !top && !!(hit && hit.closest && hit.closest('.pp4Bub')),
       disabled: el.disabled || el.classList.contains('apDisabled') || el.getAttribute('aria-disabled') === 'true' }; });
   // THINGS A PLAYER READS — text that must not be clipped or overrun.
   const textSel = '.pname, .apMsg, .pp4Bub:not(.ambient), .prowRecipe, .pp4CerTitle, .coins, .bkoName';
@@ -130,7 +132,13 @@ const off = m.interactive.filter(e => !e.disabled && !withinVP(e.rect)).map(e =>
   F(off.length === 0, "on-screen", off.length ? `clickable off-screen: ${off.slice(0,6).join(", ")}` : "all clickables on screen");
 
   // 2. every clickable control is the topmost thing at its own centre (not hidden under something)
-  const occ = m.interactive.filter(e => !e.disabled && withinVP(e.rect) && !e.topmost).map(e => `${e.text || e.tag}${e.rcpos ? ' [' + e.rcpos + ' card]' : ''} <- covered by ${e.coveredBy}`);
+  /* EXCEPT A SAIL SQUARE UNDER A NARRATION BUBBLE — Wyatt, 2026-09-14, on Wy-Blade's trial photo of "Day 1: Wind NORTH. Tomorrow:
+     WEST." over two sail squares: "this is NOT a problem ... That message disappears after a few seconds and can be tapped to
+     dismiss. I need you to write a durable record of that so the sea trial stops flagging it." Scoped to exactly what he ruled on —
+     a sail square, covered by a narration bubble. Anything else covering a sail square, and a bubble over any other control, still
+     fails; scripts/qa/checks_pointer_events_redproof.mjs builds both cases and proves it. docs/INTENDED-BEHAVIOUR.md carries the ruling. */
+  const bubbleOverSail = e => e.underNarration && /sailCell/.test(e.tag);
+  const occ = m.interactive.filter(e => !e.disabled && withinVP(e.rect) && !e.topmost && !bubbleOverSail(e)).map(e => `${e.text || e.tag}${e.rcpos ? ' [' + e.rcpos + ' card]' : ''} <- covered by ${e.coveredBy}`);
   F(occ.length === 0, "not-occluded", occ.length ? `clickable covered by something else: ${occ.slice(0,6).join(", ")}` : "all clickables reachable");
 
   // 3. no two DISTINCT clickable controls overlap (piled buttons, a control on a control)
@@ -155,7 +163,7 @@ const off = m.interactive.filter(e => !e.disabled && !withinVP(e.rect)).map(e =>
   const others = m.interactive.filter(e => !/sailCell/.test(e.tag));
   const onSail = [];
   for (const cell of sail) {
-    if (!cell.topmost && cell.coveredBy) onSail.push(`a sail square <- ${cell.coveredBy}`);
+    if (!cell.topmost && cell.coveredBy && !bubbleOverSail(cell)) onSail.push(`a sail square <- ${cell.coveredBy}`);   // a narration bubble over it is his ruled exception (rule 2's note)
     for (const o of others) if (shapeOverlap(o, cell, 4)) onSail.push(`"${o.text || o.tag}" over a sail square`);
   }
   F(onSail.length === 0, "sail-clickable", onSail.length ? `${onSail.length} sail square(s) covered: ${[...new Set(onSail)].slice(0,4).join(", ")}` : `every sail square clickable (${sail.length})`);

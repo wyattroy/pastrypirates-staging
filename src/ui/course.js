@@ -375,9 +375,17 @@ export function redrawCourse(){
  *
  * @param {{cells:number[][], marks:number[][], home:boolean}} tour
  */
-export function drawCourse(svg, cellPx, tour){
+/* ⭐ THE ROUTE DRAWS ITSELF — PASSED on his game feel audit (2026-09-13), as proposed: "Instead of appearing all at once,
+   the line traces from your boat to each dock in about a second." Asked for by the recipe picker only (opts.trace):
+   the sailing guide and a parrot redraw still appear at once.
+   CHEAP ON PURPOSE: the dashes are dealt into TRACE_STEPS groups by how far along the route they sit, and only the groups'
+   opacity animates — a couple of dozen animations, not one per dash — and each X pops in as the line reaches its dock. */
+export const COURSE_TRACE_MS = 1000;
+const TRACE_STEPS = 24;
+export function drawCourse(svg, cellPx, tour, opts){
   clearCourse();
   if (!svg || !tour || !tour.cells || tour.cells.length < 2) return;
+  const trace = !!(opts && opts.trace) && !(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
   const S = COURSE, U = cellPx / TUNER_CELL;
   const line = sourceLine(tour.cells, cellPx);
   const dashes = dashesOf(line, cellPx);
@@ -386,6 +394,8 @@ export function drawCourse(svg, cellPx, tour){
   const g = document.createElementNS(SVGNS, "g");
   g.setAttribute("class", "pp4Course");
   g.setAttribute("pointer-events", "none");
+  const steps = trace ? Array.from({ length: TRACE_STEPS }, () => g.appendChild(document.createElementNS(SVGNS, "g"))) : null;
+  const into = d => steps ? steps[Math.min(TRACE_STEPS - 1, Math.floor(d.t * TRACE_STEPS))] : g;
   const shadowDrop = 1.6 * U;
   const thk = (S.thk * U).toFixed(2);
   for (const d of dashes){
@@ -400,7 +410,7 @@ export function drawCourse(svg, cellPx, tour){
     under.setAttribute("stroke-linejoin", "round");
     under.setAttribute("fill", "none");
     under.setAttribute("opacity", (alpha * 0.5).toFixed(3));
-    g.appendChild(under);
+    into(d).appendChild(under);
     const ink = document.createElementNS(SVGNS, "path");
     ink.setAttribute("d", pathD(d.seg));
     // CREAM, NEVER GOLD. Gold means "tap me" in this game — it is the sail square's colour — and a
@@ -412,17 +422,29 @@ export function drawCourse(svg, cellPx, tour){
     ink.setAttribute("stroke-linejoin", "round");
     ink.setAttribute("fill", "none");
     ink.setAttribute("opacity", alpha.toFixed(3));
-    g.appendChild(ink);
+    into(d).appendChild(ink);
   }
   svg.appendChild(g);
-  paintMarks(tour.marks, cellPx);
+  if (!steps){ paintMarks(tour.marks, cellPx); return; }
+  steps.forEach((s, k) => {
+    if (typeof s.animate === "function")
+      s.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, delay: (k / TRACE_STEPS) * COURSE_TRACE_MS, fill: "backwards", easing: "ease-out" });
+  });
+  /* each dock's X arrives when the line reaches it: the delay of the dash nearest the dock */
+  const delays = (tour.marks || []).map(c => {
+    const x = (c[0] + 0.5) * cellPx, y = (c[1] + 0.5) * cellPx;
+    let best = null, bd = Infinity;
+    for (const d of dashes){ const dd = Math.hypot(d.mid[0] - x, d.mid[1] - y); if (dd < bd){ bd = dd; best = d; } }
+    return best ? best.t * COURSE_TRACE_MS : 0;
+  });
+  paintMarks(tour.marks, cellPx, { delays });
 }
 
 /** The pulsing X. HTML, animating transform only — Chrome cannot composite the SVG version.
  *  THE RIPPLE RING IS GONE: "I want the x to pulse, remove the ring." The swell IS the pulse.
  *  (That reverses his own two earlier rulings to keep the slow white ripple; 2026-09-03 is later
  *  and wins. Recorded here so it is not re-argued from the older comment.) */
-export function paintMarks(marks, cellPx){
+export function paintMarks(marks, cellPx, opts){
   const host = courseHost();
   if (!host || !marks || !marks.length) return;
   const size = cellPx * COURSE.mk;
@@ -442,15 +464,20 @@ export function paintMarks(marks, cellPx){
     im.alt = "";
     el.appendChild(im);
     host.appendChild(el);
+    const delay = opts && opts.delays ? opts.delays[marks.indexOf(c)] : null;
+    /* `scale`, not transform: the marker's wrapper already carries its static rotate(-4deg) */
+    if (delay != null && typeof el.animate === "function")
+      el.animate([{ opacity: 0, scale: "0.4" }, { opacity: 1, scale: "1.15", offset: .6 }, { opacity: 1, scale: "1" }],
+        { duration: 320, delay, fill: "backwards", easing: "ease-out" });
   }
 }
 
 /** Draw the course for a captain, if there is one to draw. The single entry point every caller
  *  uses, so "where onward is" is derived in ONE place from what the game already computes. */
-export function showCourseFor(game, player, svg, cellPx, ingsOverride){
+export function showCourseFor(game, player, svg, cellPx, ingsOverride, opts){
   const tour = chartTour(game || appState.game, player, ingsOverride);
   if (!tour){ clearCourse(); return null; }
-  drawCourse(svg, cellPx, tour);
+  drawCourse(svg, cellPx, tour, opts);
   /* Stashed AFTER the draw succeeds, so a moment that had no course to show never becomes the
      thing a later restore puts back. */
   lastRequest = { game, player, svg, cellPx, ings: ingsOverride };

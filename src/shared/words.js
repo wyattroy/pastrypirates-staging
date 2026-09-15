@@ -171,6 +171,8 @@ export const WORDS = {
   "button.deny": "{icon} Deny",
   "flip.button": "🌕 FLIP!",
   "flip.word": "FLIP",
+  "flip.stampHeads": "HEADS!",
+  "flip.stampTails": "TAILS",
   "coin.amount": "{n}🌕",
   "parrot.ok": "🦜 Aye aye",
 

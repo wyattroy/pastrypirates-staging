@@ -78,7 +78,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, playBattleEngage, playCannon, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession, recoverAudio } from "./ui/audio.js";
+import { initAudio, playForEvent, playWinScreen, playBattleEngage, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession, recoverAudio } from "./ui/audio.js";
 import {
   netSetFlip, netWatchFlip,
   netDeleteRoom,
@@ -104,7 +104,7 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog,
+  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
@@ -736,7 +736,8 @@ async function asyncBattleRun(att,def){
   // @copy misc.battleline.bothmiss
   else rmsg=`<span class="cancel">${say("battle.bothMiss",{})}</span>`;
   rounds.push([ah?1:0,dh?1:0,0,scorer]);
-  /* T-073 — THE CANNON, AND IT FIRES ON THE HIT, NOT ON THE BATTLE.
+  /* T-073 — THE CANNON, AND IT FIRES ON THE HIT, NOT ON THE BATTLE. (Since 2026-09-14 it fires from the shotLands record
+     just below — the reasoning here is unchanged, only the place the sound is played moved.)
      His ruling: "cannon sound happens only when a shot lands". `scorer` is non-null exactly when a
      shot got through, so it is the test the engine already computes — and guarding on it keeps the
      cannon SILENT on the two outcomes where nothing lands: both captains missing, and both firing
@@ -748,7 +749,11 @@ async function asyncBattleRun(att,def){
      FLIP_SPIN_MS (795) + FLIP_LAND_HOLD_MS (800) have both elapsed since playFlip() fired at the
      spin paint. Adding a sleep here would restate two constants that already produce the gap, and
      would go wrong silently the day either of them is tuned. */
-  if(scorer)playCannon();
+  /* THE HIT IS RECORDED AS IT LANDS, and everything a hit does follows from that record, on every screen: the cannon (audio.js
+     EVENT_SOUND.shotLands — moved here 2026-09-14, when it turned out a crew guest never heard it, because this line used to
+     play it on the fight's own device only) and the kick, flash and shake (board.js shotLands, his game feel audit). `by`,
+     not `p`: a shot is not a turn, and `p` would hand the active-captain highlight to the shooter for the length of the fight. */
+  if(scorer){appState.game.ev({t:"shotLands",by:scorer==="a"?att.idx:def.idx,a:att.idx,d:def.idx});liveRender();}
   battlePublish(base({atState:ah?"H":"T",dfState:dh?"H":"T",live:null,winCoin:scorer,result:rmsg}));
   await sleep(hold);
 
@@ -826,6 +831,7 @@ async function asyncBattleRun(att,def){
         const rh=hA?await hFlip("a",att,say("battle.fireAgainFlip",{}),{dfState:dh?"H":"T"}):await bFlip("a",att,{dfState:dh?"H":"T"});
         rounds.push([rh?1:0,null,0,rh?"a":null]);
         if(rh){a++;winner=att;
+          appState.game.ev({t:"shotLands",by:att.idx,a:att.idx,d:def.idx});liveRender();   // the re-fire landed: same kick, flash and shake
           // @copy misc.battleline.refirehits
           battlePublish(base({atState:"H",dfState:dh?"H":"T",live:null,winCoin:"a",result:{id:"battle.refireHits",facts:{a:seat(att.idx)},cls:"score"}}));
         }else{
@@ -1901,6 +1907,7 @@ export async function consumeEvent(e){
      the same events that wait for the boat to arrive (below), in the one consumer, on every device. */
   const moves=(e.draw&&Array.isArray(e.draw.route))||e.t==="tradewind";
   if(moves)forgetCourse();
+  if(e.t==="sail"&&moves&&!appState.replaying)sailSetsOff(e.p,e.draw.route);   // his game feel audit: the wind-up and the wake (board.js)
   playForEvent(e, decisionIsLocal(e.p));
   /* ⭐ THE TINY DOCK COIN IS DRAWN HERE, FOR EVERY CAPTAIN WHOSE CHOICE WAS NOT MADE ON THIS SCREEN —
      Wyatt, 2026-09-13 (note 8): "the human players don't see each other's tiny docking coins when the
@@ -1931,8 +1938,13 @@ export async function consumeEvent(e){
      the frame is decided here, once, from the event. A captain's own sail prompt still refines it with
      the pill's room (renderPickPrompt) — the same function, asked again with more to go on. */
   if(e.t==="turn"&&!appState.replaying&&window.__pp4&&window.__pp4.sailCells)window.__pp4.sailCells(e.p);
+  if(e.t==="turn"&&!appState.replaying)bobShip(e.p);   // his game feel audit: the active boat bobs once, on every screen (board.js)
   $("scrub").max=Math.max(0,appState.game.events.length-1);
   stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
+  if(e.t==="tradewind"&&!appState.replaying)rideStreaks(e.p);    // his game feel audit: speed lines while the current carries the boat (board.js)
+  if(e.t==="ovens"&&!appState.replaying)firstHomeConfetti(e);      // …and confetti for the first captain home
+  if(e.t==="shotLands"&&!appState.replaying)shotLands(e);          // …a landed shot kicks the cannon, flashes the hull, shakes the board
+  if(e.t==="battle"&&!appState.replaying)loserKnocked(e);          // …and a won battle knocks the loser about
   await animateRimSweepIfAny(e);  // W9: THE EVENT BEING CONSUMED, not the top of the pile — same correction, same reason, as the sail walker on the line below. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
   await animateSailRoute(e);      // W7: the guest walks the squares the boat crossed instead of gliding across the islands. THE EVENT BEING CONSUMED, not the top of the pile — W7b measured the guest sliding on 3 of 8 sails because watchEvents pushes each arriving event before awaiting this consumer, so the pile's top is regularly not the sail. Idempotent (a WeakMap of ridden events -> their promise), so a host call site that already started the ride has this JOIN it rather than skip past it.
   /* ⭐ AND NOTHING AFTER A MOVE IS SHOWN UNTIL THE BOAT HAS ARRIVED — Wyatt, 2026-09-11, note 2:
@@ -1949,7 +1961,21 @@ export async function consumeEvent(e){
     const settled=window.__pp4&&window.__pp4.settled;
     if(settled)await settled();
   }
+  /* his game feel audit: treasure bursts into the coin count on heads, and a bought crate flies from its island into the
+     hold (board.js). The crate's island rect is read BEFORE render() greys it, the hold's new chip AFTER render() draws it. */
+  const buyFlight=(e.t==="dock"&&e.got==="bought"&&!e.black&&!appState.replaying)?crateFlightFrom(e):null;
+  const swapFlight=(e.t==="trade"&&!appState.replaying)?tradeSwapFrom(e):null;   // …and a trade's two crates swap in arcs
+  if(e.t==="dock"&&e.heads&&!appState.replaying)treasureBurst(e.p);
   render();
+  if(buyFlight)crateFlightTo(buyFlight,e.p);
+  if(swapFlight)tradeSwapTo(swapFlight);
+  /* …AND THE ARRIVAL'S DIP AND SPLASH RING, ONCE IT HAS STOPPED. After render(), not inside the wait above: a hop too short
+     to walk only starts gliding here, and a ring placed at the settle above landed a full square behind the boat on 3 of 8
+     sails (measured). Not awaited, so the consumer's pace is unchanged; the stage's own settle says when the hull is still. */
+  if(e.t==="sail"&&moves&&!appState.replaying){
+    const settledNow=window.__pp4&&window.__pp4.settled;
+    (settledNow?settledNow():Promise.resolve()).then(()=>sailArrives(e.p));
+  }
   spawnPops(e,boardCell());
   if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
   } finally { finishEventDrawing(e); }

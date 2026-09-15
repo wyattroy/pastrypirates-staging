@@ -107,9 +107,14 @@ try {
   check("a re-delivered prompt does not stack a second window (4 squares, not 8)",
     afterTwo === 4, `counted ${JSON.stringify(afterTwo)}`);
 
-  const afterAnswer = await c.ev(`(() => {
+  /* THE ANSWER GOES THROUGH A BEAT AFTER THE TAP, ON PURPOSE — his game feel audit (2026-09-13), PASSED: "A quick squash and
+     a bright ring on the square you chose, before the boat leaves." renderPickPrompt holds the squares for that flash
+     (SAIL_PRESS_MS, 180ms in src/ui/flow.js), so this counts after a generous wait. The question stays the same one:
+     does answering leave ANY square behind. */
+  const afterAnswer = await c.ev(`(async () => {
     const sq = [...document.querySelectorAll('.sailCell')].find(el => !el.classList.contains('pp4StayCell') && !el.classList.contains('sailSwept'));
     if (sq) sq.click();
+    await new Promise(r => setTimeout(r, 600));
     return document.querySelectorAll('.sailCell').length;
   })()`);
   check("answering the window leaves ZERO squares behind", afterAnswer === 0, `counted ${JSON.stringify(afterAnswer)}`);

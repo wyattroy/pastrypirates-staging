@@ -309,21 +309,21 @@ checkTrue("cannon is a loadable stem", SFX_FILES.includes("cannon"));
 }
 {
   const orch = fs.readFileSync(new URL("../src/orchestrator.js", import.meta.url), "utf8");
-  checkTrue("the battle resolve fires the cannon", /playCannon\(\)/.test(orch));
-  /* THE GUARD, READ FROM SOURCE, because a finished module cannot show that the call is
-     CONDITIONAL. This is the assertion that stops the cannon being wired to the battle instead of
-     to the hit — the one mistake his ruling explicitly forbids. */
-  checkTrue("the cannon is fired ONLY when a shot landed — guarded by the engine's own scorer",
-    /if\s*\(\s*scorer\s*\)\s*playCannon\(\)/.test(orch));
-  /* ⚠ THIS ONE WAS VACUOUS WHEN FIRST WRITTEN AND WAS TIGHTENED BEFORE THE FIX LANDED. With no
-     cannon in the file at all, "no hand-typed delay before the cannon" is trivially true — it
-     passed in the RED step, which is the one thing a check in a RED step must not do (a
-     measurement that cannot fail is not a measurement). It now REQUIRES the call to exist, so it
-     is red until the wiring lands and a real regression guard afterwards. */
+  /* 2026-09-14 — THE CANNON MOVED FROM THE FIGHT TO THE LANDED-SHOT EVENT, so every screen in a crew hears it (a guest used to
+     watch the hit in silence: the fight, and so the cannon, ran only on the device that owned it). These assertions were
+     rewritten with it rather than deleted, and they still guard his ruling from both ends. */
+  checkTrue("the cannon plays from the landed-shot event (EVENT_SOUND.shotLands)", EVENT_SOUND.shotLands === AUDIO.CANNON_SOUND);
+  checkTrue("the fight no longer plays the cannon itself — one place, or a host would hear it twice", !/playCannon\(\)/.test(orch));
+  /* THE GUARD, READ FROM SOURCE: the shot is recorded ONLY when a shot landed — `scorer` for the exchange, `rh` for a re-fire —
+     so the cannon cannot be wired to the battle instead of to the hit, the one mistake his ruling explicitly forbids. */
+  checkTrue("a shot is recorded only when one landed — guarded by the engine's own scorer",
+    /if\s*\(\s*scorer\s*\)\s*\{\s*appState\.game\.ev\(\s*\{\s*t\s*:\s*"shotLands"/.test(orch));
+  checkTrue("a re-fire records its shot only when it landed",
+    /if\s*\(\s*rh\s*\)\s*\{[^}]*appState\.game\.ev\(\s*\{\s*t\s*:\s*"shotLands"/.test(orch));
   {
-    const i = orch.indexOf("playCannon()");
+    const i = orch.indexOf('t:"shotLands"');
     const near = i < 0 ? "" : orch.slice(Math.max(0, i - 400), i + 400);
-    checkTrue("no hand-typed delay sits beside the cannon — the existing flip pacing IS the gap",
+    checkTrue("no hand-typed delay sits beside the shot — the existing flip pacing IS the gap",
       i >= 0 && !/sleep\(\s*\d{2,4}\s*\)/.test(near.replace(/sleep\(hold\)/g, "")));
   }
 }

@@ -102,7 +102,26 @@ export function makePlayer(c, { log = () => {}, isGuest = false } = {}) {
   // pick from the current prompt's buttons by COVERAGE (least-clicked kind first). Never "Back"
   // unless it is the only choice; never the stepper's −1 (the +1/confirm path covers it, and a
   // naive driver oscillates ± forever — mp_rig lesson); records every label it SAW.
+  /* THE RECIPE CARDS ARE TAPPED ONLY ONCE THEY HAVE LANDED — Wyatt, 2026-09-14: "stop the sea trial from tapping the recipe cards
+     so quickly; i don't care about these taps." Wy-Blade's trial of 2026.09.14.2 reported two dead taps, both on the picker: a card
+     tapped while the stack was still flying in, and a first "Bake this!" tapped straight after the pop-in. A player waits for the
+     cards to arrive before reaching for one, so the driver does too: while anything in the picker is still moving it waits, and
+     once it has stopped it gives the cards CARD_BEAT_MS of stillness — about the time a person takes to read two titles. */
+  const CARD_BEAT_MS = 900;
+  async function recipeCardsSettling() {
+    const s = await ev(`(() => { const box = document.getElementById('pp4Prompt');
+      if (!box || !box.querySelector('.recipeList')) return 'none';
+      const moving = document.getAnimations().some(a => { const t = a.effect && a.effect.target;
+        return a.playState === 'running' && t && t.nodeType === 1 && (t === box || box.contains(t)); });
+      return moving ? 'moving' : 'still'; })()`);
+    if (s === "none") { P._cardsStillAt = 0; return false; }
+    if (s === "moving") { P._cardsStillAt = 0; return true; }
+    if (!P._cardsStillAt) P._cardsStillAt = Date.now();
+    return Date.now() - P._cardsStillAt < CARD_BEAT_MS;
+  }
+
   async function answerButtons() {
+    if (await recipeCardsSettling()) return true;   // the cards are still arriving: this tick is spent waiting, not tapping
     const btns = await ev(`(() => {
       const list = ${BTN_Q};
       return list.map((b, i) => ({ i, label: (b.textContent||'').trim().slice(0, 30),

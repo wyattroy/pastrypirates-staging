@@ -24,10 +24,21 @@
  *     B. a covered element that IS clickable          -> must STILL be reported (the bar)
  *
  * If B ever stops failing, the structural check has been gutted and this says so.
+ *
+ * ============================================================================
+ *  And the second loosening, 2026-09-14: a narration bubble over a sail square
+ * ============================================================================
+ * Wyatt ruled a narration bubble over a sail square "NOT a problem ... That message disappears after a few seconds and can be tapped
+ * to dismiss" and asked that the sea trial stop flagging it. checks.mjs now exempts exactly that. The same two halves, against the
+ * REAL MEASURE and structuralChecks from checks.mjs rather than a copy:
+ *
+ *     D. a sail square under a narration bubble        -> sail-clickable and not-occluded PASS  (his ruling)
+ *     E. a sail square under anything else (a lid)     -> both still FAIL                        (the bar)
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
+import { MEASURE, structuralChecks } from "../lib/checks.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = 8960 + (process.pid % 40), DBG = 9960 + (process.pid % 40);
@@ -107,6 +118,36 @@ try {
   /pointerEvents\s*!==\s*'none'/.test(src) && /\.filter\(vis\)\.filter\(clickable\)/.test(src)
     ? pass("checks.mjs applies the same pointer-events rule this proof exercises")
     : fail("checks.mjs no longer filters on pointer-events — this proof is testing nothing");
+
+  /* D and E — a sail square under a narration bubble passes; under anything else it still fails. Each case is its own page, so one
+     rule's verdict cannot be carried by the other square. */
+  const SQ = (cover) => `(() => {
+    document.body.style.margin = '0';
+    document.body.innerHTML = \`<div style="position:relative;width:400px;height:300px">
+      <div class="sailCell" id="sq" style="position:absolute;left:30px;top:30px;width:60px;height:60px"></div>
+      ${cover}
+    </div>\`;
+    return document.querySelectorAll('.sailCell').length;
+  })()`;
+  const rulesFor = async (cover) => {
+    const n = await C.ev(SQ(cover));
+    await sleep(500);   // past the square's own pop-in, so it is painted when measured
+    const m = JSON.parse(await C.ev(`JSON.stringify(${MEASURE})`));
+    const out = structuralChecks(m), r = name => out.find(x => x.rule === name) || { ok: null, what: "rule not run" };
+    return { n, sail: m.interactive.filter(e => /sailCell/.test(e.tag)).length, sailClickable: r("sail-clickable"), notOccluded: r("not-occluded") };
+  };
+  const bubble = await rulesFor(`<div class="pp4Bub" style="left:0;top:0;width:220px;height:120px;background:#123"><div class="pp4BubIn">Day 1: Wind NORTH. Tomorrow: WEST.</div></div>`);
+  console.log("  (raw D) " + JSON.stringify(bubble));
+  bubble.n === 1 && bubble.sail === 1 ? pass("D: the instrument measured the sail square under the bubble")
+    : fail(`D: the sail square was not measured (${bubble.sail}) — D and E below are meaningless`);
+  bubble.sailClickable.ok && bubble.notOccluded.ok
+    ? pass("D: a sail square under a narration bubble is NOT reported (his 2026-09-14 ruling)")
+    : fail(`D: a narration bubble over a sail square is STILL reported — ${bubble.sailClickable.what} / ${bubble.notOccluded.what}`);
+  const lid = await rulesFor(`<div id="lid" style="position:absolute;left:0;top:0;width:220px;height:120px;background:#000;z-index:30"></div>`);
+  console.log("  (raw E) " + JSON.stringify(lid));
+  lid.sail === 1 && lid.sailClickable.ok === false && lid.notOccluded.ok === false
+    ? pass("E: a sail square under anything else IS still reported by both rules — the check still bites")
+    : fail(`E: THE SAIL CHECK HAS BEEN GUTTED — a square under an opaque lid is no longer reported (${JSON.stringify(lid)})`);
 
   console.log(bad ? `\nFAILED — ${bad} problem(s)` : "\nPASSED — the fix took, and the check still bites");
   process.exitCode = bad ? 1 : 0;

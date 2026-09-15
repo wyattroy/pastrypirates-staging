@@ -612,7 +612,8 @@ export function sailHighlightRect(c,cellPx,svg){
   d.className="sailCell";
   d.style.left=CQ(c[0]*cellPx+inset); d.style.top=CQ(c[1]*cellPx+inset);
   d.style.width=CQ(side); d.style.height=CQ(side);
-  d.style.animationDelay=((c[0]+c[1])%4)*0.12+"s";
+  // two delays, one per animation in .sailCell's list: the bounce's stagger, then the pop-in's own (renderPickPrompt)
+  d.style.animationDelay=((c[0]+c[1])%4)*0.12+"s, var(--sailPopDelay, 0ms)";
   // THE GRID COORDINATES, CARRIED. Two readers used to recover these by inverting the maths above
   // (camFitSail and the trade-wind preview, both in src/ui/stage.js) — a second copy of this
   // function's arithmetic that had to be kept in step with it by hand. They read these instead.
@@ -655,6 +656,24 @@ export function sailHighlightRect(c,cellPx,svg){
    the 640 full-ocean cap, re-fought every glide, every turn. One broom, called by both paths, so
    the two cannot drift (rule 23). Gate: scripts/qa/sail_window_single_check.mjs, proven RED
    against the pre-fix build (8 squares after a double render; 4 orphans after answering). */
+/* ⭐ THE SQUARES POP IN FROM THE BOAT OUTWARD, AND THE ONE YOU TAP SQUISHES AND FLASHES — both PASSED on his game feel
+   audit (2026-09-13), as proposed: "The nearest squares appear first and the farthest last, over a quarter second — the
+   reach reads as distance." · "A quick squash and a bright ring on the square you chose, before the boat leaves."
+   `scale`, not transform, so both compose with the squares' own looping bounce (sailBounce animates transform). The
+   choice waits SAIL_PRESS_MS for its flash, and only goes through if its square is still on the board — a prompt cleared
+   from elsewhere in that moment must not be answered by a tap it has already taken away. */
+/* THE POP IS CSS (sailPop in index.html), started by a per-square --sailPopDelay — measured, a script animation left 2-5
+   squares of every window showing at full for their first frame before its hidden start applied; a CSS animation with a
+   backwards fill is resolved with the square's very first style, so nothing shows before its turn. */
+const SAIL_CASCADE_MS=250, SAIL_PRESS_MS=180;
+const sailReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+function pressSailSquare(r){
+  if(sailReduced()||typeof r.animate!=="function")return;
+  r.animate([{scale:"1",opacity:.9,boxShadow:"0 0 0 0 rgba(255,255,255,0)"},
+    {scale:"1.14 0.82",opacity:1,boxShadow:"0 0 0 3px #fff, 0 0 14px 5px rgba(255,194,58,.95)",offset:.4},
+    {scale:"1.04",opacity:1,boxShadow:"0 0 0 2px #fff, 0 0 10px 3px rgba(255,194,58,.7)"}],
+    {duration:SAIL_PRESS_MS,easing:"ease-out",fill:"forwards"});
+}
 export function clearSailWindow(){
   document.querySelectorAll(".sailCell").forEach(el=>el.remove());
 }
@@ -685,14 +704,24 @@ export function renderPickPrompt(spec,answer){
      shape as the spec.msg fallback below. */
   const squares=(spec.cells||[]).map(c=>({c}));
   if(spec.pos)squares.push({c:spec.pos,stay:true});
+  const reach=c=>spec.pos?Math.hypot(c[0]-spec.pos[0],c[1]-spec.pos[1]):0;
+  const farthest=Math.max(1,...squares.map(({c})=>reach(c)));
+  let chosen=false;
   squares.forEach(({c,stay})=>{
     const r=sailHighlightRect(c,cellPx,svg);
+    r.style.setProperty("--sailPopDelay",Math.round((reach(c)/farthest)*SAIL_CASCADE_MS)+"ms");
     if(stay){
       r.classList.remove("sailSwept");delete r.dataset.sweptTo;
       r.classList.add("pp4StayCell");
-      r.addEventListener("click",()=>{const b=$("apStay");if(b)b.style.display="";});
+      r.addEventListener("click",()=>{pressSailSquare(r);const b=$("apStay");if(b)b.style.display="";});
     } else {
-      r.addEventListener("click",()=>done(c));
+      r.addEventListener("click",()=>{
+        if(chosen)return;
+        chosen=true;
+        pressSailSquare(r);
+        if(sailReduced()){done(c);return;}
+        setTimeout(()=>{if(r.isConnected)done(c);else chosen=false;},SAIL_PRESS_MS);
+      });
     }
     hs.push(r);
   });

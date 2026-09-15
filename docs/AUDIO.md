@@ -356,6 +356,32 @@ volume 55%"*, and *"make the sound play when the ingredient appears -- not when 
   timers set beside it ran ~30ms ahead of the eye. Measured at 375×812: every sound starts within 15ms of its crate
   appearing.
 
+### The sounds of the voyage — his picks (2026-09-14)
+
+His game feel audit proposed a sound beside several of the moments it animated. The candidates were built in a page, three per
+moment, each heard in a replay of the moment and **levelled to one loudness** (every candidate rendered offline and its sounding
+frames measured; median −24.3 dB) so none could win by being louder. He picked on the page ("Sounds of the Voyage",
+CURRENT-SHEET), and **the page is the recipe**: [`sounds-of-the-voyage.html`](../.planning/research/audio-sourcing/sounds-of-the-voyage.html)
+renders each pick through [`render_voyage_sounds.mjs`](../.planning/research/audio-sourcing/render_voyage_sounds.mjs) at the level he
+heard it, so every one plays at `SFX_VOLUME` 1.
+
+| Stem | Moment | His pick, and his note |
+|---|---|---|
+| `card-swish` | the recipe cards fly in (stage.js, off the entrance's `ready`) | Paper swish — *"remove the "boop boop" at the end -- just use the swish at the beginning."* |
+| `abacus-click` | a coin count rolls (board.js showSeatCoins), and the End of Voyage stats roll up | Abacus click; the stats take *"The coin tick"* |
+| `crate-marimba` | each bake-off lid lands (bakeoff.js dropLid) — 8 slots of 600ms, like the cork pop | Marimba — *"make them lower pitched so they sound more like big crates"* (two octaves down, C3 to A3) |
+| `crate-chime` / `crate-thud` | a right / wrong crate on the reveal | Chime & thud |
+| `award-whoosh` | each award card deals in | Soft whoosh |
+
+**Refused:** a sting under HEADS/TAILS (*"No need - the coin already has a landing sound baked in."*). **Sent to Luis:** the
+first-home fanfare (*"Get Luis to come up with this"*) — a row in SOUND-BRIEF.csv. Measured mean/peak (volumedetect): card-swish
+−33.6/−10.0, abacus-click −38.1/−12.6, crate-marimba −33.8/−14.9, crate-chime −35.9/−19.0, crate-thud −30.6/−12.3,
+award-whoosh −34.3/−12.9 — against store-ingredient's file −30.9/−12.4 and the cork pop's −31.5/−7.6. **Heard by him on the page,
+never by the session that built them** (§6).
+
+**The cannon moved the same day:** it plays from the `shotLands` event (`EVENT_SOUND.shotLands`), on every screen, instead of from
+the fight on the device that owned it — a crew guest used to watch a hit in silence.
+
 ### Open questions — genuinely his, do not decide these
 
 1. **Does "your turn" break the hear-the-whole-table rule?** `audio.js` D-07 says every captain is

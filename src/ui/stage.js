@@ -15,8 +15,8 @@
 // Everything here is render-side. The engine, its RNG, and the dlog are never touched.
 "use strict";
 import { appState } from "../state/index.js";
-import { boardShipEls, setFlipCoin, boardArtReady } from "./board.js";
-import { soundReady } from "./audio.js";
+import { boardShipEls, setFlipCoin, boardArtReady, FLIP_SPIN_MS } from "./board.js";
+import { soundReady, playCardSwish } from "./audio.js";
 import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, refreshNameMarquees,
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
@@ -26,6 +26,7 @@ import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
 import { startPopIn, releasePopIn } from "./popin.js";
+import { wirePressSquish } from "./press.js";
 
 const $ = id => document.getElementById(id);
 const AR = { N: "↑", S: "↓", E: "→", W: "←" };
@@ -45,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.14.3-staging@15a0f25b";
+const PP4_STAMP = "2026.09.14.4-staging@b083f577";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -113,6 +114,9 @@ const S = {
   lastPill: "",
   geomAt: 0,                // D-31: Date.now() of the last computeStageGeometry() measurement pass
   geomBound: false,         // …and whether the resize listener has been registered yet
+  settleUntil: 0,           // the board's arrival (settleBoardIn): until this moment camFrame reads the board's width from before it
+  stripW: 0,                // …the board window's last untransformed width, which is what it reads instead
+  bandWatch: null,          // the ResizeObserver on the ribbon and the wind pill (see buildStage)
 };
 
 /* ================= camera ================= */
@@ -522,6 +526,15 @@ let ribHCache = 48, ribHAt = -1e9, lastVB = "", lastRipT = "";
    (playtest 11, a hot phone). Read by camFrame() every frame AND by computeStageGeometry() when it
    sizes the desktop board — one measurement, so the square it derives and the strip the camera
    paints cannot drift apart (rule 23). */
+/* Something in the header changed size or row. Re-read the band NOW and, if the board's top edge moved, re-size and
+   re-frame the board in this same frame — so a change reaches the screen as one layout, never as the old board for half
+   a second followed by a jump. */
+function bandChanged(){
+  const before = ribHCache;
+  ribHAt = -1e9;
+  if (!S.active) return;
+  if (topBandPx() !== before){ lastVB = ""; computeStageGeometry(); camFrame(); }
+}
 function topBandPx(){
   if (performance.now() - ribHAt > 500){
     const rib = $("pp4Ribbon");
@@ -992,7 +1005,9 @@ function camFrame(){
      the viewBox was cut 4% wider than the window it was drawn into and the board came out
      739 x 708 — ten rows tall against ten and a half columns wide. Read off the element that
      actually holds it, after the square cap above has been applied to it. */
-  const stripW = wrap ? (wrap.getBoundingClientRect().width || vwPx()) : vwPx();
+  const settling = S.settleUntil && performance.now() < S.settleUntil && S.stripW;   // see settleBoardIn
+  const stripW = settling ? S.stripW : (wrap ? (wrap.getBoundingClientRect().width || vwPx()) : vwPx());
+  if (!settling) S.stripW = stripW;
   const aspect = availH / stripW;
   let h = c.w * aspect;
   if (h > 640) h = 640;                       // whole board fits vertically; width stays filled
@@ -1062,7 +1077,7 @@ function camFrame(){
          pan by viewBox, and toScreen() already reads the SVG's own rect. This is that same
          measurement, for the HTML layers. */
       const bw = $("boardwrap");
-      const W = (bw && bw.getBoundingClientRect().width) || vwPx(), s2 = 640 / c.w;
+      const W = (settling ? S.stripW : (bw && bw.getBoundingClientRect().width)) || vwPx(), s2 = 640 / c.w;
       const t = `scale(${s2}) translate(${-(c.x / 640) * W}px, ${-(vy / 640) * W}px)`;
       if (t !== lastRipT){
         lastRipT = t;
@@ -1457,12 +1472,21 @@ function pillTick(){
      left group, wind, right group. Guarded on the current parent, so this is a no-op on all but
      the one tick a window actually crosses the boundary; the phone keeps its own fixed pill below
      the ribbon (D-18/D-31, the phone stays as it is). */
+  /* ⭐ THE WORDS GO IN BEFORE THE ROW IS CHOSEN — the board jitter Wyatt passed on the game feel audit: "The board
+     currently jitters when it comes in, and seems to choose a few differnt sizes before settling. It may be caused by
+     the navbar row/other elements fighting/jostling". Measured 2026-09-14, first five seconds of a solo voyage: the
+     pill was placed while still EMPTY (24px wide), so it fitted the header row, then filled to 217px and no longer
+     did — it hopped rows on the phone, and the board under it moved 18px at 663ms (phone) and 24px at 537ms, then
+     grew 24px at 936ms (laptop), each time the band under the header was next re-read. So: fill it, THEN place it,
+     and when either changes, the board is re-measured on the spot rather than on the half-second cache. */
   const rib = $("pp4Ribbon");
-  const wantRibbon = !!rib && pillFitsRibbon(rib, p);
-  if (wantRibbon && p.parentNode !== rib) rib.insertBefore(p, $("pp4FF") || rib.lastElementChild);
-  else if (!wantRibbon && p.parentNode !== document.body) document.body.appendChild(p);
   const h = pillHTML();
-  if (h !== S.lastPill){ p.innerHTML = h; S.lastPill = h; }
+  let moved = false;
+  if (h !== S.lastPill){ p.innerHTML = h; S.lastPill = h; moved = true; }
+  const wantRibbon = !!rib && pillFitsRibbon(rib, p);
+  if (wantRibbon && p.parentNode !== rib){ rib.insertBefore(p, $("pp4FF") || rib.lastElementChild); moved = true; }
+  else if (!wantRibbon && p.parentNode !== document.body){ document.body.appendChild(p); moved = true; }
+  if (moved) bandChanged();
   // statsWrap's visibility is toggled via its inline style — read that, never getComputedStyle
   // (which forces style recalc and was running every frame; see the HOT-PHONE note above)
   const sw = $("statsWrap");
@@ -1701,6 +1725,23 @@ const plain = h => String(h).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim()
    fire-and-forget: netIntroBarrier's waitMsg, watchDraftPrompt's waitMsg, recipeDraftNet's two
    lines, and ask()'s "…is deciding…" broadcast. None is awaited by the game loop. If a future wait
    line IS awaited, it must not use this flag. */
+/* ⭐ THE PARROT BOBS WHEN IT SPEAKS — PASSED on his game feel audit (2026-09-13), as proposed: "A small hop each time a new
+   line of narration appears, so the voice has a body." The parrot is the header's parrot chip. Its PICTURE hops, never
+   the button, so a hop cannot fight the button's own press squish. A resting parrot (switched off) stays still. */
+const PARROT_HOP_PX = 4;
+const PARROT_HOP_MS = 380;
+function hopParrot(){
+  const img = document.querySelector("#pp4Help img");
+  if (!img || typeof img.animate !== "function" || !pilotIsOn()) return;
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  img.animate([
+    { transform: "translateY(0px)" },
+    { transform: `translateY(${-PARROT_HOP_PX}px)`, offset: .35 },
+    { transform: "translateY(0px)", offset: .7 },
+    { transform: "translateY(-1px)", offset: .85 },
+    { transform: "translateY(0px)" },
+  ], { duration: PARROT_HOP_MS, easing: "ease-out" });
+}
 function stageFlash(msg, ms, holdMs, variants, opts){
   if (!S.active) return null;                        // pre-game: let the panel handle it
   /* A REPLAY IS SILENT AND INSTANT — playtest 22, the other half of the stall report (Wyatt: "when
@@ -1805,6 +1846,7 @@ function stageFlash(msg, ms, holdMs, variants, opts){
     b.innerHTML = `<div class="pp4BubIn">${emojify(String(msg))}</div>` + (subj != null ? `<div class="pp4Tail" style="border-color:${HEXCOL[subj] || "#177"}"></div>` : "");
     const host = fxHost();
     host.appendChild(b);
+    hopParrot();
     // playtest 4: lines type themselves in, the game's own reveal — and fade out on replace
     try { typewriterReveal(b.querySelector(".pp4BubIn"), 9); } catch (e) {}
     /* ONLY AS WIDE AS THE WORDS — playtest 23 item 3 (Wyatt): "the narration text boxes should only
@@ -2154,6 +2196,58 @@ function cerTeardown(){
    is a constant, and a new one here would be a third clock to keep in step with these two). */
 const CER_REVEAL_MS = 1100, CER_FALLBACK_MS = 6000;
 const CER_VEIL_WAIT_CAP_MS = CER_FALLBACK_MS + CER_REVEAL_MS;
+/* ⭐ THE COIN FLIP, WITH WEIGHT — four PASSED ideas from his game feel audit (2026-09-13), as proposed:
+     "The coin sinks down before it flips — your example: it dips 10–15% and squashes wide for a beat, then launches —
+      anticipation makes the flip feel like a throw." · "It lands with weight — a squash on landing, one small bounce, and a
+      dust ring — then the result." · "HEADS or TAILS stamps in — the word punches in at 130% and settles." · "A tiny
+      screen nudge on tails — a 2px, 150ms shake — just enough to feel the bad luck."
+   All four live in the flip CEREMONY, the stage every flip ye make is thrown on. The coin's sink and launch ride the whole
+   spin (FLIP_SPIN_MS), so the flip still lands on the same frame its sound's landing blip peaks. `translate`/`scale`, so
+   they compose with the spin's own rotateX. The two stings named in the audit are sounds, and come with the sound page. */
+const COIN_SINK = 0.12, COIN_SQUASH = 0.2, STAMP_MS = 380, NUDGE_PX = 2, NUDGE_MS = 150, DUST_MS = 620;
+const cerReduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function coinSinksAndLaunches(){
+  const c = $("flipCoinWrap");
+  if (!c || cerReduced() || typeof c.animate !== "function") return;
+  const v = $("pp4Veil"); if (v) v.querySelectorAll(".pp4CerStamp").forEach(s => s.remove());
+  c.animate([
+    { translate: "0 0", scale: "1" },
+    { translate: `0 ${COIN_SINK * 100}%`, scale: `${1 + COIN_SQUASH} ${1 - COIN_SQUASH}`, offset: .16 },
+    { translate: `0 ${-COIN_SINK * 110}%`, scale: "0.94 1.06", offset: .42 },
+    { translate: `0 ${-COIN_SINK * 45}%`, scale: "1", offset: .72 },
+    { translate: "0 0", scale: "1" },
+  ], { duration: FLIP_SPIN_MS, easing: "ease-in-out", id: "coin-sink" });
+}
+function coinLandsWithWeight(heads){
+  const c = $("flipCoinWrap"), v = $("pp4Veil");
+  if (!c || !v || cerReduced() || typeof c.animate !== "function") return;
+  // a squash on landing and one small bounce — `scale`/`translate`, on top of the gavel shudder's own transform
+  c.animate([
+    { scale: "1.22 0.8", translate: "0 6%" }, { scale: "0.95 1.05", translate: "0 -7%", offset: .4 },
+    { scale: "1.02 0.98", translate: "0 0", offset: .7 }, { scale: "1", translate: "0 0" },
+  ], { duration: 420, easing: "ease-out", id: "coin-land" });
+  // the dust ring, round the coin where it sits
+  const slot = $("pp4CerSlot");
+  if (slot){
+    const r = c.getBoundingClientRect(), sr = slot.getBoundingClientRect(), dust = document.createElement("div");
+    dust.className = "pp4Dust";
+    Object.assign(dust.style, { left: (r.left - sr.left - r.width * .1) + "px", top: (r.top - sr.top - r.height * .1) + "px",
+      width: (r.width * 1.2) + "px", height: (r.height * 1.2) + "px" });
+    slot.appendChild(dust);
+    const a = dust.animate([{ opacity: .75, scale: "0.7" }, { opacity: 0, scale: "1.55" }], { duration: DUST_MS, easing: "ease-out", fill: "both" });
+    a.onfinish = a.oncancel = () => dust.remove();
+  }
+  // the word stamps in, where the tap-the-coin line stood
+  let stamp = v.querySelector(".pp4CerStamp");
+  if (!stamp){ stamp = document.createElement("div"); v.insertBefore(stamp, v.querySelector(".pp4CerSub")); }
+  stamp.className = "pp4CerStamp " + (heads ? "heads" : "tails");
+  stamp.textContent = sayText(heads ? "flip.stampHeads" : "flip.stampTails", {});
+  stamp.animate([{ opacity: 0, scale: "1.3" }, { opacity: 1, scale: "0.96", offset: .6 }, { opacity: 1, scale: "1" }],
+    { duration: STAMP_MS, easing: "ease-out", fill: "both", id: "coin-stamp" });
+  // and on tails, the screen flinches
+  if (!heads) v.animate([{ translate: "0 0" }, { translate: `${-NUDGE_PX}px 0` }, { translate: `${NUDGE_PX}px 0` },
+    { translate: `${-NUDGE_PX / 2}px 0` }, { translate: "0 0" }], { duration: NUDGE_MS, easing: "linear", id: "tails-nudge" });
+}
 function cerWatchResult(){
   // the flip flow swaps faces on #flipCoinWrap: spin -> heads/tails. Hold the veil until a face
   // lands, show it a beat, then leave. Fallback teardown if nothing lands (e.g. prompt cancelled).
@@ -2168,6 +2262,7 @@ function cerWatchResult(){
       // playtest 10 item 6: the landed face hits like a gavel — shudder + golden flare
       c.classList.add("pp4Land");
       setTimeout(() => c.classList.remove("pp4Land"), 700);
+      coinLandsWithWeight(c.classList.contains("heads"));
       /* If the coin re-armed during the reveal beat, this used to do NOTHING — and the interval
          above was already cleared, so the veil was left standing with no watcher at all. Watch
          the new flip instead; the watchdog is the backstop, not the mechanism. */
@@ -2188,7 +2283,7 @@ function flipArmed(el, onClick){
   if (!onClick){
     // disarmed: the tap landed and the spin is starting — hold the stage and watch for the face
     const veil = $("pp4Veil");
-    if (veil){ veil.classList.add("resolving"); cerWatchResult(); }
+    if (veil){ veil.classList.add("resolving"); coinSinksAndLaunches(); cerWatchResult(); }
     return true;
   }
   let veil = $("pp4Veil");
@@ -2265,6 +2360,69 @@ function flipArmed(el, onClick){
 
 /* ================= recipe compare (two-tap focus + island glow) ================= */
 let focusBtn = null;
+/* ⭐ THE CHOSEN CARD FLIES INTO THE CAPTAIN'S BOX — PASSED on his game feel audit (2026-09-13), as proposed: "On "Bake
+   this!" the card shrinks and flies to the recipe band at the top of your box, and its five ingredients ripple in one
+   after another — so you see where your recipe went."
+   THE CHOICE WAITS FOR THE CARD: the confirming tap is held while the card flies (RC_COMMIT_MS) and sent on when it
+   lands, so the picker cannot be torn down from under its own card. A dropped animation still sends it (the timeout).
+   The card animates `translate`/`scale`, which compose with the stack's own transforms, and whatever it is drawn inside
+   stops clipping it for the journey (#actionPanel scrolls, so it clips). The band's ingredients ripple in the first
+   time the band shows a recipe after a choice — at once in solo; in a crew, when the last captain has chosen. */
+let rcCommitting = null, rcRippleWanted = null;   // rcRippleWanted: the chosen card's ingredient pictures, in order
+const RC_COMMIT_MS = 620;
+function flyChosenCard(btn){
+  if (typeof btn.animate !== "function") return false;
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  const band = $("capRecipeBand"), cap = $("pp4Cap");
+  const tgt = [band, cap].find(el => el && !el.hidden && el.getBoundingClientRect().width > 2);
+  const a = btn.getBoundingClientRect();
+  if (!tgt || a.width < 2) return false;
+  const b = tgt.getBoundingClientRect();         // a DELTA between two gBCRs: one space for both (see boardDrawnRect)
+  const dx = Math.round((b.left + b.width / 2) - (a.left + a.width / 2));
+  const dy = Math.round((b.top + b.height / 2) - (a.top + a.height / 2));
+  const s = Math.max(0.12, Math.min(0.6, b.height / a.height));
+  const lifted = [];
+  for (let el = btn.parentElement; el && el !== document.body; el = el.parentElement){
+    const cs = getComputedStyle(el);
+    if (cs.overflowX !== "visible" || cs.overflowY !== "visible"){ lifted.push([el, el.style.overflow]); el.style.overflow = "visible"; }
+  }
+  rcCommitting = btn;
+  /* THE RIPPLE WAITS FOR THIS RECIPE. Every captain already holds a seeded recipe before the draft (capEmptyTick's note),
+     so the band can be showing a DIFFERENT one the frame the box appears — the ripple is keyed to the chosen card's own
+     ingredient pictures, which are the same files the band draws. */
+  rcRippleWanted = [...btn.querySelectorAll(".recipeList img")].map(i => i.getAttribute("src")).join("|") || null;
+  const an = btn.animate([
+    { translate: "0px 0px", scale: "1", opacity: 1 },
+    { translate: `${Math.round(dx * .08)}px ${Math.round(dy * .08) - 24}px`, scale: "1.05", opacity: 1, offset: .22 },   // lifts first
+    { translate: `${dx}px ${dy}px`, scale: String(s), opacity: 0 },
+  ], { duration: RC_COMMIT_MS, easing: "cubic-bezier(.55,0,.35,1)", fill: "forwards" });
+  let landed = false;
+  const land = () => {
+    if (landed) return;
+    landed = true;
+    lifted.forEach(([el, v]) => { el.style.overflow = v; });
+    if (btn.isConnected) btn.click(); else rcCommitting = null;
+  };
+  an.onfinish = land; an.oncancel = land;
+  setTimeout(land, RC_COMMIT_MS + 300);
+  return true;
+}
+function rcRippleTick(){
+  if (!rcRippleWanted) return;
+  const band = $("capRecipeBand"), cap = $("pp4Cap");
+  if (!band || band.hidden || band.classList.contains("bandEmpty") || (cap && cap.style.visibility === "hidden")) return;
+  const chips = [...band.querySelectorAll(".capRecipeIng .chip")];
+  if (!chips.length) return;
+  const shows = chips.map(c => { const i = c.querySelector("img"); return i ? i.getAttribute("src") : ""; }).join("|");
+  if (shows !== rcRippleWanted) return;          // not the chosen recipe yet
+  rcRippleWanted = null;
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  chips.forEach((c, k) => {
+    if (typeof c.animate === "function")
+      c.animate([{ scale: "0.3", opacity: 0 }, { scale: "1.18", opacity: 1, offset: .6 }, { scale: "1", opacity: 1 }],
+        { duration: 340, delay: k * 80, fill: "backwards", easing: "ease-out" });
+  });
+}
 function recipeGuard(){
   document.addEventListener("click", e => {
     if (!S.active) return;
@@ -2275,7 +2433,13 @@ function recipeGuard(){
        glow) all stayed. Pixels and state disagreed, and the next tap re-selected instead of
        confirming. The internal state now follows the visible one: an outside tap changes nothing. */
     if (!btn || !btn.querySelector(".recipeList")) return;
-    if (focusBtn === btn) { clearGlow(); clearBake(); focusBtn = null; return; }  // second tap: let it through
+    if (rcCommitting === btn) { rcCommitting = null; return; }                // the choice, re-sent as its card lands
+    if (rcCommitting) { e.stopPropagation(); e.preventDefault(); return; }    // a card is already on its way
+    if (focusBtn === btn) {                                                   // second tap: the choice
+      clearGlow(); clearBake(); focusBtn = null;
+      if (flyChosenCard(btn)) { e.stopPropagation(); e.preventDefault(); }   // it goes through when the card lands
+      return;
+    }
     e.stopPropagation(); e.preventDefault();                          // first tap: focus + glow
     if (rcSwapCancel) rcSwapCancel();   // a tap mid-swap keeps the tapped card in front (see cancelSwap in mountRecipeStack)
     focusBtn = btn;
@@ -2537,7 +2701,10 @@ function rcFlightRun(key, brd){
   /* …and the dotted line waits for the cards: his "Don't draw the dotted line UNTIL the recipe cards appear"
      (2026-09-13). A path that skips the entrance draws it at once; the entrance itself draws it when the cards have
      faded fully in (see rcFlightShow) — measured, a line drawn as the fade merely began led the cards by a frame or two. */
-  const rcShow = (lineFollows) => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; if (!lineFollows) rcCourseRelease(); };
+  /* …and the cards' SWISH arrives with them on every path (his pick, 2026-09-14). The fly-in times its own swish off the entrance
+     (rcFlightShow, lineFollows=true); every path that shows the cards WITHOUT flying them — reduced motion, a sheet already parked
+     in the middle (a phone, measured: no swish at all when it hung off the fly-in alone) — swishes as they appear. */
+  const rcShow = (lineFollows) => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; if (!lineFollows){ rcCourseRelease(); if (b) playCardSwish(); } };
   if (REDUCED) { releasePopIn(); rcShow(); return; }        // parked, immediately, and no demo swap: the show IS motion
 
   /* ⭐ THE WHOLE SHOW IS MEASURED WHEN IT STARTS, NOT WHEN IT IS SCHEDULED — and his two-second
@@ -2599,11 +2766,16 @@ function rcFlightShow(box, brd, rcShow){
   /* the delay is already spent — these are his numbers, from now */
   const rcAt = ms => ms;
 
-  ANIMS.push(box.animate([
+  const entrance = box.animate([
     { opacity: 0, transform: `${hold} scale(${RC_FROM})`, offset: 0 },
     { opacity: 1, transform: `${hold} scale(${RC_OVER})`, offset: .62 },
     { opacity: 1, transform: `${hold} scale(1)`,          offset: 1 },
-  ], { duration: RC_FADE_MS, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" }));
+  ], { duration: RC_FADE_MS, easing: "cubic-bezier(.2,.7,.3,1)", fill: "both" });
+  ANIMS.push(entrance);
+  /* THE SWISH AS THE CARDS FLY IN — his pick on the Sounds of the Voyage page, 2026-09-14: "Paper swish", the swish alone. Timed
+     off the entrance actually starting (its `ready`), not beside it: a sound set beside an animation leads the eye by a frame,
+     measured on the pop-in. A show cancelled before it starts plays nothing. */
+  entrance.ready.then(() => { if (entrance.playState !== "idle") playCardSwish(); }).catch(() => {});
   rcShow(true);   // the keyframes own opacity from here — they fill backwards through the delay
   rcLater(rcCourseRelease, Math.round(RC_FADE_MS * .62));   // the dotted line, once the cards are fully in (the .62 keyframe)
 
@@ -2877,7 +3049,7 @@ function chartFrontRecipe(card){
   const ids = [...card.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
   const seat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
   const me = (seat != null && g.players) ? g.players[seat] : null;
-  if (me) showCourseFor(g, me, svgEl(), cellPx(), ids);
+  if (me) showCourseFor(g, me, svgEl(), cellPx(), ids, { trace: true });   // the picker's route draws itself (course.js)
   else paintMarks(ids.map(i => (g.dockOf && g.dockOf[i]) || (g.islandOf && g.islandOf[i])).filter(Boolean), cellPx());
 }
 
@@ -3181,7 +3353,26 @@ function buildStage(){
   camFull();
   S.active = true;
   S.recipePicked = false;      // a new voyage starts with an empty captains box again (capEmptyTick)
+  rcCommitting = null; rcRippleWanted = null;   // …and no chosen card still in the air from the last one
+  /* ⭐ ONE LAYOUT BEFORE THE FIRST PAINT. The pill's words and row, then the board measured under them, then the pill
+     once more in case the ribbon's fit moved it, then the camera — all before the browser paints, so the board's
+     first frame is its final one. Before this the stage painted a frame at the full window height (732x800 on a
+     laptop) before camFrame had run at all. */
+  pillTick();
   computeStageGeometry();   // D-31: size the stage before the first paint, not after
+  pillTick();
+  camFrame();
+  /* A late change to the header — a font arriving, a name growing, the ribbon's fit — re-measures the board in the
+     frame it happens (a ResizeObserver runs before paint), instead of on the next half-second read. */
+  /* ⚠ ONE FRAME LATER, NOT INSIDE THE CALLBACK: re-measuring re-fits the ribbon, which resizes the very element being
+     observed, and a resize caused inside a ResizeObserver callback is reported by the browser as a console error.
+     Re-observed on every build, because a new voyage builds a new ribbon and pill. */
+  if (typeof ResizeObserver === "function"){
+    if (!S.bandWatch) S.bandWatch = new ResizeObserver(() => requestAnimationFrame(bandChanged));
+    S.bandWatch.disconnect();
+    for (const id of ["pp4Ribbon", "pp4Pill"]){ const el = $(id); if (el) S.bandWatch.observe(el); }
+  }
+  settleBoardIn(wrap);
   if (!S.geomBound){
     S.geomBound = true;
     let t = 0;
@@ -3193,6 +3384,26 @@ function buildStage(){
     /* and when Safari's bottom bar expands or collapses on his phone, which moves the visual viewport */
     if (window.visualViewport) window.visualViewport.addEventListener("resize", again);
   }
+}
+
+/* ⭐ THE BOARD SETTLES IN — PASSED on his game feel audit, 2026-09-13, as proposed there: "The whole board arrives a touch
+   large (about 104%) and settles to size in half a second, so the first frame feels like arriving somewhere rather than
+   a page loading." A quick fade over the first third, so the first frame is not a hard cut.
+   ⚠ camFrame MEASURES THIS ELEMENT, and a scale changes what getBoundingClientRect reports — a 104% width would cut the
+   viewBox 4% short and the board would crop and then snap at the end. So for the arrival camFrame reads the board
+   window's width from before it (S.stripW), and the layout underneath never moves. */
+const BOARD_SETTLE_FROM = 1.04;
+const BOARD_SETTLE_MS = 500;
+function settleBoardIn(wrap){
+  if (!wrap || typeof wrap.animate !== "function") return;
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  S.settleUntil = performance.now() + BOARD_SETTLE_MS + 50;
+  const an = wrap.animate([
+    { opacity: 0, transform: `scale(${BOARD_SETTLE_FROM})` },
+    { opacity: 1, offset: .3 },
+    { opacity: 1, transform: "scale(1)" },
+  ], { duration: BOARD_SETTLE_MS, easing: "cubic-bezier(.2,.7,.3,1)" });
+  an.onfinish = an.oncancel = () => { S.settleUntil = 0; lastVB = ""; };
 }
 
 /* ================= D-31: the desktop stage's own size ================= */
@@ -3779,6 +3990,7 @@ function promptTick(force){
   const box = $("pp4Prompt"), ap = $("actionPanel");
   if (!box || !ap) return;
   capEmptyTick();
+  rcRippleTick();
   // AT PORT: this loop keeps running (it is the shared stage rAF, not per-game), and it owns
   // box.style.display. Without this it re-shows the prompt one frame after hideStageLayer() hides
   // it — T-12's second half. Returning early leaves the hidden display exactly as set.
@@ -5618,6 +5830,7 @@ export function cleanupLegacyTimerKey(store){
 }
 
 export function initStage(){
+  wirePressSquish();   // every button in the game squishes when pressed (src/ui/press.js) — welcome screen included
   // FIX-01: clear the shared legacy key once per browser, BEFORE the seed below reads anything.
   // Wrapped again here because a browser can throw on merely touching localStorage (Safari private
   // mode) — the boot path must not go down for a housekeeping call.

@@ -289,6 +289,7 @@ session neither re-reports it as a bug nor assumes it is proven fine.
 |---|---|---|
 | A short move does not animate its route | **Deliberate.** A two-square straight hop has no corner to draw and the plain render says it better | `src/ui/flow.js` (the route walker's `route.length<3` cull) |
 | A ship sails diagonally across an island | **This one IS a bug** and is the reason the sailed route is drawn at all. Do not dismiss it | `src/engine/index.js:630-634` quotes the original playtest wording |
+| A narration bubble (the day's wind line, or any other) sits over a gold sail square | **Deliberate — NOT a problem.** Wyatt, 2026-09-14, on Wy-Blade's trial photo of "Day 1: Wind NORTH. Tomorrow: WEST." over two squares: *"this is NOT a problem ... That message disappears after a few seconds and can be tapped to dismiss."* The sea trial's `sail-clickable` / `not-occluded` checks exempt a sail square whose cover is a narration bubble | `scripts/lib/checks.mjs` (rules 2 and 6); `scripts/qa/checks_pointer_events_redproof.mjs` proves a real cover still fails |
 
 ## 3. Host vs guest, and the other play modes
 
@@ -384,6 +385,7 @@ drift rule 23 exists to prevent, and it had already started.
 - a ship drawn at reduced opacity is BAKING and deliberately off the board, not disabled or broken;
 - a coin slider drawn greyed and undraggable is a captain with an empty purse — the disabled control IS the answer;
 - a narration bubble sits off-centre because it is anchored to a captain's ship with a tail; only a battle result is deliberately centred;
+- a narration bubble — the day's wind line ("Day 1: Wind NORTH. Tomorrow: WEST.") or any other line — sitting over a gold sail square is NOT a fault (Wyatt, 2026-09-14: "this is NOT a problem ... That message disappears after a few seconds and can be tapped to dismiss."). It is never a FAIL and never an issue;
 - a wavy line of cream dashes across the water, ending in a white X on a dock, is the onward guide teaching a first-time captain where to sail — it is drawn under the gold squares on purpose and retires by itself;
 - a dock marked with a pulsing white X rather than a thin orange ring is the current design for every captain, not a tutorial-only marker.
 - the fixed "Play again!" button at the End of Voyage floats OVER the award cards behind it, and those cards scroll underneath it — so the captain-name line under an award is routinely sliced horizontally in half by it, showing only the top halves of the letters. That is the designed stacking, never a clipping fault (Wyatt, 2026-09-11: "I HAVE ALREADY RULED THAT THIS IS EXPECTED BEHAVIOR DOZENS OF TIMES").

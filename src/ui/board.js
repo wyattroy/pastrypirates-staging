@@ -151,14 +151,14 @@ import {
   // the decorative board's demo log line, and that board no longer renders. Dead imports are
   // forbidden in this codebase (D-33/D-34/D-40) and no gate catches them, so they go with the code
   // that used them rather than being left behind as plausible-looking dependencies.
-  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say, seat,
+  assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say, seat, fixedOrigin,
   fitHold,   // 2026-09-11: every hold on one line (his check-9 note)
   fitRecipeName,   // 2026-09-12: the recipe's name at the largest size that fits its card
 } from "./util.js";
 import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
-import { playFlip, startFlipSpinSound, stopFlipSpinSound } from "./audio.js";
+import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playAwardWhoosh } from "./audio.js";
 import { popInHolds } from "./popin.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
@@ -591,6 +591,234 @@ export function drawBoard(){
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
   });
 }
+/* ⭐ THE ACTIVE BOAT BOBS ONCE WHEN ITS TURN BEGINS — PASSED on his game feel audit (2026-09-13), as proposed: "One gentle
+   bob of the active boat when the turn begins — the eye goes straight to it."
+   Called from the ONE event consumer on the `turn` event (orchestrator.js consumeEvent), so every screen bobs the same
+   boat at the same moment. The boat's PICTURE bobs (CSS `translate` on its <image>), never its group: the group's
+   transform is where the boat sits on the board and carries the sailing glide. A one-shot, so its SVG cost is a moment,
+   not the continuous cost BOARD-RENDERING §5 forbids. */
+export const SHIP_BOB = 0.1;        // of a square, up
+export const SHIP_BOB_MS = 560;
+export function bobShip(seat){
+  const g=shipEls[seat], im=g&&g.querySelector("image");
+  if(!im||typeof im.animate!=="function"||!cell)return;
+  if(typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  const up=cell*SHIP_BOB;
+  im.animate([{translate:"0px 0px"},{translate:`0px ${(-up).toFixed(2)}px`,offset:.35},{translate:"0px 0px",offset:.7},
+    {translate:`0px ${(-up/3).toFixed(2)}px`,offset:.85},{translate:"0px 0px"}],{duration:SHIP_BOB_MS,easing:"ease-in-out"});
+}
+/* ⭐ THE BOAT SAILS: A WIND-UP, A WAKE, AND A SPLASH WHEN IT ARRIVES — all three PASSED on his game feel audit (2026-09-13),
+   as proposed: "A short rock backward, then it surges forward — the classic wind-up that makes movement feel powered." ·
+   "A few foam dots that trail and fade, so speed and direction are visible." · "When it stops, it dips and rises once with
+   a small ring on the water."
+   Called from THE ONE event consumer on a `sail` event (sailSetsOff as the boat moves, sailArrives once the stage has
+   settled), so every screen shows the same boat doing the same thing. The boat's PICTURE leans and dips (translate and
+   scale on its <image>); its group, which carries its place and its glide, is never touched. The foam and the ring are
+   HTML in #popHost, a camera layer under the boats, placed from where the boat is DRAWN at that moment (its computed
+   transform), so they sit where the eye sees the hull whatever route or glide is moving it. */
+export const SAIL_LEAN=0.09, SAIL_LEAN_MS=320;          // how far back the wind-up rocks, in squares; how long it takes
+export const WAKE_EVERY=0.28, WAKE_MS=650;              // a foam dot every this many squares travelled; how long each lasts
+export const ARRIVE_DIP=0.07, ARRIVE_MS=520, SPLASH_MS=700;
+const fxReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+const CQfx=v=>(v/640*100)+"cqw";
+function drawnShipPoint(seat){
+  const g=shipEls[seat]; if(!g)return null;
+  const m=/matrix\([^,]+,[^,]+,[^,]+,[^,]+,\s*([-\d.]+),\s*([-\d.]+)\)/.exec(getComputedStyle(g).transform);
+  return m?[parseFloat(m[1]),parseFloat(m[2])]:null;
+}
+function fxDot(host,cls,p,size,keyframes,ms){
+  const d=document.createElement("div");
+  d.className=cls;
+  d.style.left=CQfx(p[0]-size/2);d.style.top=CQfx(p[1]-size/2);d.style.width=d.style.height=CQfx(size);
+  host.appendChild(d);
+  const a=d.animate(keyframes,{duration:ms,easing:"ease-out",fill:"both"});
+  a.onfinish=a.oncancel=()=>d.remove();
+  return d;
+}
+export function sailSetsOff(seat,route){
+  if(fxReduced()||!shipEls[seat]||!cell)return;
+  const im=shipEls[seat].querySelector("image");
+  let dx=0,dy=0;
+  if(Array.isArray(route)&&route.length>=2){dx=route[1][0]-route[0][0];dy=route[1][1]-route[0][1];}
+  const len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;
+  const back=cell*SAIL_LEAN,fwd=back*.55;
+  if(im&&typeof im.animate==="function")
+    im.animate([{translate:"0px 0px",scale:"1"},
+      {translate:`${(-dx*back).toFixed(2)}px ${(-dy*back).toFixed(2)}px`,scale:"0.94",offset:.35},
+      {translate:`${(dx*fwd).toFixed(2)}px ${(dy*fwd).toFixed(2)}px`,scale:"1.03",offset:.7},
+      {translate:"0px 0px",scale:"1"}],{duration:SAIL_LEAN_MS,easing:"ease-in-out",id:"sail-lean"});
+  followHull(seat,WAKE_EVERY,(host,at)=>fxDot(host,"ppWake",at,cell*0.16,[{opacity:.8,scale:"1"},{opacity:0,scale:"0.3"}],WAKE_MS));
+}
+/* FOLLOW THE DRAWN HULL until it has stopped, and leave something where the boat WAS each time it moves on by `every` of a
+   square — so a trail falls behind the boat rather than under it. drop(host, point, angle) makes the mark. */
+const SNAP_SQUARES=1.2;
+function followHull(seat,every,drop){
+  const host=document.getElementById("popHost");
+  if(!host)return;
+  let last=drawnShipPoint(seat),prev=last,moved=false,stillMs=0,prevT=performance.now();
+  const t0=prevT;
+  const step=now=>{
+    const p=drawnShipPoint(seat);
+    if(!p||!host.isConnected)return;
+    const dt=now-prevT;prevT=now;
+    /* A SNAP IS NOT TRAVEL. A boat sailing or riding the wind moves a fraction of a square a frame; one that jumps more than a
+       square in a frame was put back on its true square by a paint (MEASURED on the trade wind: two rides each left a pair of
+       streaks pointing straight back along the jump). Nothing trails a jump — the trail picks up again from where it landed. */
+    if(prev&&Math.hypot(p[0]-prev[0],p[1]-prev[1])>cell*SNAP_SQUARES){last=p;prev=p;stillMs=0;requestAnimationFrame(step);return;}
+    if(prev&&Math.hypot(p[0]-prev[0],p[1]-prev[1])<0.25)stillMs+=dt;else{stillMs=0;moved=true;}
+    if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])>=cell*every){
+      drop(host,last,Math.atan2(p[1]-last[1],p[0]-last[0]));
+      last=p;
+    }
+    prev=p;
+    if((moved&&stillMs>250)||(!moved&&now-t0>1200)||now-t0>8000)return;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+/* ⭐ SPEED LINES ON THE TRADE WIND — PASSED on his game feel audit (2026-09-13), as proposed: "Short streaks trail the boat
+   while the current carries it, so the ride reads as fast." Called from THE ONE event consumer on a `tradewind` event, so
+   every screen sees every ride. Each streak lies along the direction the hull is travelling (a static `rotate`), and fades
+   and shortens behind it. His separate note, that every wind-sailing cue should be yellow-gold, belongs to the sailing
+   project on the backlog; these stay white like the rest of the water until that is built. */
+export const STREAK_EVERY=0.22, STREAK_MS=520;
+export function rideStreaks(seat){
+  if(fxReduced()||!shipEls[seat]||!cell)return;
+  followHull(seat,STREAK_EVERY,(host,at,angle)=>{
+    const len=cell*0.55,thick=cell*0.07,d=document.createElement("div");
+    d.className="ppStreak";d.dataset.seat=seat;
+    d.style.left=CQfx(at[0]-len/2);d.style.top=CQfx(at[1]-thick/2);d.style.width=CQfx(len);d.style.height=CQfx(thick);
+    d.style.rotate=`${(angle*180/Math.PI).toFixed(1)}deg`;
+    host.appendChild(d);
+    const a=d.animate([{opacity:.85,scale:"1 1"},{opacity:0,scale:"0.3 0.6"}],{duration:STREAK_MS,easing:"ease-out",fill:"both",id:"ride-streak"});
+    a.onfinish=a.oncancel=()=>d.remove();
+  });
+}
+/* ⭐ CONFETTI FOR THE FIRST CAPTAIN HOME — PASSED on his game feel audit (2026-09-13), as proposed: "The first captain home
+   gets a two-second burst — it is the moment the race turns." (The fanfare is a sound and comes with the sound page.)
+   Called from THE ONE event consumer on the voyage's FIRST `ovens` event — a captain home with a full hold, lighting the
+   ovens — read off the event list, so a reload or a guest joining late never throws it twice. Paper in that captain's
+   colour, gold and cream, from their boat. */
+export const CONFETTI_PIECES=36, CONFETTI_MS=2000;
+export function firstHomeConfetti(e){
+  if(fxReduced()||!e||e.t!=="ovens"||!appState.game||!shipEls[e.p])return;
+  const evs=appState.game.events;
+  if(evs.find(x=>x&&x.t==="ovens")!==e)return;              // only the first captain home
+  /* ON TOP OF EVERYTHING, IN SCREEN PIXELS, like the treasure coins. Drawn first in the board's own camera layer, the
+     pieces MEASURED 3-4px on his phone and rose straight under the narration bubble that announces the ovens: 36 pieces
+     nobody could see. A burst for the moment the race turns has to be the top thing on the screen. */
+  const ships=$("boardShips")||$("board");
+  const m=/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(shipEls[e.p].style.transform||"");
+  const from=m&&fixedPointOfBoard(ships,parseFloat(m[1]),parseFloat(m[2]));if(!from)return;
+  const ctm=ships.getScreenCTM(),sq=cell*(ctm?ctm.a:1);     // one square of the board, in screen pixels
+  const colours=[HEXCOL[e.p]||"#f5a623","#ffd76b","#fff3d6"];
+  const rnd=k=>{const x=Math.sin((k+1)*127.1+e.p*31.7)*43758.5453;return x-Math.floor(x);};
+  for(let k=0;k<CONFETTI_PIECES;k++){
+    const w=Math.max(6,sq*(0.26+rnd(k)*0.1)),h=w*0.5,d=document.createElement("div");
+    d.className="ppConfetti";d.style.background=colours[k%colours.length];
+    Object.assign(d.style,{left:(from[0]-w/2)+"px",top:(from[1]-h/2)+"px",width:w+"px",height:h+"px"});
+    document.body.appendChild(d);
+    const ang=-Math.PI/2+(rnd(k+50)-0.5)*Math.PI*1.1,pow=Math.max(45,sq*(2+rnd(k+90)*2));
+    const ux=Math.cos(ang)*pow,uy=Math.sin(ang)*pow,spin=(rnd(k+7)-0.5)*900,fall=Math.max(90,sq*4);
+    const a=d.animate([{translate:"0px 0px",rotate:"0deg",opacity:1},
+      {translate:`${ux.toFixed(1)}px ${uy.toFixed(1)}px`,rotate:`${(spin*.5).toFixed(0)}deg`,opacity:1,offset:.35},
+      {translate:`${(ux*1.25).toFixed(1)}px ${(uy+fall).toFixed(1)}px`,rotate:`${spin.toFixed(0)}deg`,opacity:0}],
+      {duration:CONFETTI_MS*(0.8+rnd(k+3)*0.4),easing:"cubic-bezier(.2,.6,.4,1)",fill:"both",id:"first-home-confetti"});
+    a.onfinish=a.oncancel=()=>d.remove();
+  }
+}
+/* ⭐ A SHOT LANDS: THE CANNON KICKS, THE HIT FLASHES, THE BOARD SHAKES — PASSED on his game feel audit (2026-09-13), as proposed:
+   "The firing side's art recoils backward and springs back, with a smoke puff" and "The struck ship flashes white for one frame
+   and the board shakes 3px — a hit you can feel." ON THE BOARD, NOT THE BATTLE CARD: he means to retire the battle screen and
+   fight over the board, so the reaction belongs to the boats. Called from THE ONE event consumer on a `shotLands` event, which
+   the fight records the moment a shot gets through, so every screen feels the same hit. Smoke and flash sit OVER the boats
+   (#dockCoinHost); the shake moves the whole board window by its individual `translate`, which composes with the camera. */
+export const KICK_MS=320, SMOKE_MS=520, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=3, SHAKE_MS=300;
+export function shotLands(e){
+  if(fxReduced()||!e||e.by==null||!cell)return;
+  const shooter=e.by,target=e.by===e.a?e.d:e.a;
+  const from=drawnShipPoint(shooter),to=drawnShipPoint(target),host=$("dockCoinHost");
+  if(!from||!to||!host)return;
+  const len=Math.hypot(to[0]-from[0],to[1]-from[1])||1,ux=(to[0]-from[0])/len,uy=(to[1]-from[1])/len;
+  const im=shipEls[shooter]&&shipEls[shooter].querySelector("image");
+  if(im&&typeof im.animate==="function")
+    im.animate([{translate:"0px 0px"},{translate:`${(-ux*cell*.14).toFixed(2)}px ${(-uy*cell*.14).toFixed(2)}px`,offset:.18},{translate:"0px 0px"}],
+      {duration:KICK_MS,easing:"cubic-bezier(.2,.8,.3,1)",id:"cannon-kick"});
+  // a pale puff that small vanished on sand in the frozen-frame photo, so it is bigger, holds its body for a third of its life,
+  // and carries a grey edge that reads against sand and sea alike
+  fxDot(host,"ppSmoke",[from[0]+ux*cell*.45,from[1]+uy*cell*.45],cell*.85,[{opacity:1,scale:".35"},{opacity:.9,scale:"1",offset:.35},{opacity:0,scale:"1.45"}],SMOKE_MS);
+  setTimeout(()=>{
+    if(!host.isConnected)return;
+    fxDot(host,"ppHitFlash",drawnShipPoint(target)||to,cell*1.1,[{opacity:1,scale:".75"},{opacity:0,scale:"1.1"}],HIT_FLASH_MS);
+    const wrap=$("boardwrap");
+    if(wrap&&typeof wrap.animate==="function")
+      wrap.animate([{translate:"0px 0px"},{translate:`${SHAKE_PX}px ${-SHAKE_PX/2}px`,offset:.2},{translate:`${-SHAKE_PX}px ${SHAKE_PX/2}px`,offset:.45},
+        {translate:`${SHAKE_PX/2}px 0px`,offset:.7},{translate:"0px 0px"}],{duration:SHAKE_MS,easing:"linear",id:"hit-shake"});
+  },HIT_AT_MS);
+}
+/* ⭐ THE LOSER IS KNOCKED ABOUT — PASSED on his game feel audit (2026-09-13), as proposed: "The losing boat wobbles and a crate
+   splashes into the sea when spoils are taken." On the `battle` event, which the engine records only for a fight somebody WON (a
+   flee and a null battle are other events); the crate goes only when one actually changed hands. It tumbles off the far side of
+   the loser, away from the winner, and lands in a splash ring on the water. */
+export const KNOCK_MS=900, CRATE_SPLASH_MS=620;
+export function loserKnocked(e){
+  if(fxReduced()||!e||e.winner==null||!cell)return;
+  const loser=e.winner===e.a?e.d:e.a;
+  const im=shipEls[loser]&&shipEls[loser].querySelector("image");
+  if(im&&typeof im.animate==="function")
+    im.animate([{rotate:"0deg"},{rotate:"-12deg",offset:.15},{rotate:"9deg",offset:.38},{rotate:"-5deg",offset:.6},{rotate:"2deg",offset:.8},{rotate:"0deg"}],
+      {duration:KNOCK_MS,easing:"ease-out",id:"loser-knock"});
+  if(!e.spoilIng)return;
+  const host=$("dockCoinHost"),water=$("popHost"),at=drawnShipPoint(loser),won=drawnShipPoint(e.winner);
+  if(!host||!at)return;
+  const away=(won&&Math.sign(at[0]-won[0]))||1,size=cell*.42,land=[away*cell*.75,cell*.35];
+  const img=document.createElement("img");
+  img.src=`${ASSET_BASE}plaque/crate.webp`;img.alt="";img.className="ppCrateSplash";
+  img.style.left=CQfx(at[0]-size/2);img.style.top=CQfx(at[1]-size/2);img.style.width=img.style.height=CQfx(size);
+  host.appendChild(img);
+  const a=img.animate([{translate:"0 0",rotate:"0deg",opacity:1,scale:"1"},
+    {translate:`${CQfx(land[0]*.5)} ${CQfx(-cell*.55)}`,rotate:`${away*140}deg`,opacity:1,offset:.45},
+    {translate:`${CQfx(land[0])} ${CQfx(land[1])}`,rotate:`${away*260}deg`,opacity:.9,scale:".8",offset:.85},
+    {translate:`${CQfx(land[0])} ${CQfx(land[1]+cell*.1)}`,rotate:`${away*270}deg`,opacity:0,scale:".5"}],
+    {duration:CRATE_SPLASH_MS,easing:"cubic-bezier(.3,.5,.6,1)",fill:"both",id:"crate-splash"});
+  a.onfinish=a.oncancel=()=>img.remove();
+  if(water)setTimeout(()=>{if(water.isConnected)fxDot(water,"ppSplash",[at[0]+land[0],at[1]+land[1]],cell*.8,[{opacity:.9,scale:".3"},{opacity:0,scale:"1.4"}],SPLASH_MS);},CRATE_SPLASH_MS*.85);
+}
+export function sailArrives(seat){
+  if(fxReduced()||!shipEls[seat]||!cell)return;
+  const im=shipEls[seat].querySelector("image");
+  if(im&&typeof im.animate==="function")
+    im.animate([{translate:"0px 0px"},{translate:`0px ${(cell*ARRIVE_DIP).toFixed(2)}px`,offset:.4},
+      {translate:`0px ${(-cell*ARRIVE_DIP*.4).toFixed(2)}px`,offset:.75},{translate:"0px 0px"}],
+      {duration:ARRIVE_MS,easing:"ease-in-out",id:"sail-arrive"});
+  const host=document.getElementById("popHost"),p=drawnShipPoint(seat);
+  if(host&&p)fxDot(host,"ppSplash",p,cell*0.95,[{opacity:.85,scale:"0.35"},{opacity:0,scale:"1.35"}],SPLASH_MS);
+}
+/* ⭐ STORMS: LIGHTNING WITH THE THUNDER, AND THE BOATS ROCK — PASSED on his game feel audit (2026-09-13), as proposed: "A white
+   flash across the board timed to each thunder clap" — with his note, "make this subtle -- too much could be annoying." —
+   and "Every boat tilts gently back and forth while the storm lasts." The third storm idea, the sea darkening as a storm
+   rolls in, was already there (#stormOverlay's navy tint); it now eases in over a full second.
+   ⚠ THE ROCKING RIDES THE THUNDER, NOT A LOOP. The boats are SVG, and Chrome cannot composite a transform animation on SVG
+   (BOARD-RENDERING §5: ~62 layouts a second), so a rock running the whole round would spend the board's idle budget for the
+   whole storm. Each clap — the first the instant the storm arrives, then about every 20 seconds — rocks every boat for two
+   seconds. A clap is per screen (the thunder is scattered on each device), so each screen's lightning matches its own sound. */
+export const LIGHTNING_PEAK=0.2, LIGHTNING_MS=420, ROCK_DEG=4, ROCK_MS=2000;
+export function stormFlash(){
+  const wrap=$("boardwrap"),ov=$("stormOverlay");
+  if(!wrap||!ov||!wrap.classList.contains("storming")||fxReduced())return;
+  let f=ov.querySelector(".ppLightning");
+  if(!f){f=document.createElement("div");f.className="ppLightning";ov.appendChild(f);}
+  f.animate([{opacity:0},{opacity:LIGHTNING_PEAK,offset:.1},{opacity:.03,offset:.3},{opacity:LIGHTNING_PEAK*.55,offset:.45},{opacity:0}],
+    {duration:LIGHTNING_MS,easing:"ease-out",id:"lightning"});
+  shipEls.forEach((g,i)=>{
+    const im=g&&g.querySelector("image");
+    if(!im||typeof im.animate!=="function"||g.style.visibility==="hidden")return;
+    im.animate([{rotate:"0deg"},{rotate:`${ROCK_DEG}deg`,offset:.2},{rotate:`${-ROCK_DEG}deg`,offset:.45},
+      {rotate:`${(ROCK_DEG*.6).toFixed(1)}deg`,offset:.7},{rotate:`${(-ROCK_DEG*.3).toFixed(1)}deg`,offset:.88},{rotate:"0deg"}],
+      {duration:ROCK_MS,delay:i*60,easing:"ease-in-out",id:"storm-rock"});
+  });
+}
+onThunder(stormFlash);
 /* ---------- playback ---------- */
 // notes/edits BUG-01: build the storm's rain layers once, on the first storm. The rain is now a
 // pre-rendered tiling PNG (see #stormOverlay .rlayer CSS), so each layer only varies things that
@@ -1715,12 +1943,151 @@ export function paintShipAt(seat,c){
    is CONVERGE, not add a path: so render() goes through this too, and the pulse, the dataset stamp
    and the markup are one statement rather than two copies drifting.
    `coins` is a NUMBER, and 0 is a real purse — every test in here is explicit, never truthiness. */
+/* ⭐ THE COUNT ROLLS, IT DOES NOT JUMP — PASSED on his game feel audit (2026-09-13), as proposed for both directions: "Coins
+   spray up from the dock and arc into your coin count, which rolls up number by number." · "The price leaves your coin count
+   as a quick tick-down ... instead of the number just changing." The number ticks one at a time toward the new purse
+   (never longer than COIN_ROLL_MAX_MS), and waits while treasure is still in the air (holdCoinRoll). The coin picture is
+   written once and only the number changes, so the roll re-fetches nothing. A replay and reduced motion just set it. */
+const COIN_ROLL_STEP_MS=40, COIN_ROLL_MAX_MS=700;
+const coinRolls={};
+export function holdCoinRoll(seat,ms){(coinRolls[seat]=coinRolls[seat]||{}).holdUntil=performance.now()+ms;}
 export function showSeatCoins(seat,coins){
   const el=$("coins"+seat);
   if(!el)return;
-  if(el.dataset.coins!==undefined&&+el.dataset.coins!==coins)pulseEl(el);
+  const had=el.dataset.coins!==undefined?+el.dataset.coins:null;
+  if(had!==null&&had!==coins)pulseEl(el);
   el.dataset.coins=coins;
-  el.innerHTML=`${iconImg(COIN_IMG)} ${coins}`;
+  const n=el.querySelector(".coinN");
+  if(!n){el.innerHTML=`${iconImg(COIN_IMG)} <span class="coinN">${coins}</span>`;return;}
+  const r=coinRolls[seat]=coinRolls[seat]||{};
+  clearTimeout(r.timer);
+  const from=parseInt(n.textContent,10);
+  if(had===null||!Number.isFinite(from)||from===coins||appState.replaying||fxReduced()){n.textContent=coins;return;}
+  const every=Math.max(12,Math.min(COIN_ROLL_STEP_MS,COIN_ROLL_MAX_MS/Math.abs(coins-from))),dir=Math.sign(coins-from);
+  const tick=()=>{
+    if(!n.isConnected)return;
+    const cur=parseInt(n.textContent,10);
+    if(!Number.isFinite(cur)||cur===coins){n.textContent=coins;return;}
+    n.textContent=cur+dir;
+    playCoinTick();                                            // his pick, 2026-09-14: the abacus click, one per coin
+    if(cur+dir!==coins)r.timer=setTimeout(tick,every);
+  };
+  r.timer=setTimeout(tick,Math.max(0,(r.holdUntil||0)-performance.now()));
+}
+/* ⭐ TREASURE BURSTS OUT, AND A BOUGHT CRATE FLIES HOME — PASSED on his game feel audit (2026-09-13), as proposed: "Coins spray
+   up from the dock and arc into your coin count" · "It lifts off the island, arcs to your captain's box, and lands on its
+   crate with a squash — the island's copy greys with a little poof as it leaves."
+   Called from THE ONE event consumer on a `dock` event, so every screen shows every captain's dock. They fly in FIXED
+   position between two things drawn in different places — the board and the captains box — so both ends are measured as
+   drawn and brought into the one fixed space (fixedOrigin, util.js) before a single number is taken between them. */
+const TREASURE_COINS=6, TREASURE_MS=780, CRATE_FLY_MS=620;
+function fixedPointOfBoard(svg,x,y){
+  const ctm=svg&&svg.getScreenCTM();if(!ctm)return null;
+  const pt=svg.createSVGPoint();pt.x=x;pt.y=y;
+  const p=pt.matrixTransform(ctm),o=fixedOrigin();
+  return [p.x-o.x,p.y-o.y];
+}
+function capShowing(){const cap=$("pp4Cap");return !(cap&&cap.style.visibility==="hidden");}
+export function treasureBurst(seat){
+  if(fxReduced()||!shipEls[seat])return;
+  const ships=$("boardShips")||$("board");
+  const m=/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(shipEls[seat].style.transform||"");
+  const from=m&&fixedPointOfBoard(ships,parseFloat(m[1]),parseFloat(m[2]));if(!from)return;
+  const icon=($("coins"+seat)||{querySelector:()=>null}).querySelector("img");
+  let to=null;
+  if(icon&&capShowing()){const r=icon.getBoundingClientRect(),o=fixedOrigin();if(r.width>1)to=[r.left+r.width/2-o.x,r.top+r.height/2-o.y];}
+  const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42);
+  for(let k=0;k<TREASURE_COINS;k++){
+    const im=document.createElement("img");
+    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";
+    Object.assign(im.style,{left:(from[0]-size/2)+"px",top:(from[1]-size/2)+"px",width:size+"px",height:size+"px"});
+    document.body.appendChild(im);
+    const spread=(k-(TREASURE_COINS-1)/2)*size*0.55,up=size*(2.2+((k*37)%5)*0.25);
+    const end=to?[to[0]-from[0],to[1]-from[1]]:[spread*1.4,-up*1.6];
+    const a=im.animate([{translate:"0px 0px",scale:"0.4",opacity:0},
+      {translate:`${spread.toFixed(1)}px ${(-up).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.4},
+      {translate:`${end[0].toFixed(1)}px ${end[1].toFixed(1)}px`,scale:to?"0.55":"0.7",opacity:to?1:0}],
+      {duration:TREASURE_MS,delay:k*55,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"treasure"});
+    a.onfinish=a.oncancel=()=>im.remove();
+  }
+  if(to)holdCoinRoll(seat,TREASURE_MS*0.8+TREASURE_COINS*55);
+}
+/* ⭐ THE TWO CRATES SWAP IN ARCS — PASSED on his game feel audit (2026-09-13), as proposed: "Your crate and theirs cross over
+   each other between the two rows, and both land with a squash." Same shape as the crate flight home: each side's crate is
+   read out of its row BEFORE render() moves it, and flies to the new chip in the other row AFTER render() draws it. The two
+   bow opposite ways, so they visibly pass each other rather than overlap in a straight line. A counter paid in coin has no
+   crate on that side — only the ingredient flies, and the coin counts roll. */
+const SWAP_MS=680;
+function chipIn(seat,src){
+  const el=$("chips"+seat);if(!el||!src)return null;
+  return [...el.querySelectorAll(".chip")].filter(c=>{const i=c.querySelector("img");return i&&i.getAttribute("src")===src;}).pop()||null;
+}
+function fixedBox(el){const r=el.getBoundingClientRect();if(r.width<1)return null;const o=fixedOrigin();return {x:r.left-o.x,y:r.top-o.y,w:r.width,h:r.height};}
+export function tradeSwapFrom(e){
+  if(fxReduced()||!e||e.t!=="trade")return null;
+  const giveSrc=(/src="([^"]+)"/.exec(String(e.gave||""))||[])[1]||null,wantSrc=ING_IMG[e.got]||null;
+  const legs=[];
+  const g=chipIn(e.a,giveSrc),w=chipIn(e.b,wantSrc);
+  if(g&&fixedBox(g))legs.push({src:giveSrc,from:fixedBox(g),to:e.b,bow:-1});
+  if(w&&fixedBox(w))legs.push({src:wantSrc,from:fixedBox(w),to:e.a,bow:1});
+  return legs.length?legs:null;
+}
+export function tradeSwapTo(legs){
+  if(!legs||!capShowing())return;
+  for(const leg of legs){
+    const chip=chipIn(leg.to,leg.src),to=chip&&fixedBox(chip);
+    if(!to)continue;
+    chip.style.visibility="hidden";
+    const im=document.createElement("img");im.src=leg.src;im.alt="";im.className="ppCrateFly";
+    Object.assign(im.style,{left:leg.from.x+"px",top:leg.from.y+"px",width:leg.from.w+"px",height:leg.from.h+"px"});
+    document.body.appendChild(im);
+    const dx=(to.x+to.w/2)-(leg.from.x+leg.from.w/2),dy=(to.y+to.h/2)-(leg.from.y+leg.from.h/2);
+    const side=leg.bow*Math.max(leg.from.w*1.4,Math.abs(dy)*0.35),s=Math.max(.3,Math.min(2,to.w/leg.from.w));
+    const a=im.animate([{translate:"0px 0px",scale:"1"},
+      {translate:`${(dx*.5+side).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.2",offset:.5},
+      {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:SWAP_MS,easing:"ease-in-out",fill:"both",id:"trade-swap"});
+    let landed=false;
+    const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
+      if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:"1.3 0.75"},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:300,easing:"ease-out",id:"crate-land"});};
+    a.onfinish=land;a.oncancel=land;
+    setTimeout(land,SWAP_MS+400);
+  }
+}
+/* Measured BEFORE render() greys the crate (its island rect), handed to crateFlightTo AFTER render() has drawn the new chip. */
+export function crateFlightFrom(e){
+  if(fxReduced()||!e||!e.tokens||e.tokens[e.ing]==null)return null;
+  const crate=$(`crate_${e.ing}_${e.tokens[e.ing]}`);if(!crate)return null;
+  const r=crate.getBoundingClientRect();if(r.width<1)return null;
+  const o=fixedOrigin();
+  return {ing:e.ing,rect:{x:r.left-o.x,y:r.top-o.y,w:r.width,h:r.height}};
+}
+export function crateFlightTo(f,seat){
+  if(!f)return;
+  const cx=f.rect.x+f.rect.w/2,cy=f.rect.y+f.rect.h/2;
+  const poof=document.createElement("div");poof.className="ppPoof";
+  Object.assign(poof.style,{left:(cx-f.rect.w*.6)+"px",top:(cy-f.rect.h*.6)+"px",width:(f.rect.w*1.2)+"px",height:(f.rect.h*1.2)+"px"});
+  document.body.appendChild(poof);
+  const pa=poof.animate([{opacity:.8,scale:"0.5"},{opacity:0,scale:"1.5"}],{duration:480,easing:"ease-out",fill:"both",id:"crate-poof"});
+  pa.onfinish=pa.oncancel=()=>poof.remove();
+  const chipsEl=$("chips"+seat),src=ING_IMG[f.ing];
+  if(!chipsEl||!capShowing()||!src)return;
+  const chip=[...chipsEl.querySelectorAll(".chip")].filter(c=>{const i=c.querySelector("img");return i&&i.getAttribute("src")===src;}).pop();
+  if(!chip)return;
+  const cr=chip.getBoundingClientRect();if(cr.width<1)return;
+  const o=fixedOrigin(),tx=cr.left-o.x+cr.width/2,ty=cr.top-o.y+cr.height/2;
+  chip.style.visibility="hidden";
+  const im=document.createElement("img");im.src=src;im.alt="";im.className="ppCrateFly";
+  Object.assign(im.style,{left:f.rect.x+"px",top:f.rect.y+"px",width:f.rect.w+"px",height:f.rect.h+"px"});
+  document.body.appendChild(im);
+  const dx=tx-cx,dy=ty-cy,s=Math.max(.3,Math.min(2,cr.width/f.rect.w));
+  const a=im.animate([{translate:"0px 0px",scale:"1"},
+    {translate:`${(dx*.2).toFixed(1)}px ${(dy*.2-f.rect.h*1.2).toFixed(1)}px`,scale:"1.15",offset:.3},
+    {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:CRATE_FLY_MS,easing:"cubic-bezier(.45,0,.3,1)",fill:"both",id:"crate-fly"});
+  let landed=false;
+  const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
+    if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:"1.3 0.75"},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:300,easing:"ease-out",id:"crate-land"});};
+  a.onfinish=land;a.oncancel=land;
+  setTimeout(land,CRATE_FLY_MS+400);   // a dropped animation never leaves a crate invisible in the hold
 }
 export function render(){
   if(idlePlaceholder()){if(shipEls.length)hideShipsWhileIdle();return;}
@@ -2248,6 +2615,71 @@ export function showStats(){
     <div class="awardsRow">${awards}</div>
     ${statsTable}`;
   renderWindSummary();
+  endCardArrives($("statsPanel"),w);
+}
+/* ⭐ THE END CARD ARRIVES — three ideas PASSED on his game feel audit (2026-09-13), as proposed: "Each award card flips in one
+   after another ..., instead of the list simply being there"; "Numbers roll up from zero ..."; and "One burst in the winner's
+   captain colour behind the pastry." (The whoosh and the ticking are sounds, and come with the sound page.)
+   ONCE A VOYAGE, ON EACH SCREEN. render() calls showStats() whenever the log sits at its end, so the same finished voyage can
+   be written more than once; the mark lives on the Game object it describes (as __idle does), so a new voyage starts unmarked
+   and a repaint of the same one never deals the cards twice. A repaint mid-arrival just writes the card at rest: every number
+   is final in the HTML, and the roll only rewrites what is on screen on its way there. */
+export const DEAL_MS=440, DEAL_GAP_MS=150, DEAL_START_MS=220, COUNT_MS=900, END_CONFETTI=26;
+function endCardArrives(panel,w){
+  const g=appState.game;
+  if(!panel||!g||g.__endArrived)return;
+  g.__endArrived=true;
+  if(fxReduced())return;
+  const cards=[...panel.querySelectorAll(".awardCard")];
+  cards.forEach((c,k)=>{
+    const a=c.animate([
+      {opacity:0,transform:"perspective(700px) translateY(18px) rotateY(85deg)"},
+      {opacity:1,transform:"perspective(700px) translateY(0) rotateY(-10deg)",offset:.7},
+      {opacity:1,transform:"perspective(700px) rotateY(0deg)"}],
+      {duration:DEAL_MS,delay:DEAL_START_MS+k*DEAL_GAP_MS,easing:"cubic-bezier(.2,.7,.3,1)",fill:"backwards",id:"end-deal"});
+    // his pick, 2026-09-14: a soft whoosh as each card deals in — from the moment its animation starts, then its own delay
+    a.ready.then(()=>setTimeout(()=>{ if(c.isConnected&&a.playState!=="idle")playAwardWhoosh(); },DEAL_START_MS+k*DEAL_GAP_MS)).catch(()=>{});
+  });
+  // the numbers roll up as the last card lands: every run of digits in the stats column and in each award's value
+  const texts=[];
+  const collect=node=>{for(const c of node.childNodes){if(c.nodeType===3){if(/\d/.test(c.nodeValue))texts.push([c,c.nodeValue]);}else collect(c);}};
+  for(const el of panel.querySelectorAll("table td:nth-child(2), .awardStat b"))collect(el);
+  if(texts.length){
+    // the stats tick as they roll — his pick, 2026-09-14: "The coin tick", the same abacus click as a coin count, once per visible change
+    const roll=t=>{let sum=0;for(const [n,full] of texts)if(n.isConnected)n.nodeValue=full.replace(/\d+/g,d=>{const v=Math.ceil(Number(d)*t);sum+=v;return String(v);});return sum;};
+    let shown=roll(0);
+    const start=performance.now()+DEAL_START_MS+Math.max(0,cards.length-1)*DEAL_GAP_MS;
+    const step=now=>{
+      if(!texts.some(([n])=>n.isConnected))return;
+      const u=Math.min(1,Math.max(0,(now-start)/COUNT_MS));
+      const sum=roll(1-Math.pow(1-u,3));
+      if(sum!==shown){shown=sum;playCoinTick();}
+      if(u<1)requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  const banner=panel.querySelector(".winner-banner"),pastry=banner&&banner.querySelector(".victoryRecipe");
+  if(w==null||!pastry)return;
+  const col=HEXCOL[w]||"#f5a623",colours=[col,`color-mix(in srgb, ${col} 55%, white)`,"#ffe6a0"];
+  setTimeout(()=>{                                             // as the pastry lands (its victoryPop settles at .55s)
+    if(!pastry.isConnected)return;
+    const b=banner.getBoundingClientRect(),r=pastry.getBoundingClientRect();
+    const cx=r.left+r.width/2-b.left,cy=r.top+r.height/2-b.top;
+    for(let k=0;k<END_CONFETTI;k++){
+      const d=document.createElement("div"),wd=6+(k*7)%4,ht=wd*.5;
+      d.className="endConfetti";d.style.background=colours[k%colours.length];
+      Object.assign(d.style,{left:(cx-wd/2)+"px",top:(cy-ht/2)+"px",width:wd+"px",height:ht+"px"});
+      banner.appendChild(d);
+      const ang=(k/END_CONFETTI)*Math.PI*2+((k*53)%10)/10,pow=Math.max(60,r.width*(.55+((k*31)%7)/12));
+      const ux=Math.cos(ang)*pow,uy=Math.sin(ang)*pow*.75,spin=((k*97)%360)-180;
+      const a=d.animate([{translate:"0px 0px",rotate:"0deg",opacity:0},
+        {translate:`${(ux*.2).toFixed(1)}px ${(uy*.2).toFixed(1)}px`,opacity:1,offset:.08},
+        {translate:`${ux.toFixed(1)}px ${uy.toFixed(1)}px`,rotate:`${spin}deg`,opacity:1,offset:.45},
+        {translate:`${(ux*1.15).toFixed(1)}px ${(uy+Math.max(40,r.height*.6)).toFixed(1)}px`,rotate:`${spin*2}deg`,opacity:0}],
+        {duration:1700+((k*41)%500),easing:"cubic-bezier(.2,.6,.4,1)",fill:"both",id:"end-confetti"});
+      a.onfinish=a.oncancel=()=>d.remove();
+    }
+  },300);
 }
 
 // LOAD-03 final (2026-08-02). This used to be renderDecorativeBoard(): it built a bot-vs-bot game

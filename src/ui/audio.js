@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["battle-swords", "battle-won", "bells", "cannon", "coin-flip", "cork-pop", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["abacus-click", "award-whoosh", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-thud", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -71,6 +71,14 @@ const SFX_VOLUME = {
   /* THE CORK POP — also 1, and for a stronger reason than q7: his 55% is already IN the file. It was rendered from the
      pop-in tuner's own recipe at the volume he dialled, so at 1 it plays exactly as loud as the tuner played it. */
   "cork-pop": 1,
+  /* THE SOUNDS OF THE VOYAGE HE PICKED (2026-09-14) — 1 for the cork pop's reason: each was rendered from the "Sounds of the
+     Voyage" page's own recipe at the level he auditioned it (every candidate levelled to one loudness, times the page's 70%). */
+  "abacus-click": 1,
+  "award-whoosh": 1,
+  "card-swish": 1,
+  "crate-chime": 1,
+  "crate-marimba": 1,
+  "crate-thud": 1,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -317,6 +325,13 @@ const EVENT_SOUND = {
   // the end instead of the start. The clash moved to engage time — see playBattleEngage() and its
   // two call sites in src/orchestrator.js (asyncBattle and watchBattle).
   battle: null,
+  /* ⭐ THE CANNON RIDES THE LANDED SHOT, ON EVERY SCREEN — Wyatt, 2026-09-14: "Fix this too" (a crew guest heard no cannon).
+     It used to be played by the fight itself (`if(scorer)playCannon()` in src/orchestrator.js), and the fight runs only on
+     the device that owns it, so every other screen in a crew watched the hit in silence. The fight now RECORDS the hit as a
+     `shotLands` event — emitted only when a shot gets through, and again when a paid re-fire lands — and this line is the
+     whole of the wiring: every screen's one consumer plays it. His 2026-09-06 ruling holds unchanged, "cannon sound happens
+     only when a shot lands": a miss and a crosswind collision record no shot, so they stay silent. */
+  shotLands: CANNON_SOUND,
   // D-21 — explicit silence: an offer is not a deal; sidebet is already narration-suppressed
   parley: null, sidebet: null,
   // v2 events, explicit silence rather than merely absent (D-06). `purse` especially: it exists
@@ -390,6 +405,11 @@ function soundForEvent(e) {
      bus, so STORM_VOLUME governs it and fadeStorm() ends it.
      `bus: "storm"` and no `loop`: playForEvent hands this to the scatter starter below. */
   if (e.t === "newround" && e.storm) return { name: "storm", bus: "storm", scatter: true };
+  /* A JUICIER STORE SOUND — PASSED on his game feel audit (2026-09-13), as proposed: "The same pop you are picking in the
+     tuner, so buying and the pop-in speak the same language." A crate BOUGHT at a dock plays his cork pop (BUY_POP_SLOT
+     semitones above its starting pitch); scrubbing the docks and every trade keep the store sound. */
+  if (e.t === "dock" && e.got === "bought")
+    return { name: "cork-pop", bus: "master", from: BUY_POP_SLOT * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S };
   const name = EVENT_SOUND[e.t];
   if (!name) return null;
   const out = { name, bus: "master" };
@@ -881,10 +901,43 @@ function play(name, opts) {
    long as a low one, which a sped-up sample would not be. Each pop starts 40ms into its slot; playback starts 10ms
    before it, so an mp3 decoder's priming delay can shift the pop but never clip its attack. */
 const POP_SLOT_S = 0.3, POP_START_S = 0.04, POP_SLOTS = 19;
+const BUY_POP_SLOT = 7;   // a bought crate's pop: seven semitones up (a fifth) — bright against the pop-in's low start
 function playPop(step) {
   const s = Math.max(0, Math.min(POP_SLOTS - 1, Math.round(step || 0)));
   play("cork-pop", { from: s * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S });
 }
+
+/* ⭐ THE SOUNDS OF THE VOYAGE HE PICKED — 2026-09-14, on the page of that name, each rendered from the page's own recipe
+   (.planning/research/audio-sourcing/render_voyage_sounds.mjs + sounds-of-the-voyage.html beside it). His picks, and his notes:
+     card-swish     the recipe cards arrive — "Paper swish", "remove the "boop boop" at the end -- just use the swish at the beginning."
+     abacus-click   coins tick as they count, and the End of Voyage stats as they roll up — "Abacus click", and "The coin tick"
+     crate-marimba  each bake-off lid lands a note higher — "Marimba", "make them lower pitched so they sound more like big crates."
+                    ONE FILE OF SLOTS, like the cork pop: slot k is the k-th lid of a sweep, 600ms each, the note 40ms in.
+     crate-chime /  a right crate / a wrong crate on the reveal — "Chime & thud"
+     crate-thud
+     award-whoosh   each award card dealt in — "Soft whoosh"
+   Refused, on purpose: a sting under HEADS/TAILS ("the coin already has a landing sound baked in"), and the first-home fanfare,
+   which is Luis's to make (SOUND-BRIEF.csv). */
+const MARIMBA_SLOT_S = 0.6, MARIMBA_LEAD_S = 0.04, MARIMBA_SLOTS = 8;
+function playCardSwish() { play("card-swish"); }
+/* A COUNT CAN ROLL FASTER THAN A CLICK IS LONG. A big purchase steps the coin count every 12ms, and two captains' counts can roll at
+   once, so a click closer than TICK_GAP_MS to the last one is skipped: the count still visibly ticks, the sound stays a tick
+   rather than a buzz. The gap sits just under the roll's own slowest step (board.js COIN_ROLL_STEP_MS, 40ms), so an ordinary
+   purchase keeps a click for every coin. */
+const TICK_GAP_MS = 35;
+let lastTickAt = -1e9;
+function playCoinTick() {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now - lastTickAt < TICK_GAP_MS) return;
+  lastTickAt = now;
+  play("abacus-click");
+}
+function playLidNote(k) {
+  const s = Math.max(0, Math.min(MARIMBA_SLOTS - 1, Math.round(k || 0)));
+  play("crate-marimba", { from: s * MARIMBA_SLOT_S + MARIMBA_LEAD_S - 0.01, dur: MARIMBA_SLOT_S - MARIMBA_LEAD_S });
+}
+function playCrateVerdict(right) { play(right ? "crate-chime" : "crate-thud"); }
+function playAwardWhoosh() { play("award-whoosh"); }
 
 /* Is this sound ready to play the instant it is asked for? True when it is decoded — and ALSO when sound cannot play here at
    all (no audio context yet, or muted), so nothing ever waits on a sound that will not be heard. The pop-in's show asks
@@ -949,7 +1002,12 @@ let stormScatterTimer = null;
 let stormGen = 0;                    // bumped on every stop, so a timer from a past storm is dead
 let stormLive = [];                  // the claps still ringing, for fadeStorm to retire
 
+/* EACH CLAP IS ALSO A MOMENT THE BOARD CAN SEE — his game feel audit's lightning (board.js stormFlash). Told BEFORE the
+   sound checks, so a muted screen, or one whose sound never started, still sees the lightning the clap would have brought. */
+const thunderListeners = [];
+function onThunder(fn) { if (typeof fn === "function") thunderListeners.push(fn); }
 function stormFireOne(name) {
+  for (const fn of thunderListeners) { try { fn(); } catch (e) {} }
   if (!ctx || !buffers[name] || isMuted()) return;
   const src = ctx.createBufferSource();
   src.buffer = buffers[name];
@@ -1372,7 +1430,7 @@ function playForEvent(e, isLocalSeat) {
   if (s.localOnly && isLocalSeat !== true) return;
   /* The storm is not a one-shot and not a loop — it is a scatter that runs for the round. */
   if (s.scatter) { stormScatterStart(s.name); return; }
-  play(s.name, { bus: masterGain });
+  play(s.name, { bus: masterGain, from: s.from, dur: s.dur });
 }
 
 // D-05's placeholder cue, tied to the win screen APPEARING, not to the `end`/`finish` events —
@@ -1426,7 +1484,9 @@ export {
      all. That is precisely how a page could end up permanently silent. */
   wakeCtx,
   soundReady,
+  onThunder,
   playPop,
+  playCardSwish, playCoinTick, playLidNote, playCrateVerdict, playAwardWhoosh,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

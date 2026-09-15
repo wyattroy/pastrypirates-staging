@@ -155,10 +155,12 @@
      The rain angle/travel is driven by CSS vars set per-storm from the wind (see render()).
      Fades in/out rather than snapping on/off. Purely decorative. */
   #stormOverlay { position: absolute; inset: 0; pointer-events: none; border-radius: 10px; overflow: hidden;
-    opacity: 0; transition: opacity .8s ease; z-index: 5; background: rgba(18, 24, 45, 0.4);
+    opacity: 0; transition: opacity 1s ease; z-index: 5; background: rgba(18, 24, 45, 0.4);
     /* --slant is set per-storm (render) to the wind direction; --drop is one dash period of the tile */
     --slant: 0deg; --speed: 0.75s; --drop: 113px; }
   #boardwrap.storming #stormOverlay { opacity: 1; }
+  /* his game feel audit: the lightning, over the rain (board.js stormFlash) — subtle, at his word */
+  #stormOverlay .ppLightning { position: absolute; inset: 0; background: #eef7ff; opacity: 0; pointer-events: none; will-change: opacity; }
   /* notes/edits BUG-01: the rain used to be a live CSS build — a huge repeating-linear-gradient
      masked by another gradient with an animated mask-position and a blur filter. Safari re-rasterizes
      AND re-blurs that whole 220%-sized masked layer on the CPU every single frame (Chrome
@@ -252,8 +254,12 @@
      (see src/ui/util.js). Stacking and full-width rows are identical to the block layout it
      replaces — with no `order` set anywhere, every row is 0 and DOM order stands. */
   #players { display: flex; flex-direction: column; }
-  .player-row { padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; border: 2px solid transparent; box-sizing: border-box; transition: border-color .25s ease, box-shadow .25s ease; }
-  .player-row.activeTurn { box-shadow: 0 0 0 2px var(--rowcol, var(--accent)), 0 0 7px rgba(0,0,0,.22); }
+  .player-row { padding: 5px 6px; border-radius: 7px; margin-bottom: 4px; font-size: 13.5px; border: 2px solid transparent; box-sizing: border-box; transition: border-color .25s ease, box-shadow .25s ease, translate .25s ease; }
+  /* YOUR ROW LIFTS — PASSED on his game feel audit (2026-09-13), as proposed: "The row whose turn it is rises 2px with a
+     soft shadow while the ring appears, so it reads as "you're up" before you read a word." `translate`, not transform,
+     so it composes with anything else that moves a row. */
+  .player-row.activeTurn { box-shadow: 0 0 0 2px var(--rowcol, var(--accent)), 0 0 7px rgba(0,0,0,.22), 0 4px 8px rgba(0,0,0,.28); translate: 0 -2px; }
+  @media (prefers-reduced-motion: reduce) { .player-row { transition: none; } }
   /* fixed dot/name/coins columns keep money and hold aligned across all captains regardless of
      name length or how many ingredients they're holding. The recipe name is a second grid row
      inside the same .prowTop grid (not a separate row/div) so its placement — above the chips
@@ -921,6 +927,25 @@
      itself back to the board's own SVG crate the moment it lands. Z-INDEX 2 after #sailHost: over the islands, under the
      rings(3) and boats(4). transform and opacity only, in a camera layer (CAM_HTML_LAYERS). The sparkle is his tuner's. */
   #popHost { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  /* the boat's wake and its arrival ring (board.js sailSetsOff / sailArrives) share this camera layer, under the boats */
+  .ppWake { position: absolute; border-radius: 50%; background: rgba(255,255,255,.9); opacity: 0; will-change: transform, opacity; }
+  /* treasure coins and a bought crate fly between the board and the captains box in FIXED position (board.js) */
+  .ppTreasure, .ppCrateFly { position: fixed; z-index: 60; pointer-events: none; will-change: transform, opacity; object-fit: contain;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  .ppPoof { position: fixed; z-index: 59; pointer-events: none; border-radius: 50%; opacity: 0;
+    background: radial-gradient(rgba(255,255,255,.85), rgba(255,255,255,0) 70%); will-change: transform, opacity; }
+  .ppStreak { position: absolute; border-radius: 99px; background: rgba(255,255,255,.9); opacity: 0; will-change: transform, opacity; }
+  /* first-home confetti flies in FIXED position too, over the narration bubble (board.js firstHomeConfetti) */
+  .ppConfetti { position: fixed; z-index: 60; pointer-events: none; border-radius: 1px; opacity: 0; will-change: transform, opacity; }
+  /* a landed shot and a won battle (board.js shotLands / loserKnocked): smoke at the firing bow, a white flash over the struck hull and
+     a crate tumbling off the loser, all OVER the boats in #dockCoinHost; the crate's splash ring stays on the water in #popHost */
+  .ppSmoke { position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; will-change: transform, opacity;
+    background: radial-gradient(rgba(252,252,250,1) 0 28%, rgba(196,196,192,.92) 50%, rgba(120,120,118,.45) 62%, rgba(120,120,118,0) 72%); }
+  .ppHitFlash { position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; will-change: transform, opacity;
+    background: radial-gradient(rgba(255,255,255,1) 35%, rgba(255,255,255,0) 70%); }
+  .ppCrateSplash { position: absolute; opacity: 0; pointer-events: none; will-change: transform, opacity; object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  .ppSplash { position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.9); box-sizing: border-box; opacity: 0; will-change: transform, opacity; }
   .ppPop { position: absolute; opacity: 0; will-change: transform, opacity; }
   .ppPop img { width: 100%; height: 100%; display: block; object-fit: contain; }
   .ppSpark { position: absolute; opacity: 0; will-change: transform, opacity; }
@@ -1168,8 +1193,12 @@
      background. cqw units keep the geometry identical to the 640-unit board. */
   .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
     background: #ffc23a; border-radius: 6px; opacity: .5;
-    animation: sailBounce 1.15s ease-in-out infinite;
+    animation: sailBounce 1.15s ease-in-out infinite, sailPop .22s ease-out backwards;
     transition: opacity .12s ease, filter .12s ease; }
+  /* THE SQUARES POP IN FROM THE BOAT OUTWARD — his game feel audit, PASSED (2026-09-13). LISTED LAST so its hidden start
+     wins over the bounce until each square's own --sailPopDelay (renderPickPrompt, by distance from the boat); `scale`,
+     so it composes with the bounce's transform. */
+  @keyframes sailPop { 0% { scale: .2; opacity: 0; } 60% { scale: 1.12; opacity: .8; } 100% { scale: 1; opacity: .5; } }
   /* UI-04: a more distinct hover. Was opacity .85 + brightness 1.12 + a 4px glow, which on an
      already-pulsing square read as "slightly brighter" rather than "this one". Now the hovered
      square goes FULLY opaque, gains a white outline, and throws a wider two-stage glow — three cues
@@ -1304,6 +1333,9 @@
      longer inherits centring from `align-items` and would otherwise sit left while the crown, the
      name and the picture above it are all centred. */
   .winner-banner .victoryText { width: 100%; text-align: center; }
+  /* ⭐ the winner's confetti bursts BEHIND the pastry and the words (board.js endCardArrives), inside the banner's own clip */
+  .winner-banner > :not(.endConfetti) { position: relative; z-index: 1; }
+  .endConfetti { position: absolute; z-index: 0; pointer-events: none; border-radius: 1px; opacity: 0; will-change: transform, opacity; }
   @keyframes victoryPop { 0% { transform: scale(.4) rotate(-6deg); opacity: 0; }
     60% { transform: scale(1.12) rotate(3deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .victoryRecipe { animation: none; } }
@@ -1522,7 +1554,7 @@
   .bkoRow { display: flex; flex-direction: row; gap: 6px; justify-content: center; margin: 13px 0 8px; }
   .bkoBowl { flex: 1 1 0; min-width: 0; max-width: 64px; aspect-ratio: 1;
     position: relative; padding: 0; border: none; background: none; cursor: pointer;
-    border-radius: 10px; }
+    border-radius: 10px; transform-origin: 50% 100%; }
   .bkoBowl.locked { cursor: default; }
   /* T-27: a bowl in mid-swap paints OVER the ones standing still. Siblings in a flat flex row paint
      in DOM order, so a crate travelling past a solved bowl went behind it — "this looks messy",
@@ -1566,7 +1598,7 @@
        as "the bowl comes off" without ever leaving the bench's own row. Still transform+opacity
        only (PERF-01). */
     transform: translateY(-18%); opacity: 0;
-    transition: transform .26s ease, opacity .26s ease; }
+    transition: transform .26s ease, opacity .26s ease; transform-origin: 50% 100%; }
   .bkoBowl.covered .bkoDome { transform: translateY(0); opacity: 1; }
   /* z-index 3 puts the badge IN FRONT of the crate (Wyatt, 2026-08-08: "The numbers are now behind
      the bowls, put them back in front"). They were not always: the crate lid gained z-index 2 when
@@ -1611,6 +1643,13 @@
   .bkoBowl.locked { outline: 3px solid #3aa76d; outline-offset: 1px; opacity: .88; }
   .bkoBowl.flash { animation: bkoFlash .34s ease; }
   @keyframes bkoFlash { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  /* ⭐ the lid's dust, and a right crate's green sparks (bakeoff.js dropLid / crateRight): spans a crate carries for one beat.
+     Lid and crate squash from their bottom edge (transform-origin above), where they land. */
+  .bkoPuff { position: absolute; left: 22%; right: 22%; bottom: -8%; height: 30%; z-index: 3; pointer-events: none; opacity: 0;
+    border-radius: 50%; background: radial-gradient(rgba(150,112,68,.7), rgba(150,112,68,0) 70%); }   /* sawdust brown: cream dust vanished on the cream card */
+  .bkoSpark { position: absolute; left: 33%; top: 33%; width: 34%; height: 34%; z-index: 4; pointer-events: none; opacity: 0; }
+  .bkoSpark::before { content: ""; position: absolute; inset: 0; background: #8ff0b4;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 3px #3aa76d); }
   .bkoHint { font-size: 12px; font-style: italic; opacity: .82; margin-bottom: 6px; }
   /* .bkoBtns, NOT .apBtns: panel() adds `pendingReveal` whenever it sees .apBtns and index.html
      hides them until the typewriter resolves. With no .apMsg here that resolves on the next
@@ -2459,6 +2498,14 @@
   .pp4CerStakes { color:#e8dcc0; font-size:12.5px; font-style:italic; text-align:center;
     max-width:82vw; line-height:1.55; text-shadow:0 1px 4px rgba(0,0,0,.7); }
   .pp4CerTitle img, .pp4CerStakes img { width:18px; height:18px; vertical-align:-3px; }
+  /* his game feel audit: the landed word stamps in under the coin, and a dust ring leaves the coin (stage.js coinLandsWithWeight) */
+  .pp4CerStamp { font-weight:900; font-size:clamp(26px,8vw,40px); letter-spacing:2px;
+    text-align:center; text-shadow:0 3px 10px rgba(0,0,0,.6); }
+  .pp4CerStamp.heads { color:#ffd76b; }
+  .pp4CerStamp.tails { color:#c9d4dc; }
+  #pp4CerSlot { position:relative; }
+  .pp4Dust { position:absolute; border-radius:50%; pointer-events:none; opacity:0;
+    border:calc(3px * var(--pp4CerZoom,1)) solid rgba(255,236,190,.8); box-shadow:0 0 12px rgba(255,220,150,.45); }
   /* playtest 10 item 6: the landed face hits like a gavel — shudder + golden flare */
   #pp4CerSlot #flipCoinWrap.pp4Land { animation:pp4LandFx .62s ease-out; }
   @keyframes pp4LandFx {
