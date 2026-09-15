@@ -89,7 +89,7 @@ const verdictOf = (b, ct0) => {
 let lastSig = "";
 const inspect = () => {
   const p = ap(); if (!p) return;
-  const btns = [...p.querySelectorAll(".apBtn,.btlBtn")].filter(b => b.getBoundingClientRect().width > 2);
+  const btns = [...p.querySelectorAll(".apBtn")].filter(b => b.getBoundingClientRect().width > 2);
   const sig = btns.map(b => b.textContent.trim().slice(0, 10)).join("|");
   if (!sig || sig === lastSig) return;
   lastSig = sig;

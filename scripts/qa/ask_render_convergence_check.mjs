@@ -11,7 +11,7 @@
  * `answer`, watchPrompt passes sendResponse. Run RED against the pre-convergence tree.
  *
  * THE LANDMINES THIS GATE PINS (fork-2 map):
- *   · stage.js's `!fm && btl` "⚔️ Broadside!" fallback is load-bearing — the renderer must never
+ *   · stage.js's `!fm && S.battle` "⚔️ Broadside!" fallback is load-bearing — the renderer must never
  *     stamp flipMsg for a battle prompt (battleAsk keeps producing fm===null).
  *   · the parity gate anchors on the NAME localAsk( — it stays, as the local response mechanism.
  */
@@ -54,7 +54,7 @@ function fnBody(src, name) {
     if (body.includes("optionButtonsHTML(") && body.includes("panel(")) pass("renderAskPrompt() builds the whole ask prompt (buttons, slider, back, flip, panel)");
     if (/flipMsg/.test(body)) {
       if (/battle/.test(body)) pass("renderAskPrompt() stamps flipMsg guarded against battle prompts (stage.js's ⚔️ Broadside! fallback survives)");
-      else fail("renderAskPrompt() stamps flipMsg with no battle guard — a battle flip would lose its ⚔️ Broadside! title (stage.js `!fm && btl`)");
+      else fail("renderAskPrompt() stamps flipMsg with no battle guard — a battle flip would lose its ⚔️ Broadside! title (stage.js `!fm && S.battle`)");
     } else fail("renderAskPrompt() never stamps flipMsg — the ceremony would have no words on either tier");
   }
 }
@@ -88,8 +88,8 @@ function fnBody(src, name) {
 
 /* 4. the battle fallback the renderer must not break */
 {
-  if (/!fm\s*&&\s*btl/.test(stage) || /btl\s*&&\s*!fm/.test(stage)) pass("stage.js's battle-flip title fallback (`!fm && btl`) is intact");
-  else fail("stage.js's `!fm && btl` Broadside fallback is gone — verify the battle ceremony still has a title");
+  if (/!fm\s*&&\s*S\.battle/.test(stage))   /* was `!fm && btl` until the battle box was removed, 2026-09-14 */ pass("stage.js's battle-flip title fallback (`!fm && S.battle`) is intact");
+  else fail("stage.js's `!fm && S.battle` Broadside fallback is gone — verify the battle ceremony still has a title");
 }
 
 console.log(fails ? `\nFAILED — ${fails} assertion(s)` : "\nPASSED — one ask renderer, two response mechanisms");

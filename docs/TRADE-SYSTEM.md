@@ -405,6 +405,8 @@ Public inference: `noteDemand` · `demandFor` · `likelyNeeds` · `visibleProgre
 Units: `coinTurns` · `acquireTurns` · `PLAN.coinsPerDockTurn` · `PLAN.leverageTurns`
 
 UI — `src/ui/flow.js`: `humanTrade` · `counterOffer` · `coinSlider` · `crateOpt` · `logQuantity`
+
+What a player SEES settle — `src/engine/index.js` `settleTrade` records the `trade` event with `paid` (the coins the asker hands the seller, offer plus any counter); the one consumer (`src/orchestrator.js` `consumeEvent`) swaps the two crates as crates (`board.js` `tradeSwapTo`) and flies exactly `paid` coins from the payer's purse into the seller's (`board.js` `coinsAcross`). Wyatt, 2026-09-14: *"every coin you earn should fly over"*; guarded by `scripts/qa/every_coin_flies_check.mjs`.
 UI, shared by both tiers — `src/ui/util.js`: `ask` · `optionButtonsHTML` · `sliderWrapHTML` ·
 `sliderText` · `wireSlider` · `sliderWirePayload`
 Harnesses — `scripts/trade_offer_measure.js` (the guarded number) ·

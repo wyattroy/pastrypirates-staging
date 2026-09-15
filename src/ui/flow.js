@@ -70,6 +70,7 @@ import {
   clearSoloState, clearSession,   // ?pilot=new starts a NEW voyage; these own the two saved blobs
   buildPlayerRows,                // endReplay: the captains' rows, rebuilt once in sailing order
   say, sayAll, sayText, seat,     // the one door to src/shared/words.js
+  eventDrawn,   // a dock's buy waits for its coins to land (humanDock)
 } from "./util.js";
 /* A line every screen reads its own way, in one call: the words and their "ye" versions come from words.js. */
 const sayFlash=(id,facts,ms)=>{const w=sayAll(id,facts);return flash(w.html,ms,undefined,w.variants);};
@@ -665,7 +666,7 @@ export function sailHighlightRect(c,cellPx,svg){
 /* THE POP IS CSS (sailPop in index.html), started by a per-square --sailPopDelay — measured, a script animation left 2-5
    squares of every window showing at full for their first frame before its hidden start applied; a CSS animation with a
    backwards fill is resolved with the square's very first style, so nothing shows before its turn. */
-const SAIL_CASCADE_MS=250, SAIL_PRESS_MS=180;
+const SAIL_CASCADE_MS=375, SAIL_PRESS_MS=180;   // 250 -> 375 with the pop itself (index.html sailPop .33s): Wyatt, 2026-09-14, "The sail squares should pop up 50% slower so it's more noticeable"
 const sailReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 function pressSailSquare(r){
   if(sailReduced()||typeof r.animate!=="function")return;
@@ -1910,7 +1911,7 @@ export async function humanDock(player,port){
   const h=await humanFlip(player,say("dock.flipAsk",{icon:iconImg(ING_IMG[ing]),place:dockPlace(ing)}),true,
     say("dock.flipHelp",{heads:g.cfg.dockHeads,tails:g.cfg.dockTails}),"dock");
   if(h==="back")return "back";
-  player.coins+=h?g.cfg.dockHeads:g.cfg.dockTails;
+  g.payDock(player,h);   // credited AND recorded in one place, shared with a bot's dock (engine Game.payDock)
   let got=h?"treasure":"dockhand";
   const price=g.cratePrice(ing);
   /* THE CAPTAINS PANEL IS DRAWN FROM THE LAST EVENT'S SNAPSHOT, not from live player state — so
@@ -1919,11 +1920,15 @@ export async function humanDock(player,port){
      end of your turn, which is confusing". He is right, and it matters most exactly here, because
      the buy prompt asks him to spend money the panel says he does not have yet.
      A silent event carries the new snapshot immediately. It narrates nothing (see EVENT_NARRATION
-     .purse) and logs nothing — its whole job is to make the panel tell the truth. Every other coin
-     change in the game emits its event in the same breath as the mutation; this one could not,
-     because a prompt sits in between. */
-  g.ev({t:"purse",p:player.idx});
+     .purse) and logs nothing — its whole job is to make the panel tell the truth. Game.payDock now
+     records it in the same breath as the payment, above, for bots and humans alike (CEO, 2026-09-15). */
+  const purseEv=g.events&&g.events[g.events.length-1];
   liveRender(); // the purse changed — show it before the buy prompt prices anything against it
+  /* THE BUY WAITS FOR THE COINS TO LAND. Wyatt, 2026-09-14: "they happen sequentially and both require player decisions, so they
+     should be displayed that way." The CEO found the "Buy a crate?" question was not held for them (2026-09-15), so a captain could
+     be asked to spend coins still in the air. It now waits on the one consumer's drawing of this very purse (util.js eventDrawn,
+     capped), the same way every narration line waits on its event. */
+  if(purseEv&&purseEv.t==="purse")await eventDrawn(purseEv);
   let buy=null;
   if(g.cfg.dockBuy&&price!==null){
     /* THE BLACK MARKET'S SECOND PRICE, on the human side (Wyatt, 2026-08-13): "ye can trade any 2
@@ -3541,22 +3546,6 @@ export async function showTurnOrderIntro(order){
   // @copy misc.introbarrier.turnorder
   await netIntroBarrier(msg,say("intro.orderGo",{}));
 }
-export function coinHTML(state,bs,win){
-  const b=bs?`<span class="bs">🔥</span>`:"";
-  const w=win?" win":"";
-  if(state==="H")return `<div class="coin heads${w}" style="background-image:url(${FLIP_HEADS_IMG})">${b}</div>`;
-  if(state==="T")return `<div class="coin tails${w}" style="background-image:url(${FLIP_TAILS_IMG})">${b}</div>`;
-  // playtest 11: the battle card's own coin visibly spins — .coin.spin sets color:transparent
-  // expecting a background image, so without one the "spin" state rendered as an empty square
-  if(state==="spin")return `<div class="coin spin" style="background-image:url(${COIN_SPIN_IMG})">${b}</div>`;
-  return `<div class="coin wait">?</div>`;
-}
-export function pipsHTML(n,col,total){
-  total=total||3;
-  let s="";
-  for(let i=0;i<total;i++)s+=`<span class="pip${i<n?" on":""}"${i<n?` style="background:${col};border-color:${col}"`:""}></span>`;
-  return `<div class="pips">${s}</div>`;
-}
 export function battleSnapshot(o){
   const snap={};
   for(const k of ["round","a","d","atState","dfState","atBs","dfBs","live","winCoin","result","waiting","need","title","roleA","roleD"])
@@ -3568,21 +3557,6 @@ export function renderBattleFromSnap(snap,extra){
   if(!appState.game||!appState.game.players[snap.attIdx]||!appState.game.players[snap.defIdx])return;
   if(window.__pp4)window.__pp4.battle(snap.attIdx,snap.defIdx);
   netHandlers().onRenderBattle(Object.assign({att:appState.game.players[snap.attIdx],def:appState.game.players[snap.defIdx]},snap,extra||{}));
-}
-// the footer beneath the coins: a decision (buttons), a "waiting…" note, or the round result
-export function battleFooter(o){
-  if(o.prompt){
-    const {msg,opts,colors}=o.prompt;
-    return `<div class="btl-prompt">${msg?`<div class="msg">${msg}</div>`:""}<div class="btns">`+
-      opts.map((op,i)=>`<button class="apBtn btlBtn" data-i="${i}"${apBtnStyle(colors&&colors[i])}>${op.label}</button>`).join("")+
-      `</div></div>`;
-  }
-  if(o.waiting!=null)return `<div class="btl-wait">${say("battle.waiting",{who:seat(o.waiting)})}</div>`;
-  /* A LINE ABOUT A CAPTAIN CROSSES THE WIRE AS ITS WORDS — {id, facts} — and EVERY screen words it for itself, so the
-     battle card on a guest reads "ye" exactly where the host's does. A line about nobody is still a plain string.
-     `cls` is the result's colour ("score"). */
-  const r=o.result, txt=r&&typeof r==="object"?say(r.id,r.facts):r;
-  return `<div class="btl-result">${r&&r.cls?`<span class="${r.cls}">${txt}</span>`:(txt||"&nbsp;")}</div>`;
 }
 // The Lookout's Call: every spectator MUST call a winner from the crow's nest —
 // it's free, and a correct call earns a Spotter's Bounty (+1🌕) from the ship's

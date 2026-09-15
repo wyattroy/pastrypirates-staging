@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["abacus-click", "award-whoosh", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-thud", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["abacus-click", "award-whoosh", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-squawk", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -73,12 +73,15 @@ const SFX_VOLUME = {
   "cork-pop": 1,
   /* THE SOUNDS OF THE VOYAGE HE PICKED (2026-09-14) — 1 for the cork pop's reason: each was rendered from the "Sounds of the
      Voyage" page's own recipe at the level he auditioned it (every candidate levelled to one loudness, times the page's 70%). */
-  "abacus-click": 1,
+  /* THE COIN CLICK AT 3 — Wyatt, 2026-09-14: "The ticking sound isn't happening as it should (or i don't hear it, but i hear
+     every other sound)." It was the quietest stem in the game by far: -38 dB mean against store-ingredient's -31 at a volume of
+     2.79. Three times louder puts it level with the cork pop, which he hears. */
+  "abacus-click": 3,
   "award-whoosh": 1,
   "card-swish": 1,
   "crate-chime": 1,
   "crate-marimba": 1,
-  "crate-thud": 1,
+  "crate-squawk": 2,   // rendered level peaks -19 dB, under the thud it replaces (-12); doubled so a wrong crate lands as firmly
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -913,8 +916,8 @@ function playPop(step) {
      abacus-click   coins tick as they count, and the End of Voyage stats as they roll up — "Abacus click", and "The coin tick"
      crate-marimba  each bake-off lid lands a note higher — "Marimba", "make them lower pitched so they sound more like big crates."
                     ONE FILE OF SLOTS, like the cork pop: slot k is the k-th lid of a sweep, 600ms each, the note 40ms in.
-     crate-chime /  a right crate / a wrong crate on the reveal — "Chime & thud"
-     crate-thud
+     crate-chime /  a right crate / a wrong crate on the reveal — "Chime & thud", then 2026-09-14: "I want the "wrong" sound to be a
+     crate-squawk   squawk during the bakeoff" — the page's own squawk, his pick over re-downloading the macaw recording
      award-whoosh   each award card dealt in — "Soft whoosh"
    Refused, on purpose: a sting under HEADS/TAILS ("the coin already has a landing sound baked in"), and the first-home fanfare,
    which is Luis's to make (SOUND-BRIEF.csv). */
@@ -936,7 +939,7 @@ function playLidNote(k) {
   const s = Math.max(0, Math.min(MARIMBA_SLOTS - 1, Math.round(k || 0)));
   play("crate-marimba", { from: s * MARIMBA_SLOT_S + MARIMBA_LEAD_S - 0.01, dur: MARIMBA_SLOT_S - MARIMBA_LEAD_S });
 }
-function playCrateVerdict(right) { play(right ? "crate-chime" : "crate-thud"); }
+function playCrateVerdict(right) { play(right ? "crate-chime" : "crate-squawk"); }
 function playAwardWhoosh() { play("award-whoosh"); }
 
 /* Is this sound ready to play the instant it is asked for? True when it is decoded — and ALSO when sound cannot play here at

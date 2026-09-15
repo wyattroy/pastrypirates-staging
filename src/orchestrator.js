@@ -104,10 +104,10 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked,
+  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, coinsAcross, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
-  battleSnapshot, renderBattleFromSnap, battleFooter, coinHTML, pipsHTML,
+  battleSnapshot, renderBattleFromSnap,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
   reachable, pickCell, localAsk, pilotGate, armStormGate, pilotOpeningFork, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
   startPassAndPlay, startSinglePlayer,
@@ -287,62 +287,33 @@ export function battlePublish(o){
 // The battle scoreboard: names, a static result circle per fighter, and pips. The coin never
 // spins here — every flip in the game (battles included) physically happens on the shared
 // flippenator; this just displays whatever it last landed on for each fighter.
+/* ⭐ THE BATTLE BOX IS GONE — Wyatt, 2026-09-14: "THe battle box covered this up. I want the battle box removed entirely." — and
+   his earlier note on how (DECISIONS, the game feel audit): "when you're the one engaging in the battle, the coin flipper stage
+   should still appear; but the moment it's finished flipping, the board should reveal itself again with the two ships battling."
+   So a fight is drawn ON THE BOARD: the camera holds both ships (stage.js S.battle); a captain's own flip is the flip stage; every
+   other screen sees the small coin turn over the flipping boat (the `coinflip` a battle flip now records, drawn by the one consumer
+   exactly as a dock's is); a landed shot kicks, flashes and shakes (board.js shotLands); and each round's words are a narration
+   bubble. Every decision — flee or stand, fire again or break off, which crate to plunder — is the ordinary prompt.
+   STILL CALLED renderBattle AND STILL PURE, because the seam it serves is unchanged (scripts/qa/battle_publish_seam_check.mjs):
+   battlePublish renders here and writes the snapshot; a guest renders the same snapshot here through renderBattleFromSnap. What it
+   draws is a bubble, ONCE per new line — a fight republishes the same result several times, and a line said twice reads as a
+   stutter. A fight's FIRST line carries the wind's rule for a tie, the old box's wind pill in his own words, so nobody loses the
+   one fact that settles a quarter of all fights. */
+let battleLineSaid=null;
 export function renderBattle(o){
-  if(appState.replaying)return;          // silent during reload-replay, like liveRender
-  const nm=i=>pname(i),col=i=>HEXCOL[i];
-  const A=o.att,D=o.def,title=o.title||say("battle.title",{});
-  // playtest 20: WHO WINS A TIE, said before a coin is ever tapped. Rule 9 hands a two-heads tie
-  // to the downwind ship and the card used to show only names, roles and coins — so a quarter of
-  // all fights turned on something the card never mentioned. Wyatt's pick, 2026-08-13.
-  // Derived here rather than passed in: nobody moves during a battle (rule 9d) and nobody moves
-  // after one (BATL-03), so the geometry cannot go stale between render and result. `o.dw` still
-  // wins when present, so a broadcast snapshot keeps rendering from its own recorded value.
-  const dw=o.dw!==undefined?o.dw:(appState.game&&appState.game.downwindSide?appState.game.downwindSide(A,D):null);
-  /* ONE PILL, CENTRED UNDER BOTH CAPTAINS — playtest 23 item 2 (Wyatt: "the battle UI has too much
-     text and much of it is unnecessary… remove both wind hint pills from underneath the captain's
-     name; instead put one wind hint pill underneath, centered across both captains").
-     The pair it replaces stated ONE fact twice, from two sides, and neither half named the captain
-     it favoured — the reader had to work out that ⬇ DOWNWIND under a column meant that column. A
-     single pill says the whole thing once and points at whoever holds the edge.
-     @copy misc.battlecard.windtag — APPROVED as written, Wyatt 2026-08-15 (the downwind line was
-     his own wording; the crosswind line is unchanged from the 2026-08-14 approval). */
-  const windTag=dw==null
-    ? `<div class="windTag cross">${say("battle.crosswindTag",{})}</div>`
-    : `<div class="windTag dw">${say("battle.downwindTag",{name:nm(dw==="a"?A.idx:D.idx).toUpperCase()})}</div>`;
-  /* …AND THE SAME `dw` MARKS THE COLUMN IT NAMES (`.btl-col.dw`, just below). Purely structural —
-     no CSS reads it — and it exists so the FLIP CEREMONY can find the downwind captain without
-     re-deriving the wind or parsing this badge's prose.
-     Earned 2026-09-03. The ceremony looked for the captain in `dwTag.parentElement`, which is
-     `.btl-wind` — a div holding the badge and nothing else — so the lookup returned null on EVERY
-     downwind battle and fell through to the crosswind sentence. A player was told "Crosswind — two
-     heads and the cannonballs collide" over the coin, then shown a card saying the opposite two
-     seconds later. Both halves are photographed in judge-1914Z-shots/solo-tablet-wk-018*.png.
-     Rule 23's question, asked before the fix: what makes the badge and the ceremony agree? Nothing
-     did. A cleverer selector, or matching on the badge's words, would have worked today and broken
-     at the next rewording — so the answer is one value written in one place and read in both.
-     Gate: scripts/qa/flip_ceremony_names_the_wind_check.mjs. */
-  // `Round N · first to K` is gone with it, and it was never load-bearing: asyncBattleRun fixes
-  // need=1 and the a/d counters only ever read 0 or 1 (see the note above asyncBattle), so the
-  // line counted a race that stopped existing when the battle became a single broadside.
-  // @copy prompt.battle.scoreboard
-  panel(`<div class="btl">
-    <div class="btl-hd"><span>${title}</span></div>
-    <div class="btl-body">
-      <div class="btl-col${o.live==="a"?" live":""}${dw==="a"?" dw":""}">
-        <div class="who" style="color:${col(A.idx)}">${nm(A.idx)}</div>
-        <div class="role">${o.roleA||say("battle.attacker",{})}</div>
-        ${coinHTML(o.atState,o.atBs,o.winCoin==="a")}
-      </div>
-      <div class="btl-mid">${say("battle.vs",{})}</div>
-      <div class="btl-col${o.live==="d"?" live":""}${dw==="d"?" dw":""}">
-        <div class="who" style="color:${col(D.idx)}">${nm(D.idx)}</div>
-        <div class="role">${o.roleD||say("battle.defender",{})}</div>
-        ${coinHTML(o.dfState,o.dfBs,o.winCoin==="d")}
-      </div>
-    </div>
-    <div class="btl-wind">${windTag}</div>
-    ${battleFooter(o)}
-  </div>`,!!o.prompt);
+  if(appState.replaying||!o||!o.att||!o.def||!o.result)return;
+  const who=[o.att.idx,o.def.idx].join(),key=JSON.stringify([who,o.round,o.result]);
+  if(key===battleLineSaid)return;
+  const first=!battleLineSaid||JSON.parse(battleLineSaid)[0]!==who||o.round===1&&o.result&&o.result.id==="battle.loads";
+  battleLineSaid=key;
+  let txt=typeof o.result==="object"?say(o.result.id,o.result.facts):o.result;
+  if(first){
+    const dw=o.dw!==undefined?o.dw:(appState.game&&appState.game.downwindSide?appState.game.downwindSide(o.att,o.def):null);
+    // @copy misc.battlecard.windtag — APPROVED as written, Wyatt 2026-08-15 (said with the fight's first line now, not pinned in a box)
+    const wind=dw==null?say("battle.crosswindTag",{}):say("battle.downwindTag",{name:pname(dw==="a"?o.att.idx:o.def.idx).toUpperCase()});
+    txt=`${txt||""}<br>${wind}`;
+  }
+  if(txt&&window.__pp4&&window.__pp4.flash)window.__pp4.flash(txt);   // not awaited: the fight keeps its own pace
 }
 // battleSnapshot/renderBattleFromSnap moved verbatim to src/ui/flow.js (11-05).
 
@@ -492,7 +463,6 @@ export function applyBenchSnap(snap){
    on to something else — the bake-off bench takes the same precaution. */
 export function applyBattleSnap(snap){
   if(!snap){
-    if(document.querySelector("#actionPanel .btl"))panel("");
     appState.spectatingBattle=false;
     return;
   }
@@ -576,19 +546,16 @@ export function battleAsk(player,o,msg,opts,colors){
   netBroadcast(spect.html,[...spect.variants.filter(v=>v.seat!==askSeat),{seat:askSeat,html:msg}]);
   let idxP;
   if(decisionIsLocal(askSeat)){
-    idxP=new Promise(res=>{
-      if(isFlip){
-        // the scoreboard just shows state — the flippenator is the actual control
-        battlePublish(o);
+    battlePublish(o);   // the table's copy of the fight (no box any more — see renderBattle)
+    if(isFlip){
+      idxP=new Promise(res=>{
         setNeedsAction(true);
-        setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);res(0);});
-      }else{
-        battlePublish(Object.assign({},o,{prompt:{msg,opts,colors}}));
-        $("actionPanel").querySelectorAll(".btlBtn").forEach(b=>{
-          b.onclick=()=>res(+b.dataset.i);
-        });
-      }
-    });
+        setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);res(0);});   // the flip stage is the control
+      });
+    }else{
+      // the ordinary prompt: its buttons answer with their index, which is what the record and resolveOpt below expect
+      idxP=localAsk(msg,opts.map((op,i)=>({label:op.label,value:i})),colors);
+    }
   }else{
     battlePublish(Object.assign({},o,{waiting:askSeat}));   // a seat, so each screen words it for itself
     idxP=remotePrompt(askSeat,{kind:"ask",msg,labels:opts.map(x=>x.label),
@@ -674,13 +641,13 @@ async function asyncBattleRun(att,def){
     const key=side==="a"?"atState":"dfState";
     await battleAsk(player,base(Object.assign({live:side,[key]:"wait"},extra)),
       label,[{label:say("flip.button",{}),value:1,flip:true}]);
+    /* DECIDED AT THE TAP AND RECORDED (why "battle"), as a dock's flip is (flow.js humanFlip): with the battle box gone, the small
+       coin over this captain's boat is how every other screen sees the flip, and it starts as this screen's big coin starts. */
+    const h=appState.game.flip(player,"battle");
+    publishNow();liveRender();
     broadcastFlip("spin");
-    // playtest 11: the battle card's own coin spins through the beat — before this, only the
-    // (hidden-under-the-stage) flippenator got the spin state and the card coin jumped
-    // wait -> face with no motion at all
     battlePublish(base(Object.assign({live:side,[key]:"spin"},extra)));
     await sleep(flipSpinLeftMs());
-    const h=appState.game.flip(player);
     broadcastFlip(h?"H":"T");
     // (no "flips HEADS!" line — his pass, 2026-09-13; the battle card's own coin shows the face on every screen,
     // and a bot's flip, bFlip below, never had the line at all)
@@ -695,10 +662,11 @@ async function asyncBattleRun(att,def){
     extra=extra||{};
     const key=side==="a"?"atState":"dfState";
     battlePublish(base(Object.assign({live:side,[key]:"wait"},extra)));
+    const h=appState.game.flip(player,"battle");   // decided and recorded first — see hFlip
+    publishNow();liveRender();
     broadcastFlip("spin");
-    battlePublish(base(Object.assign({live:side,[key]:"spin"},extra)));   // playtest 11: see hFlip
+    battlePublish(base(Object.assign({live:side,[key]:"spin"},extra)));
     await sleep(flipSpinLeftMs());
-    const h=appState.game.flip(player);
     broadcastFlip(h?"H":"T");
     battlePublish(base(Object.assign({live:side,[key]:h?"H":"T"},extra)));   // land ON the face
     await sleep(FLIP_LAND_HOLD_MS);   // playtest 13 / T-34: the landed face holds, same as every other flip
@@ -1925,7 +1893,7 @@ export async function consumeEvent(e){
      human's tap, inside a bot's doDock — and this is what draws the coin. ARRIVAL FIRST: "bots begin docking
      BEFORE they have arrived at their dock" — so the coin waits for the stage to be settled (the camera's
      glide done and every ship drawn where the engine says it is) before it is thrown. */
-  if(e.t==="coinflip"&&e.why==="dock"&&!appState.replaying&&!decisionIsLocal(e.p)){
+  if(e.t==="coinflip"&&(e.why==="dock"||e.why==="battle")&&!appState.replaying&&!decisionIsLocal(e.p)){   // a battle flip too, since the battle box went (2026-09-14)
     const settled=window.__pp4&&window.__pp4.settled;
     if(settled)await settled();
     await flipDockCoin(e.p,!!e.heads);
@@ -1938,7 +1906,8 @@ export async function consumeEvent(e){
      the frame is decided here, once, from the event. A captain's own sail prompt still refines it with
      the pill's room (renderPickPrompt) — the same function, asked again with more to go on. */
   if(e.t==="turn"&&!appState.replaying&&window.__pp4&&window.__pp4.sailCells)window.__pp4.sailCells(e.p);
-  if(e.t==="turn"&&!appState.replaying)bobShip(e.p);   // his game feel audit: the active boat bobs once, on every screen (board.js)
+  if(e.t==="turn"&&!appState.replaying)bobShip(e.p);   // his game feel audit, then 2026-09-14: the active boat bobs for its whole turn, on every screen (board.js)
+  if(e.t==="end")stopTurnBob();                         // …and nothing bobs once the voyage is over
   $("scrub").max=Math.max(0,appState.game.events.length-1);
   stormCamForEvent(e);            // W9: the storm's wide shot, the SAME cue the host's storm driver fires, off the same event — not a guest-only camera call. Self-guarded: any event that is not a storm returns immediately.
   if(e.t==="tradewind"&&!appState.replaying)rideStreaks(e.p);    // his game feel audit: speed lines while the current carries the boat (board.js)
@@ -1965,10 +1934,23 @@ export async function consumeEvent(e){
      hold (board.js). The crate's island rect is read BEFORE render() greys it, the hold's new chip AFTER render() draws it. */
   const buyFlight=(e.t==="dock"&&e.got==="bought"&&!e.black&&!appState.replaying)?crateFlightFrom(e):null;
   const swapFlight=(e.t==="trade"&&!appState.replaying)?tradeSwapFrom(e):null;   // …and a trade's two crates swap in arcs
-  if(e.t==="dock"&&e.heads&&!appState.replaying)treasureBurst(e.p);
+  /* EVERY COIN EARNED FLIES TO THE PURSE, THE MOMENT IT IS EARNED — Wyatt, 2026-09-14: "if you earn 3 coins, only 3 coins should fly
+     to the hold ... every coin you earn should fly over -- including from working the docks ... the coins should enter your hold
+     the moment you earn them". It hung off the `dock` summary, heads only, six coins whatever was earned. It now rides the record of
+     the earning itself — a dock's `purse` (heads or tails) and a pass's pay — one coin per coin, on every screen. AWAITED below:
+     a bot earns and buys in one breath, so the coins land before its buy is shown, and the two read as the two steps they are. */
+  /* AND EVERY OTHER WAY OF EARNING (CEO, 2026-09-15: "coins from selling a crate in a trade ... and from a correct crow's-nest call
+     ... do not" fly). A won call's bounty flies from the caller's boat like any payday; a trade's coins come from the other captain,
+     so they cross row to row, out of the payer's purse and into the seller's. With these four (dock, pass, won call, trade sale)
+     every coin credited anywhere in the game flies (scripts/qa/every_coin_flies_check.mjs holds that). */
+  const earned=(e.t==="purse"||e.t==="pass")?e.coins:(e.t==="sidebet"&&e.won)?e.delta:0;
+  const earnedFlight=(!appState.replaying&&earned>0)?treasureBurst(e.p,earned):null;
+  const paidFlight=(!appState.replaying&&e.t==="trade"&&e.paid>0)?coinsAcross(e.a,e.b,e.paid):null;
   render();
   if(buyFlight)crateFlightTo(buyFlight,e.p);
   if(swapFlight)tradeSwapTo(swapFlight);
+  if(earnedFlight)await earnedFlight;
+  if(paidFlight)await paidFlight;
   /* …AND THE ARRIVAL'S DIP AND SPLASH RING, ONCE IT HAS STOPPED. After render(), not inside the wait above: a hop too short
      to walk only starts gliding here, and a ring placed at the settle above landed a full square behind the boat on 3 of 8
      sails (measured). Not awaited, so the consumer's pace is unchanged; the stage's own settle says when the hull is still. */
@@ -2044,18 +2026,17 @@ export function watchPrompt(){
       setFlipActive(null);appState.inBattlePrompt=false;return;}
     if(prompt.kind==="ask"){
       if(prompt.battle){
-        // this seat owns the live battle decision — render the same scoreboard everyone else
-        // sees, with the control (flip button or choice buttons) layered on top
+        /* THIS SEAT'S BATTLE DECISION, WITH NO BOX (2026-09-14): the camera holds the fight, a flip is the flip stage, and a choice is
+           the ordinary prompt — exactly what the host's own captain gets in battleAsk. */
         appState.inBattlePrompt=true;
+        renderBattleFromSnap(prompt.battle);   // holds the camera on the fight; a line already said is not said again
         if(prompt.flip){
-          renderBattleFromSnap(prompt.battle);
           setNeedsAction(true);
           setFlipActive(()=>{setFlipActive(null);setNeedsAction(false);sendResponse(prompt.id,0);});
         }else{
           setFlipActive(null);
-          const cols=prompt.colors||[];
-          renderBattleFromSnap(prompt.battle,{prompt:{msg:prompt.msg,opts:(prompt.labels||[]).map(l=>({label:l})),colors:cols}});
-          $("actionPanel").querySelectorAll(".btlBtn").forEach(b=>{b.onclick=()=>sendResponse(prompt.id,+b.dataset.i);});
+          renderAskPrompt({msg:prompt.msg,opts:(prompt.labels||[]).map((l,i)=>({label:l,value:i})),colors:prompt.colors||null,battle:true},
+            v=>sendResponse(prompt.id,v,true));
         }
         return;
       }

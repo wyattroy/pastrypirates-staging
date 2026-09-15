@@ -703,43 +703,6 @@
   /* .ahoyGlow is assigned in THE ATTENTION VOCABULARY block (end of this stylesheet) — it used
      to carry its own private @keyframes ahoyglow, the second of three hand-rolled copies of the
      same orange ring. One definition now: pp4Glow. */
-  /* ---- battle scoreboard ---- */
-  .btl { text-align: center; }
-  .btl-hd { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
-  .btl-body { display: flex; align-items: flex-start; justify-content: center; gap: 8px; }
-  /* min-width:0 IS LOad-BEARING — playtest 22 (Wyatt: "the battles box is clipping at the edges"),
-     with the attacker's name cut to "ough Hook" on one side and "ties collide" cut on the other.
-     A flex item defaults to min-width:auto, so it refuses to shrink below its own content; the wind
-     tag below is `width: max-content`, so a long one ("CROSSWIND · ties collide") set the column's
-     intrinsic width and BOTH columns then pushed the row wider than the card. .btl-body centres its
-     children, so the overflow spilled equally off both ends — which is why it read as the box being
-     clipped at the edges rather than as one column being too wide. Letting the columns shrink puts
-     the tag's own max-width:100% back in charge. */
-  .btl-col { flex: 1 1 0; min-width: 0; max-width: 190px; padding: 8px 6px; border-radius: 12px; border: 2px solid transparent; transition: background .2s, border-color .2s, box-shadow .2s; }
-  .btl-col.live { background: #fff; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,166,35,.18); }
-  .btl-col .who { font-weight: 800; font-size: 14px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .btl-col .role { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; opacity: .5; margin-bottom: 7px; }
-  /* playtest 20: the wind, on the card, before a coin is tapped. A two-heads tie goes to the
-     downwind ship (rule 9) and ~25% of fights are decided that way, so the edge is named where
-     the fight is watched rather than only in the line that follows it.
-     playtest 23 item 2: ONE pill, centred BENEATH both columns, rather than one per captain. It
-     left the columns, so it is scoped to .btl-wind — the min-width:0 note above no longer applies
-     to it (a centred row cannot set a column's intrinsic width), but the columns keep that rule
-     because the captain names still can. `.up` is gone rather than left unused: a single pill
-     names the downwind ship, so there is no side left to label upwind. */
-  .btl-wind { display: flex; justify-content: center; margin-top: 8px; }
-  .btl-wind .windTag { font-size: 10px; font-weight: 800; letter-spacing: .6px; border-radius: 999px;
-    padding: 3px 10px; width: max-content; max-width: 100%; line-height: 1.35; }
-  .btl-wind .windTag.dw { background: #f5a623; color: #3a2600; border: 1px solid #c9821a; }
-  .btl-wind .windTag.cross { background: rgba(31,66,73,.10); color: #1f4249; opacity: .65; }
-  /* VS HOLDS ITS PLACE AGAINST THE COINS, and 9px is a measurement rather than a guess. The pill
-     leaving the column shortened it 160px -> 138px, so the old 30px over-corrected. Swept in the
-     live page at 430px and read off a Range over the glyph — NOT off the flex box, which
-     align-self:center pins to the line centre and which therefore reads the same at every padding
-     (that mis-measurement reported a flat -13 for 0px through 40px and nearly shipped a wrong number):
-       before, padding 30px -> VS sits  9.1px above the coin's centre
-       after,  padding  9px -> VS sits  8.5px above the coin's centre  */
-  .btl-mid { align-self: center; font-weight: 800; font-size: 12px; opacity: .35; padding-top: 9px; }
   /* --coinRing is a token because the flip ceremony has to multiply it (W5-1). Under the old
      `transform:scale(2.2)` the ring came along for free at 6.6px; sizing the coin properly leaves
      a literal 3px hairline round a 167px coin unless the ring is scaled with it. */
@@ -864,15 +827,6 @@
   .pips { display: flex; justify-content: center; gap: 6px; }
   .pip { width: 15px; height: 15px; border-radius: 50%; background: #ececec; border: 2px solid #d2d2d2; transition: transform .2s, box-shadow .2s; }
   .pip.on { box-shadow: 0 0 7px rgba(0,0,0,.28); transform: scale(1.14); }
-  .btl-result { margin-top: 11px; font-weight: 700; font-size: 13.5px; min-height: 19px; }
-  .btl-result .score { color: #1c9e63; }
-  .btl-result .cancel { color: #8a8a8a; }
-  /* battle decisions live inside the scoreboard — coins stay visible above them */
-  .btl-prompt { margin-top: 11px; text-align: center; }
-  .btl-prompt .msg { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
-  .btl-prompt .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  .btlBtn { font-size: 14px; }
-  .btl-wait { margin-top: 11px; font-weight: 700; font-size: 13.5px; color: #8a8a8a; }
   /* THE EASING IS THE WHOLE TRICK — do not put ease-out back. Wyatt, on the 3.6s ease-out version:
      "the rings bunch up. and then they pause." That was not a timing problem. ease-out sprints then
      crawls, so three rings spaced evenly in TIME arrive clumped in SPACE near the outer edge, and
@@ -932,6 +886,11 @@
   /* treasure coins and a bought crate fly between the board and the captains box in FIXED position (board.js) */
   .ppTreasure, .ppCrateFly { position: fixed; z-index: 60; pointer-events: none; will-change: transform, opacity; object-fit: contain;
     filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  /* the active captain's boat bobbing for its turn, as HTML so it costs no layout (board.js bobShip) */
+  .ppBobBoat { position: absolute; pointer-events: none; will-change: transform; object-fit: contain; }
+  /* a crate in flight is the crate with its ingredient on it (board.js flyingCrate) */
+  .ppCrateBox { background: url(assets/plaque/crate.webp) center/100% 100% no-repeat; display: grid; place-items: center; }
+  .ppCrateBox img { width: 74%; height: 74%; object-fit: contain; }
   .ppPoof { position: fixed; z-index: 59; pointer-events: none; border-radius: 50%; opacity: 0;
     background: radial-gradient(rgba(255,255,255,.85), rgba(255,255,255,0) 70%); will-change: transform, opacity; }
   .ppStreak { position: absolute; border-radius: 99px; background: rgba(255,255,255,.9); opacity: 0; will-change: transform, opacity; }
@@ -1193,7 +1152,7 @@
      background. cqw units keep the geometry identical to the 640-unit board. */
   .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
     background: #ffc23a; border-radius: 6px; opacity: .5;
-    animation: sailBounce 1.15s ease-in-out infinite, sailPop .22s ease-out backwards;
+    animation: sailBounce 1.15s ease-in-out infinite, sailPop .33s ease-out backwards;   /* .22s -> .33s: his 2026-09-14 "50% slower so it's more noticeable" */
     transition: opacity .12s ease, filter .12s ease; }
   /* THE SQUARES POP IN FROM THE BOAT OUTWARD — his game feel audit, PASSED (2026-09-13). LISTED LAST so its hidden start
      wins over the bounce until each square's own --sailPopDelay (renderPickPrompt, by distance from the boat); `scale`,
@@ -2500,7 +2459,11 @@
   .pp4CerTitle img, .pp4CerStakes img { width:18px; height:18px; vertical-align:-3px; }
   /* his game feel audit: the landed word stamps in under the coin, and a dust ring leaves the coin (stage.js coinLandsWithWeight) */
   .pp4CerStamp { font-weight:900; font-size:clamp(26px,8vw,40px); letter-spacing:2px;
-    text-align:center; text-shadow:0 3px 10px rgba(0,0,0,.6); }
+    text-align:center; text-shadow:0 3px 10px rgba(0,0,0,.6);
+    /* placed over the "Tap the coin" line's own box (stage.js coinLandsWithWeight), so the stage never reflows as it lands */
+    position:absolute; left:0; right:0; translate:0 -50%; pointer-events:none; }
+  /* the throw lifts the coin out of its socket, so the socket stops clipping it for that long (stage.js coinSinksAndLaunches) */
+  #pp4CerSlot.pp4Lift .flipPlank { overflow:visible; }
   .pp4CerStamp.heads { color:#ffd76b; }
   .pp4CerStamp.tails { color:#c9d4dc; }
   #pp4CerSlot { position:relative; }
@@ -3296,7 +3259,7 @@
      It was #177 before — the identical dark teal as the radial fan's rings, which is what made it
      read as chrome rather than as the way in.
      Ink and edge are NOT invented here: #3a2600 on #f5a623 with a #c9821a border is already this
-     codebase's pairing for text on this orange (.btl-col .windTag.dw, the downwind battle tag).
+     codebase's pairing for text on this orange (the downwind pill on the old battle card, since removed).
      White would have been the obvious choice and fails contrast on it (~2.2:1). */
   /* ⚠ O2 — THE PILL NO LONGER COVERS THE ARTWORK. This is one of the four he was offered and left
      unticked, so it is MY BEST GUESS pending his word, and it is flagged for him rather than

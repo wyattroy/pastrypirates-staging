@@ -114,7 +114,7 @@ try {
   const afterAnswer = await c.ev(`(async () => {
     const sq = [...document.querySelectorAll('.sailCell')].find(el => !el.classList.contains('pp4StayCell') && !el.classList.contains('sailSwept'));
     if (sq) sq.click();
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 900));   // past the slower pop-in (cascade 375ms + a .33s pop, 2026-09-14), so every square is counted painted
     return document.querySelectorAll('.sailCell').length;
   })()`);
   check("answering the window leaves ZERO squares behind", afterAnswer === 0, `counted ${JSON.stringify(afterAnswer)}`);

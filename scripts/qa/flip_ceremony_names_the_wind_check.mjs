@@ -19,16 +19,15 @@
  * `else` of that same `if`. The comment directly above it states the intent it was failing:
  * "so the card and the ceremony can never disagree about who holds the wind."
  *
- * WHY THE FIX IS A MARKER AND NOT A BETTER SELECTOR (rule 23 — what makes these two agree?).
- * renderBattle now stamps the downwind column with `.btl-col.dw`, written by the same expression
- * that writes the badge, and the ceremony reads that. Matching on the badge's PROSE would have
- * worked today and broken the next time anyone rewords it; a marker written beside the badge
- * cannot disagree with the badge.
+ * RE-ANCHORED 2026-09-14, when Wyatt had the battle box removed entirely ("THe battle box covered this up. I want the battle box
+ * removed entirely."). There is no card and no badge any more. The ceremony now asks the ENGINE — appState.game.downwindSide for
+ * the two captains the stage frames (S.battle) — and the fight's opening bubble (orchestrator.js renderBattle) asks the same
+ * function, so the two cannot disagree (rule 23: one source).
  *
  *   node scripts/qa/flip_ceremony_names_the_wind_check.mjs
  *
- * RED-PROOFED: revert either half of the fix (the `dw` class in src/orchestrator.js, or the
- * selector in src/ui/stage.js) and this check reports the crosswind sentence and exits 1.
+ * RED-PROOFED: --before makes the engine answer "no one holds the wind" for the posed fight, which is what the pre-fix ceremony
+ * effectively heard on every downwind battle; the check must then report the crosswind sentence and exit 1.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -36,11 +35,8 @@ import { openChrome, freshProfileDir, sleep } from "../lib/cdp.mjs";
 import { openWebKit } from "../lib/wk.mjs";
 import { REPO, gameURL } from "../lib/chrome.mjs";
 
-/* --before  strips the `.dw` marker off the column before arming the ceremony, which reproduces
-              the PRE-FIX DOM exactly, on the same posed board. It is how the matched pair
-              (rule 26) is taken without stashing the fix out of a tree another session may be
-              reading — and it doubles as the red-proof: with the marker gone this check must
-              report the crosswind sentence and exit 1.
+/* --before  makes the engine's downwindSide answer null (crosswind) for the posed fight — the red-proof: the ceremony must then
+              say crosswind and this check must exit 1.
    --wk       the same seat on WebKit, which is the engine the fault was photographed on. */
 const BEFORE = process.argv.includes("--before");
 const WK = process.argv.includes("--wk");
@@ -55,32 +51,23 @@ const wait = async (m, expr, ms = 45000, step = 250) => {
   return false;
 };
 
-/* Pose a DOWNWIND battle card, then raise the ceremony over it exactly as the game does — through
-   the same `window.__pp4.flip(el, onClick)` bridge the flippenator arms (src/ui/stage.js:3958). */
+/* Pose a DOWNWIND battle ON THE BOARD — the stage framing captains 1 and 2, the engine saying captain 1 holds the wind — then raise
+   the ceremony exactly as the game does, through the same `window.__pp4.flip(el, onClick)` bridge the flippenator arms. */
 const POSE_AND_ARM = (before) => `(async () => {
-  const { pn } = await import('/src/ui/util.js');
-  const { renderBattleFromSnap } = await import('/src/ui/flow.js');
-  renderBattleFromSnap({
-    attIdx: 1, defIdx: 2, round: 1, a: 1, d: 0,
-    atState: 'H', dfState: 'H', live: null, winCoin: 'a',
-    result: '<span class="score">Both fire \\u26aa HEADS \\u2014 but ' + pn(1) + "'s firing downwind and the shot hits!</span>",
-    title: '\\u2694\\ufe0f The broadside', roleA: 'Attacker', roleD: 'Defender'
-  }, { dw: 'a' });
-  const btl0 = document.querySelector('#actionPanel .btl');
-  ${before ? `if (btl0) btl0.querySelectorAll('.btl-col.dw').forEach(c => c.classList.remove('dw'));` : ``}
+  const { appState } = await import('/src/state/index.js');
+  const { pname } = await import('/src/ui/util.js');
+  const g = appState.game;
+  g.downwindSide = ${before ? "() => null" : "(att, def) => (att === g.players[1] ? 'a' : 'd')"};
+  if (window.__pp4) { window.__pp4.flipMsg = null; window.__pp4.battle(1, 2); }
   const armed = !!(window.__pp4 && window.__pp4.flip &&
                    window.__pp4.flip(document.getElementById('flipCoinWrap'), () => {}));
-  const btl = document.querySelector('#actionPanel .btl');
-  return {
-    armed,
-    badge: btl && btl.querySelector('.windTag.dw') ? btl.querySelector('.windTag.dw').textContent.trim() : null,
-    marked: !!(btl && btl.querySelector('.btl-col.dw .who'))
-  };
+  return { armed, holder: pname(1), dw: g.downwindSide(g.players[1], g.players[2]) };
 })()`;
 
 const READ_STAKES = `(() => {
   const st = document.querySelector('#pp4Veil .pp4CerStakes');
-  return st ? { present: true, text: st.textContent.trim() } : { present: false };
+  const b = st && st.querySelector('b');
+  return st ? { present: true, text: st.textContent.trim(), named: b ? b.textContent.trim() : null } : { present: false };
 })()`;
 
 (async () => {
@@ -110,26 +97,25 @@ const READ_STAKES = `(() => {
     const shotName = `flip-ceremony-wind-${engine}-${BEFORE ? "before" : "after"}.png`;
     await m.shot(path.join(OUT, shotName));
 
-    console.log(`flip_ceremony_names_the_wind — the ceremony must agree with the battle card's wind badge`);
-    console.log(`  ${engine} ${W}x${H} @${DSF} · ${BEFORE ? "BEFORE (marker stripped — the pre-fix DOM)" : "AFTER (as shipped)"}`
+    console.log(`flip_ceremony_names_the_wind — the ceremony must name the captain the engine says holds the wind`);
+    console.log(`  ${engine} ${W}x${H} @${DSF} · ${BEFORE ? "BEFORE (engine forced to say crosswind — the red-proof)" : "AFTER (as shipped)"}`
               + ` · picture: .planning/posed/${shotName}`);
-    console.log(`  the card's badge says : ${JSON.stringify(posed && posed.badge)}`);
-    console.log(`  downwind column marked: ${posed && posed.marked}`);
+    console.log(`  the engine says       : ${posed && posed.dw === "a" ? JSON.stringify(posed.holder) + " holds the wind" : "no one holds the wind"}`);
     console.log(`  the ceremony says     : ${JSON.stringify(stakes.present ? stakes.text : "(no .pp4CerStakes)")}`);
 
     /* THE INSTRUMENT MUST REACH ITS SUBJECT BEFORE ITS VERDICT MEANS ANYTHING. A ceremony that was
        never raised, or a card with no downwind badge, would make the assertion below pass or fail
        for reasons that have nothing to do with the bug. Checked first, and loudly. */
     if (!posed || !posed.armed)  fail = "the ceremony was never armed — __pp4.flip returned false, so nothing below was measured";
-    else if (!posed.badge)       fail = "the posed card carries no downwind badge, so this run tested a crosswind and proves nothing";
-    else if (!stakes.present)    fail = "the ceremony raised but has no .pp4CerStakes line to read";
+    else if (!stakes.present || !stakes.text) fail = "the ceremony raised but its stakes line is empty — the stage never saw the posed fight (S.battle)";
     else if (/crosswind/i.test(stakes.text))
-      fail = `the ceremony calls a DOWNWIND battle a crosswind. The card says ${JSON.stringify(posed.badge)} `
-           + `and the ceremony says ${JSON.stringify(stakes.text)} — the same fight, two rules.`;
+      fail = `the ceremony calls a DOWNWIND battle a crosswind: ${JSON.stringify(stakes.text)}`;
     else if (!/downwind/i.test(stakes.text))
       fail = `the ceremony says neither downwind nor crosswind: ${JSON.stringify(stakes.text)}`;
+    else if (stakes.named !== posed.holder)
+      fail = `the ceremony names ${JSON.stringify(stakes.named)} but the engine gave the wind to ${JSON.stringify(posed.holder)}`;
     else
-      console.log("  PASS  the ceremony names the downwind captain, and it is the one the badge names.");
+      console.log("  PASS  the ceremony names the downwind captain, and it is the one the engine names.");
   } finally {
     await m.close();
   }

@@ -28,7 +28,7 @@ import { panel, setNeedsAction, GHOST_FADE_MS } from "./panel.js";
 // imports neither panel.js nor this file), so this adds no cycle — see the note beside the bake-off's
 // export in ./index.js, updated in this same commit.
 import { narrationHoldMs, say, sayText } from "./util.js";
-import { playLidNote, playCrateVerdict } from "./audio.js";
+import { playLidNote, playCrateVerdict, playCoinTick } from "./audio.js";
 
 const $=(id)=>document.getElementById(id);
 // module-local, as every other src/ui/ file keeps its own
@@ -214,6 +214,12 @@ function benchHTML(bake,slots){
    the baker's paint() and by the watcher's pick stream, and neither knows where its list came from.
    A LOCKED CRATE IS NEVER TOUCHED: its badge is the step number the captain already earned. */
 function paintBadges(bowls,openSteps,picks){
+  /* A TICK FOR EVERY GUESS — Wyatt, 2026-09-14: "I want a "tick" sound (same as the coin tick up/down sound?) when a player makes
+     their guesses for the bakeoff". One per crate named or un-named, on the baker's screen and every watcher's alike, because both
+     paint through here. A whole bench clearing at once (a paid rewatch) is not a guess, so it makes no sound. */
+  const was=bowls.__picks;
+  if(was!=null&&Math.abs(picks.length-was)===1)playCoinTick();
+  bowls.__picks=picks.length;
   bowls.forEach((b,pos)=>{
     if(b.classList.contains("locked"))return;
     const at=picks.indexOf(pos);
