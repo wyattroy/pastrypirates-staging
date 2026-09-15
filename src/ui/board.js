@@ -2060,6 +2060,7 @@ export async function treasureBurst(seat,coins){
   if(icon&&capShowing()){const r=icon.getBoundingClientRect(),o=fixedOrigin();if(r.width>1)to=[r.left+r.width/2-o.x,r.top+r.height/2-o.y];}
   const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42);
   if(!from||!to)holdCoinRoll(seat,0);
+  const anims=[];
   for(let k=0;k<n;k++){
     const im=document.createElement("img");
     im.src=COIN_IMG;im.alt="";im.className="ppTreasure";
@@ -2071,11 +2072,16 @@ export async function treasureBurst(seat,coins){
       {translate:`${spread.toFixed(1)}px ${(-up).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.4},
       {translate:`${end[0].toFixed(1)}px ${end[1].toFixed(1)}px`,scale:to?"0.55":"0.7",opacity:to?1:0}],
       {duration:TREASURE_MS,delay:k*TREASURE_GAP_MS,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"treasure"});
-    a.onfinish=a.oncancel=()=>im.remove();
+    a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
   }
   const flight=TREASURE_MS+(n-1)*TREASURE_GAP_MS;
-  holdCoinRoll(seat,to?TREASURE_MS*0.8:0);          // …and rolls up as they arrive
-  await new Promise(r=>setTimeout(r,flight));
+  /* THE WAIT IS THE FLIGHT ITSELF, NOT A CLOCK BESIDE IT. On a busy machine the coins start a frame or more after they are created, so a
+     timer of the same length ended before the last coin landed: a heads dock measured "Buy a crate?" 133ms before its third coin
+     arrived (2026-09-15). So the count starts rolling when the FIRST coin lands, and this (and through eventDrawn, a dock's question)
+     waits for the LAST one, capped so a stalled page never holds the game. */
+  if(to&&anims.length){holdCoinRoll(seat,flight+1500);const go=()=>holdCoinRoll(seat,0);anims[0].finished.then(go,go);}
+  else holdCoinRoll(seat,0);
+  await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
 /* ⭐ THE TWO CRATES SWAP IN ARCS — PASSED on his game feel audit (2026-09-13), as proposed: "Your crate and theirs cross over
    each other between the two rows, and both land with a squash." Same shape as the crate flight home: each side's crate is
@@ -2142,7 +2148,7 @@ export async function coinsAcross(fromSeat,toSeat,coins){
     const r=icon.getBoundingClientRect(),o=fixedOrigin();return r.width>1?{x:r.left+r.width/2-o.x,y:r.top+r.height/2-o.y,w:r.width}:null;};
   const from=at(fromSeat),to=at(toSeat);if(!from||!to)return;
   const n=Math.max(1,Math.min(TREASURE_MAX,Math.round(coins||1))),size=Math.max(12,from.w*1.15);
-  holdCoinRoll(toSeat,ACROSS_MS*0.8);
+  const anims=[];
   const dx=to.x-from.x,dy=to.y-from.y,ox=fixedOrigin().x,cx0=ox+from.x+dx*.5,half=size*.55+6;
   const bow=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,Math.max(size*2,Math.abs(dy)*0.3)));   // the same clamp: on the glass
   for(let k=0;k<n;k++){
@@ -2154,9 +2160,11 @@ export async function coinsAcross(fromSeat,toSeat,coins){
       {translate:`${(dx*.5+bow).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.1",opacity:1,offset:.45},
       {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:"0.7",opacity:1}],
       {duration:ACROSS_MS,delay:k*TREASURE_GAP_MS,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"coins-across"});
-    a.onfinish=a.oncancel=()=>im.remove();
+    a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
   }
-  await new Promise(r=>setTimeout(r,ACROSS_MS+(n-1)*TREASURE_GAP_MS));
+  const flight=ACROSS_MS+(n-1)*TREASURE_GAP_MS,go=()=>holdCoinRoll(toSeat,0);   // the seller's count starts when the first coin lands
+  holdCoinRoll(toSeat,flight+1500);if(anims.length)anims[0].finished.then(go,go);else go();
+  await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
 /* Measured BEFORE render() greys the crate (its island rect), handed to crateFlightTo AFTER render() has drawn the new chip. */
 export function crateFlightFrom(e){
