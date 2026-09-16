@@ -108,6 +108,8 @@ await sleep(900);
    verified in orchestrator.js writeGameLog(). His plan is to name the players test1/test2 so the
    rows filter out of any later analysis; this pins the id too, so there are TWO independent
    handles and a real player who happens to type "test1" is never mistaken for the harness.
+   FROM 2026-09-16 the log records NO names (his ruling) and records `host` instead — so the handles are now this id
+   and the host, which for a gate run is always localhost.
    Nothing in the game reads gamelogs back, so these rows cannot affect what any player sees. */
 const QA_PLAYER_ID = "qa-playtest-gate";
 /* WAIT FOR THE THING, NEVER FOR THE CLOCK. Wyatt, 2026-09-13, after the rig abandoned five of ten

@@ -24,7 +24,7 @@
     visits/<ts>-<pid> = build            one per page boot
     starts/<ts>-<pid> = {b,h,m}          one per new voyage; key doubles as the gid
     fins/<gid>        = {t,b}            one per completed voyage
-    gamelogs/<ts>     = {...names,bots}  the long-standing completed-voyage log (captain names)
+    gamelogs/<ts>     = {...bots,seed}   the long-standing completed-voyage log (captain names only before 2026-09-16)
   The fifth answers his question in its own present tense — "how many people are PLAYING":
     presence/<pid>    = true             written by netMarkPresence on connect, and armed with
                                          onDisconnect().remove() — so it empties itself when a
@@ -239,7 +239,7 @@ async function load(){
   // fins whose start-gid we never saw (mid-game refresh lost the gid): still finished voyages
   for(const k in fins){if(!starts[k]){const d=D(day(tsOf(k)));d.fins++;if(!me.has(pidOf(k)))d.finsOthers++;}}
   for(const k in logs){
-    const g=logs[k];if(!g||!g.names)continue;
+    const g=logs[k];if(!g||!g.names)continue;   // logs from 2026-09-16 on carry no names (his ruling) — this list fades as the older ones age out
     const d=D(day(+(g.ts||k)));
     g.names.forEach((n,i)=>{if(n&&!(g.bots&&g.bots[i]))d.caps.add(n);});
   }

@@ -126,7 +126,7 @@ import {
   //  renderer was the last caller, and it now goes through localAsk like every other tier.
   //  prompt_one_renderer_check.mjs holds that.)
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
-  rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
+  pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, applyActiveSeat, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
   expectEventDrawing, finishEventDrawing, eventDrawn, afterLine, flipDockCoin,
   sleepMs, BOARD_LAST_LOOK_MS,
@@ -893,10 +893,13 @@ export function writeGameLog(){
     pid:appState.myId||null,gid:usageGid(),
     ts,room:appState.room||null,winner:appState.game.winner,round:appState.game.round,
     battles:appState.game.battles,trades:appState.game.trades,strategies:appState.game.cfg.strategies,
-    // names/bots are recorded per seat so solo & local games (no rooms/{code}/seats node) are still
-    // attributable — events reference players by seat index, so this is the key to reading them back.
-    // Consistent with the lobby's data-collection notice ("nothing beyond the name you type").
-    names:appState.game.players.map((_,i)=>rawName(i)),
+    /* ⛔ NO NAMES, FROM 2026-09-16 — his ruling. This log carried `names` (what each player typed) from the start, "so solo &
+       local games are still attributable". Nothing ever needed that: events reference captains by seat, and `bots` below
+       says which seats were people. Asked, when reading these logs to learn how winning humans play meant handling every
+       name a child had typed, Wyatt chose: "Stop recording names". So the privacy page's "Anonymised move data" is now
+       literally what is stored. The 588 logs written before this keep theirs; scripts/voyage_disagreements.mjs only ever
+       fetches logs written after a date it is given. stats.html's "Captains seen" list reads names from older logs and
+       hides itself once they age out of its window. */
     bots:appState.game.players.map(player=>player.strategy!=="human"),
     /* ⭐ THE THREE THINGS THAT MAKE A VOYAGE ASKABLE AGAIN — Wyatt, 2026-09-16: "send them to firebase", for the
        CEO's idea he picked out: "ask the bot's planner what it would have done on each of your turns — a list of
