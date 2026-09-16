@@ -898,6 +898,21 @@ export function writeGameLog(){
     // Consistent with the lobby's data-collection notice ("nothing beyond the name you type").
     names:appState.game.players.map((_,i)=>rawName(i)),
     bots:appState.game.players.map(player=>player.strategy!=="human"),
+    /* ⭐ THE THREE THINGS THAT MAKE A VOYAGE ASKABLE AGAIN — Wyatt, 2026-09-16: "send them to firebase", for the
+       CEO's idea he picked out: "ask the bot's planner what it would have done on each of your turns — a list of
+       the exact moments the bots disagree with a winning human, in the game's own words."
+       The events below already hold every captain's square, purse and hold at every move. What they could never
+       give back is the MAP: islands and docks are drawn from the seed, and 588 logs written before this line
+       have none, so no planner can be asked about them. With `seed` and `cfg`, scripts/voyage_disagreements.mjs
+       rebuilds the very board this voyage was played on and asks a bot at the top of each human turn.
+       `host` is the third handle his 2026-08-21 ruling asked for (after the test names and QA_PLAYER_ID in
+       scripts/playtest_gate.mjs): a sea trial or a probe plays on localhost, so a real player's voyage and the
+       harness's can never be confused, even when both typed "Wyatt".
+       The privacy page already says this is collected: "Anonymised move data — what happened on the board".
+       cfg goes through JSON so an undefined field can never make Firebase refuse the whole write. */
+    seed:appState.game.seed,
+    cfg:JSON.parse(JSON.stringify(appState.game.cfg)),
+    host:(typeof location!=="undefined"&&location.hostname)||"",
     events:JSON.parse(JSON.stringify(appState.game.events))
   },netFail("game log"));
 }
