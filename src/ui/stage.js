@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.16.3-staging@bd6e1c4f";
+const PP4_STAMP = "2026.09.16.4-staging@c7833097";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2252,10 +2252,18 @@ function coinSinksAndLaunches(){
 /* THE STAMP TAKES THE PLACE OF "TAP THE COIN" — his recording showed TAILS stamped straight over "Tap the coin, captain — let fate
    decide.", which nothing hid once the coin had been tapped. The stamp now stands where that line stands (placed over its box, so
    nothing else on the stage moves) and the line hides while it does; both come back the moment the coin is armed again. */
+/* ⭐ WHICH WORDS THE FLIP STAGE SHOWS — DECIDED IN ONE PLACE, FROM ONE PHASE. Wyatt, 2026-09-16: "during flippenator flips, the TAILS or
+   HEADS text that appears at the end is written on top of other text. the other text shouldn't be there, or should be removed first."
+   The stage carries three lines of words — the prompt over the coin (.pp4CerTitle), the stakes or the wind's rule (.pp4CerStakes), and
+   "Tap the coin" (.pp4CerSub) — and whether each showed was decided in three places: this file showed "Tap the coin" (cerClearStamp) and hid
+   it under the landing word (coinLandsWithWeight), and index.html faded it while the coin spun. The prompt and the stakes were decided
+   NOWHERE, so the big word stamped straight over the stakes line. Now the stage has a phase — "ask", "spinning", "verdict" — set only
+   here, and index.html's one [data-cer] block says what every line does in each (scripts/qa/flip_stage_words_one_place_check.mjs). */
+function cerPhase(v, phase){ if (v) v.dataset.cer = phase; }
 function cerClearStamp(){
   const v = $("pp4Veil"); if (!v) return;
   v.querySelectorAll(".pp4CerStamp").forEach(s => s.remove());
-  const sub = v.querySelector(".pp4CerSub"); if (sub) sub.style.visibility = "";
+  cerPhase(v, "ask");
 }
 function coinLandsWithWeight(heads){
   const c = $("flipCoinWrap"), v = $("pp4Veil");
@@ -2281,7 +2289,8 @@ function coinLandsWithWeight(heads){
   if (!stamp){ stamp = document.createElement("div"); v.appendChild(stamp); }
   stamp.className = "pp4CerStamp " + (heads ? "heads" : "tails");
   const sub = v.querySelector(".pp4CerSub");
-  if (sub){ stamp.style.top = (sub.offsetTop + sub.offsetHeight / 2) + "px"; sub.style.visibility = "hidden"; }
+  if (sub) stamp.style.top = (sub.offsetTop + sub.offsetHeight / 2) + "px";
+  cerPhase(v, "verdict");   // every other line leaves before the word lands (index.html [data-cer="verdict"])
   stamp.textContent = sayText(heads ? "flip.stampHeads" : "flip.stampTails", {});
   stamp.animate([{ opacity: 0, scale: "1.3" }, { opacity: 1, scale: "0.96", offset: .6 }, { opacity: 1, scale: "1" }],
     { duration: STAMP_MS, easing: "ease-out", fill: "both", id: "coin-stamp" });
@@ -2330,7 +2339,7 @@ function flipArmed(el, onClick){
        was not tapped; there is nothing to launch and nothing new to watch. */
     const coin = $("flipCoinWrap");
     if (veil && coin && !coin.classList.contains("active")) return true;
-    if (veil){ veil.classList.add("resolving"); coinSinksAndLaunches(); cerWatchResult(); }
+    if (veil){ cerPhase(veil, "spinning"); coinSinksAndLaunches(); cerWatchResult(); }
     return true;
   }
   let veil = $("pp4Veil");
@@ -2345,7 +2354,6 @@ function flipArmed(el, onClick){
       if (coin && coin.onclick){ ev.stopPropagation(); coin.onclick(); }
     });
   }
-  veil.classList.remove("resolving");
   cerClearStamp();   // armed again: the last flip's word leaves, and "Tap the coin" is back
   // …and before the first paint, not on the next tick: the slow gear is 125ms away, which is long
   // enough for the ceremony to be seen once in the wrong place (Group G fault 1).
@@ -5873,7 +5881,32 @@ export function cleanupLegacyTimerKey(store){
   } catch (e) { return false; }
 }
 
+/* ⭐ THE DARK REACHES EVERY EDGE OF THE WINDOW — A LAYER OF ITS OWN, ABOVE THE PAGE. Wyatt, 2026-09-16, on "The dark covers the whole window
+   now": "Nope, see screenshot. there has to be a simpler way -- can you just make a new fullscreen div that's on top of everything else, and
+   put the stage modal on top of that?"
+   The dark used to be #pp4Veil's box-shadow, spread past the stage's box. But #pp4Veil lives inside body, and body.pp4Stage is the capped
+   column — transformed so every fixed box lays out against it, and overflow:hidden — so whatever it paints beyond the column is the
+   browser's to clip, and his Safari clipped it. So, his idea, with one change: a layer that is a child of <html> itself, above the page and
+   inside no column, so nothing can clip it — with a clear window cut exactly where the column stands (a transparent box the column's size,
+   its 100vmax shadow the dark). The stage modal does not have to move: the coin, the words and the stamp stay in the column, where every
+   position they take is measured, and show through the window; the column's own dark is still #pp4Veil. Up only while #pp4Veil is, read off
+   its presence by an observer rather than a second switch anyone must remember (and not a :has() rule — Safari's reactivity gaps with
+   :has() are recorded in index.html). */
+function syncSurround(){
+  let s = document.getElementById("pp4Surround");
+  if (!s){ s = document.createElement("div"); s.id = "pp4Surround"; s.setAttribute("aria-hidden", "true"); document.documentElement.appendChild(s); }
+  const up = !!$("pp4Veil") && document.body.classList.contains("pp4Stage");
+  if (up){ const r = document.body.getBoundingClientRect(); s.style.left = r.left + "px"; s.style.width = r.width + "px"; }
+  s.hidden = !up;
+}
+function watchSurround(){
+  if (typeof MutationObserver === "function") new MutationObserver(syncSurround).observe(document.body, { childList: true, attributes: true, attributeFilter: ["class"] });
+  if (typeof ResizeObserver === "function") new ResizeObserver(syncSurround).observe(document.body);
+  window.addEventListener("resize", syncSurround);
+  syncSurround();
+}
 export function initStage(){
+  watchSurround();   // the full-window dark follows the stage (see syncSurround)
   wirePressSquish();   // every button in the game squishes when pressed (src/ui/press.js) — welcome screen included
   // FIX-01: clear the shared legacy key once per browser, BEFORE the seed below reads anything.
   // Wrapped again here because a browser can throw on merely touching localStorage (Safari private

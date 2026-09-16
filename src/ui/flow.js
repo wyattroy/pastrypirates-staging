@@ -666,10 +666,16 @@ export function sailHighlightRect(c,cellPx,svg){
 /* THE POP IS CSS (sailPop in index.html), started by a per-square --sailPopDelay — measured, a script animation left 2-5
    squares of every window showing at full for their first frame before its hidden start applied; a CSS animation with a
    backwards fill is resolved with the square's very first style, so nothing shows before its turn. */
-/* 250 -> 375 -> 560ms, with the pop itself (index.html sailPop, now .5s): Wyatt, 2026-09-14, "The sail squares should pop up 50%
-   slower so it's more noticeable", and again 2026-09-15 on the next build — "still come in too fast -- add them to the game feel
-   tuner". Both numbers are his dials there now; these are what it opens at. */
-const SAIL_CASCADE_MS=560, SAIL_PRESS_MS=180;
+/* ⭐ ONE NUMBER, AND A WAVE. Wyatt, 2026-09-16, on his tuner: "doesn't this var 'How long the whole cascade takes, nearest square to
+   furthest' get calculated by multiplying 'One square's pop' by the number of squares? You shouldn't have 2 variables for this. Also,
+   the sail squares in your animation seem like they're going radially, not outward from the boat. I want all squares that are the same
+   distance from the boat to appear simultaneously as each other so the effect looks like a yellow wave flowing from the boat; not a
+   radial pop in of squares."
+   Both were right, and not only on the tuner: the game timed each square by its straight-line distance from the boat, so squares one
+   sail apart popped at different moments and the pop spread like a circle. Now a square's RING is how many sails of water it is from
+   the boat — squares on the same ring pop together — and each ring starts one pop after the ring before, so the whole wave takes a pop
+   per ring. SAIL_POP_MS is the only number (index.html's sailPop reads it as --sailPopMs). 250 -> 375 -> 560 -> his 440. */
+const SAIL_POP_MS=440, SAIL_PRESS_MS=180;
 const sailReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 function pressSailSquare(r){
   if(sailReduced()||typeof r.animate!=="function")return;
@@ -708,8 +714,16 @@ export function renderPickPrompt(spec,answer){
      shape as the spec.msg fallback below. */
   const squares=(spec.cells||[]).map(c=>({c}));
   if(spec.pos)squares.push({c:spec.pos,stay:true});
-  const reach=c=>spec.pos?Math.hypot(c[0]-spec.pos[0],c[1]-spec.pos[1]):0;
-  const farthest=Math.max(1,...squares.map(({c})=>reach(c)));
+  /* A SQUARE'S RING: sails of water from the boat, counted through the gold squares themselves (a flood from the boat's own square), so the
+     wave flows AROUND an island instead of leaping it. A square the flood cannot reach (only across a version skew) takes its steps. */
+  const ringOf=new Map(),key=c=>c[0]+","+c[1],gold=new Set(squares.map(({c})=>key(c)));
+  if(spec.pos){
+    const q=[[spec.pos,0]];ringOf.set(key(spec.pos),0);
+    for(let i=0;i<q.length;i++){const [c,r]=q[i];
+      for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){const n=[c[0]+d[0],c[1]+d[1]],k=key(n);
+        if(gold.has(k)&&!ringOf.has(k)){ringOf.set(k,r+1);q.push([n,r+1]);}}}
+  }
+  const reach=c=>ringOf.has(key(c))?ringOf.get(key(c)):(spec.pos?Math.abs(c[0]-spec.pos[0])+Math.abs(c[1]-spec.pos[1]):0);
   /* A TAP THAT DRAGGED THE BOARD IS NOT A CHOICE. Wyatt, 2026-09-15: "When the player clicks /taps a sailable yellow square and drags
      the board, that should not count as them choosing that square to sail to... Many times I've tried to move the board and ended up
      accidentally moving to the square I tapped purely to move the board." His pick when asked was to ignore drags rather than add a
@@ -719,7 +733,8 @@ export function renderPickPrompt(spec,answer){
   let chosen=false;
   squares.forEach(({c,stay})=>{
     const r=sailHighlightRect(c,cellPx,svg);
-    r.style.setProperty("--sailPopDelay",Math.round((reach(c)/farthest)*SAIL_CASCADE_MS)+"ms");
+    r.style.setProperty("--sailPopDelay",(reach(c)*SAIL_POP_MS)+"ms");
+    r.style.setProperty("--sailPopMs",SAIL_POP_MS+"ms");
     if(stay){
       r.classList.remove("sailSwept");delete r.dataset.sweptTo;
       r.classList.add("pp4StayCell");

@@ -104,7 +104,7 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, coinsLeave, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, coinsAcross, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
+  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, payInto, coinsLeave, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap,
@@ -618,7 +618,7 @@ async function asyncBattleRun(att,def){
   const opening=sayAll("battle.opening",{a:seat(att.idx),d:seat(def.idx)});
   // @copy adhoc.battle.opening
   await flash(opening.html,Math.max(900,stepDelay()),undefined,opening.variants);
-  if(c.powder)att.coins-=c.powder;
+  appState.game.payPowder(att);   // the ONE place a fight's powder is taken, and recorded (engine payPowder)
   appState.game.battles++;
   const bets=await collectSideBets(att,def);
   let a=0,d=0;
@@ -1967,19 +1967,21 @@ export async function consumeEvent(e){
   const earned=(e.t==="purse")?e.coins:(e.t==="sidebet"&&e.won)?e.delta:0;
   /* AND EVERY COIN THAT LEAVES A PURSE TIPS OUT OF IT — Wyatt, 2026-09-15: "we need a 'coins taken away' animation from the purse".
      Read off the event like `earned` above, in this one place, so a bot's purchase and a human's look the same on every screen:
-     a crate bought at a dock (its price), a re-watched bake-off, a battle's powder and each refire. A TRADE IS NOT HERE ON PURPOSE —
-     those coins are not taken away, they cross the table to the other captain, and coinsAcross already flies them (below). */
+     a crate bought at a dock (its price), a re-watched bake-off, a fight's powder (engine payPowder) and each refire. A TRADE IS NOT HERE ON PURPOSE —
+     those coins are not taken away, they cross the table to the other captain, and payInto flies them across (below). */
   const spent=(e.t==="dock"&&e.price>0)?e.price:(e.t==="rewatch"&&e.paid>0)?e.paid
-    :(e.t==="refire"&&e.cost>0)?e.cost:((e.t==="battle"||e.t==="battlenull"||e.t==="battleflee")&&e.powder>0)?e.powder:0;
-  const spender=(e.t==="refire"||e.t==="battle"||e.t==="battlenull"||e.t==="battleflee")?e.a:e.p;
+    :((e.t==="refire"||e.t==="powder")&&e.cost>0)?e.cost:0;
+  const spender=(e.t==="refire"||e.t==="powder")?e.a:e.p;
   if(!appState.replaying&&spent>0&&spender!=null)coinsLeave(spender,spent);
-  const earnedFlight=(!appState.replaying&&earned>0)?treasureBurst(e.p,earned):null;
-  /* A PASS IS THE ONE PAYDAY THAT IS BEING EXPLAINED AS IT ARRIVES, so its coin waits for the words (util.js afterLine). Wyatt,
-     2026-09-15: "the coin you get from musing should only fly into your purse AFTER the narration line has finished writing --
-     because it's explaining where the coin comes from." Not awaited here, or the line could never start: the narrator waits on this
-     consumer finishing the event. */
-  if(!appState.replaying&&e.t==="pass"&&e.coins>0)afterLine(e,()=>treasureBurst(e.p,e.coins));
-  const paidFlight=(!appState.replaying&&e.t==="trade"&&e.paid>0)?coinsAcross(e.a,e.b,e.paid):null;
+  /* ⭐ EVERY EARNING THROUGH THE ONE DOOR (board.js payInto) — a dock's treasure, a won call's bounty, a muse coin, a trade's sale — BEFORE
+     render(), so each purse is drawn without the coins still on their way to it, and each coin's landing is the one arrival event that
+     puts it on the number and chinks. Wyatt, 2026-09-16, of the muse coin: "This should be done architecutrally with an event fired by
+     the coin arriving in the hold, regardless of where the coin came from". Nothing here knows how any source's count should behave.
+     A muse coin is the one earning explained as it arrives, so its flight waits for its line (util.js afterLine; his 2026-09-15 ruling)
+     — waiting is all it does differently, and it is not awaited, or the line this consumer is still drawing could never start. */
+  const earnedFlight=earned>0?payInto(e.p,earned):null;
+  if(e.t==="pass"&&e.coins>0)payInto(e.p,e.coins,{after:new Promise(r=>afterLine(e,r))});
+  const paidFlight=(e.t==="trade"&&e.paid>0)?payInto(e.b,e.paid,{from:e.a}):null;
   render();
   if(buyFlight)crateFlightTo(buyFlight,e.p);
   if(swapFlight)tradeSwapTo(swapFlight);

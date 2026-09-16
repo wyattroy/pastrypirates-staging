@@ -80,7 +80,7 @@ const SFX_VOLUME = {
   /* THE CHINK SITS AT THE TICK'S LEVEL, on purpose. Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound
      -- we want a coin 'chink' sound whenever a coin goes into the purse." It replaces the tick in the purse, so it must
      arrive at the same loudness or the swap reads as a volume change. Measured: the tick renders at 0.084 peak and is
-     lifted x3 here (0.25); chink A renders at 0.175, so x1.45 lands on the same 0.25. */
+     lifted x3 here (0.25); chink A renders at 0.175, so x1.45 lands on the same 0.25. (His pick became B on 2026-09-16, a touch fuller: 0.41 of full scale at this gain, measured — left at the same volume setting; if B sits too loud against the other sounds in play, this one number is what moves.) */
   "coin-chink": 1.45,
   "award-whoosh": 1,
   "card-swish": 1,
@@ -367,6 +367,8 @@ const EVENT_SOUND = {
   // a battle that ends with nobody hit has no hit to sound; the paid re-fire is covered by the
   // flip that follows it
   battlenull: null, refire: null,
+  // the powder a fight burns: its coins are SEEN leaving the purse (board.js coinsLeave), and the fight's own engage cue already sounds
+  powder: null,
   // v2.1: the ovens going cold rides the battle sound of the raid that caused it — it is the
   // consequence of that same broadside, one beat later, not a second event to be scored.
   unfinish: null,
@@ -941,21 +943,18 @@ function playCoinTick() {
   play("abacus-click");
 }
 /* ⭐ THE CHINK A COIN MAKES LANDING IN THE PURSE — Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound -- we want
-   a coin 'chink' sound whenever a coin goes into the purse. And for 3 or more coins, which should be spaced somewhat apart
-   temporally, we need those clink sounds not to overlap."
-   sfx/coin-chink.mp3 is ONE FILE OF THREE SLOTS — the three he can hear side by side on the Game Feel Tuner, rendered from that
-   page's own recipe (.planning/research/audio-sourcing/render_coin_chink.mjs). CHINK_PICK is his pick; changing it is one digit,
-   never another render. NON-OVERLAP IS ENFORCED HERE, not by whoever calls: a chink closer than CHINK_GAP_MS to the last one is
-   skipped, exactly as the tick's own guard works — the flight spaces the coins (board.js TREASURE_GAP_MS) and this is the floor
-   under it, so a rushed haul can never layer two chinks into a buzz. */
+   a coin 'chink' sound whenever a coin goes into the purse." sfx/coin-chink.mp3 is ONE FILE OF THREE SLOTS — the three on his Game Feel
+   Tuner, rendered from that page's own recipe (.planning/research/audio-sourcing/render_coin_chink.mjs). 2026-09-16 he picked: "the
+   chink I pick: B".
+   LAYERED, NEVER SKIPPED. The same day: "Instead of least time between chinks, can you layer the sounds so they don't clip? i don't see
+   this being a problem but pls verify." Verified by mixing the real file at this gain exactly as Web Audio sums it
+   (scratch chink_clip.mjs, 2026-09-16): one chink peaks at 0.41 of full scale; three at his 325ms spacing, 0.41; a 20-coin haul at its
+   tightest 84ms, 0.41; even 40ms apart, 0.42 — each has decayed to a whisper before the next begins. Two on the same instant, 0.81;
+   only THREE on the same instant would clip (1.22), and no path does that: a haul's coins are at least 84ms apart, and at most two
+   purses fill at once (two side-bet winners in a four-seat game). So every chink plays. */
 const CHINK_SLOT_S = 0.35, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
-const CHINK_PICK = 0;          // 0 = A (short and bright), 1 = B (fatter, lower), 2 = C (two-stage, a coin settling)
-const CHINK_GAP_MS = 120;      // the tuner's "least time between two chinks" dial, at its default
-let lastChinkAt = -1e9;
+const CHINK_PICK = 1;          // 0 = A (short and bright), 1 = B (fatter, lower) — his pick, 2 = C (two-stage, a coin settling)
 function playCoinChink() {
-  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (now - lastChinkAt < CHINK_GAP_MS) return;
-  lastChinkAt = now;
   const s = Math.max(0, Math.min(CHINK_SLOTS - 1, CHINK_PICK));
   play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S });
 }

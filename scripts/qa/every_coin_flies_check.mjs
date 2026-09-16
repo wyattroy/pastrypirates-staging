@@ -39,7 +39,10 @@ const check = (cond, pass, fail) => (cond ? ok(pass) : bad(fail));
 function body(src, head) {
   const h = src.indexOf(head);
   if (h < 0) return "";
-  let j = src.indexOf("{", h + head.length - 1), d = 0;
+  // skip the WHOLE parameter list first: a default like `{from="boat"}={}` has braces of its own, and the body starts after the `)`
+  let j = src.indexOf("(", h), d = 0;
+  for (; j < src.length; j++) { if (src[j] === "(") d++; else if (src[j] === ")") { d--; if (!d) break; } }
+  j = src.indexOf("{", j); d = 0;
   for (; j < src.length; j++) { if (src[j] === "{") d++; else if (src[j] === "}") { d--; if (!d) break; } }
   return src.slice(h, j + 1);
 }
@@ -71,36 +74,17 @@ const everywhere = gameFiles.reduce((n, f) => n + (rd(f).match(/\.coins\s*\+=/g)
 check(inEarnings === everywhere && inEarnings >= 4,
   `all ${everywhere} coin credits in the game sit in the four earnings that fly (dock, pass, trade sale, crow's-nest call)`,
   `${everywhere} coin credit(s) in the game but only ${inEarnings} inside the four that fly — a way to earn coins that nobody sees arrive`);
-const consume = body(orch, "export async function consumeEvent(e){");
-check(/treasureBurst\(/.test(consume) && /"purse"/.test(consume) && /"pass"/.test(consume) && /"sidebet"/.test(consume),
-  "the one consumer flies a dock's, a pass's and a won call's coins to the captain's purse",
-  "consumeEvent does not fly purse, pass AND won-call coins (treasureBurst)");
-check(/paid\s*:\s*total/.test(body(engine, "settleTrade(p,q,offer,extra){")) && /coinsAcross\(/.test(consume) && /e\.paid/.test(consume),
-  "a trade records the coins paid, and the consumer flies them from the payer's purse to the seller's",
-  "a trade's coins do not fly: the trade event carries no `paid`, or consumeEvent has no coinsAcross for it");
+check(/paid\s*:\s*total/.test(body(engine, "settleTrade(p,q,offer,extra){")),
+  "a trade records the coins paid, so the door can fly them from the payer to the seller",
+  "a trade's event carries no `paid`");
+/* How those coins reach a purse — one door, one arrival event, no holds — is scripts/qa/coin_arrival_one_event_check.mjs's, not this
+   gate's: one rule, one gate. */
 
 console.log("\nThe buy waits for the coins");
 const payAt = humanDock.indexOf(".payDock("), waitAt = humanDock.indexOf("eventDrawn("), buyLoop = humanDock.indexOf("for(;;)");
 check(payAt >= 0 && waitAt > payAt && (buyLoop < 0 || waitAt < buyLoop),
   "a human's dock waits for its purse to be drawn before it asks to buy",
   "humanDock asks to buy without waiting for the coins it just earned (no eventDrawn between payDock and the buy)");
-
-console.log("\nA held coin count is always released");
-const tb = body(board, "export async function treasureBurst(");
-const afterHold = tb.slice(Math.max(0, tb.indexOf("holdCoinRoll(seat,60000)")));
-const unreleased = [...afterHold.matchAll(/\breturn\b/g)].filter((m) => !/holdCoinRoll\(seat,0\)\s*;\s*$/.test(afterHold.slice(Math.max(0, m.index - 40), m.index)));
-check(tb.includes("holdCoinRoll(seat,60000)") && unreleased.length === 0,
-  "every way out of treasureBurst after its long hold releases the count",
-  "treasureBurst can return after holding the count without releasing it — the purse freezes");
-
-/* ADDED 2026-09-15, after the host+phone pictures showed it and a posed dock measured it at both sizes: the count read 4 when three
-   treasure coins landed and still read 4 when "Buy a crate?" asked him to spend them. treasureBurst shortens a 60s hold once the
-   coins fly, but the roll's tick was already sleeping against the 60s, and nothing woke it. */
-console.log("\nA shortened hold wakes the count");
-const hold = body(board, "export function holdCoinRoll(");
-check(/setTimeout\(\s*r\.tick/.test(hold) && /r\.tick\s*=\s*tick/.test(board),
-  "holdCoinRoll re-schedules a waiting roll, so the count shows coins the moment they land",
-  "holdCoinRoll only moves the hold; a roll already sleeping on a longer hold never wakes — the count lags the coins and the buy");
 
 console.log("\nThe battle box stays gone");
 const boxRefs = [];

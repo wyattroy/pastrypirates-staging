@@ -705,7 +705,7 @@ function followHull(seat,every,drop){
     if(prev&&Math.hypot(p[0]-prev[0],p[1]-prev[1])>cell*SNAP_SQUARES){last=p;prev=p;stillMs=0;requestAnimationFrame(step);return;}
     if(prev&&Math.hypot(p[0]-prev[0],p[1]-prev[1])<0.25)stillMs+=dt;else{stillMs=0;moved=true;}
     if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])>=cell*every){
-      drop(host,last,Math.atan2(p[1]-last[1],p[0]-last[0]));
+      drop(host,last,Math.atan2(p[1]-last[1],p[0]-last[0]),p);
       last=p;
     }
     prev=p;
@@ -719,16 +719,21 @@ function followHull(seat,every,drop){
    every screen sees every ride. Each streak lies along the direction the hull is travelling (a static `rotate`), and fades
    and shortens behind it. His separate note, that every wind-sailing cue should be yellow-gold, belongs to the sailing
    project on the backlog; these stay white like the rest of the water until that is built. */
-export const STREAK_EVERY=0.22, STREAK_MS=780;   // 520 -> 780: Wyatt, 2026-09-14, "I want the speed lines to linger 50% longer"
+/* EMITTED FROM THE BOAT, BRIGHTEST AT THE BOAT. Wyatt, 2026-09-16: "The speed lines seem like they're aiming the wrong direction ...
+   they are not being emitted from the boat, but they should be. the gradient should be most opaque nearest to the boat." Both true:
+   each line was CENTRED on the square the boat had just left, so half of it reached forward, and it was one flat white. Now a line's
+   head sits on the hull where it is emitted and its body trails straight back along the way the boat came, fading from the head
+   (index.html .ppStreak) — and it shrinks back toward that head as it goes, so the water closes up behind the boat. */
+export const STREAK_EVERY=0.22, STREAK_MS=1220;   // was 780 — his tuner, 2026-09-16
 export function rideStreaks(seat){
   if(fxReduced()||!shipEls[seat]||!cell)return;
-  followHull(seat,STREAK_EVERY,(host,at,angle)=>{
+  followHull(seat,STREAK_EVERY,(host,last,angle,at)=>{
     const len=cell*0.55,thick=cell*0.07,d=document.createElement("div");
     d.className="ppStreak";d.dataset.seat=seat;
-    d.style.left=CQfx(at[0]-len/2);d.style.top=CQfx(at[1]-thick/2);d.style.width=CQfx(len);d.style.height=CQfx(thick);
-    d.style.rotate=`${(angle*180/Math.PI).toFixed(1)}deg`;
+    d.style.left=CQfx(at[0]-len);d.style.top=CQfx(at[1]-thick/2);d.style.width=CQfx(len);d.style.height=CQfx(thick);
+    d.style.rotate=`${(angle*180/Math.PI).toFixed(1)}deg`;   // turns about its head (transform-origin: right), so the body lies behind the hull
     host.appendChild(d);
-    const a=d.animate([{opacity:.85,scale:"1 1"},{opacity:0,scale:"0.3 0.6"}],{duration:STREAK_MS,easing:"ease-out",fill:"both",id:"ride-streak"});
+    const a=d.animate([{opacity:.9,scale:"1 1"},{opacity:0,scale:"0.4 0.6"}],{duration:STREAK_MS,easing:"ease-out",fill:"both",id:"ride-streak"});
     a.onfinish=a.oncancel=()=>d.remove();
   });
 }
@@ -737,7 +742,12 @@ export function rideStreaks(seat){
    Called from THE ONE event consumer on the voyage's FIRST `ovens` event — a captain home with a full hold, lighting the
    ovens — read off the event list, so a reload or a guest joining late never throws it twice. Paper in that captain's
    colour, gold and cream, from their boat. */
-export const CONFETTI_PIECES=36, CONFETTI_MS=3000;   // 2000 -> 3000: Wyatt, 2026-09-14, "Make the confetti linger 50% longer"
+/* A BURST THAT SLOWS AND FALLS, NOT ONE THAT TURNS A CORNER. Wyatt, 2026-09-16: "The confetti has an abrupt fall to it, instead of a
+   gradual parabolic fall -- each piece moves away at a certain speed then abruptly turns to fall, this is bad." It did exactly that: a
+   burst keyframe at 35% and a fall keyframe after it. Now each piece's path is sampled from how paper actually moves — thrown out fast,
+   air drag bleeding the throw away (e^-t/τ), gravity taking over smoothly until it drifts down, with a slow flutter side to side. */
+export const CONFETTI_PIECES=24, CONFETTI_MS=3700;   // was 36 · 3000 — his tuner, 2026-09-16
+const CONFETTI_DRAG=0.16, CONFETTI_STEPS=20;          // τ as a share of a piece's life: the throw is mostly spent by a third of the way
 export function firstHomeConfetti(e){
   if(fxReduced()||!e||e.t!=="ovens"||!appState.game||!shipEls[e.p])return;
   const evs=appState.game.events;
@@ -757,11 +767,14 @@ export function firstHomeConfetti(e){
     Object.assign(d.style,{left:(from[0]-w/2)+"px",top:(from[1]-h/2)+"px",width:w+"px",height:h+"px"});
     document.body.appendChild(d);
     const ang=-Math.PI/2+(rnd(k+50)-0.5)*Math.PI*1.1,pow=Math.max(45,sq*(2+rnd(k+90)*2));
-    const ux=Math.cos(ang)*pow,uy=Math.sin(ang)*pow,spin=(rnd(k+7)-0.5)*900,fall=Math.max(90,sq*4);
-    const a=d.animate([{translate:"0px 0px",rotate:"0deg",opacity:1},
-      {translate:`${ux.toFixed(1)}px ${uy.toFixed(1)}px`,rotate:`${(spin*.5).toFixed(0)}deg`,opacity:1,offset:.35},
-      {translate:`${(ux*1.25).toFixed(1)}px ${(uy+fall).toFixed(1)}px`,rotate:`${spin.toFixed(0)}deg`,opacity:0}],
-      {duration:CONFETTI_MS*(0.8+rnd(k+3)*0.4),easing:"cubic-bezier(.2,.6,.4,1)",fill:"both",id:"first-home-confetti"});
+    const ux=Math.cos(ang)*pow,uy=Math.sin(ang)*pow,spin=(rnd(k+7)-0.5)*900,fall=Math.max(90,sq*4),phase=rnd(k+11)*6.28;
+    const E=t=>(1-Math.exp(-t/CONFETTI_DRAG))/(1-Math.exp(-1/CONFETTI_DRAG));                 // how much of the throw is spent by t
+    const G0=1-CONFETTI_DRAG*(1-Math.exp(-1/CONFETTI_DRAG)),G=t=>(t-CONFETTI_DRAG*(1-Math.exp(-t/CONFETTI_DRAG)))/G0;   // how far gravity has pulled it by t
+    const frames=[];
+    for(let i=0;i<=CONFETTI_STEPS;i++){const t=i/CONFETTI_STEPS;
+      const x=ux*E(t)+Math.sin(phase+t*9)*sq*0.18*t, y=uy*E(t)+fall*G(t);
+      frames.push({offset:t,translate:`${x.toFixed(1)}px ${y.toFixed(1)}px`,rotate:`${(spin*t).toFixed(0)}deg`,opacity:(t<.72?1:Math.max(0,1-(t-.72)/.28)).toFixed(3)});}
+    const a=d.animate(frames,{duration:CONFETTI_MS*(0.8+rnd(k+3)*0.4),easing:"linear",fill:"both",id:"first-home-confetti"});
     a.onfinish=a.oncancel=()=>d.remove();
   }
 }
@@ -774,8 +787,39 @@ export function firstHomeConfetti(e){
 /* THE SHOT IS TWICE THE SHOT IT WAS. Wyatt, 2026-09-15: "I didn't see any smoke, or the ship recoil away from the other ship --
    these should all be accentuated 2x." The recoil (KICK_CELL), the puff (SMOKE_CELL) and the board's shake all doubled; the timings
    are unchanged, so the same moment simply reads. All four are dials on his Game Feel Tuner. */
-export const KICK_MS=320, SMOKE_MS=520, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=6, SHAKE_MS=300;
-export const KICK_CELL=0.28, SMOKE_CELL=1.7;   // of a square: 0.14 -> 0.28, 0.85 -> 1.7
+/* HIS NUMBERS, 2026-09-16, and his note: "There needs to be more weight to the recoil -- ... the boat should be flung forcefully away
+   from the smoke but draw back to its original position gradually. Also, the boat should tilt away from the smoke, perhaps by 10 or
+   20 degrees -- add these dials". So the kick is two motions, not one: FLUNG out over the first KICK_FLING of it, then drawn back over
+   the rest, leaning KICK_TILT_DEG away from the smoke at the far end. The tilt and the fling are both his dials on the tuner now. */
+export const KICK_MS=880, SMOKE_MS=1060, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=11, SHAKE_MS=300;   // was 320 · 520 · — · — · 6 · —
+export const KICK_CELL=0.26, SMOKE_CELL=1.05, KICK_TILT_DEG=15, KICK_FLING=0.14;   // was 0.28 · 1.7 · (new) · (new)
+/* SMOKE, NOT A BALL. Wyatt, 2026-09-16: "The smoke looks more like a sphere than smoke. Fix this visual effect, but do it efficiently."
+   It was one circle. Now a shot throws SMOKE_PUFFS soft puffs of different sizes from the muzzle: each drifts out along the line of fire,
+   spreads across it and rises, swelling as it thins, and they fade at different moments — so the cloud tears apart the way smoke does.
+   Cheap by construction: a handful of divs, a soft radial gradient drawn once each (no blur filter), and only translate/scale/opacity
+   animated, all of which the compositor does without a layout. Seeded off the shot, so every screen draws the same cloud. */
+const SMOKE_PUFFS=6;
+function smokePuffs(host,at,ux,uy,size,ms,seed){
+  const rnd=k=>{const x=Math.sin((k+1)*91.7+seed*13.37)*43758.5453;return x-Math.floor(x);};
+  for(let k=0;k<SMOKE_PUFFS;k++){
+    const r=size*(0.34+rnd(k)*0.24),d=document.createElement("div");
+    d.className="ppSmokePuff";
+    const jx=(rnd(k+10)-.5)*size*.22,jy=(rnd(k+20)-.5)*size*.22;
+    d.style.left=CQfx(at[0]+jx-r/2);d.style.top=CQfx(at[1]+jy-r/2);d.style.width=d.style.height=CQfx(r);
+    host.appendChild(d);
+    /* IT BILLOWS WHERE THE GUN IS, AND HOLDS ITS BODY. Measured 2026-09-16 at his window with a forced hit: the first cut drifted each puff up
+       to two-thirds of the cloud's size along the line of fire and faded it from its first moment, so what a player saw was a wisp past the
+       TARGET that was mostly gone a quarter-second in — his "there was no smoke during battles". So a puff now swells in place, moves at most
+       a third of the cloud along the line of fire, keeps nine-tenths of its opacity for half its life, and only then thins away. */
+    const drift=size*(0.08+rnd(k+30)*0.25),across=(rnd(k+40)-.5)*size*.4,rise=size*(0.06+rnd(k+50)*0.16);
+    const tx=ux*drift-uy*across,ty=uy*drift+ux*across-rise;
+    const life=ms*(0.75+rnd(k+60)*0.25),delay=ms*rnd(k+70)*0.08,peak=0.85+rnd(k+90)*0.12;
+    const m=d.animate([{translate:"0px 0px",scale:"0.35"},{translate:`${CQfx(tx)} ${CQfx(ty)}`,scale:(1.15+rnd(k+80)*0.35).toFixed(2)}],
+      {duration:life,delay,easing:"cubic-bezier(.12,.75,.3,1)",fill:"both",id:"cannon-smoke"});
+    d.animate([{opacity:0},{opacity:peak.toFixed(2),offset:.1},{opacity:(peak*.9).toFixed(2),offset:.5},{opacity:0}],{duration:life,delay,easing:"linear",fill:"both"});
+    m.onfinish=m.oncancel=()=>d.remove();
+  }
+}
 export function shotLands(e){
   if(fxReduced()||!e||e.by==null||!cell)return;
   const shooter=e.by,target=e.by===e.a?e.d:e.a;
@@ -783,12 +827,12 @@ export function shotLands(e){
   if(!from||!to||!host)return;
   const len=Math.hypot(to[0]-from[0],to[1]-from[1])||1,ux=(to[0]-from[0])/len,uy=(to[1]-from[1])/len;
   const im=shipEls[shooter]&&shipEls[shooter].querySelector("image");
+  const tilt=-Math.sign(ux||1)*KICK_TILT_DEG;   // lean away from the smoke: a shot to the right tips the mast left
   if(im&&typeof im.animate==="function")
-    im.animate([{translate:"0px 0px"},{translate:`${(-ux*cell*KICK_CELL).toFixed(2)}px ${(-uy*cell*KICK_CELL).toFixed(2)}px`,offset:.18},{translate:"0px 0px"}],
-      {duration:KICK_MS,easing:"cubic-bezier(.2,.8,.3,1)",id:"cannon-kick"});
-  // a pale puff that small vanished on sand in the frozen-frame photo, so it is bigger, holds its body for a third of its life,
-  // and carries a grey edge that reads against sand and sea alike
-  fxDot(host,"ppSmoke",[from[0]+ux*cell*.45,from[1]+uy*cell*.45],cell*SMOKE_CELL,[{opacity:1,scale:".35"},{opacity:.9,scale:"1",offset:.35},{opacity:0,scale:"1.45"}],SMOKE_MS);
+    im.animate([{translate:"0px 0px",rotate:"0deg",easing:"cubic-bezier(.05,.85,.25,1)"},
+      {translate:`${(-ux*cell*KICK_CELL).toFixed(2)}px ${(-uy*cell*KICK_CELL).toFixed(2)}px`,rotate:`${tilt}deg`,offset:KICK_FLING,easing:"cubic-bezier(.45,0,.4,1)"},
+      {translate:"0px 0px",rotate:"0deg"}],{duration:KICK_MS,id:"cannon-kick"});
+  smokePuffs(host,[from[0]+ux*cell*.45,from[1]+uy*cell*.45],ux,uy,cell*SMOKE_CELL,SMOKE_MS,(e.round||0)*7+shooter);
   setTimeout(()=>{
     if(!host.isConnected)return;
     fxDot(host,"ppHitFlash",drawnShipPoint(target)||to,cell*1.1,[{opacity:1,scale:".75"},{opacity:0,scale:"1.1"}],HIT_FLASH_MS);
@@ -1985,58 +2029,83 @@ export function paintShipAt(seat,c){
    is CONVERGE, not add a path: so render() goes through this too, and the pulse, the dataset stamp
    and the markup are one statement rather than two copies drifting.
    `coins` is a NUMBER, and 0 is a real purse — every test in here is explicit, never truthiness. */
-/* ⭐ THE COUNT ROLLS, IT DOES NOT JUMP — PASSED on his game feel audit (2026-09-13), as proposed for both directions: "Coins
-   spray up from the dock and arc into your coin count, which rolls up number by number." · "The price leaves your coin count
-   as a quick tick-down ... instead of the number just changing." The number ticks one at a time toward the new purse
-   (never longer than COIN_ROLL_MAX_MS), and waits while treasure is still in the air (holdCoinRoll). The coin picture is
-   written once and only the number changes, so the roll re-fetches nothing. A replay and reduced motion just set it. */
+/* ⭐ THE COUNT ROLLS, IT DOES NOT JUMP — PASSED on his game feel audit (2026-09-13), for coins LEAVING a purse: "The price leaves your
+   coin count as a quick tick-down ... instead of the number just changing." A number going down ticks one at a time toward the new
+   purse (never longer than COIN_ROLL_MAX_MS). Coins COMING IN never roll — each one arrives (coinArrived, below). A replay and reduced
+   motion just set it. The coin picture is written once and only the number changes, so the roll re-fetches nothing. */
 const COIN_ROLL_STEP_MS=40, COIN_ROLL_MAX_MS=700;
 const coinRolls={};
-/* A SHORTER HOLD WAKES A ROLL ALREADY WAITING ON A LONGER ONE. treasureBurst holds the count for up to a minute the moment coins
-   are earned (they wait for the flip stage), then shortens the hold once they are actually in the air. The roll's next tick was
-   scheduled against the long hold, so without this it slept the full minute: the count never showed the coins just earned, and
-   "Buy a crate?" asked him to spend a purse the count said he did not have (measured on a posed dock, phone and laptop,
-   2026-09-15). A hold that is lengthened needs nothing — the tick re-checks it when it wakes. */
-/* THE COUNT CAN ALSO BE PACED BY THE FLIGHT. `paceMs` makes the number step once per ARRIVING COIN instead of at the roll's own
-   40ms clip: with it, a three-coin haul reads as three coins, each landing with its own chink, which is what he asked for —
-   Wyatt, 2026-09-15: "there are still too many coins visible when you earn 3 coins. there should only be 3 ... for 3 or more
-   coins, which should be spaced somewhat apart temporally, we need those clink sounds not to overlap." Read at every tick, not
-   captured when the roll starts, because the burst can set it after render() has already scheduled the roll. */
-export function holdCoinRoll(seat,ms,paceMs){
-  const r=coinRolls[seat]=coinRolls[seat]||{};
-  r.holdUntil=performance.now()+ms;
-  r.paceMs=paceMs||0;
-  if(r.tick){clearTimeout(r.timer);r.timer=setTimeout(r.tick,Math.max(0,ms));}
+/* ⭐⭐ A PURSE SHOWS WHAT IS IN IT, NOT WHAT IS STILL FLYING TO IT — AND A COIN ARRIVING IS ONE EVENT, WHOEVER SENT IT.
+   Wyatt, 2026-09-16: "THe coin sound earned from Muse should happen when the coin LANDS in the hold, not when it is earned ... This
+   should be done architecutrally with an event fired by the coin arriving in the hold, regardless of where the coin came from -- i
+   noticed that the sound enters at the correct time when docking; this suggests that once again you've made a stupid patchy fix
+   instead of fixing it at the root."
+   He was right, and the patch he meant was mine from the same afternoon. The number on a purse was drawn from the game's total the
+   moment a coin was EARNED, and each way of earning then tried to HOLD that number back until its own coins landed: a dock's treasure
+   held it one way, a trade's coins another, and a muse coin — whose flight waits for its line — not at all, until a third special
+   case was bolted on for it. Three copies of one rule, and the next way of earning would have needed a fourth.
+   Now nothing is held. ON_THE_WAY counts, per captain, the coins announced but not yet landed; a purse SHOWS its true total less that
+   (purseShows); every earning in the game passes through ONE door (payInto), which puts its coins on the way BEFORE the board is drawn
+   and flies them when they may fly; and every coin that lands — from a boat, from another captain's purse, from anywhere added later —
+   calls ONE event (coinArrived), which takes it off the way, puts it on the number and chinks. A coin that cannot fly (reduced motion,
+   no purse on screen) arrives at once through the same event, and whatever a flight does, its batch is arrived in full when the flight
+   is over (payInto's `finally`), so a purse can never be left short. scripts/qa/every_coin_flies_check.mjs holds all of it. */
+const ON_THE_WAY={};
+const purseShows=(seat,coins)=>coins-(ON_THE_WAY[seat]||0);
+export function coinArrived(seat,count=1){
+  if(!(count>0))return;
+  ON_THE_WAY[seat]=Math.max(0,(ON_THE_WAY[seat]||0)-count);
+  const el=$("coins"+seat),n=el&&el.querySelector(".coinN");
+  if(n&&el.dataset.coins!==undefined){
+    const r=coinRolls[seat];if(r){clearTimeout(r.timer);r.tick=null;}
+    n.textContent=purseShows(seat,+el.dataset.coins);
+    pulseEl(el);
+  }
+  playCoinChink();          // the ONE place a coin going into a purse makes its sound
 }
 export function showSeatCoins(seat,coins){
   const el=$("coins"+seat);
   if(!el)return;
-  const had=el.dataset.coins!==undefined?+el.dataset.coins:null;
-  if(had!==null&&had!==coins)pulseEl(el);
   el.dataset.coins=coins;
+  const show=purseShows(seat,coins);
   const n=el.querySelector(".coinN");
-  if(!n){el.innerHTML=`${iconImg(COIN_IMG)} <span class="coinN">${coins}</span>`;return;}
+  if(!n){el.innerHTML=`${iconImg(COIN_IMG)} <span class="coinN">${show}</span>`;return;}
   const r=coinRolls[seat]=coinRolls[seat]||{};
   clearTimeout(r.timer);
   const from=parseInt(n.textContent,10);
-  if(had===null||!Number.isFinite(from)||from===coins||appState.replaying||fxReduced()){n.textContent=coins;r.tick=null;return;}
-  const base=Math.max(12,Math.min(COIN_ROLL_STEP_MS,COIN_ROLL_MAX_MS/Math.abs(coins-from))),dir=Math.sign(coins-from);
-  const every=()=>(dir>0&&r.paceMs)?r.paceMs:base;   // a purse FILLING keeps pace with the coins in the air; spending keeps the roll's own clip
+  if(from===show)return;
+  /* WHO MAY MOVE THIS NUMBER — Wyatt's rule, 2026-09-16: "Nothing else raises the number or plays the chink ... a replay or a freshly
+     drawn purse may set it; a price may tick it down." So: a replay, or a number not drawn yet, is SET; a number going UP is left alone,
+     because the only way up is a coin arriving (coinArrived) — coins still on their way are not on it yet; a number going DOWN ticks. */
+  if(!Number.isFinite(from)||appState.replaying){n.textContent=show;r.tick=null;return;}
+  if(show>from)return;
+  pulseEl(el);
+  if(fxReduced()){n.textContent=show;r.tick=null;return;}
+  const every=Math.max(12,Math.min(COIN_ROLL_STEP_MS,COIN_ROLL_MAX_MS/Math.abs(show-from)));
   const tick=()=>{
     if(!n.isConnected){r.tick=null;return;}
-    // a hold set AFTER this roll was scheduled still holds it — the earned coins wait for the flip stage to come down (treasureBurst)
-    if(performance.now()<(r.holdUntil||0)){r.timer=setTimeout(tick,r.holdUntil-performance.now());return;}
-    const cur=parseInt(n.textContent,10);
-    if(!Number.isFinite(cur)||cur===coins){n.textContent=coins;r.tick=null;return;}
-    n.textContent=cur+dir;
-    /* A COIN GOING IN CHINKS; A COIN GOING OUT TICKS. Wyatt, 2026-09-15: "we want a coin 'chink' sound whenever a coin goes into
-       the purse" — so the chink is here, at the ONE place the purse number ever changes, rather than beside each thing that pays.
-       His 2026-09-14 abacus click keeps the outgoing count and the End of Voyage roll-up. */
-    if(dir>0)playCoinChink();else playCoinTick();
-    if(cur+dir!==coins)r.timer=setTimeout(tick,every());else r.tick=null;
+    const cur=parseInt(n.textContent,10),target=purseShows(seat,+el.dataset.coins);
+    if(!Number.isFinite(cur)||cur<=target){n.textContent=target;r.tick=null;return;}
+    n.textContent=cur-1;
+    playCoinTick();         // a coin going OUT ticks — his 2026-09-14 abacus click
+    if(cur-1!==target)r.timer=setTimeout(tick,every);else r.tick=null;
   };
   r.tick=tick;
-  r.timer=setTimeout(tick,Math.max(0,(r.holdUntil||0)-performance.now()));
+  r.timer=setTimeout(tick,0);
+}
+/* ⭐ THE ONE DOOR EVERY EARNING PASSES THROUGH. `from` is "boat" (the coins fly up off that captain's boat — a dock's treasure, a muse
+   coin, a won call's bounty) or another captain's seat (they cross from that purse — a trade's sale). `after` is a promise the flight
+   waits for (a muse coin waits for the line that explains it). Called by the one event consumer BEFORE render(), so the purse is drawn
+   without these coins; returns once every one of them is in. */
+export function payInto(seat,coins,{from="boat",after=null}={}){
+  coins=Math.round(coins||0);
+  if(!(coins>0)||appState.replaying)return Promise.resolve();     // a replay draws the true total: nothing is in flight
+  ON_THE_WAY[seat]=(ON_THE_WAY[seat]||0)+coins;
+  let left=coins;
+  const land=k=>{const c=Math.min(k,left);if(c>0){left-=c;coinArrived(seat,c);}};
+  const fly=()=>(from==="boat"?flyFromBoat(seat,coins,land):flyAcross(from,seat,coins,land));
+  const flight=after?Promise.resolve(after).then(fly,fly):fly();
+  return flight.catch(()=>{}).finally(()=>land(left));
 }
 /* ⭐ TREASURE BURSTS OUT, AND A BOUGHT CRATE FLIES HOME — PASSED on his game feel audit (2026-09-13), as proposed: "Coins spray
    up from the dock and arc into your coin count" · "It lifts off the island, arcs to your captain's box, and lands on its
@@ -2044,25 +2113,56 @@ export function showSeatCoins(seat,coins){
    Called from THE ONE event consumer on a `dock` event, so every screen shows every captain's dock. They fly in FIXED
    position between two things drawn in different places — the board and the captains box — so both ends are measured as
    drawn and brought into the one fixed space (fixedOrigin, util.js) before a single number is taken between them. */
-/* 780 -> 1170ms and a wider stagger: Wyatt, 2026-09-14, "the treasure should always fly from the island into your hold -- i think it
-   does this, but a little fast." TREASURE_GAP_MS spaces the coins so each can be counted in. */
-/* 620 -> 1240: Wyatt, 2026-09-15, "The crates DO fly -- but they're too fast. slow them to 50% of their current speed". His dial for it
-   is on the Game Feel Tuner; this is the number he gave. */
-/* 1170 -> 1400ms, and 90 -> 260ms between coins: Wyatt, 2026-09-15, on why a three-coin haul looked like more than three coins —
-   "the coins are moving so fast that they jump discernably between frames, because they have no motion blur; solution may be to
-   move them slower, or one at a time for multiple coin hauls". Measured before the change: 60fps, three coins in the air at once,
-   a coin stepping 4px in a typical frame and 21px at its fastest. Slower flight lowers that peak; the wider gap is the "one at a
-   time" — the next coin does not leave until the one ahead is most of the way home, and its chink has room (audio.js CHINK_GAP_MS). */
-const TREASURE_MS=1400, TREASURE_GAP_MS=700, TREASURE_MAX=20, CRATE_FLY_MS=1240;
-/* THE STAGGER IS CAPPED, SO THE GAP IS NOT A PRICE LIST. At 700ms apart a three-coin haul is genuinely one at a time — never more
-   than two in the sky — but eight coins that way would be six seconds of watching, and the game waits for the last one. So the
-   whole stagger is held to TREASURE_STAGGER_MS and the gap is whatever divides it: 2 or 3 coins get the full 700, a big haul
-   tightens up on its own. Measured before: three coins staggered 90ms inside a 1170ms flight were all airborne at once. */
+/* ⭐ HIS NUMBERS, 2026-09-16, off the Game Feel Tuner. Each carries the value it replaced. */
+const TREASURE_MS=1200, TREASURE_GAP_MS=325, TREASURE_MAX=20, CRATE_FLY_MS=1360;   // was 1400 · 700 · 20 · 1240
+/* THE STAGGER IS CAPPED, SO THE GAP IS NOT A PRICE LIST: a haul too big to space at the full gap within TREASURE_STAGGER_MS tightens
+   up on its own, so eight coins never make the game wait six seconds for its own purse. */
 const TREASURE_STAGGER_MS=1600;
 const coinGap=n=>n>1?Math.min(TREASURE_GAP_MS,TREASURE_STAGGER_MS/(n-1)):0;
-/* How far past the purse a coin carries before it springs back (a share of its last leg), and how much it squashes as it goes
-   in. Same two for a crate landing in the hold. Both are his dials on the Game Feel Tuner; these are the numbers it opens at. */
-const COIN_BOUNCE=0.09, COIN_SQUASH=0.18, CRATE_BOUNCE=0.07, CRATE_SQUASH=0.22;
+/* A coin: how high its arc climbs above the higher end (a share of the coin's size), how high it hops back up off the purse, how flat
+   it squashes as it hits. A crate: how far its path bulges from a straight line (a share of the larger of 1.4 crates and a third of
+   the distance down — the measure the swap has always bowed by), its hop off the chip, its squash. */
+const COIN_ARC=2.1, COIN_BOUNCE=0.30, COIN_SQUASH=0.20;       // was 2.2 · 0.09 · 0.18
+const CRATE_BOW=0.70, CRATE_BOUNCE=0.16, CRATE_SQUASH=0.54;   // was 1.4 · 0.07 · 0.22
+/* ⭐ ONE SMOOTH ARC FOR EVERYTHING THAT FLIES. Wyatt, 2026-09-16, on the tuner. The coins: "The coin's arc is too sharp -- it should
+   be a smooth, pleasing curve, a parabola between the boat and the coin purse." The crates: "it should be a smooth clean parabola to
+   look like the crate is being launched off the island and landing in your hold. this has jitter during the journey (about a 1/3 of
+   the way through?), is a straight line instead of a parabola". The confetti: "each piece moves away at a certain speed then
+   abruptly turns to fall, this is bad."
+   Every one was three or four keyframes joined by per-segment easings, and where two easings meet the path bends and the speed dips.
+   The crate's stall a third of the way along was exactly that — two of my own easings meeting at its apex. So a flight is SAMPLED
+   from a real curve and the samples are joined in straight, even steps: a quadratic Bézier, which at even time steps IS a parabola
+   (even speed across, a rise and a fall). No corners, no stall, and still only translate/scale/opacity, which the compositor animates
+   without asking for a layout. `side` bows the path sideways on the screen, the way the trade's crates pass each other. */
+const ARC_STEPS=24;
+/* The control height that puts the top of the arc `lift` above the HIGHER of the two ends — so a coin leaving a boat that sits above
+   its purse still climbs before it falls, rather than its peak sinking under its own start. */
+function arcControlY(dy,lift){
+  if(!(lift>0))return dy/2;
+  const v=Math.min(0,dy)-lift;
+  return v-Math.sqrt(v*v-v*dy);
+}
+export function arcFrames(dx,dy,{lift=0,side=0,steps=ARC_STEPS,at=null}={}){
+  const cx=dx/2+side*2,cy=arcControlY(dy,lift);   // a Bézier bulges half-way to its control point, hence ×2 on the bow
+  const out=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps,u=1-t,f={offset:t,translate:`${(2*u*t*cx+t*t*dx).toFixed(1)}px ${(2*u*t*cy+t*t*dy).toFixed(1)}px`};
+    if(at)Object.assign(f,at(t,u));
+    out.push(f);
+  }
+  return out;
+}
+/* THE LANDING: flattened on contact, then a hop back up by `bounce` of its own height that is itself a little parabola, then still. */
+export function hopFrames(x,y,h,bounce,squash,{base=1,fade=false}={}){
+  const hop=h*bounce,f=[{offset:0,translate:`${x}px ${y}px`,scale:`${(base*(1+squash)).toFixed(3)} ${(base*(1-squash)).toFixed(3)}`,opacity:1},
+    {offset:.16,translate:`${x}px ${y}px`,scale:String(base),opacity:1}];
+  for(let i=1;i<=8;i++){const t=i/8;f.push({offset:.16+.84*t,translate:`${x}px ${(y-4*hop*t*(1-t)).toFixed(1)}px`,scale:String(base),opacity:fade?1-t*t:1});}
+  return f;
+}
+const bez=(t,u,a,b,c)=>u*u*a+2*u*t*b+t*t*c;   // a quantity eased smoothly from a, past b, to c
+/* THE COUNT TICKS THE INSTANT A COIN LANDS — Wyatt, 2026-09-16: "The number should tick up, with the sound, IMMEDIATELY as each coin
+   lands". Each coin's flight ends exactly where it meets the purse, and that moment is coinArrived (above). */
+const COIN_SETTLE_MS=Math.round(TREASURE_MS*0.25);
 /* THE FLIP STAGE COMES DOWN FIRST. A captain's own dock earns its coins while the stage still stands over the board; coins flying
    under it would land in a purse nobody can see. Waits at most the stage's own longest stand (stage.js CER_VEIL_WAIT_CAP_MS). */
 function whenFlipStageGone(capMs=7100){
@@ -2077,85 +2177,64 @@ function fixedPointOfBoard(svg,x,y){
   return [p.x-o.x,p.y-o.y];
 }
 function capShowing(){const cap=$("pp4Cap");return !(cap&&cap.style.visibility==="hidden");}
-export async function treasureBurst(seat,coins){
+/* The flight up off a boat, for payInto. Each coin that reaches the purse calls `land` with how many coins it carries (a haul bigger
+   than TREASURE_MAX shares its coins across the ones that fly). Returns when they are down; anything it could not land, payInto lands. */
+async function flyFromBoat(seat,coins,land){
   if(fxReduced()||!shipEls[seat])return;
-  const n=Math.max(1,Math.min(TREASURE_MAX,Math.round(coins||1)));
-  holdCoinRoll(seat,60000);                         // the count waits for its coins…
+  const n=Math.max(1,Math.min(TREASURE_MAX,coins));
   await whenFlipStageGone();
   const ships=$("boardShips")||$("board");
   const m=/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(shipEls[seat].style.transform||"");
-  const from=m&&fixedPointOfBoard(ships,parseFloat(m[1]),parseFloat(m[2]));if(!from){holdCoinRoll(seat,0);return;}   // never leave the count frozen (CEO, 2026-09-15)
+  const from=m&&fixedPointOfBoard(ships,parseFloat(m[1]),parseFloat(m[2]));if(!from)return;
   const icon=($("coins"+seat)||{querySelector:()=>null}).querySelector("img");
   let to=null;
   if(icon&&capShowing()){const r=icon.getBoundingClientRect(),o=fixedOrigin();if(r.width>1)to=[r.left+r.width/2-o.x,r.top+r.height/2-o.y];}
+  if(!to)return;                                    // no purse on screen to land in: payInto lands them at once
   const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42),gap=coinGap(n);
-  if(!from||!to)holdCoinRoll(seat,0);
+  const share=Math.floor(coins/n),extra=coins-share*n,end=[to[0]-from[0],to[1]-from[1]];
   const anims=[];
   for(let k=0;k<n;k++){
     const im=document.createElement("img");
     im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(seat);   // whose purse this one is heading for — read by the probes, invisible to a player
     Object.assign(im.style,{left:(from[0]-size/2)+"px",top:(from[1]-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
-    const spread=(k-(n-1)/2)*size*0.55,up=size*(2.2+((k*37)%5)*0.25);
-    const end=to?[to[0]-from[0],to[1]-from[1]]:[spread*1.4,-up*1.6];
-    /* ⭐ IT LANDS ELASTICALLY, NOT FLATLY — Wyatt, 2026-09-15: "It needs to have more bounce to it ... The coin and crates both
-       should fly more elastically and pleasingly into your part of the captain's box." So the last leg carries PAST the purse by
-       COIN_BOUNCE of the way there and springs back, squashing as it goes in. His dials for both are on the Game Feel Tuner. */
-    const ox=to?end[0]+ (end[0]-spread)*COIN_BOUNCE:end[0], oy=to?end[1]+(end[1]-(-up))*COIN_BOUNCE:end[1];
-    const a=im.animate([{translate:"0px 0px",scale:"0.4",opacity:0,easing:"cubic-bezier(.2,.75,.5,1)"},
-      {translate:`${spread.toFixed(1)}px ${(-up).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.4,easing:"cubic-bezier(.45,0,.5,1)"},
-      {translate:`${ox.toFixed(1)}px ${oy.toFixed(1)}px`,scale:to?String(0.55*(1-COIN_SQUASH)):"0.7",opacity:to?1:0,offset:.84,easing:"cubic-bezier(.3,0,.2,1)"},
-      {translate:`${end[0].toFixed(1)}px ${end[1].toFixed(1)}px`,scale:to?"0.55":"0.7",opacity:to?1:0}],
-      {duration:TREASURE_MS,delay:k*gap,fill:"both",id:"treasure"});
-    a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
+    const side=(k-(n-1)/2)*size*0.55,lift=size*COIN_ARC*(1+((k*37)%5)*0.06);   // a little spread and variety, so a haul is not one line
+    const a=im.animate(arcFrames(end[0],end[1],{lift,side:side*.5,at:(t,u)=>({scale:bez(t,u,.4,1.7,.55).toFixed(3),opacity:Math.min(1,t/.08).toFixed(3)})}),
+      {duration:TREASURE_MS,delay:k*gap,easing:"linear",fill:"both",id:"treasure"});
+    a.oncancel=()=>im.remove();
+    a.onfinish=()=>{
+      land(k===n-1?share+extra:share);              // THE coin is in: the one arrival event, the number and the chink
+      const st=im.animate(hopFrames(end[0].toFixed(1),end[1].toFixed(1),size*.55,COIN_BOUNCE,COIN_SQUASH,{base:.55,fade:true}),
+        {duration:COIN_SETTLE_MS,easing:"linear",fill:"both",id:"treasure-settle"});
+      st.onfinish=st.oncancel=()=>im.remove();
+    };
+    anims.push(a);
   }
   const flight=TREASURE_MS+(n-1)*gap;
-  /* THE WAIT IS THE FLIGHT ITSELF, NOT A CLOCK BESIDE IT. On a busy machine the coins start a frame or more after they are created, so a
-     timer of the same length ended before the last coin landed: a heads dock measured "Buy a crate?" 133ms before its third coin
-     arrived (2026-09-15). So the count starts rolling when the FIRST coin lands, and this (and through eventDrawn, a dock's question)
-     waits for the LAST one, capped so a stalled page never holds the game. */
-  if(to&&anims.length){holdCoinRoll(seat,flight+1500,gap);const go=()=>holdCoinRoll(seat,0,gap);anims[0].finished.then(go,go);}
-  else holdCoinRoll(seat,0);
+  // the wait is the flights themselves, capped so a stalled page never holds the game (payInto lands whatever did not)
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
-/* ⭐ COINS LEAVING THE PURSE — Wyatt, 2026-09-15: "we need a 'coins taken away' animation from the purse -- suggest 3, and add
-   them to the game feel tuner". All three he can see side by side on the tuner are here; SPEND_STYLE is the one the game opens
-   on, and his pick is that one word:
-     "spill"    the coins tip out of the purse, tumble, and fall away below the box          (what it opens on)
-     "drop"     one coin at a time is let go and drops straight down, hopping once as it goes
-     "scatter"  the coins burst outward in a small fan and shrink to nothing
-   It is the mirror of treasureBurst and shares its rules: fixed position in the ONE fixed space, a cap so a ten-coin price does
-   not throw ten coins, and nothing here decides anything about the game — the count itself still rolls down and ticks. */
-export const SPEND_MS=620, SPEND_GAP_MS=70, SPEND_MAX=5, SPEND_SPREAD=0.6;
-const SPEND_STYLE="spill";
-export function coinsLeave(seat,coins,style){
+/* ⭐ COINS LEAVING THE PURSE — Wyatt, 2026-09-15: "we need a 'coins taken away' animation from the purse -- suggest 3, and add them to
+   the game feel tuner". 2026-09-16 he picked from the three on the tuner: "the leaving I pick: B, Drop". So it is the one way now, and
+   drawn as the tuner drew it — each coin lifts a little to its own side of the purse, tumbles, and falls away out of sight — only on the
+   smooth arc every other flight uses, so it falls rather than turning a corner. A price bigger than SPEND_MAX shows SPEND_MAX coins. */
+export const SPEND_MS=690, SPEND_GAP_MS=140, SPEND_MAX=10, SPEND_SPREAD=0.5;   // was 620 · 70 · 5 · 0.6
+export function coinsLeave(seat,coins){
   if(fxReduced())return;
   const box=$("coins"+seat),icon=box&&box.querySelector("img");
   if(!icon||!capShowing())return;
   const r=icon.getBoundingClientRect();if(r.width<1)return;
   const o=fixedOrigin(),size=Math.max(12,r.width*1.05);
   const x=r.left+r.width/2-o.x,y=r.top+r.height/2-o.y;
-  const n=Math.max(1,Math.min(SPEND_MAX,Math.round(coins||1))),st=style||SPEND_STYLE;
+  const n=Math.max(1,Math.min(SPEND_MAX,Math.round(coins||1)));
   for(let k=0;k<n;k++){
     const im=document.createElement("img");
     im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(seat);im.dataset.leaving="1";
     Object.assign(im.style,{left:(x-size/2)+"px",top:(y-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
-    const lane=(k-(n-1)/2)*size*SPEND_SPREAD,fall=size*3.2;
-    let frames;
-    if(st==="drop")
-      frames=[{translate:"0px 0px",scale:"1",opacity:1},
-        {translate:`0px ${(-size*.45).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.22,easing:"cubic-bezier(.3,0,.6,1)"},
-        {translate:`0px ${fall.toFixed(1)}px`,scale:"0.8",opacity:0}];
-    else if(st==="scatter")
-      frames=[{translate:"0px 0px",scale:"1",opacity:1},
-        {translate:`${(lane*1.6).toFixed(1)}px ${(-size*.9).toFixed(1)}px`,scale:"1.1",opacity:1,offset:.35,easing:"cubic-bezier(.2,.8,.5,1)"},
-        {translate:`${(lane*3).toFixed(1)}px ${(-size*1.6).toFixed(1)}px`,scale:"0.25",opacity:0}];
-    else
-      frames=[{translate:"0px 0px",scale:"1",opacity:1,rotate:"0deg"},
-        {translate:`${(lane*.9).toFixed(1)}px ${(-size*.35).toFixed(1)}px`,scale:"1.08",opacity:1,rotate:"40deg",offset:.28,easing:"cubic-bezier(.3,0,.6,1)"},
-        {translate:`${(lane*1.8).toFixed(1)}px ${fall.toFixed(1)}px`,scale:"0.85",opacity:0,rotate:"180deg"}];
-    const a=im.animate(frames,{duration:SPEND_MS,delay:k*SPEND_GAP_MS,fill:"both",id:"coins-leave"});
+    const lane=(k-(n-1)/2)*size*1.7*SPEND_SPREAD;
+    const a=im.animate(arcFrames(lane*1.6,size*4.5,{lift:size*.5,at:t=>({rotate:`${(220*t).toFixed(0)}deg`,opacity:(t<.55?1:Math.max(0,1-(t-.55)/.45)).toFixed(3)})}),
+      {duration:SPEND_MS,delay:k*SPEND_GAP_MS,easing:"linear",fill:"both",id:"coins-leave"});
     a.onfinish=a.oncancel=()=>im.remove();
   }
 }
@@ -2164,7 +2243,7 @@ export function coinsLeave(seat,coins,style){
    read out of its row BEFORE render() moves it, and flies to the new chip in the other row AFTER render() draws it. The two
    bow opposite ways, so they visibly pass each other rather than overlap in a straight line. A counter paid in coin has no
    crate on that side — only the ingredient flies, and the coin counts roll. */
-const SWAP_MS=1360;   // 680 -> 1360: the same ruling, for the two crates of a trade crossing
+const SWAP_MS=730;   // was 1360 — his tuner, 2026-09-16
 function chipIn(seat,src){
   const el=$("chips"+seat);if(!el||!src)return null;
   return [...el.querySelectorAll(".chip")].filter(c=>{const i=c.querySelector("img");return i&&i.getAttribute("src")===src;}).pop()||null;
@@ -2202,14 +2281,11 @@ export function tradeSwapTo(legs){
        flew half off the screen (a phone guest at 375 wide, 2026-09-15). The bow is clamped so the crate's widest moment, the
        middle of the arc at 1.2x, sits inside the screen; start and end are already on it, so the whole path is. */
     const o=fixedOrigin(),cx0=o.x+leg.from.x+leg.from.w/2+dx*.5,half=leg.from.w*.6+6;
-    const side=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,leg.bow*Math.max(leg.from.w*1.4,Math.abs(dy)*0.35))),s=Math.max(.3,Math.min(2,to.w/leg.from.w));
-    const a=im.animate([{translate:"0px 0px",scale:"1",easing:"cubic-bezier(.35,.7,.5,1)"},
-      {translate:`${(dx*.5+side).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.2",offset:.5,easing:"cubic-bezier(.45,0,.5,1)"},
-      {translate:`${(dx+(dx*.5-side)*CRATE_BOUNCE).toFixed(1)}px ${(dy+dy*.5*CRATE_BOUNCE).toFixed(1)}px`,scale:String((s*(1-CRATE_SQUASH*.5)).toFixed(3)),offset:.86,easing:"cubic-bezier(.3,0,.2,1)"},
-      {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:SWAP_MS,fill:"both",id:"trade-swap"});
+    const side=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,leg.bow*CRATE_BOW*Math.max(leg.from.w*1.4,Math.abs(dy)*0.35))),s=Math.max(.3,Math.min(2,to.w/leg.from.w));
+    const a=im.animate(arcFrames(dx,dy,{side,at:(t,u)=>({scale:bez(t,u,1,1.4,s).toFixed(3)})}),{duration:SWAP_MS,easing:"linear",fill:"both",id:"trade-swap"});
     let landed=false;
     const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-      if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:`${(1+CRATE_SQUASH*1.4).toFixed(2)} ${(1-CRATE_SQUASH*1.15).toFixed(2)}`},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:340,easing:"ease-out",id:"crate-land"});};
+      if(chip.isConnected&&typeof chip.animate==="function")chip.animate(hopFrames(0,0,to.h,CRATE_BOUNCE,CRATE_SQUASH),{duration:Math.round(CRATE_FLY_MS*.3),easing:"linear",id:"crate-land"});};
     a.onfinish=land;a.oncancel=land;
     setTimeout(land,SWAP_MS+400);
   }
@@ -2219,12 +2295,13 @@ export function tradeSwapTo(legs){
    do: out of the payer's coin count and into the seller's, one coin per coin. The seller's count waits for them; the payer's drops
    at once, because the coins have already left. Called BEFORE render(), so the hold is in place before the new count is drawn. */
 const ACROSS_MS=900;
-export async function coinsAcross(fromSeat,toSeat,coins){
+async function flyAcross(fromSeat,toSeat,coins,land){
   if(fxReduced()||!capShowing())return;
   const at=s=>{const icon=($("coins"+s)||{querySelector:()=>null}).querySelector("img");if(!icon)return null;
     const r=icon.getBoundingClientRect(),o=fixedOrigin();return r.width>1?{x:r.left+r.width/2-o.x,y:r.top+r.height/2-o.y,w:r.width}:null;};
   const from=at(fromSeat),to=at(toSeat);if(!from||!to)return;
-  const n=Math.max(1,Math.min(TREASURE_MAX,Math.round(coins||1))),size=Math.max(12,from.w*1.15),gap=coinGap(n);
+  const n=Math.max(1,Math.min(TREASURE_MAX,coins)),size=Math.max(12,from.w*1.15),gap=coinGap(n);
+  const share=Math.floor(coins/n),extra=coins-share*n;
   const anims=[];
   const dx=to.x-from.x,dy=to.y-from.y,ox=fixedOrigin().x,cx0=ox+from.x+dx*.5,half=size*.55+6;
   const bow=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,Math.max(size*2,Math.abs(dy)*0.3)));   // the same clamp: on the glass
@@ -2233,14 +2310,17 @@ export async function coinsAcross(fromSeat,toSeat,coins){
     im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(toSeat);   // the seller's purse
     Object.assign(im.style,{left:(from.x-size/2)+"px",top:(from.y-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
-    const a=im.animate([{translate:"0px 0px",scale:"0.6",opacity:0},
-      {translate:`${(dx*.5+bow).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.1",opacity:1,offset:.45},
-      {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:"0.7",opacity:1}],
-      {duration:ACROSS_MS,delay:k*gap,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"coins-across"});
-    a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
+    const a=im.animate(arcFrames(dx,dy,{side:bow,at:(t,u)=>({scale:bez(t,u,.6,1.5,.7).toFixed(3),opacity:Math.min(1,t/.08).toFixed(3)})}),
+      {duration:ACROSS_MS,delay:k*gap,easing:"linear",fill:"both",id:"coins-across"});
+    a.oncancel=()=>im.remove();
+    a.onfinish=()=>{
+      land(k===n-1?share+extra:share);              // the same one arrival event a dock's coins use
+      const st=im.animate(hopFrames(dx.toFixed(1),dy.toFixed(1),size*.7,COIN_BOUNCE,COIN_SQUASH,{base:.7,fade:true}),{duration:COIN_SETTLE_MS,easing:"linear",fill:"both",id:"treasure-settle"});
+      st.onfinish=st.oncancel=()=>im.remove();
+    };
+    anims.push(a);
   }
-  const flight=ACROSS_MS+(n-1)*gap,go=()=>holdCoinRoll(toSeat,0,gap);   // the seller's count starts when the first coin lands
-  holdCoinRoll(toSeat,flight+1500,gap);if(anims.length)anims[0].finished.then(go,go);else go();   // the seller's count also keeps pace with the coins crossing
+  const flight=ACROSS_MS+(n-1)*gap;
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
 /* Measured BEFORE render() greys the crate (its island rect), handed to crateFlightTo AFTER render() has drawn the new chip. */
@@ -2270,17 +2350,13 @@ export function crateFlightTo(f,seat){
   Object.assign(im.style,{left:f.rect.x+"px",top:f.rect.y+"px",width:f.rect.w+"px",height:f.rect.h+"px"});
   document.body.appendChild(im);
   const dx=tx-cx,dy=ty-cy,s=Math.max(.3,Math.min(2,cr.width/f.rect.w));
-  /* THE SAME ELASTIC LANDING THE COINS GOT — his 2026-09-15 note names both: "The coin and crates both should fly more elastically
-     and pleasingly into your part of the captain's box." The crate carries CRATE_BOUNCE of its last leg PAST the chip, squashing,
-     then springs back onto it; the chip's own squash below finishes the motion. */
-  const ax=dx*.2,ay=dy*.2-f.rect.h*1.2;
-  const a=im.animate([{translate:"0px 0px",scale:"1",easing:"cubic-bezier(.35,.7,.5,1)"},
-    {translate:`${ax.toFixed(1)}px ${ay.toFixed(1)}px`,scale:"1.15",offset:.3,easing:"cubic-bezier(.45,0,.5,1)"},
-    {translate:`${(dx+(dx-ax)*CRATE_BOUNCE).toFixed(1)}px ${(dy+(dy-ay)*CRATE_BOUNCE).toFixed(1)}px`,scale:String((s*(1-CRATE_SQUASH*.5)).toFixed(3)),offset:.85,easing:"cubic-bezier(.3,0,.2,1)"},
-    {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:CRATE_FLY_MS,fill:"both",id:"crate-fly"});
+  /* LAUNCHED OFF THE ISLAND, LANDING IN THE HOLD — his 2026-09-16 note (see arcFrames). It climbs CRATE_BOW of the larger of 1.4 crates
+     and a third of the way down above the higher end, falls into its chip, and the chip takes the squash and the hop. */
+  const lift=CRATE_BOW*Math.max(f.rect.h*1.4,Math.abs(dy)*0.35);
+  const a=im.animate(arcFrames(dx,dy,{lift,at:(t,u)=>({scale:bez(t,u,1,1.35,s).toFixed(3)})}),{duration:CRATE_FLY_MS,easing:"linear",fill:"both",id:"crate-fly"});
   let landed=false;
   const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-    if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:`${(1+CRATE_SQUASH*1.4).toFixed(2)} ${(1-CRATE_SQUASH*1.15).toFixed(2)}`},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:340,easing:"ease-out",id:"crate-land"});};
+    if(chip.isConnected&&typeof chip.animate==="function")chip.animate(hopFrames(0,0,cr.height,CRATE_BOUNCE,CRATE_SQUASH),{duration:Math.round(CRATE_FLY_MS*.3),easing:"linear",id:"crate-land"});};
   a.onfinish=land;a.oncancel=land;
   setTimeout(land,CRATE_FLY_MS+400);   // a dropped animation never leaves a crate invisible in the hold
 }
@@ -2294,7 +2370,7 @@ export function render(){
   const humanIdxs=appState.game.players.map((player,i)=>player.strategy==="human"?i:-1).filter(i=>i>=0);
   const youIdx=humanIdxs.length===1?humanIdxs[0]:-1;
   const spectator=humanIdxs.length===0;
-  let bandHtml="", hasYou=false;   // the viewer's recipe, for #capRecipeBand — filled by the loop, written once after it
+  let bandHtml="";   // the viewer's recipe, for #capRecipeBand — filled by the loop, written once after it
   appState.game.players.forEach((player,i)=>{
     const [x,y]=shipXY(st[i].pos,i,st,cell);
     shipEls[i].style.transform=`translate(${x}px,${y}px)`;
@@ -2352,7 +2428,6 @@ export function render(){
        A SPECTATOR HAS NO "YOU", so a spectator keeps every recipe in its own row, as before. */
     const bandSeat=mine&&!spectator;
     if(bandSeat){
-      hasYou=true;
       const rec=appState.game.players[i].recipe;
       if(canReveal&&rec&&rec.length){
         const bh=[...st[i].ing];
@@ -2420,7 +2495,7 @@ export function render(){
      band that came and went at every pass-and-play reveal and hand-over would breathe the board up
      and down by its own height each time. Blank is visibility:hidden — nothing drawn, which is the
      secrecy duty — not display:none. Only a table with no "you" (spectating bots) has no band. */
-  if(band){ band.hidden=!hasYou; band.classList.toggle("bandEmpty",!bandHtml); }
+  if(band)band.classList.toggle("bandEmpty",!bandHtml);   // whether the band is there at all is buildPlayerRows' call (util.js); render only fills it in
   // active-player ring + captain's-box highlight: whose turn is it as of this event?
   /* T-09 (Wyatt, 2026-08-26, with a host/guest screenshot pair): "the bakeoff SHOULD be happening
      for guest because it's their turn -- but Dough hook (who just played) is still displayed as the

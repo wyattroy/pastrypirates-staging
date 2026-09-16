@@ -893,13 +893,18 @@
   .ppCrateBox img { width: 74%; height: 74%; object-fit: contain; }
   .ppPoof { position: fixed; z-index: 59; pointer-events: none; border-radius: 50%; opacity: 0;
     background: radial-gradient(rgba(255,255,255,.85), rgba(255,255,255,0) 70%); will-change: transform, opacity; }
-  .ppStreak { position: absolute; border-radius: 99px; background: rgba(255,255,255,.9); opacity: 0; will-change: transform, opacity; }
+  /* a speed line's HEAD is its right end, on the hull; it turns about that end and fades back along its body (board.js rideStreaks) —
+     Wyatt, 2026-09-16: "the gradient should be most opaque nearest to the boat" */
+  .ppStreak { position: absolute; border-radius: 99px; opacity: 0; will-change: transform, opacity; transform-origin: 100% 50%;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.55) 45%, rgba(255,255,255,.95)); }
   /* first-home confetti flies in FIXED position too, over the narration bubble (board.js firstHomeConfetti) */
   .ppConfetti { position: fixed; z-index: 60; pointer-events: none; border-radius: 1px; opacity: 0; will-change: transform, opacity; }
   /* a landed shot and a won battle (board.js shotLands / loserKnocked): smoke at the firing bow, a white flash over the struck hull and
      a crate tumbling off the loser, all OVER the boats in #dockCoinHost; the crate's splash ring stays on the water in #popHost */
-  .ppSmoke { position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; will-change: transform, opacity;
-    background: radial-gradient(rgba(252,252,250,1) 0 28%, rgba(196,196,192,.92) 50%, rgba(120,120,118,.45) 62%, rgba(120,120,118,0) 72%); }
+  /* one puff of several (board.js smokePuffs): an off-centre soft core and a feathered grey edge, so overlapping puffs of different
+     sizes read as a torn cloud rather than a ball; the grey still reads against sand */
+  .ppSmokePuff { position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; will-change: transform, opacity;
+    background: radial-gradient(circle at 42% 40%, rgba(250,250,247,.95) 0%, rgba(222,221,216,.85) 30%, rgba(170,169,164,.45) 55%, rgba(150,150,146,0) 71%); }
   .ppHitFlash { position: absolute; border-radius: 50%; opacity: 0; pointer-events: none; will-change: transform, opacity;
     background: radial-gradient(rgba(255,255,255,1) 35%, rgba(255,255,255,0) 70%); }
   .ppCrateSplash { position: absolute; opacity: 0; pointer-events: none; will-change: transform, opacity; object-fit: contain;
@@ -1125,6 +1130,7 @@
   .fcSpin { animation: fcSpin 4s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
   @media (prefers-reduced-motion: reduce) { .fcSpin { animation: none; } }
   #boardShips { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    width: 100%; height: 100%; overflow: visible; }
   /* ⛈ THE BOBBING BOAT PAINTS WHERE THE BOAT PAINTS. Wyatt, 2026-09-15: "Storms - currently they do not seem to consistently darken
      the active player; it seems like the active player may sometimes be drawn OVER the storm." It was, and it was mine: since the
      whole-turn bob (2026-09-14) the active captain's boat is an HTML COPY (board.js bobShip) and the copy lived in #dockCoinHost —
@@ -1134,8 +1140,12 @@
      Z-INDEX 4, LEVEL WITH #boardShips AND DIRECTLY AFTER IT IN THE DOM, so the copy stands exactly where the picture it replaces
      stands: over the rings (3), under the weather (5). It is board-mapped, so its id goes in CAM_HTML_LAYERS (stage.js) — the step
      BOARD-RENDERING §3 exists to stop anyone forgetting. */
+  /* ⛔ AND IT MUST STAND OUTSIDE #boardShips' BRACES. From 2026-09-15 to 2026-09-16 this rule sat INSIDE the #boardShips rule, between
+     its declarations — which CSS nesting reads as "#bobHost inside #boardShips", matching nothing, since the two are siblings. So the
+     layer was never positioned: at Wyatt's window (734x920) the bobbing copy of the active boat drew 602px below the boat and the
+     boat vanished for its whole turn ("active player's ship disappeared when it is not sailing"). scripts/qa/css_no_accidental_nesting_check.mjs
+     now fails any rule that lands inside another rule's braces. */
   #bobHost { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
-    width: 100%; height: 100%; overflow: visible; }
   /* the thing that MOVES — carries the same translate() the SVG <g> used to, and the same
      transition the trade-wind sweep retunes (src/ui/board.js setShipGlideMs). */
   #rippleRing { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
@@ -1162,7 +1172,7 @@
      background. cqw units keep the geometry identical to the 640-unit board. */
   .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
     background: #ffc23a; border-radius: 6px; opacity: .5;
-    animation: sailBounce 1.15s ease-in-out infinite, sailPop .5s ease-out backwards;   /* .22s -> .33s -> .5s: his 2026-09-14 "50% slower so it's more noticeable", then 2026-09-15 "still come in too fast" — another 50%. His dial for it is on the Game Feel Tuner. */
+    animation: sailBounce 1.15s ease-in-out infinite, sailPop var(--sailPopMs, 440ms) ease-out backwards;   /* ONE number for the whole wave, set per square by flow.js SAIL_POP_MS — see there */
     transition: opacity .12s ease, filter .12s ease; }
   /* THE SQUARES POP IN FROM THE BOAT OUTWARD — his game feel audit, PASSED (2026-09-13). LISTED LAST so its hidden start
      wins over the bounce until each square's own --sailPopDelay (renderPickPrompt, by distance from the boat); `scale`,
@@ -2413,18 +2423,23 @@
   /* A FIGHT SPEAKS IN DARK BLUE — Wyatt, 2026-09-15: "the battle narrations should be in dark blue". The cream box read as a card
      laid over the fight; this one reads as weather over the sea, and the small coin turning on the attacker's boat stays legible
      through the gap it leaves. Set by stageFlash's opts.cls, from orchestrator renderBattle. */
-  .pp4Bub.btl { background:#12323a; color:#eef7f9; }
+  .pp4Bub.btl { --bubBg:#12323a; color:#eef7f9; }
   .pp4Bub.btl .score { color:#7fe3b0; }
-  .pp4Bub { position:absolute; z-index:26; background:#fffdf2; border:2px solid #177; border-radius:13px;
+  /* ⭐ A BUBBLE'S COLOURS ARE ITS OWN TWO VARIABLES, AND ITS TAIL WEARS THEM. Wyatt, 2026-09-16: "there's a weird little white diamond that
+     appears in the water near my boat during battles." It was the battle bubble's TAIL: the tail painted its own fill (a copy of the cream
+     below) and took its edge from the text colour, so when the battle bubble turned dark blue (2026-09-15) its tail stayed a white diamond
+     under it. Now each kind of bubble sets --bubBg and --bubEdge once, and .pp4Bub and .pp4Tail both paint from them — the tail decides no
+     colour of its own (scripts/qa/bubble_tail_wears_bubble_check.mjs). */
+  .pp4Bub { --bubBg:#fffdf2; --bubEdge:#177; position:absolute; z-index:26; background:var(--bubBg); border:2px solid var(--bubEdge); border-radius:13px;
     padding:9px 12px; box-shadow:0 8px 26px rgba(0,0,0,.33); font-size:14px; line-height:1.45;
     font-weight:600; color:#1f2d33; transition:opacity .35s; }
   .pp4Bub.ambient { left:50%; transform:translateX(-50%); top:calc(74px + env(safe-area-inset-top));
-    max-width:min(320px,86vw); background:rgba(9,42,52,.87); color:#fff; border-color:rgba(255,255,255,.25); }
+    max-width:min(320px,86vw); --bubBg:rgba(9,42,52,.87); color:#fff; --bubEdge:rgba(255,255,255,.25); }
   .pp4Bub.out { opacity:0; }
   /* item 4: below its ship, the tail points UP at the boat it belongs to */
   .pp4Bub.below .pp4Tail { top:-9px; bottom:auto; transform:rotate(225deg); }   /* 45 + 180: the base tail is already rotated 45, so a bare 180 would square it off */
-  .pp4Tail { position:absolute; bottom:-9px; width:15px; height:15px; background:#fffdf2;
-    border-right:2px solid; border-bottom:2px solid; transform:rotate(45deg); }
+  .pp4Tail { position:absolute; bottom:-9px; width:15px; height:15px; background:var(--bubBg);
+    border-right:2px solid var(--bubEdge); border-bottom:2px solid var(--bubEdge); transform:rotate(45deg); }
   /* --pp4CerGapMax is the RESTING air between the ceremony's four rows, and it is a variable
      because stage.js's cerBandTick() has to read the ceiling rather than carry a second copy of it:
      on a phone the column is taller than the board band, so the gap closes up to whatever fits and
@@ -2442,12 +2457,22 @@
      scrollbar. Measured after: 0 bare pixels on every side at every size. */
   #pp4Veil { position:fixed; inset:0; z-index:44; display:flex; flex-direction:column;
     align-items:center; justify-content:center; --pp4CerGapMax:26px; gap:var(--pp4CerGapMax);
-    background:radial-gradient(circle at 50% 44%,rgba(20,50,60,.6),rgba(4,16,22,.92));
+    background:radial-gradient(circle at 50% 44%,rgba(20,50,60,.6),rgba(4,16,22,.92)); }
+  /* …AND OUTSIDE THE COLUMN, THE DARK IS A LAYER OF ITS OWN (stage.js syncSurround, 2026-09-16): a child of <html>, above the page, never
+     clipped by the column. Its box is a clear window the column's exact size; its shadow is the dark — the same rgba the veil's gradient
+     reaches at its edge, so the two meet without a seam. It takes no pointer events. */
+  #pp4Surround { position:fixed; top:0; height:100%; z-index:1; pointer-events:none; background:transparent;
     box-shadow:0 0 0 100vmax rgba(4,16,22,.92); }
+  #pp4Surround[hidden] { display:none; }
   .pp4CerTop { color:#ffd76b; font-weight:800; font-size:15px; letter-spacing:3px; text-align:center; }
   .pp4CerSub { color:#e8f4ee; font-weight:700; font-style:italic; font-size:14px; text-align:center;
     transition:opacity .3s; }
-  #pp4Veil.resolving .pp4CerSub { opacity:0; }
+  /* WHICH WORDS THE FLIP STAGE SHOWS, IN EACH OF ITS PHASES — the ONE place (stage.js cerPhase sets the phase; nothing else touches a line).
+     ask: every line. spinning: "Tap the coin" fades — the tap has happened. verdict: only the landing word; every line leaves first. */
+  #pp4Veil[data-cer="spinning"] .pp4CerSub { opacity:0; }
+  #pp4Veil[data-cer="verdict"] .pp4CerTitle,
+  #pp4Veil[data-cer="verdict"] .pp4CerStakes,
+  #pp4Veil[data-cer="verdict"] .pp4CerSub { visibility:hidden; }
   /* SIZED, NOT SCALED — W5-1 (Wyatt: "the coin flip is low-res while the rest of the game is
      not"). This carried `transform:scale(2.2)`, and a transform stretches the picture the browser
      already drew; it does not ask for a better one. Multiplying the flippenator's own size tokens

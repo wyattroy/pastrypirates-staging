@@ -6,7 +6,7 @@
 //   node scripts/voyage_disagreements.mjs --selftest [voyages]     prove the instrument first (no player data)
 //   node scripts/voyage_disagreements.mjs --dir <folder>           ask about voyage logs saved as JSON files
 //   node scripts/voyage_disagreements.mjs --firebase --since 2026-09-20   ask about players' voyages logged since that day
-//   add --html <file> to write the page; --all to include voyages a human did not win; --include-dev for staging
+//   add --html <file> to write the page; --all to include voyages a human did not win; --include-dev for a developer's own machine
 //
 // The engine half — rebuilding a voyage's board and asking the ONE bot brain — is scripts/lib/voyage_ask.mjs.
 //
@@ -201,10 +201,15 @@ if (flag("--selftest")) {
 
 const source = flag("--firebase") ? await fromFirebase(opt("--since")) : opt("--dir") ? fromDir(opt("--dir")) : null;
 if (!source) { console.log("give --selftest, --dir <folder> or --firebase"); process.exit(2); }
-const players = source.filter(({ rec }) => (flag("--include-dev") || isLiveHost(rec.host)) && rec.pid !== QA_PLAYER_ID);
+/* WHOSE VOYAGES COUNT. Wyatt, 2026-09-16: "is it watching my playtests on staging to? it should be! i'm very good at this game, and it should
+   learn from me. Also, it should only try to learn from humans who win. we don't want the bots learning bad moves from bad human players."
+   So staging counts as well as the live game — it is where he plays — and a probe's or a sea trial's voyage never does: those play on a
+   developer's own machine (localhost), and the playtest gate stamps its own pid besides. Only voyages a human WON are asked (below). */
+const fromPeople = rec => (isLiveHost(rec.host) || /^staging\./.test(String(rec.host || "")) || flag("--include-dev")) && rec.pid !== QA_PLAYER_ID;
+const players = source.filter(({ rec }) => fromPeople(rec));
 const results = players.map(({ rec }) => askVoyage(rec)).filter(r => flag("--all") || r.won);
 const skipped = results.filter(r => !r.map.ok).length;
-console.log(`${source.length} voyage logs carry a seed; ${players.length} were played by real players on the live game; ` +
+console.log(`${source.length} voyage logs carry a seed; ${players.length} were played by people (the live game or staging); ` +
   `${results.length} ${flag("--all") ? "asked" : "were won by a human"}${skipped ? ` (${skipped} on a map this build no longer draws, left out)` : ""}`);
 for (const [i, r] of results.entries()) if (r.map.ok) console.log(`  voyage ${i + 1}: ${r.days} days, agreed ${r.agreed}/${r.turns} turns, ${r.buysAgreed}/${r.buys} buys`);
 if (opt("--html")) {
