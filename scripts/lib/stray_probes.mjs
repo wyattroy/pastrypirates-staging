@@ -16,6 +16,8 @@
  * oldest more than a day old, holding 15,097 MB, on the laptop he was asleep next to.
  */
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 export const isWin = process.platform === "win32";
 
@@ -147,4 +149,140 @@ export function killProfile(dir) {
   if (!dir) return;
   try { execFileSync("/bin/sh", ["-c", `pkill -f ${JSON.stringify("--user-data-dir=" + dir)}`], { stdio: "ignore" }); }
   catch { /* nothing matched, which is the normal case */ }
+}
+
+/* ⭐ AND THE DIRECTORY OUTLIVES THE BROWSER — 2026-09-15, 188 of them, 9.8 GB, in one worktree.
+ *
+ * Everything above this line reaps PROCESSES. Nothing reaped the folders they ran out of, so a
+ * machine could pass `stray_probe_check` — no browsers running, genuinely clean — while nearly ten
+ * gigabytes of dead Chrome profiles sat in a worktree. Wyatt found them; the instrument could not,
+ * because it was never asked the question.
+ *
+ * WHY THEY SURVIVE. `launch()` wipes its profile directory on the way IN, not on the way out, and
+ * `killAll()` / `reapOrphans()` only ever end processes. A probe that exits cleanly therefore leaves
+ * its ~50 MB folder standing, and `checks_pointer_events_redproof.mjs` is IN `npm test` — so every
+ * suite run on this machine dropped another one. 188 is what a fortnight of that looks like.
+ *
+ * ⛔ THREE THINGS IT MUST NOT DELETE, and each one is why the checks below are not padding:
+ *   - a profile a browser is USING right now. Same restraint as the reaper: an in-flight posed
+ *     board or a sea trial at sea must survive a tidy-up, or the first person it hurts turns it off.
+ *   - a `.tmp-` directory that is not a profile at all. `asset_quantize.mjs` writes `.tmp-quant`,
+ *     `art_posed_pair.mjs` writes copies of the art tree — somebody's OUTPUT, sitting under the same
+ *     prefix. So "is it a Chrome profile?" is answered by what Chrome itself puts there, never by
+ *     the name.
+ *   - anything recent. A day is far longer than any probe runs and far shorter than the mess takes
+ *     to build, so nothing a session might still be looking at is ever in range.
+ *
+ * And a FAILED LOOK DELETES NOTHING — the rule this whole family was written after. If the process
+ * table cannot be read, `held` is unknown, so every directory might be in use and none are swept.
+ */
+export const STALE_PROFILE_MS = 24 * 60 * 60 * 1000;
+
+/** Every `--user-data-dir=` on this machine's process table, as a Set of paths.
+ *  THROWS if it cannot look — an empty set means "nothing is held", which is the opposite fact.
+ *
+ *  A path containing spaces comes back truncated at the first one (the Claude app's own
+ *  `…/Application Support/Claude` does). That is harmless HERE and deliberately not worked around:
+ *  the only paths this set is ever compared against are `<repo>/.tmp-*`, which have no spaces, and
+ *  a truncated foreign path cannot collide with one. */
+export function liveProfileDirs() {
+  let raw;
+  if (isWin) {
+    const ps = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match '--user-data-dir=' } | ForEach-Object { $_.CommandLine }`;
+    raw = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", ps], { encoding: "utf8" });
+  } else {
+    raw = execFileSync("/bin/sh", ["-c",
+      "ps -eo command | grep -- '--user-data-dir=' | grep -v grep || true"], { encoding: "utf8" });
+  }
+  const held = new Set();
+  for (const m of String(raw).matchAll(/--user-data-dir=(\S+)/g)) held.add(m[1].replace(/["']/g, ""));
+  return held;
+}
+
+/** Is this directory a Chrome profile, as opposed to some probe's output folder that happens to
+ *  share the `.tmp-` prefix? Asked of Chrome's own bookkeeping, which it writes on first run and
+ *  which nothing else in this repo produces. */
+export function isChromeProfile(dir) {
+  try { return fs.existsSync(path.join(dir, "Local State")) || fs.statSync(path.join(dir, "Default")).isDirectory(); }
+  catch { return false; }
+}
+
+/** Delete `<repoRoot>/.tmp-*` Chrome profile DIRECTORIES that are older than `maxAgeMs` and that no
+ *  live browser is holding. Same scope as `reapOrphans` — this repo's own prefix, nothing else on
+ *  the machine. Returns `{ swept, bytes, looked }`; never throws. */
+export function sweepStaleProfiles(repoRoot, { maxAgeMs = STALE_PROFILE_MS, now = Date.now(), dryRun = false, held = null } = {}) {
+  /* `held` is injectable ONLY so the restraint can be red-proofed. The bug this family keeps
+     meeting is a safety check nothing could reach — `isOrphan` was extracted for exactly this
+     reason — and "does it spare a profile a browser is using?" is the one question here whose
+     wrong answer breaks live work. The default path asks the OS and nothing changes. */
+  if (!held) {
+    try { held = liveProfileDirs(); }
+    catch { return { swept: [], bytes: 0, looked: false }; }   // could not look -> delete NOTHING
+  }
+  let entries;
+  try { entries = fs.readdirSync(repoRoot, { withFileTypes: true }); }
+  catch { return { swept: [], bytes: 0, looked: false }; }
+  const swept = [];
+  let bytes = 0;
+  for (const ent of entries) {
+    if (!ent.name.startsWith(".tmp-")) continue;
+    if (!ent.isDirectory()) continue;                 // `.tmp-about-before.html` is a FILE, not ours
+    const dir = path.join(repoRoot, ent.name);
+    if (held.has(dir)) continue;                      // a browser is in it right now
+    if (!isChromeProfile(dir)) continue;              // somebody's output, not a profile
+    let st;
+    try { st = fs.statSync(dir); } catch { continue; }
+    /* ⚑ mtime, AND DELIBERATELY NOT ctime OR birthtime. A first version took the newest of all
+       three, reasoning that a folder should only go when every clock agrees it is old — and the
+       gate caught it, red, on a three-day-old profile it refused to sweep. ctime is the INODE
+       CHANGE time: it answers "when did this directory's metadata last change", not "when was this
+       profile last used", and nothing can set it, so no test could ever pose an old folder and the
+       sweep would have shipped never deleting anything. mtime is what `find -mtime` means and what
+       "last touched" means. Age is only the coarse filter here anyway — a profile that is genuinely
+       IN USE is spared by `held` above, which asks the process table, not a clock. */
+    if (now - st.mtimeMs < maxAgeMs) continue;
+    let size = 0;
+    try { size = dirBytes(dir); } catch {}
+    if (dryRun) { swept.push(dir); bytes += size; continue; }
+    try { fs.rmSync(dir, { recursive: true, force: true }); swept.push(dir); bytes += size; } catch {}
+  }
+  return { swept, bytes, looked: true };
+}
+
+/** Bytes, in the unit a person reads. The first version of the sweep's report said "0.00 GB" after
+ *  freeing four megabytes, which is a line that tells Wyatt nothing. */
+export function humanBytes(n) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
+  if (n >= 1e6) return `${Math.round(n / 1e6)} MB`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} KB`;
+  return `${n} bytes`;
+}
+
+/** Bytes under a directory. Only ever called on something already judged sweepable, so it is
+ *  allowed to be approximate — it exists so the report can say what was freed. */
+function dirBytes(dir) {
+  let total = 0;
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const f = path.join(dir, ent.name);
+    try { total += ent.isDirectory() ? dirBytes(f) : fs.statSync(f).size; } catch {}
+  }
+  return total;
+}
+
+/* ⭐ ONE "TIDY UP BEFORE YOU LAUNCH", SHARED BY EVERY LAUNCHER — rule 23.
+ *
+ * `mp_rig.launch()` had its own memoised reap; `cdp.openChrome()` had none at all, and it is the
+ * mount behind `board_decodes_probe`, `storm_rain_posed`, `asset_quantize_verify` and the WebKit
+ * legs. Two launchers, one of them tidying, is how 9.8 GB accumulates in the worktree that happened
+ * to use the other. The flag lives here, in the module both import, so it is genuinely once per
+ * process however many launchers a probe uses. */
+let tidied = false;
+export function reapOnce(repoRoot) {
+  if (tidied) return { killed: [], swept: [], bytes: 0, ran: false };
+  tidied = true;
+  let killed = [];
+  try { ({ killed } = reapOrphans(repoRoot)); } catch {}
+  let swept = [], bytes = 0;
+  try { ({ swept, bytes } = sweepStaleProfiles(repoRoot)); } catch {}
+  return { killed, swept, bytes, ran: true };
 }

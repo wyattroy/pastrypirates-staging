@@ -23,8 +23,13 @@
  *
  * House convention: no test runner, one PASS/FAIL line per case, every case runs before exit.
  */
-import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { execFileSync, spawn } from "node:child_process";
+/* The sweep is IMPORTED here on purpose, unlike case 2b's deliberately independent route:
+   cases 6 and 7 test BEHAVIOUR against a real directory tree and a real process, so the
+   thing under test has to be the thing that ships. */
+import { sweepStaleProfiles, liveProfileDirs } from "../lib/stray_probes.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,7 +42,7 @@ let failed = 0;
 const pass = (m) => console.log(`  PASS  ${m}`);
 const fail = (m) => { console.log(`  FAIL  ${m}`); failed++; };
 
-console.log("stray_probe_reaper_check — abandoned browsers are KILLED, and the detector cannot be silenced\n");
+console.log("stray_probe_reaper_check — abandoned browsers are KILLED, their folders are SWEPT, and the detector cannot be silenced\n");
 
 // 1 — THE REAPER EXISTS AND RUNS.
 {
@@ -225,5 +230,101 @@ console.log("stray_probe_reaper_check — abandoned browsers are KILLED, and the
   }
 }
 
-console.log(failed ? `\nFAIL — ${failed} failure(s).` : "\nPASS — abandoned browsers are killed automatically, and the detector runs first so nothing can silence it.");
+/* 6 — ⛔ AND THE FOLDER GOES, NOT ONLY THE PROCESS — 2026-09-15.
+ *
+ * Everything above this line is about PROCESSES, and on 2026-09-15 that turned out to be half the
+ * problem: **188 dead Chrome profile directories, 9.8 GB, standing in one worktree** while
+ * `stray_probe_check` reported PASS and was RIGHT — no browsers were running. `launch()` wipes its
+ * profile on the way IN, `killAll()` and the reaper only ever end processes, so a probe that exits
+ * cleanly leaves its ~50 MB folder behind forever. `checks_pointer_events_redproof.mjs` is IN this
+ * very suite, so every `npm test` on this machine dropped another one.
+ *
+ * ⛔ AND THE RESTRAINT IS AGAIN THE WHOLE DESIGN, for the same reason case 2 exists. A sweep that
+ * took a profile a browser is USING would kill a posed board mid-photograph; one that went by name
+ * would eat `.tmp-quant`, which is `asset_quantize.mjs`'s OUTPUT and not a profile at all. Both are
+ * exercised below on a real directory tree, so these are behaviours and not regexes — break the age
+ * test, the held test, the profile test or the file/directory test and a named case goes red.
+ */
+{
+  const tmp = mkdtempSync(join(tmpdir(), "sweep-gate-"));
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.UTC(2026, 8, 15, 12, 0, 0);
+  /* Build one: a directory with Chrome's own bookkeeping in it, stamped at `ageDays` old. */
+  const profile = (name, ageDays) => {
+    const d = join(tmp, name);
+    mkdirSync(join(d, "Default"), { recursive: true });
+    writeFileSync(join(d, "Local State"), "{}");
+    writeFileSync(join(d, "Default", "Cookies"), "x".repeat(1024));
+    const t = new Date(NOW - ageDays * DAY);
+    utimesSync(join(d, "Default", "Cookies"), t, t);
+    utimesSync(d, t, t);
+    return d;
+  };
+  const stale   = profile(".tmp-pe-111", 3);        // three days dead: the 188
+  const held    = profile(".tmp-pe-222", 3);        // three days old but a browser is IN it
+  const fresh   = profile(".tmp-pe-333", 0.2);      // five hours: a probe from this session
+  const output  = join(tmp, ".tmp-quant");          // asset_quantize.mjs's OUTPUT, not a profile
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, "cupcake.webp"), "art");
+  utimesSync(output, new Date(NOW - 9 * DAY), new Date(NOW - 9 * DAY));
+  const loose   = join(tmp, ".tmp-about-before.html");   // a FILE under the same prefix
+  writeFileSync(loose, "<html>");
+  utimesSync(loose, new Date(NOW - 9 * DAY), new Date(NOW - 9 * DAY));
+  const unrelated = join(tmp, "assets");                 // nothing to do with probes
+  mkdirSync(unrelated, { recursive: true });
+  utimesSync(unrelated, new Date(NOW - 9 * DAY), new Date(NOW - 9 * DAY));
+
+  const res = sweepStaleProfiles(tmp, { now: NOW, held: new Set([held]) });
+
+  if (!res.looked) fail("the sweep reported it could not look at a directory that plainly exists");
+  else if (existsSync(stale)) fail("⛔ A THREE-DAY-OLD ABANDONED CHROME PROFILE SURVIVED THE SWEEP — this is the 9.8 GB, unswept. Nothing else here matters if this one is red.");
+  else pass(`an abandoned profile older than a day is DELETED, folder and all (${res.swept.length} swept, ${res.bytes} bytes reported freed)`);
+
+  const spared = [
+    [held, "a profile a live browser is holding — a posed board mid-photograph, a sea trial at sea"],
+    [fresh, "a profile only hours old — this session's own probe"],
+    [output, "`.tmp-quant`: a probe's OUTPUT directory, same prefix, not a Chrome profile"],
+    [loose, "`.tmp-about-before.html`: a FILE under the prefix, not a directory"],
+    [unrelated, "a directory that is not under the `.tmp-` prefix at all"],
+  ];
+  const eaten = spared.filter(([p]) => !existsSync(p));
+  if (eaten.length) for (const [, why] of eaten) fail(`⛔ THE SWEEP DELETED ${why} — it must not.`);
+  else pass(`it spares all ${spared.length} things it must: held, fresh, not-a-profile, a file, and anything outside the prefix`);
+
+  /* A FAILED LOOK DELETES NOTHING — the rule this whole family was written after. An unreadable
+     root must come back `looked:false` with an empty sweep, never "nothing was there". */
+  const gone = sweepStaleProfiles(join(tmp, "no-such-root"), { now: NOW, held: new Set() });
+  if (gone.looked || gone.swept.length) fail("a root it cannot read came back as a completed sweep — 'I could not look' and 'there was nothing' are opposite facts, and conflating them is how 183 browsers went unseen");
+  else pass("a root it cannot read reports `looked:false` and deletes nothing");
+
+  rmSync(tmp, { recursive: true, force: true });
+}
+
+/* 7 — ⛔ AND THE PROTECTION ABOVE IS ONLY REAL IF `liveProfileDirs()` CAN ACTUALLY SEE A BROWSER.
+ *     Case 6 hands the sweep a `held` set, which proves the SELECTION spares what is held and
+ *     proves nothing about whether the live set is ever populated. An empty `liveProfileDirs()`
+ *     would pass case 6 and delete a running probe's profile on the machine — the same shape as
+ *     every fault in this file's history: a safety the test could not reach.
+ *     So: hold a profile path open in a real process, on this real machine, and require the
+ *     function to find it. */
+{
+  const dir = join(tmpdir(), `.tmp-sweep-gate-${process.pid}`);
+  const script = join(tmpdir(), `sweep-gate-${process.pid}.cjs`);
+  writeFileSync(script, "setTimeout(() => {}, 8000);");
+  const child = spawn(process.execPath, [script, `--user-data-dir=${dir}`], { stdio: "ignore" });
+  try {
+    let seen = false;
+    for (let i = 0; i < 40 && !seen; i++) {                 // bounded: 40 x 100ms
+      try { seen = liveProfileDirs().has(dir); } catch { break; }
+      if (!seen) execFileSync("/bin/sh", ["-c", "sleep 0.1"], { stdio: "ignore" });
+    }
+    if (seen) pass("`liveProfileDirs()` finds a --user-data-dir held by a real process on this machine — the restraint in case 6 has something to hold on to");
+    else fail("⛔ `liveProfileDirs()` could not see a --user-data-dir that is on this machine's process table RIGHT NOW. The sweep would then believe NOTHING is in use and delete a running probe's profile.");
+  } finally {
+    try { child.kill("SIGKILL"); } catch {}
+    try { rmSync(script, { force: true }); } catch {}
+  }
+}
+
+console.log(failed ? `\nFAIL — ${failed} failure(s).` : "\nPASS — abandoned browsers are killed automatically, their dead profile folders are swept, and the detector runs first so nothing can silence it.");
 process.exit(failed ? 1 : 0);

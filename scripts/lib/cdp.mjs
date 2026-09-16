@@ -2,11 +2,11 @@
 // it, kill it — scoped to its own ports so it never touches another agent's probe (HARD-WON-LESSONS §8).
 // Shared by playtest.mjs (and reusable by any future browser gate). Nothing game-specific lives here.
 import { spawn, execSync } from "node:child_process";
-import { killProfile } from "./stray_probes.mjs";
+import { killProfile, reapOnce, humanBytes } from "./stray_probes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { CHROME, LINUX_ARGS, PYTHON, staticServerArgs } from "./chrome.mjs";
+import { REPO, CHROME, LINUX_ARGS, PYTHON, staticServerArgs } from "./chrome.mjs";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -52,6 +52,17 @@ export function freshProfileDir(profileDir) {
   return alt;
 }
 export async function openChrome({ W, H, dbgPort, httpPort, serveRoot, profileDir, mobile = false, dsf = 1 }) {
+  /* ⭐ THE SECOND LAUNCHER TIDIES TOO — 2026-09-15. mp_rig's launch() has reaped leaked browsers
+     before every start since 2026-09-10; THIS mount never did, and it is the one behind
+     board_decodes_probe, storm_rain_posed, asset_quantize_verify and the WebKit legs. One launcher
+     tidying and one not is how 9.8 GB of dead Chrome profiles accumulated in a single worktree.
+     reapOnce() is memoised inside the shared module both launchers import, so a probe that uses
+     both still does this exactly once. */
+  try {
+    const { killed, swept, bytes } = reapOnce(REPO);
+    if (killed.length) console.log(`  [probe] reaped ${killed.length} orphaned probe browser(s) from a previous run`);
+    if (swept.length) console.log(`  [probe] swept ${swept.length} abandoned profile folder(s) older than a day (${humanBytes(bytes)})`);
+  } catch {}
   const srv = httpPort ? spawn(PYTHON, staticServerArgs(httpPort), { cwd: serveRoot, stdio: "ignore" }) : null;
   profileDir = freshProfileDir(profileDir);
   const args = [...LINUX_ARGS, "--headless=new", "--mute-audio", `--remote-debugging-port=${dbgPort}`,

@@ -29,7 +29,7 @@ import path from "node:path";
 
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON, staticServerArgs } from "./lib/chrome.mjs";
-import { reapOrphans } from "./lib/stray_probes.mjs";
+import { reapOnce as tidyOnce, humanBytes } from "./lib/stray_probes.mjs";
 // screenshots: $MP_RIG_SHOTS, else ./mp-rig-shots under the caller's cwd (was a dead scratchpad path)
 export const SHOTS = process.env.MP_RIG_SHOTS || path.join(process.cwd(), "mp-rig-shots");
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -78,13 +78,15 @@ const profilePath = p => (process.platform === "win32" && /^\/tmp\//.test(p))
    one afternoon and pegged Wyatt's CPU. Discipline inside the probe cannot cover a probe that is
    killed; reaping at the START of the next one can, and turns "twenty-two by evening" into "at
    most one between runs". Scoped to this repo's own .tmp- profiles — see reapOrphans. */
-let reaped = false;
 function reapOnce() {
-  if (reaped) return;
-  reaped = true;
   try {
-    const { killed } = reapOrphans(REPO);
+    const { killed, swept, bytes } = tidyOnce(REPO);
     if (killed.length) console.log(`  [rig] reaped ${killed.length} orphaned probe browser(s) from a previous run`);
+    /* ⭐ AND THE FOLDERS, NOT ONLY THE PROCESSES — 2026-09-15. Killing browsers left 188 dead
+       profile directories, 9.8 GB, standing in one worktree while every instrument reported the
+       machine clean. Said out loud for the same reason a kill is: a sweep I never hear about is a
+       leak I never fix. */
+    if (swept.length) console.log(`  [rig] swept ${swept.length} abandoned profile folder(s) older than a day (${humanBytes(bytes)})`);
   } catch {}
 }
 

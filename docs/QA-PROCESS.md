@@ -458,6 +458,13 @@ one whose parent has exited is abandoned. So a posed board you are mid-way throu
 does not fail the build. The gate prints the correct kill command for the machine you are on —
 on Mac and Linux that is still `pkill -f remote-debugging-port; pkill -f http.server`.
 
+**And the FOLDER outlives the browser.** On 2026-09-15 this worktree held **188 dead Chrome profile
+directories, 9.8 GB**, while the gate above correctly reported nothing running — every tool here
+reaps processes and none of them reaped folders. Both launchers now sweep `<repo>/.tmp-*` profiles
+older than a day that no live browser is holding, before they spawn (`sweepStaleProfiles`, and they
+say out loud what they swept). It spares anything held, anything fresh, and anything that is not a
+Chrome profile — `.tmp-quant` is a probe's output, not a profile.
+
 Bound every probe. Kill it when you have the answer, not when the task ends. Never leave one running
 across a reply — he is at the keyboard, on the machine it is heating.
 
