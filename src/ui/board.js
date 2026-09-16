@@ -2069,7 +2069,7 @@ export async function treasureBurst(seat,coins){
   const anims=[];
   for(let k=0;k<n;k++){
     const im=document.createElement("img");
-    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";
+    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(seat);   // whose purse this one is heading for — read by the probes, invisible to a player
     Object.assign(im.style,{left:(from[0]-size/2)+"px",top:(from[1]-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
     const spread=(k-(n-1)/2)*size*0.55,up=size*(2.2+((k*37)%5)*0.25);
@@ -2159,7 +2159,7 @@ export async function coinsAcross(fromSeat,toSeat,coins){
   const bow=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,Math.max(size*2,Math.abs(dy)*0.3)));   // the same clamp: on the glass
   for(let k=0;k<n;k++){
     const im=document.createElement("img");
-    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";
+    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(toSeat);   // the seller's purse
     Object.assign(im.style,{left:(from.x-size/2)+"px",top:(from.y-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
     const a=im.animate([{translate:"0px 0px",scale:"0.6",opacity:0},

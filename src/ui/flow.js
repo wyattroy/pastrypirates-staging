@@ -2027,8 +2027,11 @@ export async function humanDock(player,port){
       break;                                     // "Nah"
     }
   }
+  // WHAT WAS LEFT ON THE SHELF, decided by the engine for bot and human alike (Game.dockLeft) — a captain who
+  // taps "Nah" and a bot that declines get the identical sentence, which is the rule this whole file is held to.
   g.ev({t:"dock",p:player.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
     paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
+    left:buy?undefined:g.dockLeft(player,ing),
     black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
   /* HIS ITEM 9: THE CRATE LANDS WHEN YE BUY IT. One call moved, none added.
      "the crate sound and the crate animation arrive after the summary has faded, instead of on the

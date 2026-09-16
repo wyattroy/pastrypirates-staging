@@ -572,7 +572,11 @@ const EVENT_NARRATION={
     /* HIS PASS, 2026-09-13: "Crustbeard finds treasure (+N) at the Flour Patch!" · "Crustbeard earns 1{coin}
        scrubbin' the docks and buys a crate of Wheat Sheaves (−N)." The HEADS!/TAILS words are gone — the coin
        itself shows the face. Every amount still comes off cfg and the event, never typed (W2-4). */
-    const how=!bought?"":barter?".barter":e.black?".black":".buy";
+    /* A DOCK THAT BOUGHT NOTHING STILL HAS SOMETHING TO SAY — his playtest, 2026-09-15: a captain "had sufficient
+       money to buy a crate, yet didn't", and the line never mentioned the crate, so the berth read as a broken bot.
+       `e.left` is the engine's answer (Game.dockLeft), the same field for a bot's dock and a human's, and it is
+       absent when there was no crate on the shelf to leave. THE ONE CHOOSER, so both get the one sentence. */
+    const how=!bought?(e.left?"."+e.left:""):barter?".barter":e.black?".black":".buy";
     const facts={p:seat(e.p),n:e.heads?heads:tails,place:dockPlace(e.ing),goods:dockFlavorIcon(e.ing),paid,gave};
     let txt=say((e.heads?"dock.treasure":"dock.work")+how,facts,viewerSeat);
     // the purchase that empties a shelf is how the whole table learns it ran out

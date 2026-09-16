@@ -1111,8 +1111,31 @@ class Game{
     }
     this.ev({t:"dock",p:p.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
       paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
+      left:buy?undefined:this.dockLeft(p,ing),
       black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
     return true;
+  }
+  /* WHY NO CRATE CAME ABOARD — the ONE place both berths answer it, so a bot's dock and a human's can never
+     tell two stories about the same shelf (engine doDock above, and the human's flow.js humanDock).
+
+     WYATT'S PLAYTEST, 2026-09-15: "dough hook docked at full cream folly, found treasure, had sufficient money
+     to buy a crate, yet didn't. can you audit the bot strategy algorithm again and discern why?" The audit found
+     no fault — 400 voyages, every decline explained, money never the reason. The FAULT WAS THE LINE: it stopped
+     at the payday and never said a crate had been left behind, so a berth that did its whole job read as a
+     broken bot. This field is what the line was missing.
+
+     ONLY WHAT A PLAYER CAN SEE (docs/BOT-DESIGN-PRINCIPLES.md §5). A hold is public, so "already carryin' one"
+     is a reason anybody at the table can check for themselves. A RECIPE CARD IS SECRET and always will be, so
+     every other decline — not on the card, the purse came up short, a merchant's leverage not worth the coin —
+     returns the SAME neutral "passed" on purpose. Splitting it any finer would hand the table a secret.
+
+     UNDEFINED WHEN THERE WAS NOTHING TO LEAVE: no dockBuy, or a dry shelf with no black market standing behind
+     it (cratePrice returns null on exactly that). "Leaves it on the shelf" would be a lie about an empty shelf,
+     and the line simply does not appear. In the shipped config (blackMarket:10, dockBuy:true) that never
+     happens — a dry shelf is an expensive shelf, not an absent one. */
+  dockLeft(p,ing){
+    if(!this.cfg.dockBuy||this.cratePrice(ing)===null)return undefined;
+    return p.ing.includes(ing)?"holds":"passed";
   }
   // v2.2 RULE-01: passing pays a dubloon. Passing is the always-available turn-ender — the one move
   // nobody can ever be denied — so this is the floor of the economy rather than a reward for idling:

@@ -122,6 +122,18 @@ export const WORDS = {
   "dock.work.buy": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:buys|buy} {goods} (−{paid}🌕).",
   "dock.work.black": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:pays|pay} the black market for {goods} (−{paid}🌕).",
   "dock.work.barter": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:trades|trade} {gave} to the black market for {goods}.",
+  /* AND THE CRATE THAT STAYED ON THE SHELF. Wyatt's playtest, 2026-09-15: "dough hook docked at full cream folly,
+     found treasure, had sufficient money to buy a crate, yet didn't." The captain was playing correctly; the LINE
+     stopped at the payday and never said a crate had been left behind, so a berth that did its whole job read as a
+     broken bot. Each of these is its own payday line with the tail swapped, so a dock that buys and a dock that
+     walks away are plainly the same moment told two ways.
+     ONLY WHAT A PLAYER CAN SEE (docs/BOT-DESIGN-PRINCIPLES.md §5): a hold is public, so "already carryin' one" is a
+     reason anybody at the table can check. A RECIPE IS SECRET — NO LINE HERE MAY EVER SAY OR HINT THAT A CRATE WAS
+     NOT ON SOMEBODY'S CARD. Every other decline reads the same neutral way, and that sameness is the point of it. */
+  "dock.treasure.passed": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:leaves|leave} {goods} on the shelf.",
+  "dock.treasure.holds": "⚪ {p} {p:finds|find} treasure (+{n}🌕) at {place} and {p:leaves|leave} {goods} on the shelf — already carryin' one.",
+  "dock.work.passed": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:leaves|leave} {goods} on the shelf.",
+  "dock.work.holds": "⚫ {p} {p:earns|earn} {n}🌕 scrubbin' the docks and {p:leaves|leave} {goods} on the shelf — already carryin' one.",
   "dock.lastOne": "{p:That were the last of it|Ye took the last of it} — the shelves be bare!",
   "dock.gaveTwo": "{a} an' {b}",
   "dock.gaveTwoSame": "two {a}",
