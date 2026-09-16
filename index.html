@@ -1162,7 +1162,7 @@
      background. cqw units keep the geometry identical to the 640-unit board. */
   .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
     background: #ffc23a; border-radius: 6px; opacity: .5;
-    animation: sailBounce 1.15s ease-in-out infinite, sailPop .33s ease-out backwards;   /* .22s -> .33s: his 2026-09-14 "50% slower so it's more noticeable" */
+    animation: sailBounce 1.15s ease-in-out infinite, sailPop .5s ease-out backwards;   /* .22s -> .33s -> .5s: his 2026-09-14 "50% slower so it's more noticeable", then 2026-09-15 "still come in too fast" — another 50%. His dial for it is on the Game Feel Tuner. */
     transition: opacity .12s ease, filter .12s ease; }
   /* THE SQUARES POP IN FROM THE BOAT OUTWARD — his game feel audit, PASSED (2026-09-13). LISTED LAST so its hidden start
      wins over the bounce until each square's own --sailPopDelay (renderPickPrompt, by distance from the boat); `scale`,

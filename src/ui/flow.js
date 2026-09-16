@@ -666,7 +666,10 @@ export function sailHighlightRect(c,cellPx,svg){
 /* THE POP IS CSS (sailPop in index.html), started by a per-square --sailPopDelay — measured, a script animation left 2-5
    squares of every window showing at full for their first frame before its hidden start applied; a CSS animation with a
    backwards fill is resolved with the square's very first style, so nothing shows before its turn. */
-const SAIL_CASCADE_MS=375, SAIL_PRESS_MS=180;   // 250 -> 375 with the pop itself (index.html sailPop .33s): Wyatt, 2026-09-14, "The sail squares should pop up 50% slower so it's more noticeable"
+/* 250 -> 375 -> 560ms, with the pop itself (index.html sailPop, now .5s): Wyatt, 2026-09-14, "The sail squares should pop up 50%
+   slower so it's more noticeable", and again 2026-09-15 on the next build — "still come in too fast -- add them to the game feel
+   tuner". Both numbers are his dials there now; these are what it opens at. */
+const SAIL_CASCADE_MS=560, SAIL_PRESS_MS=180;
 const sailReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 function pressSailSquare(r){
   if(sailReduced()||typeof r.animate!=="function")return;

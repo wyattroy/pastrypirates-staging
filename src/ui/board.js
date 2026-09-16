@@ -158,7 +158,7 @@ import {
 import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
-import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playAwardWhoosh } from "./audio.js";
+import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playCoinChink, playAwardWhoosh } from "./audio.js";
 import { popInHolds } from "./popin.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
@@ -1997,9 +1997,15 @@ const coinRolls={};
    scheduled against the long hold, so without this it slept the full minute: the count never showed the coins just earned, and
    "Buy a crate?" asked him to spend a purse the count said he did not have (measured on a posed dock, phone and laptop,
    2026-09-15). A hold that is lengthened needs nothing — the tick re-checks it when it wakes. */
-export function holdCoinRoll(seat,ms){
+/* THE COUNT CAN ALSO BE PACED BY THE FLIGHT. `paceMs` makes the number step once per ARRIVING COIN instead of at the roll's own
+   40ms clip: with it, a three-coin haul reads as three coins, each landing with its own chink, which is what he asked for —
+   Wyatt, 2026-09-15: "there are still too many coins visible when you earn 3 coins. there should only be 3 ... for 3 or more
+   coins, which should be spaced somewhat apart temporally, we need those clink sounds not to overlap." Read at every tick, not
+   captured when the roll starts, because the burst can set it after render() has already scheduled the roll. */
+export function holdCoinRoll(seat,ms,paceMs){
   const r=coinRolls[seat]=coinRolls[seat]||{};
   r.holdUntil=performance.now()+ms;
+  r.paceMs=paceMs||0;
   if(r.tick){clearTimeout(r.timer);r.timer=setTimeout(r.tick,Math.max(0,ms));}
 }
 export function showSeatCoins(seat,coins){
@@ -2014,7 +2020,8 @@ export function showSeatCoins(seat,coins){
   clearTimeout(r.timer);
   const from=parseInt(n.textContent,10);
   if(had===null||!Number.isFinite(from)||from===coins||appState.replaying||fxReduced()){n.textContent=coins;r.tick=null;return;}
-  const every=Math.max(12,Math.min(COIN_ROLL_STEP_MS,COIN_ROLL_MAX_MS/Math.abs(coins-from))),dir=Math.sign(coins-from);
+  const base=Math.max(12,Math.min(COIN_ROLL_STEP_MS,COIN_ROLL_MAX_MS/Math.abs(coins-from))),dir=Math.sign(coins-from);
+  const every=()=>(dir>0&&r.paceMs)?r.paceMs:base;   // a purse FILLING keeps pace with the coins in the air; spending keeps the roll's own clip
   const tick=()=>{
     if(!n.isConnected){r.tick=null;return;}
     // a hold set AFTER this roll was scheduled still holds it — the earned coins wait for the flip stage to come down (treasureBurst)
@@ -2022,8 +2029,11 @@ export function showSeatCoins(seat,coins){
     const cur=parseInt(n.textContent,10);
     if(!Number.isFinite(cur)||cur===coins){n.textContent=coins;r.tick=null;return;}
     n.textContent=cur+dir;
-    playCoinTick();                                            // his pick, 2026-09-14: the abacus click, one per coin
-    if(cur+dir!==coins)r.timer=setTimeout(tick,every);else r.tick=null;
+    /* A COIN GOING IN CHINKS; A COIN GOING OUT TICKS. Wyatt, 2026-09-15: "we want a coin 'chink' sound whenever a coin goes into
+       the purse" — so the chink is here, at the ONE place the purse number ever changes, rather than beside each thing that pays.
+       His 2026-09-14 abacus click keeps the outgoing count and the End of Voyage roll-up. */
+    if(dir>0)playCoinChink();else playCoinTick();
+    if(cur+dir!==coins)r.timer=setTimeout(tick,every());else r.tick=null;
   };
   r.tick=tick;
   r.timer=setTimeout(tick,Math.max(0,(r.holdUntil||0)-performance.now()));
@@ -2038,7 +2048,21 @@ export function showSeatCoins(seat,coins){
    does this, but a little fast." TREASURE_GAP_MS spaces the coins so each can be counted in. */
 /* 620 -> 1240: Wyatt, 2026-09-15, "The crates DO fly -- but they're too fast. slow them to 50% of their current speed". His dial for it
    is on the Game Feel Tuner; this is the number he gave. */
-const TREASURE_MS=1170, TREASURE_GAP_MS=90, TREASURE_MAX=20, CRATE_FLY_MS=1240;
+/* 1170 -> 1400ms, and 90 -> 260ms between coins: Wyatt, 2026-09-15, on why a three-coin haul looked like more than three coins —
+   "the coins are moving so fast that they jump discernably between frames, because they have no motion blur; solution may be to
+   move them slower, or one at a time for multiple coin hauls". Measured before the change: 60fps, three coins in the air at once,
+   a coin stepping 4px in a typical frame and 21px at its fastest. Slower flight lowers that peak; the wider gap is the "one at a
+   time" — the next coin does not leave until the one ahead is most of the way home, and its chink has room (audio.js CHINK_GAP_MS). */
+const TREASURE_MS=1400, TREASURE_GAP_MS=700, TREASURE_MAX=20, CRATE_FLY_MS=1240;
+/* THE STAGGER IS CAPPED, SO THE GAP IS NOT A PRICE LIST. At 700ms apart a three-coin haul is genuinely one at a time — never more
+   than two in the sky — but eight coins that way would be six seconds of watching, and the game waits for the last one. So the
+   whole stagger is held to TREASURE_STAGGER_MS and the gap is whatever divides it: 2 or 3 coins get the full 700, a big haul
+   tightens up on its own. Measured before: three coins staggered 90ms inside a 1170ms flight were all airborne at once. */
+const TREASURE_STAGGER_MS=1600;
+const coinGap=n=>n>1?Math.min(TREASURE_GAP_MS,TREASURE_STAGGER_MS/(n-1)):0;
+/* How far past the purse a coin carries before it springs back (a share of its last leg), and how much it squashes as it goes
+   in. Same two for a crate landing in the hold. Both are his dials on the Game Feel Tuner; these are the numbers it opens at. */
+const COIN_BOUNCE=0.09, COIN_SQUASH=0.18, CRATE_BOUNCE=0.07, CRATE_SQUASH=0.22;
 /* THE FLIP STAGE COMES DOWN FIRST. A captain's own dock earns its coins while the stage still stands over the board; coins flying
    under it would land in a purse nobody can see. Waits at most the stage's own longest stand (stage.js CER_VEIL_WAIT_CAP_MS). */
 function whenFlipStageGone(capMs=7100){
@@ -2064,7 +2088,7 @@ export async function treasureBurst(seat,coins){
   const icon=($("coins"+seat)||{querySelector:()=>null}).querySelector("img");
   let to=null;
   if(icon&&capShowing()){const r=icon.getBoundingClientRect(),o=fixedOrigin();if(r.width>1)to=[r.left+r.width/2-o.x,r.top+r.height/2-o.y];}
-  const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42);
+  const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42),gap=coinGap(n);
   if(!from||!to)holdCoinRoll(seat,0);
   const anims=[];
   for(let k=0;k<n;k++){
@@ -2074,20 +2098,66 @@ export async function treasureBurst(seat,coins){
     document.body.appendChild(im);
     const spread=(k-(n-1)/2)*size*0.55,up=size*(2.2+((k*37)%5)*0.25);
     const end=to?[to[0]-from[0],to[1]-from[1]]:[spread*1.4,-up*1.6];
-    const a=im.animate([{translate:"0px 0px",scale:"0.4",opacity:0},
-      {translate:`${spread.toFixed(1)}px ${(-up).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.4},
+    /* ⭐ IT LANDS ELASTICALLY, NOT FLATLY — Wyatt, 2026-09-15: "It needs to have more bounce to it ... The coin and crates both
+       should fly more elastically and pleasingly into your part of the captain's box." So the last leg carries PAST the purse by
+       COIN_BOUNCE of the way there and springs back, squashing as it goes in. His dials for both are on the Game Feel Tuner. */
+    const ox=to?end[0]+ (end[0]-spread)*COIN_BOUNCE:end[0], oy=to?end[1]+(end[1]-(-up))*COIN_BOUNCE:end[1];
+    const a=im.animate([{translate:"0px 0px",scale:"0.4",opacity:0,easing:"cubic-bezier(.2,.75,.5,1)"},
+      {translate:`${spread.toFixed(1)}px ${(-up).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.4,easing:"cubic-bezier(.45,0,.5,1)"},
+      {translate:`${ox.toFixed(1)}px ${oy.toFixed(1)}px`,scale:to?String(0.55*(1-COIN_SQUASH)):"0.7",opacity:to?1:0,offset:.84,easing:"cubic-bezier(.3,0,.2,1)"},
       {translate:`${end[0].toFixed(1)}px ${end[1].toFixed(1)}px`,scale:to?"0.55":"0.7",opacity:to?1:0}],
-      {duration:TREASURE_MS,delay:k*TREASURE_GAP_MS,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"treasure"});
+      {duration:TREASURE_MS,delay:k*gap,fill:"both",id:"treasure"});
     a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
   }
-  const flight=TREASURE_MS+(n-1)*TREASURE_GAP_MS;
+  const flight=TREASURE_MS+(n-1)*gap;
   /* THE WAIT IS THE FLIGHT ITSELF, NOT A CLOCK BESIDE IT. On a busy machine the coins start a frame or more after they are created, so a
      timer of the same length ended before the last coin landed: a heads dock measured "Buy a crate?" 133ms before its third coin
      arrived (2026-09-15). So the count starts rolling when the FIRST coin lands, and this (and through eventDrawn, a dock's question)
      waits for the LAST one, capped so a stalled page never holds the game. */
-  if(to&&anims.length){holdCoinRoll(seat,flight+1500);const go=()=>holdCoinRoll(seat,0);anims[0].finished.then(go,go);}
+  if(to&&anims.length){holdCoinRoll(seat,flight+1500,gap);const go=()=>holdCoinRoll(seat,0,gap);anims[0].finished.then(go,go);}
   else holdCoinRoll(seat,0);
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
+}
+/* ⭐ COINS LEAVING THE PURSE — Wyatt, 2026-09-15: "we need a 'coins taken away' animation from the purse -- suggest 3, and add
+   them to the game feel tuner". All three he can see side by side on the tuner are here; SPEND_STYLE is the one the game opens
+   on, and his pick is that one word:
+     "spill"    the coins tip out of the purse, tumble, and fall away below the box          (what it opens on)
+     "drop"     one coin at a time is let go and drops straight down, hopping once as it goes
+     "scatter"  the coins burst outward in a small fan and shrink to nothing
+   It is the mirror of treasureBurst and shares its rules: fixed position in the ONE fixed space, a cap so a ten-coin price does
+   not throw ten coins, and nothing here decides anything about the game — the count itself still rolls down and ticks. */
+export const SPEND_MS=620, SPEND_GAP_MS=70, SPEND_MAX=5, SPEND_SPREAD=0.6;
+const SPEND_STYLE="spill";
+export function coinsLeave(seat,coins,style){
+  if(fxReduced())return;
+  const box=$("coins"+seat),icon=box&&box.querySelector("img");
+  if(!icon||!capShowing())return;
+  const r=icon.getBoundingClientRect();if(r.width<1)return;
+  const o=fixedOrigin(),size=Math.max(12,r.width*1.05);
+  const x=r.left+r.width/2-o.x,y=r.top+r.height/2-o.y;
+  const n=Math.max(1,Math.min(SPEND_MAX,Math.round(coins||1))),st=style||SPEND_STYLE;
+  for(let k=0;k<n;k++){
+    const im=document.createElement("img");
+    im.src=COIN_IMG;im.alt="";im.className="ppTreasure";im.dataset.seat=String(seat);im.dataset.leaving="1";
+    Object.assign(im.style,{left:(x-size/2)+"px",top:(y-size/2)+"px",width:size+"px",height:size+"px"});
+    document.body.appendChild(im);
+    const lane=(k-(n-1)/2)*size*SPEND_SPREAD,fall=size*3.2;
+    let frames;
+    if(st==="drop")
+      frames=[{translate:"0px 0px",scale:"1",opacity:1},
+        {translate:`0px ${(-size*.45).toFixed(1)}px`,scale:"1.05",opacity:1,offset:.22,easing:"cubic-bezier(.3,0,.6,1)"},
+        {translate:`0px ${fall.toFixed(1)}px`,scale:"0.8",opacity:0}];
+    else if(st==="scatter")
+      frames=[{translate:"0px 0px",scale:"1",opacity:1},
+        {translate:`${(lane*1.6).toFixed(1)}px ${(-size*.9).toFixed(1)}px`,scale:"1.1",opacity:1,offset:.35,easing:"cubic-bezier(.2,.8,.5,1)"},
+        {translate:`${(lane*3).toFixed(1)}px ${(-size*1.6).toFixed(1)}px`,scale:"0.25",opacity:0}];
+    else
+      frames=[{translate:"0px 0px",scale:"1",opacity:1,rotate:"0deg"},
+        {translate:`${(lane*.9).toFixed(1)}px ${(-size*.35).toFixed(1)}px`,scale:"1.08",opacity:1,rotate:"40deg",offset:.28,easing:"cubic-bezier(.3,0,.6,1)"},
+        {translate:`${(lane*1.8).toFixed(1)}px ${fall.toFixed(1)}px`,scale:"0.85",opacity:0,rotate:"180deg"}];
+    const a=im.animate(frames,{duration:SPEND_MS,delay:k*SPEND_GAP_MS,fill:"both",id:"coins-leave"});
+    a.onfinish=a.oncancel=()=>im.remove();
+  }
 }
 /* ⭐ THE TWO CRATES SWAP IN ARCS — PASSED on his game feel audit (2026-09-13), as proposed: "Your crate and theirs cross over
    each other between the two rows, and both land with a squash." Same shape as the crate flight home: each side's crate is
@@ -2133,12 +2203,13 @@ export function tradeSwapTo(legs){
        middle of the arc at 1.2x, sits inside the screen; start and end are already on it, so the whole path is. */
     const o=fixedOrigin(),cx0=o.x+leg.from.x+leg.from.w/2+dx*.5,half=leg.from.w*.6+6;
     const side=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,leg.bow*Math.max(leg.from.w*1.4,Math.abs(dy)*0.35))),s=Math.max(.3,Math.min(2,to.w/leg.from.w));
-    const a=im.animate([{translate:"0px 0px",scale:"1"},
-      {translate:`${(dx*.5+side).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.2",offset:.5},
-      {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:SWAP_MS,easing:"ease-in-out",fill:"both",id:"trade-swap"});
+    const a=im.animate([{translate:"0px 0px",scale:"1",easing:"cubic-bezier(.35,.7,.5,1)"},
+      {translate:`${(dx*.5+side).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.2",offset:.5,easing:"cubic-bezier(.45,0,.5,1)"},
+      {translate:`${(dx+(dx*.5-side)*CRATE_BOUNCE).toFixed(1)}px ${(dy+dy*.5*CRATE_BOUNCE).toFixed(1)}px`,scale:String((s*(1-CRATE_SQUASH*.5)).toFixed(3)),offset:.86,easing:"cubic-bezier(.3,0,.2,1)"},
+      {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:SWAP_MS,fill:"both",id:"trade-swap"});
     let landed=false;
     const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-      if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:"1.3 0.75"},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:300,easing:"ease-out",id:"crate-land"});};
+      if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:`${(1+CRATE_SQUASH*1.4).toFixed(2)} ${(1-CRATE_SQUASH*1.15).toFixed(2)}`},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:340,easing:"ease-out",id:"crate-land"});};
     a.onfinish=land;a.oncancel=land;
     setTimeout(land,SWAP_MS+400);
   }
@@ -2153,7 +2224,7 @@ export async function coinsAcross(fromSeat,toSeat,coins){
   const at=s=>{const icon=($("coins"+s)||{querySelector:()=>null}).querySelector("img");if(!icon)return null;
     const r=icon.getBoundingClientRect(),o=fixedOrigin();return r.width>1?{x:r.left+r.width/2-o.x,y:r.top+r.height/2-o.y,w:r.width}:null;};
   const from=at(fromSeat),to=at(toSeat);if(!from||!to)return;
-  const n=Math.max(1,Math.min(TREASURE_MAX,Math.round(coins||1))),size=Math.max(12,from.w*1.15);
+  const n=Math.max(1,Math.min(TREASURE_MAX,Math.round(coins||1))),size=Math.max(12,from.w*1.15),gap=coinGap(n);
   const anims=[];
   const dx=to.x-from.x,dy=to.y-from.y,ox=fixedOrigin().x,cx0=ox+from.x+dx*.5,half=size*.55+6;
   const bow=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,Math.max(size*2,Math.abs(dy)*0.3)));   // the same clamp: on the glass
@@ -2165,11 +2236,11 @@ export async function coinsAcross(fromSeat,toSeat,coins){
     const a=im.animate([{translate:"0px 0px",scale:"0.6",opacity:0},
       {translate:`${(dx*.5+bow).toFixed(1)}px ${(dy*.5).toFixed(1)}px`,scale:"1.1",opacity:1,offset:.45},
       {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:"0.7",opacity:1}],
-      {duration:ACROSS_MS,delay:k*TREASURE_GAP_MS,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"coins-across"});
+      {duration:ACROSS_MS,delay:k*gap,easing:"cubic-bezier(.3,.7,.4,1)",fill:"both",id:"coins-across"});
     a.onfinish=a.oncancel=()=>im.remove();anims.push(a);
   }
-  const flight=ACROSS_MS+(n-1)*TREASURE_GAP_MS,go=()=>holdCoinRoll(toSeat,0);   // the seller's count starts when the first coin lands
-  holdCoinRoll(toSeat,flight+1500);if(anims.length)anims[0].finished.then(go,go);else go();
+  const flight=ACROSS_MS+(n-1)*gap,go=()=>holdCoinRoll(toSeat,0,gap);   // the seller's count starts when the first coin lands
+  holdCoinRoll(toSeat,flight+1500,gap);if(anims.length)anims[0].finished.then(go,go);else go();   // the seller's count also keeps pace with the coins crossing
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
 /* Measured BEFORE render() greys the crate (its island rect), handed to crateFlightTo AFTER render() has drawn the new chip. */
@@ -2199,12 +2270,17 @@ export function crateFlightTo(f,seat){
   Object.assign(im.style,{left:f.rect.x+"px",top:f.rect.y+"px",width:f.rect.w+"px",height:f.rect.h+"px"});
   document.body.appendChild(im);
   const dx=tx-cx,dy=ty-cy,s=Math.max(.3,Math.min(2,cr.width/f.rect.w));
-  const a=im.animate([{translate:"0px 0px",scale:"1"},
-    {translate:`${(dx*.2).toFixed(1)}px ${(dy*.2-f.rect.h*1.2).toFixed(1)}px`,scale:"1.15",offset:.3},
-    {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:CRATE_FLY_MS,easing:"cubic-bezier(.45,0,.3,1)",fill:"both",id:"crate-fly"});
+  /* THE SAME ELASTIC LANDING THE COINS GOT — his 2026-09-15 note names both: "The coin and crates both should fly more elastically
+     and pleasingly into your part of the captain's box." The crate carries CRATE_BOUNCE of its last leg PAST the chip, squashing,
+     then springs back onto it; the chip's own squash below finishes the motion. */
+  const ax=dx*.2,ay=dy*.2-f.rect.h*1.2;
+  const a=im.animate([{translate:"0px 0px",scale:"1",easing:"cubic-bezier(.35,.7,.5,1)"},
+    {translate:`${ax.toFixed(1)}px ${ay.toFixed(1)}px`,scale:"1.15",offset:.3,easing:"cubic-bezier(.45,0,.5,1)"},
+    {translate:`${(dx+(dx-ax)*CRATE_BOUNCE).toFixed(1)}px ${(dy+(dy-ay)*CRATE_BOUNCE).toFixed(1)}px`,scale:String((s*(1-CRATE_SQUASH*.5)).toFixed(3)),offset:.85,easing:"cubic-bezier(.3,0,.2,1)"},
+    {translate:`${dx.toFixed(1)}px ${dy.toFixed(1)}px`,scale:String(s)}],{duration:CRATE_FLY_MS,fill:"both",id:"crate-fly"});
   let landed=false;
   const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-    if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:"1.3 0.75"},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:300,easing:"ease-out",id:"crate-land"});};
+    if(chip.isConnected&&typeof chip.animate==="function")chip.animate([{scale:`${(1+CRATE_SQUASH*1.4).toFixed(2)} ${(1-CRATE_SQUASH*1.15).toFixed(2)}`},{scale:"0.92 1.08",offset:.5},{scale:"1"}],{duration:340,easing:"ease-out",id:"crate-land"});};
   a.onfinish=land;a.oncancel=land;
   setTimeout(land,CRATE_FLY_MS+400);   // a dropped animation never leaves a crate invisible in the hold
 }

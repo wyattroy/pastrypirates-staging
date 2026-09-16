@@ -1953,7 +1953,7 @@ class Game{
             this.tradewind(def);
             fled=true;
             this.recordSkirmish(att,def,null);
-            this.ev({t:"battleflee",a:att.idx,d:def.idx,rounds,flips,downwind});
+            this.ev({t:"battleflee",a:att.idx,d:def.idx,rounds,flips,downwind,powder:c.powder||0});
           }
         }
       }
@@ -1984,7 +1984,7 @@ class Game{
     if(nulled){
       // NULL: the battle ends with no player gaining anything. No spoil, no swap, no caller paid.
       this.recordSkirmish(att,def,null);
-      this.ev({t:"battlenull",a:att.idx,d:def.idx,rounds,flips,downwind});
+      this.ev({t:"battlenull",a:att.idx,d:def.idx,rounds,flips,downwind,powder:c.powder||0});
       return null;
     }
     const lose=win===att?def:att;
@@ -1994,7 +1994,7 @@ class Game{
     // BATL-03 carried into v2 and hardened by rule 9d: nobody moves after a battle. A swap would
     // put the loser in the advantageous square, which is exactly backwards.
     this.recordSkirmish(att,def,lose,spoilIng);
-    this.ev({t:"battle",a:att.idx,d:def.idx,rounds,winner:win.idx,spoil,spoilIng,flips,downwind});
+    this.ev({t:"battle",a:att.idx,d:def.idx,rounds,winner:win.idx,spoil,spoilIng,flips,downwind,powder:c.powder||0});
     return win;
   }
   /* ================= v2 bot AI: planners, not gates =================

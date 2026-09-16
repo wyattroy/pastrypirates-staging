@@ -32,7 +32,7 @@
 const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["abacus-click", "award-whoosh", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-squawk", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
+const SFX_FILES = ["abacus-click", "award-whoosh", "coin-chink", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-squawk", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
 // Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
 // normalising, so a by-ear browser pass adjusts one number per sound without restructuring
 // anything else. Every stem defaults to 1 (no normalising applied yet).
@@ -77,6 +77,11 @@ const SFX_VOLUME = {
      every other sound)." It was the quietest stem in the game by far: -38 dB mean against store-ingredient's -31 at a volume of
      2.79. Three times louder puts it level with the cork pop, which he hears. */
   "abacus-click": 3,
+  /* THE CHINK SITS AT THE TICK'S LEVEL, on purpose. Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound
+     -- we want a coin 'chink' sound whenever a coin goes into the purse." It replaces the tick in the purse, so it must
+     arrive at the same loudness or the swap reads as a volume change. Measured: the tick renders at 0.084 peak and is
+     lifted x3 here (0.25); chink A renders at 0.175, so x1.45 lands on the same 0.25. */
+  "coin-chink": 1.45,
   "award-whoosh": 1,
   "card-swish": 1,
   "crate-chime": 1,
@@ -935,6 +940,25 @@ function playCoinTick() {
   lastTickAt = now;
   play("abacus-click");
 }
+/* ⭐ THE CHINK A COIN MAKES LANDING IN THE PURSE — Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound -- we want
+   a coin 'chink' sound whenever a coin goes into the purse. And for 3 or more coins, which should be spaced somewhat apart
+   temporally, we need those clink sounds not to overlap."
+   sfx/coin-chink.mp3 is ONE FILE OF THREE SLOTS — the three he can hear side by side on the Game Feel Tuner, rendered from that
+   page's own recipe (.planning/research/audio-sourcing/render_coin_chink.mjs). CHINK_PICK is his pick; changing it is one digit,
+   never another render. NON-OVERLAP IS ENFORCED HERE, not by whoever calls: a chink closer than CHINK_GAP_MS to the last one is
+   skipped, exactly as the tick's own guard works — the flight spaces the coins (board.js TREASURE_GAP_MS) and this is the floor
+   under it, so a rushed haul can never layer two chinks into a buzz. */
+const CHINK_SLOT_S = 0.35, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
+const CHINK_PICK = 0;          // 0 = A (short and bright), 1 = B (fatter, lower), 2 = C (two-stage, a coin settling)
+const CHINK_GAP_MS = 120;      // the tuner's "least time between two chinks" dial, at its default
+let lastChinkAt = -1e9;
+function playCoinChink() {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now - lastChinkAt < CHINK_GAP_MS) return;
+  lastChinkAt = now;
+  const s = Math.max(0, Math.min(CHINK_SLOTS - 1, CHINK_PICK));
+  play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S });
+}
 function playLidNote(k) {
   const s = Math.max(0, Math.min(MARIMBA_SLOTS - 1, Math.round(k || 0)));
   play("crate-marimba", { from: s * MARIMBA_SLOT_S + MARIMBA_LEAD_S - 0.01, dur: MARIMBA_SLOT_S - MARIMBA_LEAD_S });
@@ -1489,7 +1513,7 @@ export {
   soundReady,
   onThunder,
   playPop,
-  playCardSwish, playCoinTick, playLidNote, playCrateVerdict, playAwardWhoosh,
+  playCardSwish, playCoinTick, playCoinChink, playLidNote, playCrateVerdict, playAwardWhoosh,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

@@ -104,7 +104,7 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, coinsAcross, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
+  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, treasureBurst, coinsLeave, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, coinsAcross, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap,
@@ -1947,6 +1947,14 @@ export async function consumeEvent(e){
      so they cross row to row, out of the payer's purse and into the seller's. With these four (dock, pass, won call, trade sale)
      every coin credited anywhere in the game flies (scripts/qa/every_coin_flies_check.mjs holds that). */
   const earned=(e.t==="purse")?e.coins:(e.t==="sidebet"&&e.won)?e.delta:0;
+  /* AND EVERY COIN THAT LEAVES A PURSE TIPS OUT OF IT — Wyatt, 2026-09-15: "we need a 'coins taken away' animation from the purse".
+     Read off the event like `earned` above, in this one place, so a bot's purchase and a human's look the same on every screen:
+     a crate bought at a dock (its price), a re-watched bake-off, a battle's powder and each refire. A TRADE IS NOT HERE ON PURPOSE —
+     those coins are not taken away, they cross the table to the other captain, and coinsAcross already flies them (below). */
+  const spent=(e.t==="dock"&&e.price>0)?e.price:(e.t==="rewatch"&&e.paid>0)?e.paid
+    :(e.t==="refire"&&e.cost>0)?e.cost:((e.t==="battle"||e.t==="battlenull"||e.t==="battleflee")&&e.powder>0)?e.powder:0;
+  const spender=(e.t==="refire"||e.t==="battle"||e.t==="battlenull"||e.t==="battleflee")?e.a:e.p;
+  if(!appState.replaying&&spent>0&&spender!=null)coinsLeave(spender,spent);
   const earnedFlight=(!appState.replaying&&earned>0)?treasureBurst(e.p,earned):null;
   /* A PASS IS THE ONE PAYDAY THAT IS BEING EXPLAINED AS IT ARRIVES, so its coin waits for the words (util.js afterLine). Wyatt,
      2026-09-15: "the coin you get from musing should only fly into your purse AFTER the narration line has finished writing --
