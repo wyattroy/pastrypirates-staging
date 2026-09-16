@@ -128,7 +128,7 @@ import {
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   rawName, pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, applyActiveSeat, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
-  expectEventDrawing, finishEventDrawing, eventDrawn, flipDockCoin,
+  expectEventDrawing, finishEventDrawing, eventDrawn, afterLine, flipDockCoin,
   sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
@@ -313,7 +313,7 @@ export function renderBattle(o){
     const wind=dw==null?say("battle.crosswindTag",{}):say("battle.downwindTag",{name:pname(dw==="a"?o.att.idx:o.def.idx).toUpperCase()});
     txt=`${txt||""}<br>${wind}`;
   }
-  if(txt&&window.__pp4&&window.__pp4.flash)window.__pp4.flash(txt);   // not awaited: the fight keeps its own pace
+  if(txt&&window.__pp4&&window.__pp4.flash)window.__pp4.flash(txt,undefined,undefined,undefined,{cls:"btl"});   // not awaited: the fight keeps its own pace; `btl` is the dark blue skin (index.html)
 }
 // battleSnapshot/renderBattleFromSnap moved verbatim to src/ui/flow.js (11-05).
 
@@ -543,7 +543,10 @@ export function battleAsk(player,o,msg,opts,colors){
   // asked: does guest-side code AUTHOR its own text? It does not. This gate asks a different
   // question — does the broadcast REACH the right viewer? — which that sweep never examined. One
   // message cannot express a per-viewer difference, however correctly it was authored.
-  netBroadcast(spect.html,[...spect.variants.filter(v=>v.seat!==askSeat),{seat:askSeat,html:msg}]);
+  /* THE CAPTAIN ABOUT TO FLIP GETS NO BOX. Wyatt, 2026-09-15: "There is still a narration box that appears for a moment before the
+     flippenator appears. we can get rid of that." The flip stage rises with these same words as its own title, so on that one screen
+     the line is dropped (stageFlash ignores an empty line); every other seat still gets the spectator line it always got. */
+  netBroadcast(spect.html,[...spect.variants.filter(v=>v.seat!==askSeat),{seat:askSeat,html:isFlip?"":msg}]);
   let idxP;
   if(decisionIsLocal(askSeat)){
     battlePublish(o);   // the table's copy of the fight (no box any more — see renderBattle)
@@ -1896,7 +1899,7 @@ export async function consumeEvent(e){
   if(e.t==="coinflip"&&(e.why==="dock"||e.why==="battle")&&!appState.replaying&&!decisionIsLocal(e.p)){   // a battle flip too, since the battle box went (2026-09-14)
     const settled=window.__pp4&&window.__pp4.settled;
     if(settled)await settled();
-    await flipDockCoin(e.p,!!e.heads);
+    await flipDockCoin(e.p,!!e.heads,undefined,{front:e.why==="battle"});   // a battle's coin turns above the fight's words (dockcoin.js)
   }
   /* ⭐ AND THE CAMERA FRAMES WHOEVER'S TURN IT IS, ON EVERY DEVICE — Wyatt, 2026-09-13 (note 6): "Guest
      camera director does not seem to be zooming in and out dynamically or correctly -- were these
@@ -1943,8 +1946,13 @@ export async function consumeEvent(e){
      ... do not" fly). A won call's bounty flies from the caller's boat like any payday; a trade's coins come from the other captain,
      so they cross row to row, out of the payer's purse and into the seller's. With these four (dock, pass, won call, trade sale)
      every coin credited anywhere in the game flies (scripts/qa/every_coin_flies_check.mjs holds that). */
-  const earned=(e.t==="purse"||e.t==="pass")?e.coins:(e.t==="sidebet"&&e.won)?e.delta:0;
+  const earned=(e.t==="purse")?e.coins:(e.t==="sidebet"&&e.won)?e.delta:0;
   const earnedFlight=(!appState.replaying&&earned>0)?treasureBurst(e.p,earned):null;
+  /* A PASS IS THE ONE PAYDAY THAT IS BEING EXPLAINED AS IT ARRIVES, so its coin waits for the words (util.js afterLine). Wyatt,
+     2026-09-15: "the coin you get from musing should only fly into your purse AFTER the narration line has finished writing --
+     because it's explaining where the coin comes from." Not awaited here, or the line could never start: the narrator waits on this
+     consumer finishing the event. */
+  if(!appState.replaying&&e.t==="pass"&&e.coins>0)afterLine(e,()=>treasureBurst(e.p,e.coins));
   const paidFlight=(!appState.replaying&&e.t==="trade"&&e.paid>0)?coinsAcross(e.a,e.b,e.paid):null;
   render();
   if(buyFlight)crateFlightTo(buyFlight,e.p);

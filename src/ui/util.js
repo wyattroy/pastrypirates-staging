@@ -1798,7 +1798,15 @@ export function stepDelay(){return 3000;}
 // text's length — the same "one size fits all" bug as narrateLastEvent()/humanFlip() had, just
 // hitting the most common narration path in the game (every bot action goes through botBeat()).
 // Now narrateCurrent() itself is the thing that paces this beat, via flash()'s length-aware timing.
-export async function botBeat(){netHandlers().onLiveRender();await narrateCurrent();}
+/* A BOT PAUSES TO THINK. Wyatt, 2026-09-15: "Bots need to have a small about (eg 200ms) of "thinking" time between their actions --
+   it's too fast when they dock and flip and crate all back to back." His number. Skipped while replaying (the scrubber must not crawl)
+   and when motion is reduced. */
+export const BOT_THINK_MS=200;
+export async function botBeat(){
+  netHandlers().onLiveRender();
+  await narrateCurrent();
+  if(!appState.replaying)await new Promise(r=>setTimeout(r,BOT_THINK_MS));   // a beat, not an animation — the scrubber is the only thing that skips it
+}
 /* THE ONCE-PER-VOYAGE CEREMONY GATE — ONE PLACE, BOTH NARRATION PATHS (rule 23, his item 7).
    Wyatt: "Did the on-stage narration for the black market appear the first time all ingredients
    were removed from an island? ... it needs to be there. How did it get lost?" It never got lost.
@@ -1878,6 +1886,23 @@ export function eventDrawn(e,capMs=9000){
    with its own "takes the wheel…" banner that no human turn had. So when a bot attacked or traded with a person, that
    person was told about it as a bystander. Both are now this one function: the event decides the words, the screen
    decides "ye", and who chose the move never enters. narrateLastEvent() and narrateCurrent() are only WHICH event. */
+/* ⭐ A COIN THAT IS BEING EXPLAINED WAITS FOR THE WORDS. Wyatt, 2026-09-15: "I think the coin you get from musing should only fly into
+   your purse AFTER the narration line has finished writing -- because it's explaining where the coin comes from." So the one consumer
+   hands the flight here instead of running it itself, and it is let go when the line has finished TYPING — 9ms a character, the
+   typewriter's own rate (stage.js typewriterReveal), not when the line's reading time is up. The 8-second fallback is the safety a
+   screen with narration switched off needs: a coin must never be lost because nobody spoke. */
+const AFTER_LINE = new Map();
+export function afterLine(e, fn){
+  if(!e || typeof fn !== "function") return;
+  AFTER_LINE.set(e, fn);
+  setTimeout(() => runAfterLine(e), 8000);
+}
+function runAfterLine(e){
+  const fn = AFTER_LINE.get(e);
+  if(!fn) return;
+  AFTER_LINE.delete(e);
+  try { fn(); } catch (err) {}
+}
 export async function narrateEvent(e){
   if(!e)return;
   await eventDrawn(e);   // the board finishes the event (a dock coin's flip and hold) before a word of it
@@ -1942,6 +1967,8 @@ export async function narrateEvent(e){
   // could burn the ENTIRE 3s just typing itself in, leaving no time to actually read it before the
   // next event overwrote it. flash() awaits real reveal completion, then holds for length*80ms —
   // scaling with the text instead of a one-size-fits-all timer.
+  // the line is written after 9ms a character; anything waiting on the words (a muse coin) is let go then, not after the hold
+  setTimeout(() => runAfterLine(e), 9 * String(L.txt == null ? "" : L.txt).replace(/<[^>]*>/g, "").length + 120);
   await netHandlers().onFlash(L.txt,undefined,undefined,variants);
   // THE BLACK MARKET'S ONE LESSON (Wyatt, 2026-08-12, "ceremony + marker"): the first time any
   // shelf on the board empties, a once-per-voyage centre-stage beat teaches that sold-out islands

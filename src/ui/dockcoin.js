@@ -80,9 +80,15 @@ export function clearDockCoins(){
    replay-aware one, so a reload fast-forwards straight through a coin instead of sitting out two
    real seconds per dock for every dock of the voyage. A bare setTimeout here would have quietly
    made a reloaded game crawl — the same trap flipSpinLeftMs's own note describes. */
-export async function flipDockCoin(seat, heads, sleepFn){
+/* `opts.front` — THE COIN TURNS IN FRONT OF THE FIGHT'S WORDS. Wyatt, 2026-09-15, on the battle: "the first narration box is showed
+   in white, not dark blue -- so it covers up the attacker's coin flip! ... 2. the coin should flip in front of them." The board's own
+   coin layer sits under the narration layer (#pp4Fx is fixed at the page level; the board cannot reach above it), so for a BATTLE flip
+   the coin is drawn in that same fixed layer instead, one step above a bubble, at the boat's screen point. The camera holds on the two
+   ships for the whole fight, so a point taken once stays true; an ordinary dock flip is unchanged and stays on the board. */
+export async function flipDockCoin(seat, heads, sleepFn, opts){
   const sleep = sleepFn || plainSleep;
-  const host = $("dockCoinHost");
+  const front = !!(opts && opts.front);
+  const host = front ? ($("pp4Fx") || $("dockCoinHost")) : $("dockCoinHost");
   const pt = boatPoint(seat);
   const cell = boardCell();
   /* NO BOAT, NO HOST, NO COIN — and the caller still gets its wait, so the game's pacing is the
@@ -94,8 +100,20 @@ export async function flipDockCoin(seat, heads, sleepFn){
   const el = document.createElement("div");
   el.className = "dcoin";
   el.dataset.seat = String(seat);   // which captain this coin belongs to — read by the arrival probe, harmless to the look
-  el.style.left = CQ(pt[0]);
-  el.style.top  = CQ(pt[1] - cell / 2);          // the boat's TOP edge; the rise happens from there
+  if (front){
+    /* the same point, in the page's own pixels: the board's matrix turns a board coordinate into a screen one, exactly as the
+       treasure coins do when they fly between the board and the captains box. */
+    const ships = $("boardShips"), ctm = ships && ships.getScreenCTM && ships.getScreenCTM();
+    if (ctm && ships.createSVGPoint){
+      const p = ships.createSVGPoint(); p.x = pt[0]; p.y = pt[1] - cell / 2;
+      const s = p.matrixTransform(ctm);
+      el.style.position = "fixed"; el.style.zIndex = "27";   // a bubble is 26
+      el.style.left = s.x + "px"; el.style.top = s.y + "px";
+    } else { el.style.left = CQ(pt[0]); el.style.top = CQ(pt[1] - cell / 2); }
+  } else {
+    el.style.left = CQ(pt[0]);
+    el.style.top  = CQ(pt[1] - cell / 2);          // the boat's TOP edge; the rise happens from there
+  }
   /* ⚠ ONE ELEMENT WITH A BACKGROUND, WHICH IS EXACTLY WHAT THE BIG COIN DOES — and the first
      version of this did something cleverer and rendered NOTHING. It stacked the two faces back to
      back on a `transform-style: preserve-3d` card with `backface-visibility: hidden`, which measured

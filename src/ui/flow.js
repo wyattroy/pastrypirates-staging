@@ -707,6 +707,12 @@ export function renderPickPrompt(spec,answer){
   if(spec.pos)squares.push({c:spec.pos,stay:true});
   const reach=c=>spec.pos?Math.hypot(c[0]-spec.pos[0],c[1]-spec.pos[1]):0;
   const farthest=Math.max(1,...squares.map(({c})=>reach(c)));
+  /* A TAP THAT DRAGGED THE BOARD IS NOT A CHOICE. Wyatt, 2026-09-15: "When the player clicks /taps a sailable yellow square and drags
+     the board, that should not count as them choosing that square to sail to... Many times I've tried to move the board and ended up
+     accidentally moving to the square I tapped purely to move the board." His pick when asked was to ignore drags rather than add a
+     confirming tap, so one tap still sails and no turn costs an extra tap. 10px is the slop a still finger leaves on a touch screen. */
+  const DRAG_SLOP_PX=10; let downAt=null;
+  const dragged=e=>{const d=downAt;downAt=null;return !!(d&&Math.hypot((e.clientX||0)-d[0],(e.clientY||0)-d[1])>DRAG_SLOP_PX);};
   let chosen=false;
   squares.forEach(({c,stay})=>{
     const r=sailHighlightRect(c,cellPx,svg);
@@ -714,9 +720,12 @@ export function renderPickPrompt(spec,answer){
     if(stay){
       r.classList.remove("sailSwept");delete r.dataset.sweptTo;
       r.classList.add("pp4StayCell");
-      r.addEventListener("click",()=>{pressSailSquare(r);const b=$("apStay");if(b)b.style.display="";});
+      r.addEventListener("pointerdown",e=>{downAt=[e.clientX,e.clientY];});
+      r.addEventListener("click",e=>{if(dragged(e))return;pressSailSquare(r);const b=$("apStay");if(b)b.style.display="";});
     } else {
-      r.addEventListener("click",()=>{
+      r.addEventListener("pointerdown",e=>{downAt=[e.clientX,e.clientY];});
+      r.addEventListener("click",e=>{
+        if(dragged(e))return;
         if(chosen)return;
         chosen=true;
         pressSailSquare(r);

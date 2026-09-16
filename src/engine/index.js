@@ -1939,7 +1939,13 @@ class Game{
       // 2🌕 and fires ALONE. Heads and the shot lands — attacker wins. Tails and they may pay
       // again, as often as they can afford it. Decline at any point and the battle ends NULL:
       // no crate, no coins, no caller paid, and the powder already spent stays spent. ----
-      if(!fled){
+      /* NO RE-FIRE IN A CROSSWIND. Wyatt, 2026-09-15: "in crosswinds, there should be no reflip option; it's too weird and
+         complicated. if both get heads, there's simply no winner." Two heads with nobody downwind ends the fight NULL on the spot:
+         no crate, no coins, no caller paid. The powder already spent stays spent, his ruling when asked (the same as any null
+         battle today). A both-TAILS round still buys a fresh broadside — that is rule 9b and he did not touch it. */
+      const crossTie=!downwind&&rounds.length===1&&rounds[0][0]===1&&rounds[0][1]===1;
+      if(!fled&&crossTie)nulled=true;
+      if(!fled&&!crossTie){
         const refire=c.refire||0;
         while(!win){
           if(!refire||att.coins<refire||!this.wantsRefire(att,def,downwind,rounds.length)){nulled=true;break;}

@@ -354,6 +354,111 @@ if [ -f "$INDEX" ]; then
   fi
 fi
 
+# ============================================================================
+#  EVERY STAGING PAGE SAYS noindex — the half robots.txt cannot do
+# ============================================================================
+# Measured 2026-09-15, on the live subdomain: staging was serving PRODUCTION's
+# tag, byte for byte, on every public page —
+#
+#     <meta name="robots" content="index, follow, max-image-preview:large, ...">
+#
+# — for as long as the subdomain has existed. Nothing caught it, and the reason
+# is worth more than the fix: THE ROBOTS GUARD ABOVE READS A DIFFERENT FILE.
+# `Disallow: /` in robots.txt and `index, follow` in the page are two
+# contradictory instructions to the same crawler, and this script was checking
+# one of them and calling it "the preview stays out of search".
+#
+# WHY THE Disallow IS NOT ENOUGH ALONE, and this is THIS REPO'S OWN DOCTRINE —
+# robots.txt states it in prose about production: a Disallow stops a crawler
+# FETCHING a page. It does not stop Google INDEXING a URL it learned from a
+# LINK, and it guarantees the crawler can never come back and read a noindex.
+# So a Disallow'd URL that gets indexed is stuck there permanently.
+#
+# That is not hypothetical here. The staging hostname was publicly linked — the
+# staging repo's own GitHub description named it in full, and that description
+# is the top Google result for the string. A linked, un-fetchable URL is the
+# exact recipe for a URL-only index entry that can never be removed.
+#
+# So the two halves do different jobs. The Disallow keeps the crawler out. This
+# keeps the PAGE honest if the Disallow is ever lost, overwritten or ignored —
+# and it is the PRECONDITION for ever getting a staging URL back out of the
+# index, because that recovery is "allow the crawl, let it read the noindex,
+# re-disallow", and it only works if the noindex is already sitting there.
+#
+# ON THE COPY, NEVER THE SOURCE — the same discipline as the stamp above.
+# Production must keep saying `index, follow`, and scripts/qa/crawl_intent_check.mjs
+# reads the SOURCE tree, so it would go red the moment this touched the working
+# tree. Derived, not a typed list: every .html in the published copy, so a page
+# added tomorrow is covered without anyone remembering to add it here.
+cat > "$WORK/noindex.cjs" <<'NOINDEX_CJS'
+// .cjs on purpose: forces CommonJS regardless of the repo's "type": "module".
+const { readdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+
+const root = process.argv[2];
+const TAG = '<meta name="robots" content="noindex, nofollow">';
+const EXISTING = /<meta\s+[^>]*name=["']robots["'][^>]*>/i;
+const HEAD_OPEN = /<head\b[^>]*>/i;
+
+function walk(dir, out = []) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === ".git") continue;
+    const p = join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (e.name.toLowerCase().endsWith(".html")) out.push(p);
+  }
+  return out;
+}
+
+const pages = walk(root);
+let rewritten = 0, inserted = 0;
+const headless = [];
+
+for (const p of pages) {
+  const src = readFileSync(p, "utf8");
+  let out;
+  if (EXISTING.test(src)) {
+    out = src.replace(EXISTING, TAG);
+    if (out !== src) rewritten++;
+  } else if (HEAD_OPEN.test(src)) {
+    out = src.replace(HEAD_OPEN, (m) => `${m}\n${TAG}`);
+    inserted++;
+  } else {
+    // An artifact fragment with no <head> can carry no meta tag at all — Google
+    // ignores a robots meta that lands in the body. robots.txt's Disallow is the
+    // only tool that exists for these, and it already covers the whole host.
+    headless.push(p.slice(root.length + 1));
+    continue;
+  }
+  writeFileSync(p, out);
+}
+
+// FAIL CLOSED, like the CNAME and robots.txt guards above it. Re-read from disk
+// rather than trusting the loop that just ran — the guard that trusts the writer
+// is the guard that was not there.
+const stillIndexable = walk(root).filter((p) => {
+  const s = readFileSync(p, "utf8");
+  const m = s.match(EXISTING);
+  return m ? !/noindex/i.test(m[0]) : HEAD_OPEN.test(s);
+});
+
+if (stillIndexable.length) {
+  console.error("FATAL: these staging pages would still invite indexing:");
+  for (const p of stillIndexable) console.error("       " + p.slice(root.length + 1));
+  process.exit(1);
+}
+
+console.log(
+  `    noindex: ${pages.length} pages (${rewritten} rewritten, ${inserted} inserted` +
+    (headless.length ? `, ${headless.length} head-less, covered by robots.txt` : "") +
+    ")"
+);
+NOINDEX_CJS
+node "$WORK/noindex.cjs" "$WORK/staging" || {
+  echo "FATAL: could not make the staging copy noindex. Refusing to publish." >&2
+  exit 1
+}
+
 cd "$WORK/staging"
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
   echo "==> nothing changed; not pushing."

@@ -619,7 +619,7 @@ export function stopTurnBob(){
 }
 export function bobShip(seat){
   stopTurnBob();
-  const g=shipEls[seat], im=g&&g.querySelector("image"), host=$("dockCoinHost");
+  const g=shipEls[seat], im=g&&g.querySelector("image"), host=$("bobHost");   // NOT dockCoinHost: that layer is above the weather, and a boat must not be (index.html #bobHost)
   if(!im||!host||!cell||typeof im.animate!=="function")return;
   if(typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches)return;
   const pic=document.createElement("img");
@@ -771,7 +771,11 @@ export function firstHomeConfetti(e){
    fight over the board, so the reaction belongs to the boats. Called from THE ONE event consumer on a `shotLands` event, which
    the fight records the moment a shot gets through, so every screen feels the same hit. Smoke and flash sit OVER the boats
    (#dockCoinHost); the shake moves the whole board window by its individual `translate`, which composes with the camera. */
-export const KICK_MS=320, SMOKE_MS=520, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=3, SHAKE_MS=300;
+/* THE SHOT IS TWICE THE SHOT IT WAS. Wyatt, 2026-09-15: "I didn't see any smoke, or the ship recoil away from the other ship --
+   these should all be accentuated 2x." The recoil (KICK_CELL), the puff (SMOKE_CELL) and the board's shake all doubled; the timings
+   are unchanged, so the same moment simply reads. All four are dials on his Game Feel Tuner. */
+export const KICK_MS=320, SMOKE_MS=520, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=6, SHAKE_MS=300;
+export const KICK_CELL=0.28, SMOKE_CELL=1.7;   // of a square: 0.14 -> 0.28, 0.85 -> 1.7
 export function shotLands(e){
   if(fxReduced()||!e||e.by==null||!cell)return;
   const shooter=e.by,target=e.by===e.a?e.d:e.a;
@@ -780,11 +784,11 @@ export function shotLands(e){
   const len=Math.hypot(to[0]-from[0],to[1]-from[1])||1,ux=(to[0]-from[0])/len,uy=(to[1]-from[1])/len;
   const im=shipEls[shooter]&&shipEls[shooter].querySelector("image");
   if(im&&typeof im.animate==="function")
-    im.animate([{translate:"0px 0px"},{translate:`${(-ux*cell*.14).toFixed(2)}px ${(-uy*cell*.14).toFixed(2)}px`,offset:.18},{translate:"0px 0px"}],
+    im.animate([{translate:"0px 0px"},{translate:`${(-ux*cell*KICK_CELL).toFixed(2)}px ${(-uy*cell*KICK_CELL).toFixed(2)}px`,offset:.18},{translate:"0px 0px"}],
       {duration:KICK_MS,easing:"cubic-bezier(.2,.8,.3,1)",id:"cannon-kick"});
   // a pale puff that small vanished on sand in the frozen-frame photo, so it is bigger, holds its body for a third of its life,
   // and carries a grey edge that reads against sand and sea alike
-  fxDot(host,"ppSmoke",[from[0]+ux*cell*.45,from[1]+uy*cell*.45],cell*.85,[{opacity:1,scale:".35"},{opacity:.9,scale:"1",offset:.35},{opacity:0,scale:"1.45"}],SMOKE_MS);
+  fxDot(host,"ppSmoke",[from[0]+ux*cell*.45,from[1]+uy*cell*.45],cell*SMOKE_CELL,[{opacity:1,scale:".35"},{opacity:.9,scale:"1",offset:.35},{opacity:0,scale:"1.45"}],SMOKE_MS);
   setTimeout(()=>{
     if(!host.isConnected)return;
     fxDot(host,"ppHitFlash",drawnShipPoint(target)||to,cell*1.1,[{opacity:1,scale:".75"},{opacity:0,scale:"1.1"}],HIT_FLASH_MS);
@@ -2032,7 +2036,9 @@ export function showSeatCoins(seat,coins){
    drawn and brought into the one fixed space (fixedOrigin, util.js) before a single number is taken between them. */
 /* 780 -> 1170ms and a wider stagger: Wyatt, 2026-09-14, "the treasure should always fly from the island into your hold -- i think it
    does this, but a little fast." TREASURE_GAP_MS spaces the coins so each can be counted in. */
-const TREASURE_MS=1170, TREASURE_GAP_MS=90, TREASURE_MAX=20, CRATE_FLY_MS=620;
+/* 620 -> 1240: Wyatt, 2026-09-15, "The crates DO fly -- but they're too fast. slow them to 50% of their current speed". His dial for it
+   is on the Game Feel Tuner; this is the number he gave. */
+const TREASURE_MS=1170, TREASURE_GAP_MS=90, TREASURE_MAX=20, CRATE_FLY_MS=1240;
 /* THE FLIP STAGE COMES DOWN FIRST. A captain's own dock earns its coins while the stage still stands over the board; coins flying
    under it would land in a purse nobody can see. Waits at most the stage's own longest stand (stage.js CER_VEIL_WAIT_CAP_MS). */
 function whenFlipStageGone(capMs=7100){
@@ -2088,7 +2094,7 @@ export async function treasureBurst(seat,coins){
    read out of its row BEFORE render() moves it, and flies to the new chip in the other row AFTER render() draws it. The two
    bow opposite ways, so they visibly pass each other rather than overlap in a straight line. A counter paid in coin has no
    crate on that side — only the ingredient flies, and the coin counts roll. */
-const SWAP_MS=680;
+const SWAP_MS=1360;   // 680 -> 1360: the same ruling, for the two crates of a trade crossing
 function chipIn(seat,src){
   const el=$("chips"+seat);if(!el||!src)return null;
   return [...el.querySelectorAll(".chip")].filter(c=>{const i=c.querySelector("img");return i&&i.getAttribute("src")===src;}).pop()||null;

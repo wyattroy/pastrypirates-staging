@@ -1125,6 +1125,16 @@
   .fcSpin { animation: fcSpin 4s linear infinite; transform-box: fill-box; transform-origin: 50% 50%; }
   @media (prefers-reduced-motion: reduce) { .fcSpin { animation: none; } }
   #boardShips { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  /* ⛈ THE BOBBING BOAT PAINTS WHERE THE BOAT PAINTS. Wyatt, 2026-09-15: "Storms - currently they do not seem to consistently darken
+     the active player; it seems like the active player may sometimes be drawn OVER the storm." It was, and it was mine: since the
+     whole-turn bob (2026-09-14) the active captain's boat is an HTML COPY (board.js bobShip) and the copy lived in #dockCoinHost —
+     z-index 5, and LATER in the DOM than #stormOverlay (also 5), so it won the tie and painted over the rain. Measured at 768x1024
+     with a storm posed: the three still boats darkened by 21.1 / 31.4 / 33.5 grey levels and the open water by 23.8; the bobbing one
+     by 2.9. It only ever showed between animations, because any animation hands the real boat back — which is his "sometimes".
+     Z-INDEX 4, LEVEL WITH #boardShips AND DIRECTLY AFTER IT IN THE DOM, so the copy stands exactly where the picture it replaces
+     stands: over the rings (3), under the weather (5). It is board-mapped, so its id goes in CAM_HTML_LAYERS (stage.js) — the step
+     BOARD-RENDERING §3 exists to stop anyone forgetting. */
+  #bobHost { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
     width: 100%; height: 100%; overflow: visible; }
   /* the thing that MOVES — carries the same translate() the SVG <g> used to, and the same
      transition the trade-wind sweep retunes (src/ui/board.js setShipGlideMs). */
@@ -2128,7 +2138,9 @@
     box-shadow:0 6px 18px rgba(0,0,0,.35); }
   /* playtest 12 item 8: circle contents sized to FIT the circle */
   #pp4Prompt.radial .apBtn { font-size:9.5px; line-height:1; gap:0; padding:5px; }
-  #pp4Prompt.radial .apBtn img { width:17px; height:17px; }
+  /* 17 -> 26: Wyatt, 2026-09-15, "Increase the size of the images on docking buttons -- they can and should take more space, as
+     much as there's room for." The circle is 74px across with room to spare; the word underneath keeps its line. */
+  #pp4Prompt.radial .apBtn img { width:26px; height:26px; }
   #pp4Prompt.radial .apBtn.apDisabled { filter:grayscale(.7); opacity:.55; }
   /* ITEM 23, THE THIRD RULING (Wyatt, 2026-08-24, and the one that ends the series): the prompt
      buttons' attention animation is assigned in THE ATTENTION VOCABULARY block at the end of this
@@ -2398,6 +2410,11 @@
      if they ever need taps; the host itself must never eat one. */
   #pp4Fx { position:fixed; left:0; right:0; overflow:hidden; pointer-events:none; z-index:21; }
   #pp4Fx > * { pointer-events:auto; }
+  /* A FIGHT SPEAKS IN DARK BLUE — Wyatt, 2026-09-15: "the battle narrations should be in dark blue". The cream box read as a card
+     laid over the fight; this one reads as weather over the sea, and the small coin turning on the attacker's boat stays legible
+     through the gap it leaves. Set by stageFlash's opts.cls, from orchestrator renderBattle. */
+  .pp4Bub.btl { background:#12323a; color:#eef7f9; }
+  .pp4Bub.btl .score { color:#7fe3b0; }
   .pp4Bub { position:absolute; z-index:26; background:#fffdf2; border:2px solid #177; border-radius:13px;
     padding:9px 12px; box-shadow:0 8px 26px rgba(0,0,0,.33); font-size:14px; line-height:1.45;
     font-weight:600; color:#1f2d33; transition:opacity .35s; }
@@ -2412,9 +2429,21 @@
      because stage.js's cerBandTick() has to read the ceiling rather than carry a second copy of it:
      on a phone the column is taller than the board band, so the gap closes up to whatever fits and
      saturates back to this value the moment there is room (Group G fault 1). */
+  /* ⛱ THE DARK COVERS THE WINDOW, NOT THE BOARD'S COLUMN. Wyatt, 2026-09-15: "there is still incorrect calculation of the greyed-out
+     stage in tablet mode -- it should cover the entire window; currently, i see a border along the left and right sides of the screen
+     that are not darkened." MEASURED by painting the veil flat magenta for one frame and scanning the picture: at 1024x768 it covered
+     x 249..774 of 1024 — 249px of bare window down EACH side, half the screen; at 1280x900 it left 410px bare on the right. His phone
+     and a portrait tablet were already clean, which is why it only shows at tablet landscape and desktop widths.
+     THE CAUSE IS THE CAPPED COLUMN, AND THAT MUST NOT CHANGE: body.pp4Stage carries a transform, which makes <body> the containing
+     block for every position:fixed box on the stage, so `inset:0` means the board's column. Right for the board and everything
+     anchored to it; wrong for a curtain, which belongs to the SCREEN. So the BOX stays exactly as it was — the ceremony's column, the
+     coin and cerBandTick() lay out against the same rect as always — and only the DARK bleeds past it, as a spread in `vmax` so a
+     wider window cannot outrun it. A box-shadow paints outside the border box only, takes no pointer events, and cannot make a
+     scrollbar. Measured after: 0 bare pixels on every side at every size. */
   #pp4Veil { position:fixed; inset:0; z-index:44; display:flex; flex-direction:column;
     align-items:center; justify-content:center; --pp4CerGapMax:26px; gap:var(--pp4CerGapMax);
-    background:radial-gradient(circle at 50% 44%,rgba(20,50,60,.6),rgba(4,16,22,.92)); }
+    background:radial-gradient(circle at 50% 44%,rgba(20,50,60,.6),rgba(4,16,22,.92));
+    box-shadow:0 0 0 100vmax rgba(4,16,22,.92); }
   .pp4CerTop { color:#ffd76b; font-weight:800; font-size:15px; letter-spacing:3px; text-align:center; }
   .pp4CerSub { color:#e8f4ee; font-weight:700; font-style:italic; font-size:14px; text-align:center;
     transition:opacity .3s; }
@@ -4278,6 +4307,8 @@
              Only the ships live here: sail highlights and emoji pops stay in #board, below the
              boats, which is where Wyatt wants them. -->
         <svg id="boardShips" viewBox="0 0 640 640" aria-hidden="true"></svg>
+        <!-- the active captain's boat, bobbing for its whole turn (board.js bobShip): level with the boats, so the storm still falls on it -->
+        <div id="bobHost" aria-hidden="true"></div>
         <!-- chat speech bubbles, one per seat, positioned over that seat's boat -->
         <div id="chatBubbles"></div>
       </div>

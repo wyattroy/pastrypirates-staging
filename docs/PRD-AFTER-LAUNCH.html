@@ -1,0 +1,489 @@
+<title>Pastry Pirates After Launch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:wght@400;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,800&display=swap">
+<style>
+  :root {
+    --ground: #f7f1dc; --surface: #fffdf3; --ink: #1f4249; --ink-soft: #4e6d72;
+    --teal: #1d7f8b; --teal-bright: #29a3b2; --gold: #fdb63d; --gold-deep: #b9780f; --gold-ink: #5a3a05;
+    --line: #d9e6df; --note: #eef5ef; --amber-bg: #fff3d6; --amber-line: #e0a12a; --amber-text: #8a5a00;
+    --no: #9b3b2e;
+    --display: 'Averia Serif Libre', 'Iowan Old Style', Georgia, serif;
+    --body: 'Avenir Next', Avenir, 'Nunito Sans', 'Segoe UI', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d2529; --surface: #133238; --ink: #e8f1ec; --ink-soft: #a7c0c0; --teal: #6fcad5; --teal-bright: #6fcad5;
+      --gold-deep: #fdb63d; --gold-ink: #3b2603; --line: #24484f; --note: #0f2b30;
+      --amber-bg: #2e2a17; --amber-line: #d19a2c; --amber-text: #f3c56b; --no: #f0a193;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0d2529; --surface: #133238; --ink: #e8f1ec; --ink-soft: #a7c0c0; --teal: #6fcad5; --teal-bright: #6fcad5;
+    --gold-deep: #fdb63d; --gold-ink: #3b2603; --line: #24484f; --note: #0f2b30;
+    --amber-bg: #2e2a17; --amber-line: #d19a2c; --amber-text: #f3c56b; --no: #f0a193;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+  a { color: var(--teal); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--teal-bright); outline-offset: 2px; }
+  .page { max-width: 48rem; margin: 0 auto; padding: 2.2rem 1.25rem 1rem; display: grid; gap: 2.4rem; }
+  header { display: grid; gap: .35rem; }
+  h1 { font-family: var(--display); font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1.05; margin: 0; }
+  .meta { margin: 0; font-size: .85rem; color: var(--ink-soft); }
+  nav { display: flex; flex-wrap: wrap; gap: .45rem; }
+  nav a { font-size: .82rem; font-weight: 600; text-decoration: none; padding: .3rem .75rem; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+  section { display: grid; gap: 1rem; scroll-margin-top: 1rem; }
+  section > h2 { font-family: var(--display); font-size: 1.55rem; margin: 0; border-bottom: 2px solid var(--ink); padding-bottom: .35rem; text-wrap: balance; }
+  section > p, .prose p { margin: 0; max-width: 42rem; }
+  h3 { font-family: var(--display); font-size: 1.15rem; margin: .4rem 0 0; }
+  ul, ol { margin: 0; padding-left: 1.2rem; display: grid; gap: .3rem; }
+  .src { font-size: .8rem; white-space: nowrap; }
+
+  .ask-card { background: var(--amber-bg); border: 1.5px solid var(--amber-line); border-left: 6px solid var(--amber-line); border-radius: 12px; padding: 1rem 1.1rem; display: grid; gap: .6rem; }
+  .ask-card.answered { border-left-color: var(--teal); }
+  .ask-card h3 { margin: 0; font-size: 1.2rem; line-height: 1.2; text-wrap: balance; }
+  .ask-card p { margin: 0; font-size: .95rem; }
+  .opts { display: grid; gap: .45rem; }
+  .opt { font: inherit; font-size: .93rem; text-align: left; padding: .6rem .8rem; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .opt[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: var(--surface); }
+  .rec { font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-left: .35rem; color: var(--gold-deep); }
+  .opt[aria-pressed="true"] .rec { color: var(--surface); }
+
+  .ladder { list-style: none; padding: 0; display: grid; gap: .6rem; counter-reset: rung; }
+  .ladder li { display: grid; grid-template-columns: 2.4rem 1fr; gap: .8rem; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .8rem .9rem; }
+  .ladder li::before { counter-increment: rung; content: counter(rung); width: 2.4rem; height: 2.4rem; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: var(--gold-ink);
+    background: radial-gradient(circle at 35% 30%, #ffe19a, var(--gold) 60%, #e39a1f); box-shadow: inset 0 0 0 2px rgba(120,70,0,.35); }
+  .ladder b { display: block; }
+  .ladder small { display: block; color: var(--ink-soft); font-size: .88rem; }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .8rem; }
+  .cols > div { background: var(--note); border-radius: 12px; padding: .85rem 1rem; }
+  .cols h4 { margin: 0 0 .35rem; font-size: .98rem; }
+  .cols ul { font-size: .92rem; }
+
+  .feats { display: grid; gap: .7rem; }
+  .feat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .85rem 1rem; display: grid; gap: .35rem; }
+  .feat h4 { margin: 0; font-size: 1.02rem; display: flex; flex-wrap: wrap; gap: .4rem; align-items: baseline; }
+  .size { font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .45rem; border-radius: 999px; border: 1.5px solid var(--line); color: var(--ink-soft); }
+  .size.s { border-color: var(--teal); color: var(--teal); }
+  .size.m { border-color: var(--gold-deep); color: var(--gold-deep); }
+  .size.l { border-color: var(--ink); color: var(--ink); }
+  .feat dl { margin: 0; display: grid; grid-template-columns: 6.5rem 1fr; gap: .2rem .7rem; font-size: .92rem; }
+  .feat dt { color: var(--ink-soft); font-weight: 700; }
+  .feat dd { margin: 0; }
+  @media (max-width: 480px) { .feat dl { grid-template-columns: 1fr; } .feat dt { margin-top: .25rem; } }
+
+  .nos { list-style: none; padding: 0; display: grid; gap: .35rem; }
+  .nos li { padding-left: 1.4rem; position: relative; }
+  .nos li::before { content: "✕"; position: absolute; left: 0; color: var(--no); font-weight: 800; }
+
+  .phase { border-left: 3px solid var(--gold); padding: .2rem 0 .2rem 1rem; display: grid; gap: .3rem; }
+  .phase h3 { margin: 0; }
+  .phase p { margin: 0; font-size: .94rem; }
+  .pending { background: var(--amber-bg); border-radius: 10px; padding: .6rem .8rem; font-size: .92rem; }
+
+  .note { display: grid; gap: .25rem; }
+  .note label { font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+  .note textarea { font: inherit; font-size: .95rem; min-height: 3rem; resize: vertical; padding: .55rem .7rem; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; }
+  .dock { position: sticky; bottom: 0; background: var(--ground); border-top: 1px solid var(--line); padding: .7rem 1.25rem; display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; max-width: 48rem; margin: 0 auto; }
+  .copy { font: inherit; font-weight: 800; font-size: .95rem; padding: .65rem 1.1rem; border-radius: 12px; border: 1.5px solid var(--gold-deep); background: var(--gold); color: var(--gold-ink); cursor: pointer; }
+  .status { font-size: .85rem; color: var(--ink-soft); }
+  .status.warn { color: var(--amber-text); font-weight: 700; }
+</style>
+
+<main class="page">
+  <header>
+    <h1>Pastry Pirates After Launch</h1>
+    <p class="meta">PRD · 15 September 2026 · nothing in here is built · from your interview, your sheet answers and five research passes</p>
+  </header>
+
+  <nav aria-label="Sections">
+    <a href="#settle">To settle</a><a href="#goals">Goals</a><a href="#rules">Rules</a><a href="#economy">Economy</a><a href="#accounts">Accounts</a><a href="#worlds">Worlds</a><a href="#play">Ways to play</a><a href="#growth">Growth</a><a href="#platforms">Platforms</a><a href="#board">Board game</a><a href="#food">Food &amp; merch</a><a href="#order">Order</a><a href="#not">Not doing</a>
+  </nav>
+
+  <section id="settle" aria-labelledby="settle-h">
+    <h2 id="settle-h">To settle</h2>
+    <ul style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.85rem 1rem .85rem 2.2rem;font-size:.94rem">
+      <li><strong>Settled 15 Sep, then withdrawn the same day:</strong> gifting dubloons is removed entirely. Nothing changes hands.</li>
+      <li><strong>Settled 15 Sep:</strong> a win box’s prizes stay with the captain who won them; only dubloons change hands. This closes the legal grey edge.</li>
+      <li><strong>Settled 15 Sep:</strong> a win box shows what it can hold and how rare each prize is, even though it’s free.</li>
+    </ul>
+
+
+    <article class="ask-card" data-ask="visible-earned">
+      <h3>Which things other captains can see are earned only?</h3>
+      <p><strong>The rule every game in the research follows: never sell what signals skill; sell what signals taste.</strong> Your Flippinator is the one object the whole table watches on every flip, which makes it the highest-status thing a captain owns. League of Legends never sells its ranked-season skins and has never re-released one; Blizzard promised its skill mounts would never reach the store; Overwatch’s gold guns cost 3,000 competitive points and no money at all.</p>
+      <p><strong>And one look, reserved.</strong> Earned things get a hand-drawn gold edge and a small idle animation; bought things get colour and pattern and never animate. Hearthstone, Destiny and Overwatch all do a version of this. Sell the gold once and gold means nothing.</p>
+      <p><strong>Your “a coin with every sea” idea works, with one guard.</strong> Buying a sea gets you its plain coin; sailing that sea well earns its better faces. The guard: the plain coin must look plain — no gold edge, no movement — or an expensive sea starts to look like a skill. Same rule as everywhere else: the thing you can buy must never wear the thing you can only earn.</p>
+      <div class="opts">
+        <button class="opt" data-val="His version: a coin per sea, tiers earned inside it; flags and pets earned; paint, sails, decor, outfits, music bought">Your version: every sea brings a coin, and its tiers are earned inside that sea. Flags and pets earned. Paint, sails, bakery decor, pet outfits and music bought<span class="rec">Recommended</span></button>
+        <button class="opt" data-val="Only the coin is earned">Only the coin is earned; everything else can be bought</button>
+        <button class="opt" data-val="Everything seen in a voyage is earned; money buys only seas, bakery decor and music">Everything seen in a voyage is earned; money buys only seas, bakery things and music</button>
+      </div>
+    </article>
+    <div class="note"><label for="n-settle">Your notes: To settle</label><textarea id="n-settle" data-note="settle" data-label="To settle" rows="2"></textarea></div>
+  </section>
+
+  <section id="goals" aria-labelledby="goals-h">
+    <h2 id="goals-h">Goals, and how we’ll know</h2>
+    <p>Your ladder, with a measure and an exit on each rung. A rung is climbed when its measure is met, not when its work feels finished.</p>
+    <ol class="ladder">
+      <li><div><b>Ready</b>The launch bar you set on 30 Aug (tutorial, analytics, search, Cloudflare), plus the Firebase budget alert, which is your step 24 in the cutover plan.<small><strong>His date: 1 October 2026.</strong> Everything else is sequenced against it. Exit is the date, not perfection.</small></div></li>
+      <li><div><b>Launched</b>Hundreds of daily captains.<small>Measure: voyages finished per day, which the game already counts, and how many captains come back within a week.</small></div></li>
+      <li><div><b>Loved</b>Thousands daily, and they share it.<small>Measure: returning captains, shared cards, and <strong>cookies bought, which he wants happening in this rung</strong> — the first proof that people will pay.</small></div></li>
+      <li><div><b>Earning</b>The first paid sea sells; the game covers its Firebase bill, then $4,000 a month.<small>Measure: monthly revenue after store fees. Needs accounts and a store first.</small></div></li>
+      <li><div><b>A studio</b>Money from the game pays a helper; a publisher licenses the board game.<small>Measure: a helper’s first paid month; a signed licence.</small></div></li>
+    </ol>
+    <div class="note"><label for="n-goals">Your notes: Goals</label><textarea id="n-goals" data-note="goals" data-label="Goals, and how we'll know" rows="2"></textarea></div>
+  </section>
+
+  <section id="rules" aria-labelledby="rules-h">
+    <h2 id="rules-h">Rules every feature obeys</h2>
+    <ul>
+      <li><strong>Always free to play.</strong> Money buys variety and looks, never power.</li>
+      <li><strong>The rule set is gospel.</strong> No ships with powers, no house rules. New seas change the scenery and ingredients, never how sailing, docking, trading or battles work.</li>
+      <li><strong>Bots and humans play by the same rules</strong>, including what they earn.</li>
+      <li><strong>13 and up.</strong> Kids may play; nothing is built for them.</li>
+      <li><strong>One buyer carries the crew.</strong> Anyone at the table who owns a sea lets the whole crew sail it.</li>
+      <li><strong>Money never buys dubloons</strong>, and there are <strong>no paid mystery boxes</strong>.</li>
+      <li><strong>No chat with strangers.</strong> The board and a high-five, nothing typed.</li>
+      <li><strong>Nothing steals attention from the voyage.</strong> No ads; nothing may slow the game.</li>
+    </ul>
+    <div class="note"><label for="n-rules">Your notes: Rules</label><textarea id="n-rules" data-note="rules" data-label="Rules every feature obeys" rows="2"></textarea></div>
+  </section>
+
+  <section id="economy" aria-labelledby="economy-h">
+    <h2 id="economy-h">The economy: dubloons, boxes, clout</h2>
+    <div class="cols">
+      <div><h4>Earned: sails with you, and shows it</h4><ul>
+        <li><strong>Flippinator coin tiers.</strong> Every sea you own brings its own coin, and how far you get through that sea decides which tier you flip. The pack is bought; the tier is earned</li>
+        <li>Flags, won by feats</li>
+        <li>Pets, won by feats (the candycrab for winning through a storm). Your pet <strong>trails your boat</strong> as you sail</li>
+        <li>Recipes: yours once you bake one to a win, and then you can sell it in your bakery</li>
+        <li>Trophies: the game already awards 10 per voyage, like <em>The Cutlass of a Thousand Notches</em>, and accounts turn them into a cabinet</li>
+        <li>Rank, Daily Voyage streaks, the slipway ship</li>
+        <li>The cookie flag: the one bought marker, because it says “I backed the maker”, not “I’m good”. Lichess does exactly this with its patron wings</li>
+      </ul></div>
+      <div><h4>Bought or spent: at home</h4><ul>
+        <li>Expansion seas: <strong>money only</strong>, shared with your crew</li>
+        <li>Music packs: money</li>
+        <li>Bakery decor, ovens, <strong>pirate clothes for your pet</strong>, ship paint, sails: money <em>or</em> dubloons</li>
+        <li>Win boxes: one per voyage won, full of bakery decor, free</li>
+      </ul></div>
+    </div>
+    <h3>Dubloons</h3>
+    <ul>
+      <li><strong>Earned:</strong> the dubloons left in your hold at the end of a voyage are banked. Grinding all day is allowed.</li>
+      <li><strong>Spent:</strong> on looks at home. Dubloons need things to spend on, and new decor every season, or the pile grows until prices mean nothing.</li>
+      <li><strong>Never given, never traded.</strong> <em>His ruling, 15 Sep: “remove gifting doubloons between players — that way, everything in your world is stuff you either earned, or bought. It’s your world. Clean, simple, no trading.”</em> This also ends the legal grey edge outright: with nothing transferable, no market outside the game can form.</li>
+      <li><strong>Never bought, never cashed out.</strong> The terms of service ban selling dubloons or items for real money.</li>
+    </ul>
+    <h3>A new recipe every voyage</h3>
+    <p><strong>His ask:</strong> every game serves at least one recipe you don’t own yet, and says so. This is cheap, because of how the game already works: the engine deals each captain <strong>two recipes to choose between</strong>, built from a seeded handful of ingredients and then matched to the 21-recipe book. So the change is only <em>which</em> two it deals.</p>
+    <ul>
+      <li><strong>Player sees:</strong> one of their two cards wears a ribbon — “New to yer cookbook” — and baking it to a win puts it in the book for good.</li>
+      <li><strong>The rule:</strong> if you don’t own all 21, at least one of the two is always one you don’t own.</li>
+      <li><strong>Needs accounts</strong> to remember the book between voyages. Before that, it can remember in one browser only.</li>
+      <li><strong>Leaves undone:</strong> what happens when a captain owns all 21 — probably a “full cookbook” mark, and then new seas bring new books.</li>
+    </ul>
+
+    <h3>How a player can tell earned from bought, in one glance</h3>
+    <p>Six devices other games use, and what each would be here. If a captain has to open a menu to tell, the marker has failed.</p>
+    <ul>
+      <li><strong>One reserved look.</strong> A gold-leaf edge and a gentle idle movement, on earned things only. Bought things never animate. <a class="src" href="https://hearthstone-archive.fandom.com/wiki/Golden_card">Hearthstone</a></li>
+      <li><strong>Colour says where it came from.</strong> Rocket League’s titles are crimson for rank, green for tournaments, so the source reads instantly. <a class="src" href="https://rocketleague.fandom.com/wiki/Title">Rocket League</a></li>
+      <li><strong>A date, stamped on.</strong> “Won, Sept 2026” makes a thing unfakeable and tells a story; “rare” is just a price tag.</li>
+      <li><strong>Marks that fade.</strong> Destiny’s Trials glow lasts a week, so it says <em>right now</em>, not <em>once</em>. A streak lantern beside your name that dims after a missed day does the same. <a class="src" href="https://gamerant.com/destiny-2-trials-of-osiris-armor-glow-color-yellow-red-white-flawless/">Destiny 2</a></li>
+      <li><strong>Two shelves, never mixed.</strong> “Earned at sea” and “From the chandlery” in the bakery, clearly labelled.</li>
+      <li><strong>The counter shows while it fills.</strong> “7 of 10 trophies this voyage”, the way Hearthstone counts toward 500 wins under the portrait.</li>
+    </ul>
+    <p>Two more worth stealing. <strong>Never re-award a retired thing</strong>: if a sea closes, its trophy closes with it. And <strong>mark generosity, not only winning</strong> — Destiny gives a special glow for carrying someone to their first win; here, a mark for the captain who hosted a table where a newcomer sailed their first voyage.</p>
+    <p><strong>When the line blurs it costs real money.</strong> Diablo Immortal holds the lowest user score in Metacritic’s history after players worked out what full power cost (<a class="src" href="https://www.videogameschronicle.com/news/diablo-immortal-now-has-the-lowest-user-score-in-metacritic-history/">VGC</a>). A skill mount merely <em>appearing</em> in WoW’s shop on a test server forced Blizzard to promise it never would (<a class="src" href="https://gamerant.com/world-of-warcraft-prestige-items-raid-mounts-not-on-trading-post/">Game Rant</a>). Nobody riots about selling hats.</p>
+    <h3>The legal question you asked</h3>
+    <div id="legal" style="display:grid;gap:.5rem">
+      <p style="margin:0"><strong>Verdict: low risk as you ruled it, with one grey edge. This is research, not legal advice.</strong></p>
+      <ul>
+        <li><strong>Earned boxes, with dubloons nobody can buy, are not gambling</strong> under the rules we read. Belgium: <em>“we do not consider the game-play currency as a wager … if this cannot be purchased”</em> (<a class="src" href="https://www.gamingcommission.be/sites/default/files/2021-08/onderzoeksrapport-loot-boxen-Engels-publicatie.pdf">Belgium 2018</a>). UK: items <em>“confined for use within the game and cannot be cashed out”</em> are <em>“unlikely to be caught”</em> (<a class="src" href="https://www.gamblingcommission.gov.uk/news/article/loot-boxes-within-video-games">Gambling Commission</a>).</li>
+        <li><strong>The grey edge is trading.</strong> The Netherlands looks at the <em>prize</em>, not the payment: a tradable item has value because it can be sold. Every box that study tested was paid, so free boxes are untested, not cleared.</li>
+        <li><strong>“Dubloons can’t be bought” isn’t the whole answer.</strong> Trading alone built real-money markets before: FIFA coins used as betting chips got two men fined in the UK in 2017 (<a class="src" href="https://www.gamblingcommission.gov.uk/news/article/two-men-convicted-after-offering-illegal-gambling-parasitic-upon-popular">UKGC</a>), and CS:GO skins led Washington State to order Valve to act (<a class="src" href="https://www.gamedeveloper.com/business/washington-state-authority-orders-valve-to-stop-allowing-i-cs-go-i-skin-gambling">Game Developer</a>). For 13-year-olds the likelier harm is scams, and kids paying each other real money for rare decor.</li>
+        <li><strong>Safeguards, strongest first:</strong> no money anywhere in the box loop (no paid keys or re-rolls); terms that ban selling dubloons, items and accounts; no outside site can move items; gift limits and waits for new accounts; the rarest prizes stay with the winner; show what a box can hold; no slot-machine drama when it opens.</li>
+        <li><strong>Watch:</strong> an EU proposal on in-game currencies is planned for late 2026 (<a class="src" href="https://commission.europa.eu/news-and-media/news/european-commission-hosts-stakeholders-talks-application-cpc-networks-key-principles-games-virtual-2025-06-03_en">EU</a>). Before the store opens, have a lawyer read the final box and trading design.</li>
+      </ul>
+    </div>
+    <div class="note"><label for="n-economy">Your notes: Economy</label><textarea id="n-economy" data-note="economy" data-label="The economy" rows="2"></textarea></div>
+  </section>
+
+  <section id="accounts" aria-labelledby="accounts-h">
+    <h2 id="accounts-h">Accounts and the ledger</h2>
+    <div class="feats">
+      <div class="feat"><h4>Sign in after a voyage, never before <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>Plays with no sign-in, as today. At the end card: “Keep yer trophies and dubloons? Sign in.” Google, Apple or an email link.</dd>
+        <dt>Keeps</dt><dd>Win count, recipes won and recipes seen, trophies, looks, coins, boats, pets, purchases on every device, friends, visits to friends’ bakeries. Not a voyage log.</dd>
+        <dt>Unblocks</dt><dd>The slipway ship, “New best voyage!”, “3 of 21 recipes baked” (all parked by the victory card work), and everything in Economy.</dd>
+        <dt>Leaves undone</dt><dd>Profile pages beyond the bakery; account deletion tools are required but not designed here.</dd>
+      </dl></div>
+      <div class="feat"><h4>The ledger <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>Nothing directly. Their coin, flag and sea show up the same on every screen and device.</dd>
+        <dt>What it is</dt><dd>One record per captain of what they own, have earned and hold. The term is “entitlements and inventory”. The game asks it one question, e.g. “does anyone in this crew own Sushi Pirates?”, and never special-cases a captain.</dd>
+        <dt>The catch</dt><dd>A captain can edit their own browser, so the browser never writes the ledger. A trusted server writes it after checking a receipt or a finished voyage. Firebase’s security rules have to enforce that. Today <strong>the rules live only in the Firebase console</strong>, the game has no sign-in at all (a random id in the browser), and a note in <code>stats.html</code> records some paths as open for anyone to read and write. Rules in the repo come before any ledger.</dd>
+      </dl></div>
+    </div>
+    <div class="note"><label for="n-accounts">Your notes: Accounts</label><textarea id="n-accounts" data-note="accounts" data-label="Accounts and the ledger" rows="2"></textarea></div>
+  </section>
+
+  <section id="worlds" aria-labelledby="worlds-h">
+    <h2 id="worlds-h">Worlds as folders</h2>
+    <p>Pasta Pirates, Planetary Pirates, Sushi Pirates, a winter or night sea. Each world is <strong>one folder</strong>: islands, ingredients, recipes, captains, ships, flags, music, art and every word it says. The game reads whichever folder is chosen and never names a world. A new world is new files, so parallel sessions never edit the same thing.</p>
+    <div id="code" style="display:grid;gap:.4rem">
+      <p style="margin:0"><strong>What the code looks like today</strong> (surveyed on <code>dev</code>, 15 Sep):</p>
+      <ul>
+        <li><strong>A world is spread over about 6 code files and 6 art folders.</strong> Ingredients and island names are in <code>src/shared/index.js</code>, the 21 recipes in <code>src/ui/recipe.js</code> and <code>src/shared/recipe-steps.js</code>, the words in <code>src/shared/words.js</code>, and art in <code>assets/ingredients</code>, <code>islands</code>, <code>pastries</code>, <code>boats</code> and <code>sfx</code>.</li>
+        <li><strong>Captain names are typed into 9 files</strong>, including <code>index.html</code>. They must move to one place before a world can bring its own captains.</li>
+        <li><strong>Good news:</strong> the content is already mostly tables, not logic. <code>words.js</code> already puts every line in one place. And the engine deals ingredients and recipes from lists, so a world folder can hand it different lists.</li>
+        <li>The frozen <code>classic/</code> engine keeps its own copy of the source and would be left alone.</li>
+      </ul>
+    </div>
+    <div class="feats">
+      <div class="feat"><h4>Move today’s sea into the first folder <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>Nothing. That’s the test: every voyage looks and plays identically.</dd>
+        <dt>Covers</dt><dd>The groundwork for all new worlds and for parallel sessions.</dd>
+        <dt>Leaves undone</dt><dd>Any new world.</dd>
+      </dl></div>
+      <div class="feat"><h4>A tiny test world <span class="size s">Small</span></h4><dl>
+        <dt>Player sees</dt><dd>Nothing in production. Proves a world can be added without touching shared files.</dd>
+      </dl></div>
+      <div class="feat"><h4>The world pipeline <span class="size l">Large</span></h4><dl>
+        <dt>What it is</dt><dd>A repeatable run from “Pasta Pirates” to a playable sea: ingredient and recipe list, art rounds with your review, the narration pass in the world’s voice, sounds and music, then a sea trial.</dd>
+        <dt>Leaves undone</dt><dd>Whether new recipes reuse the 21 recipes’ ingredient shapes (your idea) is decided per world.</dd>
+      </dl></div>
+    </div>
+    <div class="note"><label for="n-worlds">Your notes: Worlds</label><textarea id="n-worlds" data-note="worlds" data-label="Worlds as folders" rows="2"></textarea></div>
+  </section>
+
+  <section id="play" aria-labelledby="play-h">
+    <h2 id="play-h">Ways to play</h2>
+    <div class="feats">
+      <div class="feat"><h4>The Daily Recipe <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>“Today’s bake”: everyone in the world is handed <strong>the same one recipe</strong> — no choosing — on the same sea, solo against the bots. You sail it once. The board ranks today’s captains by the victory card score.</dd>
+        <dt>Why this and not “the same sea”</dt><dd>Your instinct was right: a shared sea alone isn’t much of a hook, and a hand-designed puzzle every day is a job nobody has time for. One shared recipe turns it into a test of skill that can be compared, which is what a leaderboard needs.</dd>
+        <dt>Nobody designs it</dt><dd>The date makes the seed; the seed builds the sea. A recipe is only a handful of ingredients the engine already deals, so fixing it to one is a small change. Then <strong>bots play tomorrow’s sea overnight</strong> using the sea trial the repo already has: if it can’t be baked, or one seat runs away with it, the next seed is tried. Nothing reaches a player unplayed, and you never touch it.</dd>
+        <dt>Leaves undone</dt><dd>Permanent streaks need accounts. A second daily in another sea waits for a second sea.</dd>
+      </dl></div>
+      <div class="feat"><h4>Leaderboard <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>Today’s best voyages by the victory card score, and later a season rank.</dd>
+        <dt>Needs</dt><dd>Accounts, and scores the server can trust.</dd>
+      </dl></div>
+      <div class="feat"><h4>Find me a crew <span class="size l">Large</span></h4><dl>
+        <dt>Player sees</dt><dd>One button to sail with strangers of a similar rank. No chat; high-fives only.</dd>
+        <dt>Needs</dt><dd>Accounts, a rank, and enough captains online at once. It is empty until rung 3.</dd>
+      </dl></div>
+      <div class="feat"><h4>Campaign voyages <span class="size l">Large</span></h4><dl>
+        <dt>Player sees</dt><dd>Hand-made challenges with a story: one island, scarce ingredients, everyone gangs up, first to one ingredient, <strong>all the bots against you, an archipelago maze, a needle to thread</strong> (moved here from the daily, at his instruction). Every rule stays the same; only the setup changes.</dd>
+      </dl></div>
+      <div class="feat"><h4>Blitz <span class="size s">Small</span></h4><dl>
+        <dt>Player sees</dt><dd>“Can ye bake in five minutes?” A faster shot clock.</dd>
+      </dl></div>
+      <div class="feat"><h4>2 vs 2 <span class="size l">Large</span></h4><dl>
+        <dt>Player sees</dt><dd>Two crews of two; trading with your partner matters more. Needs a team win condition, which must not change how battles or trades work.</dd>
+      </dl></div>
+      <div class="feat"><h4>Map painter <span class="size m">Medium</span></h4><dl>
+        <dt>Player sees</dt><dd>Before a voyage, the crew places the islands, like setting up the wooden board.</dd>
+      </dl></div>
+    </div>
+    <div class="note"><label for="n-play">Your notes: Ways to play</label><textarea id="n-play" data-note="play" data-label="Ways to play" rows="2"></textarea></div>
+  </section>
+
+  <section id="growth" aria-labelledby="growth-h">
+    <h2 id="growth-h">Growth: streaming and screenshots</h2>
+    <p>All fourteen leads, as you asked. The battle feel shipped on 14 Sep (the cannon kicks, the board shakes, the loser is knocked about), so the first two build on something already there.</p>
+    <div class="feats">
+      <div class="feat"><h4>Drama caption <span class="size s">Small</span></h4><dl><dt>Player sees</dt><dd>After a battle, “PLUNDERED: 2 Sugar” stays big on screen for a few seconds, so any screenshot explains itself.</dd></dl></div>
+      <div class="feat"><h4>“Ye sank yerself” card <span class="size m">Medium</span></h4><dl><dt>Player sees</dt><dd>Lose a fight you started and the game offers a picture: both ships, the crate that changed hands, who started it.</dd></dl></div>
+      <div class="feat"><h4>Grudges on the card <span class="size s">Small</span></h4><dl><dt>Player sees</dt><dd>“Sunk by Captain Crumb, again.” A rivalry and a better caption.</dd></dl></div>
+      <div class="feat"><h4>Emoji share grid <span class="size s">Small</span></h4><dl><dt>Player sees</dt><dd>After a Daily Voyage, a spoiler-free grid (⛵ 🪙 📦 💥 🌪️ 🥐) plus “Baked in 14 days”, with a line of words for screen readers.</dd><dt>Needs</dt><dd>The Daily Voyage. Without a shared sea the grid means nothing.</dd></dl></div>
+      <div class="feat"><h4>“Beat my voyage” link <span class="size m">Medium</span></h4><dl><dt>Player sees</dt><dd>Send a friend your exact sea.</dd><dt>Needs</dt><dd>A seed in the link (none exists today), and joining a crew by link (today you type a 4-letter code).</dd></dl></div>
+      <div class="feat"><h4>Voyage recap <span class="size l">Large</span></h4><p style="margin:0;font-size:.85rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)">Back burner, his call 15 Sep</p><dl><dt>Player sees</dt><dd>A 10–15 second replay of the three biggest swings. The victory card work parked a voyage replay; this is that item.</dd></dl></div>
+      <div class="feat"><h4>Streamer mode <span class="size s">Small</span></h4><dl><dt>Player sees</dt><dd>Room code hidden behind a Copy button, so viewers can’t barge in.</dd><dt>Today</dt><dd>The code only shows in the lobby before the voyage, but a stream of the lobby gives it away.</dd></dl></div>
+      <div class="feat"><h4>High-fives <span class="size s">Small</span></h4><dl><dt>Player sees</dt><dd>A few fixed stickers (🙌 😱 🏴‍☠️) to send; nothing typed, nothing to moderate.</dd></dl></div>
+      <div class="feat"><h4>Readable on stream <span class="size m">Medium</span></h4><dl><dt>Player sees</dt><dd>Dubloon and crate counts big enough to read in a phone-sized clip.</dd></dl></div>
+      <div class="feat"><h4>Viewers vote <span class="size l">Large</span></h4><p style="margin:0;font-size:.85rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)">Back burner, his call 15 Sep</p><dl><dt>Player sees</dt><dd>Viewers join with a code and vote on the next storm; no chat.</dd></dl></div>
+      <div class="feat"><h4>Captains’ Invitational <span class="size m">Medium</span></h4><dl><dt>What it is</dt><dd>Invited streamers race the same seed. Mostly organising.</dd></dl></div>
+      <div class="feat"><h4>Inside Discord <span class="size l">Large</span></h4><p style="margin:0;font-size:.85rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)">Back burner, his call 15 Sep</p><dl><dt>Player sees</dt><dd>A crew plays inside a Discord voice call.</dd></dl></div>
+      <div class="feat"><h4>A flag for bringing a friend <span class="size m">Medium</span></h4><dl><dt>Player sees</dt><dd>Earned when a friend you invited finishes their first voyage. Needs accounts.</dd></dl></div>
+      <div class="feat"><h4>Where the first thousand come from <span class="size m">Medium</span></h4><dl><dt>What it is</dt><dd>A launch plan: which subreddits and board game groups, gaming TikTok, ten streamers to write to, friends of friends. Written, not yet researched.</dd></dl></div>
+    </div>
+    <div class="note"><label for="n-growth">Your notes: Growth</label><textarea id="n-growth" data-note="growth" data-label="Growth: streaming and screenshots" rows="2"></textarea></div>
+  </section>
+
+  <section id="platforms" aria-labelledby="platforms-h">
+    <h2 id="platforms-h">Steam, iPhone, Google Play</h2>
+    <ul>
+      <li><strong>One set of game files.</strong> A wrapper puts the game inside each app: Capacitor for iPhone and Android, Tauri or Electron for Steam. Today there’s no installable-app file and no offline support, so this starts from zero.</li>
+      <li><strong>Offline:</strong> solo against bots works on a plane; crews need the internet.</li>
+      <li><strong>Buying in the apps:</strong> Apple and Google take their cut and must sell the item themselves. Apple lets a web purchase unlock in its app if the app sells it too (3.1.3(b)). Steam’s rule on web purchases is not verified.</li>
+      <li><strong>Selling on the web:</strong> a company that sells on your behalf (Paddle, a “merchant of record”) handles worldwide sales tax, so you don’t.</li>
+    </ul>
+    <div class="note"><label for="n-platforms">Your notes: Platforms</label><textarea id="n-platforms" data-note="platforms" data-label="Steam, iPhone, Google Play" rows="2"></textarea></div>
+  </section>
+
+  <section id="board" aria-labelledby="board-h">
+    <h2 id="board-h">The board game: pitch publishers first</h2>
+    <ol>
+      <li><strong>A board game <em>waitlist</em> on the end card</strong> (his word), which counts demand from day one.</li>
+      <li><strong>A one-page sell sheet and a two-minute video</strong> of the wooden board being played. <em>His: “I can make this easily.”</em></li>
+      <li><strong>The publishers:</strong> the shortlist and how to reach each one is below. Three can be emailed today.</li>
+      <li><strong>If nobody bites:</strong> sell the wooden edition cut to order, then crowdfund a cardboard edition once followers are about 3× the copies you’d print.</li>
+    </ol>
+    <h3>Who to pitch, and how</h3>
+    <p><strong>Send three emails today.</strong> Each wants the same package and nothing else: a one-page sell sheet and a two-to-three minute video of the game being played.</p>
+    <div class="feats">
+      <div class="feat"><h4>Pandasaurus <span class="size s">Email today</span></h4><dl>
+        <dt>Why them</dt><dd><em>Wayfinders</em> is 2–4 captains, 25–45 minutes, island-hopping and route-building. Whimsical art is their house style.</dd>
+        <dt>How</dt><dd>support@pandasaurusgames.com, the address their own support page names for design submissions. <a class="src" href="https://pandasaurusgames.com/pages/support">Pandasaurus</a></dd>
+      </dl></div>
+      <div class="feat"><h4>AEG (Alderac) <span class="size s">Email today</span></h4><dl>
+        <dt>Why them</dt><dd><em>Cat Lady</em>, <em>Point Salad</em>: family weight, cosy themes. Their current call literally asks for games with “comfort, warmth, cozyness” and “wholesome settings”, and says a lighter game from a new designer is easier for them to take on.</dd>
+        <dt>How</dt><dd>submissions@alderac.com: a short introduction, the one-page sell sheet, and a 2–3 minute video. They warn it may take several months. <a class="src" href="https://www.alderac.com/design-portal/submit-a-game/">AEG</a></dd>
+      </dl></div>
+      <div class="feat"><h4>Gamewright <span class="size s">Email today</span></h4><dl>
+        <dt>Why them</dt><dd><em>Forbidden Island</em>, <em>Sleeping Queens</em>: family games, treasure and sailing. They publish 8–10 a year out of 400–500 pitches, many from first-timers.</dd>
+        <dt>How</dt><dd>submissions@gamewright.com. They want the one-sheet or, preferably, a video first, and ask for a prototype only if interested. <a class="src" href="https://x.com/Gamewright/status/1343931932267130880">Gamewright</a></dd>
+      </dl></div>
+      <div class="feat"><h4>Then, in order <span class="size m">This month</span></h4><dl>
+        <dt>Blue Orange</dt><dd><em>Kingdomino</em>, <em>Photosynthesis</em>. Wants a description, the rules and prototype photos. Says outright it signs no confidentiality agreements, and takes about three months.</dd>
+        <dt>25th Century</dt><dd>A web form, and they say they are “actively looking for new game designs”.</dd>
+        <dt>Inside Up Games</dt><dd>Player interaction is their thing, and they <em>encourage</em> a digital prototype, which makes your browser game an advantage rather than a complication.</dd>
+        <dt>HABA</dt><dd>Wooden pieces and hand-drawn art, closest to your laser-cut set. They also run a digital pitch day you can ask to join.</dd>
+        <dt>Devir, Days of Wonder, Big Potato</dt><dd>Longer shots. Days of Wonder made <em>Ticket to Ride</em> and takes a form; Big Potato takes outside inventors but makes party games, not strategy.</dd>
+      </dl></div>
+    </div>
+    <p><strong>Closed or wrong, so don’t spend time:</strong> Leder Games takes no outside proposals; Renegade and Bezier are not accepting; Floodgate’s backlog is full; Osprey wants wargames; Board &amp; Dice wants heavier games.</p>
+    <p><strong>The finding that touches the game itself: your four-seat rule closes two doors.</strong> Stonemaier will not look at a game that tops out at four players, and Calliope wants two to six. Both are shut to Pastry Pirates today, on player count alone. Stonemaier is also out because it avoids games already published, which your free web game may count as. A fifth and sixth seat is a design question, not a business one, and it’s yours — I’m only reporting what it costs. <a class="src" href="https://stonemaiergames.com/about/submission-guidelines/">Stonemaier</a></p>
+    <p><strong>Three rules everyone agrees on:</strong> never mail a prototype nobody asked for; nobody signs a confidentiality agreement except Calliope, and the designers’ association says asking “is never done”; and agents barely exist in board games, so don’t wait for one.</p>
+    <p><strong>Events worth the diary:</strong> <strong>UK Games Expo, 4–6 June 2027</strong>, runs free five-minute pitches straight to publishers, by application — the best single opportunity on the list. The <strong>Unpub Festival, 18–22 March 2027</strong> in Baltimore announces its sign-ups through its newsletter, so join that now. <strong>Metatopia</strong>, 5–8 November 2026, is publisher playtesting, and its designer registration closes 29 October 2026. <a class="src" href="https://www.ukgamesexpo.co.uk/whats-on/publisherdesigner/">UKGE</a> <a class="src" href="https://www.unpub.org/upcoming-events/unpub-festival-2027">Unpub</a></p>
+
+    <div class="note"><label for="n-board">Your notes: Board game</label><textarea id="n-board" data-note="board" data-label="The board game" rows="2"></textarea></div>
+  </section>
+
+  <section id="food" aria-labelledby="food-h">
+    <h2 id="food-h">Food and merch</h2>
+    <ul>
+      <li><strong>Bake every recipe on camera</strong>, as a social channel. Cheap, and it’s marketing.</li>
+      <li><strong>Bake-your-recipe contest</strong>, with in-game prizes (an earned flag, not money). Scoped below.</li>
+      <li><strong>A real bakery sponsors an island for a day.</strong></li>
+      <li><strong>An official cookbook: next year</strong>, his timing.</li>
+      <li><strong>Physical merch</strong> (stickers, plush) only through no-stock shops, set up by a helper later. Digital looks come first.</li>
+    </ul>
+    <h3>The bake-your-recipe contest, scoped</h3>
+    <p><strong>It’s the lowest-risk kind of promotion there is, as long as it’s judged on skill, free to enter, and you never receive any food.</strong> Research, not legal advice.</p>
+    <ul>
+      <li><strong>Why it’s safe:</strong> a prize plus chance plus payment makes a lottery. Skill removes the chance and free entry removes the payment. The UK regulator says a prize competition is one where <em>“the outcome is determined by the participants skill, judgement or knowledge”</em> and needs no licence. Baking a real pastry clears that bar easily. <a class="src" href="https://www.gamblingcommission.gov.uk/public-and-players/guide/page/free-draws-and-prize-competitions">Gambling Commission</a></li>
+      <li><strong>The one thing that would break it:</strong> a random tiebreak, or picking a winner at random. That puts chance back in. Never do it.</li>
+      <li><strong>Judge photos only.</strong> Nothing is posted to you, so the whole food-safety question disappears. Say plainly: bake safely, check allergies, the in-game recipes are flavour text, not cooking instructions.</li>
+      <li><strong>13 and up keeps it simple,</strong> which matches your ruling. Under-13s bring US parental-consent law; a neutral age question at entry avoids it. Under-18 winners need a parent’s email and permission. Collect only handle, email, country, the recipe and the photo. <a class="src" href="https://www.ftc.gov/business-guidance/resources/complying-coppa-frequently-asked-questions">FTC</a> <a class="src" href="https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/childrens-information/childrens-code-guidance-and-resources/age-appropriate-design-a-code-of-practice-for-online-services/">UK Children’s Code</a></li>
+      <li><strong>The photo stays theirs.</strong> You take a licence to show it on the site and your social accounts, with credit. Nothing about merchandise.</li>
+      <li><strong>Platform rules:</strong> Meta requires the entrant to release Facebook and to be told the promotion is <em>“in no way sponsored, endorsed or administered by”</em> it, and forbids requiring shares or tagging friends. <a class="src" href="https://www.facebook.com/policies/pages_groups_events/">Meta</a> The US FTC wants the hashtag itself to say it’s a contest, so use <strong>#PastryPiratesContest</strong>.</li>
+    </ul>
+    <p><strong>The smallest version that works: one hashtag and one form.</strong> Week 0, publish the rules and open the form. Weeks 1–3, repost entries as they come; the form does the work. Week 4, judge every entry in one evening against criteria you published before entries opened, pick five, grant their flags in the game, post the winners. Total admin: one evening, plus the rules page.</p>
+    <p><strong>What it leaves undone:</strong> the rules page itself (15 specific lines, from the promoter’s postal address to what happens to the data), and whether prizes stay digital. Digital-only avoids shipping and tax entirely.</p>
+
+    <div class="note"><label for="n-food">Your notes: Food and merch</label><textarea id="n-food" data-note="food" data-label="Food and merch" rows="2"></textarea></div>
+  </section>
+
+  <section id="order" aria-labelledby="order-h">
+    <h2 id="order-h">The order, and why</h2>
+    <p>Each phase produces what the next one needs to know. Money comes after accounts, because a purchase with nowhere to live is a refund.</p>
+    <div class="phase"><h3>Phase 0 · Launch — <strong>1 October 2026</strong></h3><p>Not this PRD: the launch bar, Cloudflare, and the Firebase budget alert.</p></div>
+    <div class="phase"><h3>Phase 1 · Be shared (no accounts needed)</h3><p>Drama caption, “Ye sank yerself” card, grudges, streamer mode, Daily Voyage, emoji grid, “Beat my voyage”, board game sign-up, the launch plan. <em>Why first:</em> it's the cheapest way to get from rung 2 to rung 3.</p></div>
+    <div class="phase"><h3>Phase 2 · Foundations (players see nothing)</h3><p>Today’s sea into a world folder, the test world, security rules in the repo, accounts, the ledger.</p></div>
+    <div class="phase"><h3>Phase 3 · Earned clout</h3><p>Trophy cabinet, win boxes, dubloons, earned coins, flags and pets, the bakery, the slipway ship, leaderboard, high-fives, recipes won.</p></div>
+    <div class="phase"><h3>Phase 4 · Earning — <strong>starts the moment we launch</strong></h3><p>His instruction: begin a second sea immediately after 1 October, rather than waiting for the rungs above. So Pasta Pirates is built through the world pipeline alongside phases 1–3, and the store, the cookie flag and music packs follow it. The cookie button keeps taking donations from launch day.</p></div>
+    <div class="phase"><h3>Phase 5 · More ways to play</h3><p>Blitz, campaign voyages, map painter, Find me a crew (once enough captains are online), 2 vs 2, recap, viewers vote, Discord.</p></div>
+    <div class="phase"><h3>Phase 6 · Native apps</h3><p>iPhone and Android, then Steam, each with its own store purchases.</p></div>
+    <div class="phase"><h3>Alongside, any time · The board game</h3><p>Sell sheet, video, publisher pitches.</p></div>
+    <div class="note"><label for="n-order">Your notes: Order</label><textarea id="n-order" data-note="order" data-label="The order" rows="2"></textarea></div>
+  </section>
+
+  <section id="not" aria-labelledby="not-h">
+    <h2 id="not-h">Not doing</h2>
+    <ul class="nos">
+      <li>Ads, unless nothing else works, and then never during a voyage</li>
+      <li>Paid mystery boxes, or money that buys dubloons</li>
+      <li>Pay to win, ships with powers, house rules</li>
+      <li>Chat with strangers</li>
+      <li>Subscriptions</li>
+      <li>Features for under-13s</li>
+      <li>Print-and-play board game</li>
+      <li>Slow voyages over days, unless a strong business case appears</li>
+    </ul>
+    <div class="note"><label for="n-not">Your notes: Not doing</label><textarea id="n-not" data-note="not" data-label="Not doing" rows="2"></textarea></div>
+  </section>
+</main>
+
+<div class="dock">
+  <button class="copy" id="copy">Copy my notes</button>
+  <span class="status" id="status" role="status" aria-live="polite">Saves as you type</span>
+</div>
+
+<script>
+(function () {
+  var KEY = 'after-launch-prd/wyatt-r1';
+  var status = document.getElementById('status');
+  var state = { asks: {}, notes: {} };
+  try { var raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw) || state; } catch (e) { say("Can't save here, so copy your notes before you leave", true); }
+  state.asks = state.asks || {}; state.notes = state.notes || {};
+  function say(msg, warn) { status.textContent = msg; status.className = 'status' + (warn ? ' warn' : ''); }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); say('Saved'); }
+    catch (e) { say("Can't save here, so copy your notes before you leave", true); }
+  }
+  document.querySelectorAll('.ask-card').forEach(function (card) {
+    var id = card.dataset.ask, btns = card.querySelectorAll('.opt');
+    function paint() {
+      btns.forEach(function (b) { b.setAttribute('aria-pressed', state.asks[id] === b.dataset.val ? 'true' : 'false'); });
+      card.classList.toggle('answered', !!state.asks[id]);
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (state.asks[id] === b.dataset.val) delete state.asks[id]; else state.asks[id] = b.dataset.val;
+        paint(); save();
+      });
+    });
+    paint();
+  });
+  document.querySelectorAll('textarea[data-note]').forEach(function (t) {
+    var id = t.dataset.note;
+    if (state.notes[id]) t.value = state.notes[id];
+    t.addEventListener('input', function () { if (t.value.trim()) state.notes[id] = t.value; else delete state.notes[id]; save(); });
+  });
+  function text() {
+    var lines = [], answered = [];
+    document.querySelectorAll('.ask-card').forEach(function (c) { if (state.asks[c.dataset.ask]) answered.push(c); });
+    if (answered.length) {
+      lines.push('ANSWERS');
+      answered.forEach(function (c) { lines.push('- ' + c.querySelector('h3').textContent + ' -> ' + state.asks[c.dataset.ask]); });
+      lines.push('');
+    }
+    var notes = [];
+    document.querySelectorAll('textarea[data-note]').forEach(function (t) {
+      if (t.value.trim()) notes.push('- ' + t.dataset.label + ':\n  ' + t.value.trim().replace(/\n/g, '\n  '));
+    });
+    if (notes.length) { lines.push('NOTES'); lines = lines.concat(notes); }
+    return lines.length ? 'After Launch PRD\n\n' + lines.join('\n') : '';
+  }
+  document.getElementById('copy').addEventListener('click', function () {
+    var t = text();
+    if (!t) { say('Nothing to copy yet: pick an answer or write a note'); return; }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      if (ok) { document.body.removeChild(ta); say('Copied, paste it into chat'); }
+      else { ta.style.opacity = '1'; ta.style.height = '40vh'; ta.style.width = '100%'; ta.style.zIndex = '10'; say("Couldn't copy, so your notes are selected at the top; copy them by hand", true); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { say('Copied, paste it into chat'); }, fallback);
+    else fallback();
+  });
+})();
+</script>

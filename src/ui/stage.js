@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.15.2-staging@607e4fe9";
+const PP4_STAMP = "2026.09.15.3-staging@f64f6cec";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -518,7 +518,7 @@ function boatUXY(i){
 // belongs here — BOARD-RENDERING §3 calls adding it "the step that gets forgotten", and #rimHost
 // was forgotten exactly this way: the current stayed parked on the full-board layout while the
 // water zoomed away beneath it. A LIST, not named consts, for the same reason.
-const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost", "popHost"];   // popHost: the ingredients popping onto the islands (popin.js)
+const CAM_HTML_LAYERS = ["rippleHost", "sailHost", "rimHost", "courseHost", "dockCoinHost", "popHost", "bobHost"];   // popHost: the ingredients popping onto the islands (popin.js)
 let ribHCache = 48, ribHAt = -1e9, lastVB = "", lastRipT = "";
 /* THE TOP BAND — where the board's top edge goes: the bottom of the ribbon, or of the wind pill
    when that sits lower (playtest 17, Wyatt: "the wind/forecast pip covers the top of the trade
@@ -534,6 +534,20 @@ function bandChanged(){
   ribHAt = -1e9;
   if (!S.active) return;
   if (topBandPx() !== before){ lastVB = ""; computeStageGeometry(); camFrame(); }
+}
+/* ⭐ THE PLAQUE UNDER THE BOARD IS PART OF THE BOARD'S SIZE, AND IT ARRIVES ONE FRAME AFTER THE BOARD IS MEASURED. Wyatt,
+   2026-09-15: "The board square still glitches during the intial ingredients popping in -- it starts a lilttle smaller, and then
+   settles to its right side... i noticed it in tablet size." Measured at 768x1024: buildStage sizes the board while #pp4Cap is 228
+   tall (its recipe band still hidden, 0 pictures); the voyage's first render() writes the band 20ms later and the plaque becomes
+   273. Nothing watched the plaque — the observer below watched only the ribbon and the pill — so the board stayed 31px too wide
+   until the 900ms geometry clock caught it, which is the snap he saw: 31px narrower and the left edge sliding 15.5px right, a
+   third of the way through the pop-in. Same shape as bandChanged above, one row down. */
+function capChanged(){
+  if (!S.active) return;
+  const cap = $("pp4Cap"); if (!cap) return;
+  const h = cap.scrollHeight;
+  if (Math.abs(h - (S.capSeen || 0)) <= 1) return;
+  S.capSeen = h; lastVB = ""; computeStageGeometry(); camFrame();
 }
 function topBandPx(){
   if (performance.now() - ribHAt > 500){
@@ -1775,6 +1789,10 @@ function stageFlash(msg, ms, holdMs, variants, opts){
      a wait line for a captain sitting at THIS browser is not drawn, because they are getting the
      question itself. Everyone else still reads "…is deciding…". */
   if (waitLineIsSelfAddressed(variants, opts)) return Promise.resolve();
+  /* AN EMPTY LINE IS NO LINE. A seat's variant can be deliberately blank — the captain about to flip gets no narration box, because
+     the flip stage is about to say the same words as its own title (orchestrator battleAsk). Wyatt, 2026-09-15: "There is still a
+     narration box that appears for a moment before the flippenator appears. we can get rid of that." */
+  if (!String(msg == null ? "" : msg).replace(/<[^>]*>/g, "").trim()) return Promise.resolve();
   let subj = S.subject; S.subject = null;
   /* DECIDED BEATS SNIFFED. `subjectSet` means an event was actually read and yielded this subject —
      including a deliberate null for a line about two captains or the whole table. The sniff below
@@ -1839,11 +1857,15 @@ function stageFlash(msg, ms, holdMs, variants, opts){
     // util.js, derived from D-10's own hold, and this call site names no milliseconds at all.
     const hold = narrationHoldMs(msg);
     const b = document.createElement("div");
-    b.className = "pp4Bub" + (subj == null ? " ambient" : "");
-    if (subj != null) b.style.borderColor = HEXCOL[subj] || "#177";
+    /* `opts.cls` — a line that wants its own skin. Today: the fight's lines, in dark blue (Wyatt, 2026-09-15: "the first narration
+       box is showed in white, not dark blue -- so it covers up the attacker's coin flip! 1. the battle narrations should be in dark
+       blue."). The tail follows the bubble rather than the captain's colour, or a dark box would sprout a bright beak. */
+    b.className = "pp4Bub" + (subj == null ? " ambient" : "") + (opts && opts.cls ? " " + opts.cls : "");
+    const tailCol = (opts && opts.cls === "btl") ? "#12323a" : (HEXCOL[subj] || "#177");
+    if (subj != null) b.style.borderColor = (opts && opts.cls === "btl") ? "#0d2830" : (HEXCOL[subj] || "#177");
     // playtest 10 item 7: bubbles bypass panel()'s emojify chokepoint, so ad-hoc narration lines
     // (turn banners, flip results) kept raw ⚪/🌕 emoji instead of the game art. Emojify here.
-    b.innerHTML = `<div class="pp4BubIn">${emojify(String(msg))}</div>` + (subj != null ? `<div class="pp4Tail" style="border-color:${HEXCOL[subj] || "#177"}"></div>` : "");
+    b.innerHTML = `<div class="pp4BubIn">${emojify(String(msg))}</div>` + (subj != null ? `<div class="pp4Tail" style="border-color:${tailCol}"></div>` : "");
     const host = fxHost();
     host.appendChild(b);
     hopParrot();
@@ -3390,6 +3412,10 @@ function buildStage(){
     if (!S.bandWatch) S.bandWatch = new ResizeObserver(() => requestAnimationFrame(bandChanged));
     S.bandWatch.disconnect();
     for (const id of ["pp4Ribbon", "pp4Pill"]){ const el = $(id); if (el) S.bandWatch.observe(el); }
+    /* …and the plaque UNDER the board, for the same reason and with the same one-frame-later rule — see capChanged(). */
+    if (!S.capWatch) S.capWatch = new ResizeObserver(() => requestAnimationFrame(capChanged));
+    S.capWatch.disconnect();
+    const capEl = $("pp4Cap"); if (capEl) S.capWatch.observe(capEl);
   }
   settleBoardIn(wrap);
   if (!S.geomBound){

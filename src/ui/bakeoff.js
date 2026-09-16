@@ -28,7 +28,7 @@ import { panel, setNeedsAction, GHOST_FADE_MS } from "./panel.js";
 // imports neither panel.js nor this file), so this adds no cycle — see the note beside the bake-off's
 // export in ./index.js, updated in this same commit.
 import { narrationHoldMs, say, sayText } from "./util.js";
-import { playLidNote, playCrateVerdict, playCoinTick } from "./audio.js";
+import { playLidNote, playCrateVerdict, playCoinTick, playCardSwish } from "./audio.js";
 
 const $=(id)=>document.getElementById(id);
 // module-local, as every other src/ui/ file keeps its own
@@ -629,6 +629,10 @@ export async function playBakeoffLive(spec,io){
   // ---- phase 3: the swaps, one at a time ----
   await runSwaps();
 
+  /* A SWISH AS THE CRATES ARE SHUFFLED — Wyatt, 2026-09-15: "we want a swish sound as the crates are shuffled." The paper swish he
+     picked for the recipe cards, one per crossing, and never twice inside SWISH_GAP_MS so a fast shuffle is a sweep and not a hiss. */
+  const SWISH_GAP_MS=110; let lastSwish=-1e9;
+  const swish=()=>{const n=performance.now();if(n-lastSwish<SWISH_GAP_MS)return;lastSwish=n;playCardSwish();};
   async function runSwaps(){
   /* READ IT HERE, once, at the moment the crates are about to move — every phase that can reflow
      the panel has already run by now. This is the whole of W3-2's fix. */
@@ -636,6 +640,7 @@ export async function playBakeoffLive(spec,io){
   for(const [a,b] of swaps){
     const A=bowls[a],B=bowls[b];
     if(!A||!B)continue;
+    swish();
     if(reduced){
       A.classList.add("flash");B.classList.add("flash");
       await sleep(340);
