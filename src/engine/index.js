@@ -1093,11 +1093,8 @@ class Game{
     // living, when the crate is leverage somebody else at the table plainly needs (rule 4 fodder)
     let got=h?"treasure":"dockhand",buy=null;
     if(this.cfg.dockBuy&&price!==null){
-      const needsIt=this.needs(p).includes(ing);
-      const leverage=this.cfg.merchant&&!needsIt&&
-        PERSONALITY[p.strategy]&&PERSONALITY[p.strategy].hoardBias>=1.4&&
-        this.players.some(q=>q!==p&&this.inPlay(q)&&this.likelyNeeds(q,ing));
-      if(needsIt||leverage){
+      const why=this.wantsCrate(p,ing,price),needsIt=why==="needs";
+      if(why){
         // playtest 20: a dry shelf now has TWO prices. Coins if the purse can stand it, or any two
         // crates out of the hold. A bot takes whichever costs it fewer TURNS (blackMarketPick) —
         // never a gate, and it only ever spends crates when that genuinely beats earning the coin.
@@ -2049,7 +2046,64 @@ class Game{
      living document rots, a pointer cannot. Read it before changing anything below. */
 
   // Coins are just stored turns: a dock flip pays 6 or 2, so a turn at a dock earns 4 on average.
-  coinTurns(n){return n<=0?0:n/PLAN.coinsPerDockTurn;}
+  /* ⭐ WHAT A DUBLOON COSTS IN TURNS — DERIVED FROM THE DOCK, NOT TYPED. The CEO's bot audit, 2026-09-15:
+     "the bots' brain is planning against a dock that pays 4 dubloons a turn when yours has paid 2 since
+     August, which is why they keep turning up somewhere they cannot afford." PLAN.coinsPerDockTurn was right
+     when a dock paid 6 and 2; his 2026-08-21 ruling moved it to 3 and 1 and this never followed. The race
+     planner two methods down already derives it — `((dockHeads+dockTails)/2)||1` — so this is the same
+     expression, and now there is one rate rather than two.
+     MEASURED on the head-to-head ladder, 300 seeded voyages an arm: +0.8 on the dev seeds, +2.8 held out,
+     and the table's trade hails fall 2.33 -> 1.68 a voyage for the same number of deals struck.
+     STILL ON THE OLD NUMBER, DELIBERATELY: the trade pricing at askFor/worthToMe. Those turn turns back into
+     COINS and were never on the ladder; the last time this constant moved under trade pricing it cost 21
+     ladder points, so they move on their own measurement, not on this one. */
+  coinTurns(n){
+    const pay=((this.cfg.dockHeads||0)+(this.cfg.dockTails||0))/2||PLAN.coinsPerDockTurn;
+    return n<=0?0:n/pay;
+  }
+  /* ⭐ DOES THIS CAPTAIN TAKE THIS CRATE? THE ONE ANSWER — it used to be written twice, once in doDock (what a
+     bot PLAYS) and once in planTurnV3's berth branch (what a bot EVALUATES), kept in step by hand. The CEO
+     found the pair on 2026-09-15, the audit before it found the same shape in the dock's payment, and the
+     rule here is the house rule: when a second consumer appears, converge.
+     Three ways a crate is worth having, and the third is his:
+       "needs"    — it is on the recipe and not already aboard. The whole game.
+       "leverage" — the merchant's clause: a rival plainly needs it (rule 4 fodder). Coin-only, never bartered.
+       "cheap"    — HIS CHEAP-CRATE RULE, at the floor price only. Wyatt, 2026-09-15: "a bot would know that
+                    holding a resource, especially a cheap resource is always better than holding the coin --
+                    it can be insurange, trade bait, it is even half of a black market crate they may need
+                    later." MEASURED on the ladder, 300 seeded voyages an arm: at ANY price this LOSES (-2.3
+                    on the dev seeds) — the spare eats the money the next island needs and voyages got LONGER
+                    — but at the FLOOR price, on a dock turn the bot was spending anyway, it WINS on both seed
+                    families (+0.8 dev, +3.2 held out). Two spares buy a crate off a bare shelf, and a bare
+                    shelf is the bot's commonest disaster: every voyage ends with at least one.
+     Affordability is NOT asked here, on purpose: a needed crate off a dry shelf can be bartered for with two
+     crates and no coins at all (blackMarketPick), and that decision belongs to the caller that can act.
+     ⛔ HIS CHEAP-CRATE RULE WAS BUILT HERE AND TAKEN OUT AGAIN, 2026-09-16, and the graveyard is the point.
+     Wyatt, 2026-09-15: "a bot would know that holding a resource, especially a cheap resource is always better
+     than holding the coin -- it can be insurange, trade bait, it is even half of a black market crate they may
+     need later." The CEO's audit measured his rule as a win at the floor price (+0.8 dev seeds, +3.2 held out,
+     300 voyages an arm). IT DOES NOT REPLICATE. At 1000 voyages an arm, on the same ladder run backwards and
+     red-proofed (+0.0 for an identical brain, -33.8 for a lobotomised one), his rule and the dock-rate fix
+     together came out at +1.0 / -0.7 — noise, either side of zero. And the mechanism he named did not appear:
+        spare crates bought   0.03 -> 0.50 a voyage        barters struck   0.14 -> 0.15 a voyage
+     The spares are bought and never become the black-market payment they were bought for; guarding the rule so
+     it can never spend the next island's money halves the cost (2.41 -> 2.20 docks a voyage standing at a crate
+     it cannot pay for, against 2.07 today) and halves the spares with it, and still moves no barters.
+     WHY, AND THIS IS THE REAL FINDING: the bot's objective is tour3, which is a function of needs() — recipe
+     minus hold. An off-recipe crate cannot change that number BY CONSTRUCTION, so a spare is scored as pure
+     loss of coins and zero gain no matter how cheap it was. A buy gate bolted on top does not fix that; it
+     just makes the bot spend money its own objective says was wasted. The honest fix is to let the objective
+     SEE a spare — price tour3's bare-shelf leg in crates as well as coins, so two spares in the hold genuinely
+     shorten the route — and then the buy falls out of the valuation, which is what principle 2 asks for.
+     Wyatt has the numbers; whoever builds that reads this paragraph first. */
+  wantsCrate(p,ing,price){
+    if(!this.cfg.dockBuy||price===null||price===undefined)return "";
+    if(this.needs(p).includes(ing))return "needs";
+    const bias=PERSONALITY[p.strategy];
+    if(this.cfg.merchant&&bias&&bias.hoardBias>=1.4&&
+       this.players.some(q=>q!==p&&this.inPlay(q)&&this.likelyNeeds(q,ing)))return "leverage";
+    return "";
+  }
   // Sailing time from a to b under a given wind. v2 rule 1: 4 squares a turn unless the route has
   // to bite into the wind, in which case 2. Bots plan against the wind they can SEE — this round's
   // for the leg they're on, and the committed forecast for the leg after it (rule 6d: never wrong).
@@ -2723,10 +2777,7 @@ class Game{
         for(const pay of [heads,tails]){
           const purse=p.coins+pay;
           const buys=this.cfg.dockBuy&&price!==null&&purse>=price;
-          const needsIt=buys&&this.needs(p).includes(port);
-          const leverage=buys&&!needsIt&&this.cfg.merchant&&bias.hoardBias>=1.4&&
-            this.players.some(q=>q!==p&&this.inPlay(q)&&this.likelyNeeds(q,port));
-          const take=needsIt||leverage;
+          const take=buys&&!!this.wantsCrate(p,port,price);   // the SAME question doDock will play, asked in the ONE place it lives
           const myT=this.turnsToWin3If(p,{cell,gain:take?port:null,
                                           coins:purse-(take?price:0)},ctx);
           // my purchase empties a shelf slot rivals may have been counting on — their race moves.

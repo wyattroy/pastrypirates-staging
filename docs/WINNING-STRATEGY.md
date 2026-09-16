@@ -15,7 +15,7 @@ decision actually **is**.
 | **Movement** | 4 squares a turn — **2 if any part of the leg bites into the wind**. |
 | **Wind** | Known this round, and the next round is committed a full round early and is never wrong. |
 | **Crates** | 3 per island. Price = `6 − crates left`, so **3🌕, then 4🌕, then 5🌕**. |
-| **Docking** | One turn. Flip: heads +5🌕, tails +2🌕 (mean **3.5**). Then you may buy. |
+| **Docking** | One turn. Flip: heads +3🌕, tails +1🌕 (mean **2**). Then you may buy. |   <!-- 5/2 until 2026-08-21 (D-30); found still written here by the CEO bot audit, 2026-09-15 -->
 | **Fighting** | 2🌕 of powder. Winner takes **one crate** from the loser. |
 | **Recipes** | 5 of the 7 ingredients. Every ingredient appears in 15 of the 21 recipes. |
 | **Bake-off** | ~2 turns at the ovens. Tortuga is sanctuary once your ovens are lit. |
@@ -124,9 +124,20 @@ But buying a spare costs a **whole dock turn**, and the leverage it buys is wort
 is break-even before the risk that nobody bites. **Do not shop for leverage.** Take a spare only when
 it falls into your lap.
 
+**And it holds even for a berth you are already standing at — measured, 2026-09-16.** Wyatt's instinct was the
+opposite: *"a bot would know that holding a resource, especially a cheap resource is always better than holding
+the coin -- it can be insurange, trade bait, it is even half of a black market crate they may need later."* A CEO
+audit measured his rule as a win at the floor price (+0.8 / +3.2 over 300 voyages an arm). **It did not replicate
+at 1000 voyages an arm** (+1.0 / −0.7 — noise both sides of zero, on a ladder red-proofed at +0.0 for an identical
+brain and −33.8 for a lobotomised one), and the mechanism he named never appeared: spare crates bought went 0.03
+→ 0.50 a voyage while barters struck stayed at 0.14 → 0.15. The spares are bought and never spent. The rule is not
+in the game; the finding under it — that the bot's objective cannot see an off-recipe crate at all — is what to fix
+instead, and `src/engine/index.js` `wantsCrate` carries the note.
+
 ### Income is not a goal
 
-You need ~19🌕 and your five dock turns generate ~20.5🌕. Spending a turn purely to earn is
+You need ~19🌕 and your five dock turns generate ~10🌕 at the dock this game actually pays (3 and 1
+since 2026-08-21, mean 2 — this paragraph said 20.5 when a dock paid 5 and 2). Spending a turn purely to earn is
 **strictly a lost turn** unless you would otherwise arrive at your next island unable to buy. The
 test is exact and worth running every turn:
 
