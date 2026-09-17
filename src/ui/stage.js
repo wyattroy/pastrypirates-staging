@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.17.2-staging@3b7685e1";
+const PP4_STAMP = "2026.09.17.3-staging@0a688baf";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2260,10 +2260,12 @@ function coinSinksAndLaunches(){
    NOWHERE, so the big word stamped straight over the stakes line. Now the stage has a phase — "ask", "spinning", "verdict" — set only
    here, and index.html's one [data-cer] block says what every line does in each (scripts/qa/flip_stage_words_one_place_check.mjs). */
 function cerPhase(v, phase){ if (v) v.dataset.cer = phase; }
+/* TAKES THE LAST WORD AWAY, AND DECIDES NO PHASE. It used to set "ask" too — and the tap's launch calls it just AFTER the tap set
+   "spinning", so "Tap the coin" came straight back for the whole spin (Wy-Blade's item-6 run, 2026-09-17, every tap measured; mine,
+   695dd5ae). The phase is set by what happens — armed ("ask", flipArmed), tapped ("spinning"), landed ("verdict") — never by tidying. */
 function cerClearStamp(){
   const v = $("pp4Veil"); if (!v) return;
   v.querySelectorAll(".pp4CerStamp").forEach(s => s.remove());
-  cerPhase(v, "ask");
 }
 function coinLandsWithWeight(heads){
   const c = $("flipCoinWrap"), v = $("pp4Veil");
@@ -2354,7 +2356,7 @@ function flipArmed(el, onClick){
       if (coin && coin.onclick){ ev.stopPropagation(); coin.onclick(); }
     });
   }
-  cerClearStamp();   // armed again: the last flip's word leaves, and "Tap the coin" is back
+  cerClearStamp(); cerPhase(veil, "ask");   // armed again: the last flip's word leaves, and "Tap the coin" is back
   // …and before the first paint, not on the next tick: the slow gear is 125ms away, which is long
   // enough for the ceremony to be seen once in the wrong place (Group G fault 1).
   cerBandTick();

@@ -39,6 +39,15 @@ function rules(stage, html) {
     .filter(m => /\b(opacity|visibility|display)\s*:/.test(m[3]) && !/\[data-cer=/.test(m[1])).map(m => m[1].trim().slice(0, 60));
   rule(stray.length === 0, "no stylesheet rule shows or hides a stage line except by the stage's phase",
     `a rule hides or shows a stage line outside the phase block: ${stray.join(" | ")}`);
+  /* 5. A TAP STAYS "spinning" UNTIL THE COIN LANDS (2026-09-17). The tap set "spinning" and the launch it then ran called a tidy-up that
+     set "ask" again, so "Tap the coin" stood over the whole spin. Only arming may say "ask"; nothing the launch calls may. */
+  const body = head => { const h = js.indexOf(head); if (h < 0) return ""; let j = js.indexOf("{", js.indexOf(")", h)), d = 0;
+    for (let k = j; k < js.length; k++) { if (js[k] === "{") d++; else if (js[k] === "}") { d--; if (!d) return js.slice(h, k + 1); } } return ""; };
+  const tidy = body("function cerClearStamp("), launch = body("function coinSinksAndLaunches(");
+  const askSites = (js.match(/cerPhase\([^,]+,\s*"ask"\)/g) || []).length;
+  rule(!/cerPhase\(/.test(tidy) && !/cerPhase\([^,]+,\s*"ask"\)/.test(launch) && askSites === 1,
+    "a tapped coin stays \"spinning\" until it lands — only arming the coin says \"ask\"",
+    `"ask" is set in ${askSites} place(s)${/cerPhase\(/.test(tidy) ? ", including the tidy-up a tap's launch runs" : ""} — "Tap the coin" can come back over the spin`);
   return out;
 }
 const stage = rd("src/ui/stage.js"), html = rd("index.html");
@@ -49,6 +58,7 @@ const MUTANTS = [
   ["a second place writes the phase", swap(stage, "function cerClearStamp(){", "function cerClearStamp(){\n  $(\"pp4Veil\").dataset.cer = \"ask\";"), null, 0],
   ["a script hides \"Tap the coin\" itself again", swap(stage, "  cerPhase(v, \"verdict\");", "  const sub2 = v.querySelector(\".pp4CerSub\"); sub2.style.visibility = \"hidden\";\n  cerPhase(v, \"verdict\");"), null, 1],
   ["a new line of words the verdict does not clear", swap(stage, "t.className = \"pp4CerTitle\";", "t.className = \"pp4CerTitle\"; const w2 = document.createElement(\"div\"); w2.className = \"pp4CerWind\";"), null, 2],
+  ["the tidy-up saying \"ask\" again, mid-spin", swap(stage, "  v.querySelectorAll(\".pp4CerStamp\").forEach(s => s.remove());\n}", "  v.querySelectorAll(\".pp4CerStamp\").forEach(s => s.remove());\n  cerPhase(v, \"ask\");\n}"), null, 4],
   ["the old fade rule put back", null, swap(html, "  #pp4Veil[data-cer=\"spinning\"] .pp4CerSub { opacity:0; }", "  #pp4Veil[data-cer=\"spinning\"] .pp4CerSub { opacity:0; }\n  #pp4Veil.resolving .pp4CerSub { opacity:0; }"), 3],
 ];
 let proof = true;
