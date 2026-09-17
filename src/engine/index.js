@@ -3633,6 +3633,16 @@ class Game{
   /* The `end` event carries THE WHOLE RESULT every screen draws the victory card from — each captain's score
      rows and the closeness order — so a guest never reads the result from anywhere else (architecture item 5:
      "number routes 2→1"). Built here, once, from the engine's own state. */
+/* ⭐ A VOYAGE THAT CANNOT GO ON IS A FACT OF THE GAME, SO IT IS AN EVENT. Wyatt, 2026-09-17, AGREED: when the host's voyage breaks,
+     every screen is told. Before, the host drew its own "run aground" box and published nothing, so a crew guest sat on "… is at the
+     ovens — watch the crates" for seven minutes (seen in a two-window run, 2026-09-16) — the bake has no clock by his ruling, and the
+     "host left" warning only fires when the host's tab DISCONNECTS, which a live-but-broken host never does.
+     Recorded once per voyage: later faults are noise, and the first one is the one that stopped the game. */
+  halt(where){
+    if(this.halted)return null;
+    this.halted=true;
+    return this.ev({t:"halted",where:String(where||"")});
+  }
   declareEnd(){
     this.ev({t:"end",winner:this.winner,voyage:this.voyageSummary()});
     return this.winner;

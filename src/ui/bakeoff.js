@@ -383,7 +383,7 @@ function bakeoffIntroCard(bake){
 // already moved on to something else it would take THAT down instead — so it only runs while a .bko
 // is still the thing on screen. That is what makes this safe to call from every exit below,
 // including the ones that can race a shot-clock forfeit.
-function retireBakeCard(){
+export function retireBakeCard(){
   delete $("actionPanel").dataset.pp4Stage;
   if(document.querySelector("#actionPanel .bko"))panel("");
 }

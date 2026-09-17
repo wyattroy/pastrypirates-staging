@@ -220,8 +220,8 @@ if (typeof window !== "undefined") {
      being closed is not "an error happened" but "the game died and said nothing". Installed at the
      composition root, before boot(), so nothing can throw ahead of the handler that reports it.
      voyageAground() itself is first-fault-wins, so the two paths cannot stack two boxes. */
-  window.addEventListener("unhandledrejection", e => ui.voyageAground(e.reason, "unhandled rejection"));
-  window.addEventListener("error", e => ui.voyageAground(e.error || e.message, "uncaught error"));
+  window.addEventListener("unhandledrejection", e => orchestrator.haltVoyage(e.reason, "unhandled rejection"));
+  window.addEventListener("error", e => orchestrator.haltVoyage(e.error || e.message, "uncaught error"));
 
   ui.applyEngineBootstrapEffects();
   ui.attachPastryArt();

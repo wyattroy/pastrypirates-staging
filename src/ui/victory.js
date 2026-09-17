@@ -209,31 +209,99 @@ export function victoryCard() {
   addPage("awards", sayText("victory.chip.awards", {}), el => pageAwards(el, v, cardH));
   for (const s of locals) { const c = v.captains.find(x => x.seat === s); if (c) addPage("tally", sayText("victory.chip.score", {}), el => pageTally(el, v, c, card)); }
   const SW = T.awards.swipe;
-  let cur = 0, done = false;
+  let cur = 0, done = false, taken = false;   // `taken`: a finger took the card over mid-show, so the auto-play stands down
   const els = pages.map((pg, i) => { const el = mk(card, "vcPage"); if (i) el.style.transform = "translateX(112%)"; return el; });
   const bodies = els.map(el => mk(el, "vcBody"));   // content fills the body; the swipe buttons live beside it on the page
   const slide = (from, to, dir) => { const ease = "cubic-bezier(.3,.7,.3,1)";
     anim(els[from], [{ transform: "translateX(0)" }, { transform: `translateX(${-dir * 112}%)` }], { duration: SW, fill: "forwards", easing: ease });
     anim(els[to], [{ transform: `translateX(${dir * 112}%)` }, { transform: "translateX(0)" }], { duration: SW, fill: "forwards", easing: ease });
     playCardSwish(); };
-  const nav = i => { if (!done || i < 0 || i >= pages.length || i === cur) return; card.classList.add("browsing"); slide(cur, i, i > cur ? 1 : -1); cur = i; };
+  /* ⭐ THE PAGES FOLLOW HIS FINGER. Wyatt, 2026-09-17, on the victory card: "The cards should be swipable to go back and forth between
+     them; not just using the little buttons at the bottom." There WAS a swipe (a pointerdown/pointerup pair with a 30px threshold),
+     and two things made it feel like there wasn't: nothing moved while the finger did, and NOTHING answered at all until the card had
+     finished playing every page — `done`. So a swipe during the show, which is when a player first tries one, did nothing.
+     Now a drag takes the card over: the auto-play stops where it is, the page follows the finger, and it snaps to whichever page the
+     release asks for. The ends rubber-band rather than wrap, and a page dragged to before its turn is filled on the way. */
+  const filled = pages.map(() => false);
+  const fill = i => { if (filled[i]) return 0; filled[i] = true; return pages[i].fill(bodies[i]) || 0; };
+  /* hand every page back to its inline style: keep the pose a filled animation is holding, then let that animation go */
+  const freePages = () => els.forEach(el => el.getAnimations().forEach(an => {
+    try { an.commitStyles(); } catch (e) {}
+    try { an.cancel(); } catch (e) {}
+  }));
+  const restAt = i => { els[i].style.transform = i === cur ? "translateX(0)" : `translateX(${i < cur ? -112 : 112}%)`; };
+  const takeOver = () => { if (done) return; taken = true; done = true; card.classList.add("done"); };
+  const nav = i => { if (!done || i < 0 || i >= pages.length || i === cur) return; card.classList.add("browsing"); fill(i); slide(cur, i, i > cur ? 1 : -1); cur = i; };
   els.forEach((el, i) => {
     if (i > 0) { const b = document.createElement("button"); b.type = "button"; b.className = "vcChip prev"; b.textContent = "‹ " + pages[i - 1].label; b.onclick = () => nav(i - 1); el.appendChild(b); }
     if (i < pages.length - 1) { const b = document.createElement("button"); b.type = "button"; b.className = "vcChip next"; b.textContent = pages[i + 1].label + " ›"; b.onclick = () => nav(i + 1); el.appendChild(b); }
   });
-  let x0 = null;
-  card.addEventListener("pointerdown", ev => { x0 = ev.clientX; });
-  card.addEventListener("pointerup", ev => { if (x0 == null) return; const dx = ev.clientX - x0; x0 = null; if (dx > 30) nav(cur - 1); else if (dx < -30) nav(cur + 1); });
+  let drag = null;
+  const PULL = 0.28;                       // how far the first and last page give before they spring back
+  /* ⚠ TOUCH AND POINTER BOTH, AND THAT IS MEASURED. A pointer-only drag looked right and did nothing on a phone: the card gets the
+     pointerdown and then Chrome stops sending pointer moves for that touch — measured at 375x812 with real touch events, the card
+     saw "pointerdown, touchstart, 8 × touchmove, touchend" and no pointermove or pointerup at all. So the finger is read from the
+     touch events, the mouse and pen from the pointer ones, and whichever starts first owns the drag. */
+  const at = ev => (ev.touches && ev.touches.length ? { x: ev.touches[0].clientX, y: ev.touches[0].clientY }
+                 : ev.changedTouches && ev.changedTouches.length ? { x: ev.changedTouches[0].clientX, y: ev.changedTouches[0].clientY }
+                 : { x: ev.clientX, y: ev.clientY });
+  const dragStart = (ev, kind) => {
+    if (drag || (ev.target && ev.target.closest && ev.target.closest("button"))) return;   // the chips answer for themselves
+    const p = at(ev);
+    drag = { kind, x: p.x, y: p.y, t: performance.now(), w: card.getBoundingClientRect().width || 1, moved: false, to: -1 };
+  };
+  const dragMove = (ev, kind) => {
+    if (!drag || drag.kind !== kind) return;
+    const p = at(ev), dx = p.x - drag.x, dy = p.y - drag.y;
+    if (!drag.moved) {                                             // a drag, not a tap, and across rather than down
+      if (Math.abs(dx) < 6 || Math.abs(dx) <= Math.abs(dy)) return;
+      drag.moved = true; takeOver(); card.classList.add("browsing");
+      /* ⚠ AND THE LAST SWIPE'S ANIMATION HAS TO LET GO OF THE PAGE FIRST. Every slide ends as a filled Web Animation
+         (fill:"forwards"), which outranks an inline style — so a second drag on the same page wrote its transform and nothing
+         moved. Wy-Blade measured exactly that: "inline translateX(59.89%), painted 0px, animations [finished/forwards]". Each
+         page's finished animations are committed (so the page keeps the pose it is in) and then cancelled, which hands it back
+         to the inline style this drag writes. */
+      freePages();
+    }
+    if (ev.cancelable) ev.preventDefault();                        // ours now: no rubber-banding of the page under it
+    const to = dx < 0 ? cur + 1 : cur - 1, room = (to >= 0 && to < pages.length) ? 1 : PULL;
+    const f = (dx / drag.w) * room;
+    drag.to = room === 1 ? to : -1;
+    els[cur].style.transform = `translateX(${(f * 100).toFixed(2)}%)`;
+    if (drag.to >= 0) { fill(to); els[to].style.transform = `translateX(${((f + (dx < 0 ? 1.12 : -1.12)) * 100).toFixed(2)}%)`; }
+  };
+  const dragEnd = (ev, kind) => {
+    if (!drag || drag.kind !== kind) return;
+    const d = drag; drag = null;
+    if (!d.moved) return;
+    const dx = at(ev).x - d.x, speed = Math.abs(dx) / Math.max(1, performance.now() - d.t);
+    const take = d.to >= 0 && (Math.abs(dx) > d.w * 0.22 || speed > 0.45);
+    const from = cur, goTo = take ? d.to : cur;
+    const ease = "cubic-bezier(.3,.7,.3,1)", ms = Math.round(SW * 0.8);
+    anim(els[from], [{ transform: els[from].style.transform }, { transform: `translateX(${from === goTo ? 0 : (goTo > from ? -112 : 112)}%)` }], { duration: ms, fill: "forwards", easing: ease });
+    if (d.to >= 0) anim(els[d.to], [{ transform: els[d.to].style.transform }, { transform: `translateX(${d.to === goTo ? 0 : (d.to > from ? 112 : -112)}%)` }], { duration: ms, fill: "forwards", easing: ease });
+    if (take) { cur = goTo; playCardSwish(); }
+  };
+  card.addEventListener("touchstart", ev => dragStart(ev, "touch"), { passive: true });
+  card.addEventListener("touchmove", ev => dragMove(ev, "touch"), { passive: false });
+  card.addEventListener("touchend", ev => dragEnd(ev, "touch"));
+  card.addEventListener("touchcancel", () => { if (drag && drag.kind === "touch") { const d = drag; drag = null; if (d.moved) { restAt(cur); if (d.to >= 0) restAt(d.to); } } });
+  card.addEventListener("pointerdown", ev => { if (ev.pointerType !== "touch") dragStart(ev, "pointer"); });
+  card.addEventListener("pointermove", ev => dragMove(ev, "pointer"));
+  card.addEventListener("pointerup", ev => dragEnd(ev, "pointer"));
+  card.addEventListener("pointercancel", () => { if (drag && drag.kind === "pointer") { const d = drag; drag = null; if (d.moved) { restAt(cur); if (d.to >= 0) restAt(d.to); } } });
   // the card rises, then each page plays in turn and swipes away left to the next
   if (!skip) anim(wrap, [{ transform: "translateY(110%)" }, { transform: "translateY(0)" }], { duration: 450, easing: "cubic-bezier(.2,.9,.3,1.1)", fill: "none" });
   (async () => {
     await sleepMs(skip ? 0 : 450);
     for (let i = 0; i < pages.length; i++) {
-      if (!card.isConnected) return;
+      if (!card.isConnected || taken) return;                      // a finger is driving now
       if (i > 0) { slide(i - 1, i, 1); cur = i; await sleepMs(skip ? 0 : SW); }
-      const ms = pages[i].fill(bodies[i]) || 0;
+      if (taken) return;
+      const ms = fill(i);
       await sleepMs(skip ? 0 : ms);
     }
+    if (taken) return;
     done = true; card.classList.add("done");
   })();
 }

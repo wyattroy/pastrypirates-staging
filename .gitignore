@@ -154,3 +154,7 @@ _site_stg/
 
 # the image-generation API key — never committed, never printed (scripts/art/gen.mjs)
 .art-key
+
+# Chrome scratch a browser gate leaves behind when npm test runs at a foreign tip (Wy-Blade, 2026-09-17):
+# 14 MB and 2.8 MB of unpacked extension payload in the repo root, named after the checked-out branch.
+tmp-*/
