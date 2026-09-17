@@ -724,7 +724,7 @@ function followHull(seat,every,drop){
    each line was CENTRED on the square the boat had just left, so half of it reached forward, and it was one flat white. Now a line's
    head sits on the hull where it is emitted and its body trails straight back along the way the boat came, fading from the head
    (index.html .ppStreak) — and it shrinks back toward that head as it goes, so the water closes up behind the boat. */
-export const STREAK_EVERY=0.22, STREAK_MS=1220;   // was 780 — his tuner, 2026-09-16
+export const STREAK_EVERY=0.22, STREAK_MS=1080;   // was 780 · 1220 — his tuner, 2026-09-16 (twice)
 export function rideStreaks(seat){
   if(fxReduced()||!shipEls[seat]||!cell)return;
   followHull(seat,STREAK_EVERY,(host,last,angle,at)=>{
@@ -746,7 +746,7 @@ export function rideStreaks(seat){
    gradual parabolic fall -- each piece moves away at a certain speed then abruptly turns to fall, this is bad." It did exactly that: a
    burst keyframe at 35% and a fall keyframe after it. Now each piece's path is sampled from how paper actually moves — thrown out fast,
    air drag bleeding the throw away (e^-t/τ), gravity taking over smoothly until it drifts down, with a slow flutter side to side. */
-export const CONFETTI_PIECES=24, CONFETTI_MS=3700;   // was 36 · 3000 — his tuner, 2026-09-16
+export const CONFETTI_PIECES=32, CONFETTI_MS=2000;   // was 36 · 3000, then 24 · 3700 — his tuner, 2026-09-16 (twice)
 const CONFETTI_DRAG=0.16, CONFETTI_STEPS=20;          // τ as a share of a piece's life: the throw is mostly spent by a third of the way
 export function firstHomeConfetti(e){
   if(fxReduced()||!e||e.t!=="ovens"||!appState.game||!shipEls[e.p])return;
@@ -791,8 +791,8 @@ export function firstHomeConfetti(e){
    from the smoke but draw back to its original position gradually. Also, the boat should tilt away from the smoke, perhaps by 10 or
    20 degrees -- add these dials". So the kick is two motions, not one: FLUNG out over the first KICK_FLING of it, then drawn back over
    the rest, leaning KICK_TILT_DEG away from the smoke at the far end. The tilt and the fling are both his dials on the tuner now. */
-export const KICK_MS=880, SMOKE_MS=1060, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=11, SHAKE_MS=300;   // was 320 · 520 · — · — · 6 · —
-export const KICK_CELL=0.26, SMOKE_CELL=1.05, KICK_TILT_DEG=15, KICK_FLING=0.14;   // was 0.28 · 1.7 · (new) · (new)
+export const KICK_MS=1290, SMOKE_MS=1200, HIT_AT_MS=110, HIT_FLASH_MS=110, SHAKE_PX=8, SHAKE_MS=300;   // was 320 · 520 · — · — · 6 · —, then 880 · 1060 · 11
+export const KICK_CELL=0.30, SMOKE_CELL=1.50, KICK_TILT_DEG=15, KICK_FLING=0.25;   // was 0.28 · 1.7 · (new) · (new), then 0.26 · 1.05 · 15 · 0.14
 /* SMOKE, NOT A BALL. Wyatt, 2026-09-16: "The smoke looks more like a sphere than smoke. Fix this visual effect, but do it efficiently."
    It was one circle. Now a shot throws SMOKE_PUFFS soft puffs of different sizes from the muzzle: each drifts out along the line of fire,
    spreads across it and rises, swelling as it thins, and they fade at different moments — so the cloud tears apart the way smoke does.
@@ -2114,7 +2114,7 @@ export function payInto(seat,coins,{from="boat",after=null}={}){
    position between two things drawn in different places — the board and the captains box — so both ends are measured as
    drawn and brought into the one fixed space (fixedOrigin, util.js) before a single number is taken between them. */
 /* ⭐ HIS NUMBERS, 2026-09-16, off the Game Feel Tuner. Each carries the value it replaced. */
-const TREASURE_MS=1200, TREASURE_GAP_MS=325, TREASURE_MAX=20, CRATE_FLY_MS=1360;   // was 1400 · 700 · 20 · 1240
+const TREASURE_MS=630, TREASURE_GAP_MS=470, TREASURE_MAX=20, CRATE_FLY_MS=1330;   // was 1400 · 700 · 20 · 1240, then 1200 · 325 · 20 · 1360
 /* THE STAGGER IS CAPPED, SO THE GAP IS NOT A PRICE LIST: a haul too big to space at the full gap within TREASURE_STAGGER_MS tightens
    up on its own, so eight coins never make the game wait six seconds for its own purse. */
 const TREASURE_STAGGER_MS=1600;
@@ -2122,8 +2122,8 @@ const coinGap=n=>n>1?Math.min(TREASURE_GAP_MS,TREASURE_STAGGER_MS/(n-1)):0;
 /* A coin: how high its arc climbs above the higher end (a share of the coin's size), how high it hops back up off the purse, how flat
    it squashes as it hits. A crate: how far its path bulges from a straight line (a share of the larger of 1.4 crates and a third of
    the distance down — the measure the swap has always bowed by), its hop off the chip, its squash. */
-const COIN_ARC=2.1, COIN_BOUNCE=0.30, COIN_SQUASH=0.20;       // was 2.2 · 0.09 · 0.18
-const CRATE_BOW=0.70, CRATE_BOUNCE=0.16, CRATE_SQUASH=0.54;   // was 1.4 · 0.07 · 0.22
+const COIN_ARC=2.8, COIN_BOUNCE=0.32, COIN_SQUASH=0.24;       // was 2.2 · 0.09 · 0.18, then 2.1 · 0.30 · 0.20
+const CRATE_BOW=1.60, CRATE_BOUNCE=0.32, CRATE_SQUASH=0.54;   // was 1.4 · 0.07 · 0.22, then 0.70 · 0.16 · 0.54
 /* ⭐ ONE SMOOTH ARC FOR EVERYTHING THAT FLIES. Wyatt, 2026-09-16, on the tuner. The coins: "The coin's arc is too sharp -- it should
    be a smooth, pleasing curve, a parabola between the boat and the coin purse." The crates: "it should be a smooth clean parabola to
    look like the crate is being launched off the island and landing in your hold. this has jitter during the journey (about a 1/3 of
@@ -2218,7 +2218,7 @@ async function flyFromBoat(seat,coins,land){
    the game feel tuner". 2026-09-16 he picked from the three on the tuner: "the leaving I pick: B, Drop". So it is the one way now, and
    drawn as the tuner drew it — each coin lifts a little to its own side of the purse, tumbles, and falls away out of sight — only on the
    smooth arc every other flight uses, so it falls rather than turning a corner. A price bigger than SPEND_MAX shows SPEND_MAX coins. */
-export const SPEND_MS=690, SPEND_GAP_MS=140, SPEND_MAX=10, SPEND_SPREAD=0.5;   // was 620 · 70 · 5 · 0.6
+export const SPEND_MS=800, SPEND_GAP_MS=155, SPEND_MAX=5, SPEND_SPREAD=0.5;   // was 620 · 70 · 5 · 0.6, then 690 · 140 · 10 · 0.5
 export function coinsLeave(seat,coins){
   if(fxReduced())return;
   const box=$("coins"+seat),icon=box&&box.querySelector("img");
@@ -2252,6 +2252,24 @@ function chipIn(seat,src){
    ingredient icons; use the crate icons too. Please also do the same thing when a crate is purchased off an island -- the ingredient
    ON the crate should move into the hold, not just the ingredient on its own." The flying copy is the approved crate with the
    ingredient sitting on it, the way every hold draws them. */
+/* ⭐ THE CRATE THAT FLEW IS THE CRATE THAT LANDS. Wyatt, 2026-09-16, on his tuner: "the crate disappears completely instead of bouncing
+   or squashing". It did: the flying crate was removed the instant it arrived and the squash and hop were handed to the hold's own
+   chip — a different picture, and on the tuner an empty slot, so the eye saw a crate vanish and nothing land. Now the crate itself
+   flattens on contact and hops where it came down, and only when it is still does the chip it became show in the hold. One landing
+   for both flights that end in a hold, the crate bought off an island and the two crates of a trade. `flight` is the flight's own
+   animation; `h` the chip's height, `base` the crate's scale on arrival (it has shrunk to the chip's size on the way). */
+function landInHold(flight,im,chip,dx,dy,h,base){
+  const ms=Math.round(CRATE_FLY_MS*.3);
+  let shown=false;
+  const show=()=>{if(shown)return;shown=true;im.remove();chip.style.visibility="";};
+  const land=()=>{
+    if(!im.isConnected||typeof im.animate!=="function"){show();return;}
+    const hop=im.animate(hopFrames(dx.toFixed(1),dy.toFixed(1),h,CRATE_BOUNCE,CRATE_SQUASH,{base}),{duration:ms,easing:"linear",fill:"both",id:"crate-land"});
+    hop.onfinish=hop.oncancel=show;
+  };
+  flight.onfinish=land;flight.oncancel=show;
+  setTimeout(show,flight.effect.getComputedTiming().endTime+ms+400);   // a dropped animation never leaves a crate invisible in the hold
+}
 function flyingCrate(src){
   const d=document.createElement("div");d.className="ppCrateFly ppCrateBox";
   const im=document.createElement("img");im.src=src;im.alt="";d.appendChild(im);
@@ -2283,11 +2301,7 @@ export function tradeSwapTo(legs){
     const o=fixedOrigin(),cx0=o.x+leg.from.x+leg.from.w/2+dx*.5,half=leg.from.w*.6+6;
     const side=Math.max(half-cx0,Math.min(window.innerWidth-half-cx0,leg.bow*CRATE_BOW*Math.max(leg.from.w*1.4,Math.abs(dy)*0.35))),s=Math.max(.3,Math.min(2,to.w/leg.from.w));
     const a=im.animate(arcFrames(dx,dy,{side,at:(t,u)=>({scale:bez(t,u,1,1.4,s).toFixed(3)})}),{duration:SWAP_MS,easing:"linear",fill:"both",id:"trade-swap"});
-    let landed=false;
-    const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-      if(chip.isConnected&&typeof chip.animate==="function")chip.animate(hopFrames(0,0,to.h,CRATE_BOUNCE,CRATE_SQUASH),{duration:Math.round(CRATE_FLY_MS*.3),easing:"linear",id:"crate-land"});};
-    a.onfinish=land;a.oncancel=land;
-    setTimeout(land,SWAP_MS+400);
+    landInHold(a,im,chip,dx,dy,to.h,s);
   }
 }
 /* A TRADE'S COINS CROSS FROM ONE PURSE TO THE OTHER. Wyatt, 2026-09-14: "every coin you earn should fly over". The CEO found a trade's
@@ -2354,11 +2368,7 @@ export function crateFlightTo(f,seat){
      and a third of the way down above the higher end, falls into its chip, and the chip takes the squash and the hop. */
   const lift=CRATE_BOW*Math.max(f.rect.h*1.4,Math.abs(dy)*0.35);
   const a=im.animate(arcFrames(dx,dy,{lift,at:(t,u)=>({scale:bez(t,u,1,1.35,s).toFixed(3)})}),{duration:CRATE_FLY_MS,easing:"linear",fill:"both",id:"crate-fly"});
-  let landed=false;
-  const land=()=>{if(landed)return;landed=true;im.remove();chip.style.visibility="";
-    if(chip.isConnected&&typeof chip.animate==="function")chip.animate(hopFrames(0,0,cr.height,CRATE_BOUNCE,CRATE_SQUASH),{duration:Math.round(CRATE_FLY_MS*.3),easing:"linear",id:"crate-land"});};
-  a.onfinish=land;a.oncancel=land;
-  setTimeout(land,CRATE_FLY_MS+400);   // a dropped animation never leaves a crate invisible in the hold
+  landInHold(a,im,chip,dx,dy,cr.height,s);
 }
 export function render(){
   if(idlePlaceholder()){if(shipEls.length)hideShipsWhileIdle();return;}

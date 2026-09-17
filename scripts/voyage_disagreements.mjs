@@ -80,7 +80,10 @@ function selfTest(n) {
   const rate = seat0 => { let t = 0, a = 0; for (let s = 1; s <= n; s++) { const r = askVoyage(sailVoyage(s * 7919, seat0).rec); t += r.turns; a += r.agreed; } return t ? a / t : 0; };
   const same = sameTurns ? sameAgreed / sameTurns : 0, rusher = rate("rusher"), passer = rate("passer");
   console.log(`  2. against what was DONE: the same brain ${(100 * same).toFixed(1)}%, a rusher ${(100 * rusher).toFixed(1)}%, a captain who only passes ${(100 * passer).toFixed(1)}%`);
-  const ok = mapBad === 0 && fidelity >= 0.95 && same - passer >= 0.5;
+  let errorIsError = false;
+  try { readJson('{"error":"startAt not supported for with shallow GET"}', "self-test"); } catch (e) { errorIsError = /refused/.test(e.message); }
+  console.log(`  3. a database error ${errorIsError ? "stops the run" : "IS READ AS DATA — it would report zero voyages"}`);
+  const ok = mapBad === 0 && fidelity >= 0.95 && same - passer >= 0.5 && errorIsError;
   console.log(ok ? "\nTHE INSTRUMENT HOLDS — it rebuilds the board a bot planned on, and it tells a real turn from a wasted one."
                  : "\nTHE INSTRUMENT DOES NOT HOLD — do not read anything it says about a human.");
   return ok;
@@ -88,23 +91,32 @@ function selfTest(n) {
 
 /* ---------------------------------------------------------------------------------------------------------------
    THE PLAYERS' VOYAGES. */
-/* ONLY WHAT WAS LOGGED SINCE --since. A log's key is the millisecond it was written, so the database is asked for keys
-   from that moment on and nothing older is ever downloaded — the 588 logs from before the seed was recorded cannot be
-   asked about, and there is no reason to fetch a player's name along with one. */
+/* ONLY WHAT WAS LOGGED SINCE --since. A log's key is the millisecond it was written. Firebase will not order or range a keys-only read
+   (shallow=true refuses orderBy and startAt), so the keys are read bare — names only, never content — and filtered here, and only the
+   logs from that moment on are downloaded. The 585 logs from before the seed was recorded cannot be asked about, and there is no reason to
+   fetch a player's name along with one.
+   ⛔ A DATABASE ERROR IS AN ERROR, NEVER "NO VOYAGES". The first version sent shallow+startAt, the database answered {"error": ...}, and
+   the script read that object's one key, "error", as a list of zero voyages — reporting "0 voyage logs" with a straight face (2026-09-16).
+   readJson now throws on any error answer, and --selftest proves it does. */
+export function readJson(text, what) {
+  let j; try { j = JSON.parse(text); } catch (e) { throw new Error(`${what}: the database did not answer with JSON (${String(text).slice(0, 80)})`); }
+  if (j && typeof j === "object" && !Array.isArray(j) && typeof j.error === "string") throw new Error(`${what}: the database refused — ${j.error}`);
+  return j;
+}
 async function fromFirebase(since) {
   const from = Date.parse(since);
   if (!Number.isFinite(from)) { console.log("--firebase needs --since <date>, e.g. --since 2026-09-20"); process.exit(2); }
-  const q = `orderBy=${encodeURIComponent('"$key"')}&startAt=${encodeURIComponent(`"${from}"`)}&shallow=true`;
-  const keys = Object.keys(await (await fetch(`${DB}/gamelogs.json?${q}`)).json() || {})
+  const keys = Object.keys(readJson(await (await fetch(`${DB}/gamelogs.json?shallow=true`)).text(), "reading the voyage log keys") || {})
     .filter(k => /^\d+$/.test(k) && +k >= from).sort((a, b) => a - b);
   const recs = [];
   for (const k of keys) {
-    const rec = await (await fetch(`${DB}/gamelogs/${k}.json`)).json().catch(() => null);
+    const rec = readJson(await (await fetch(`${DB}/gamelogs/${k}.json`)).text(), `reading voyage log ${k}`);
     if (!rec) continue;
     delete rec.names;                               // never kept, never written, never shown
     if (!askable(rec)) continue;                    // a log from before 2026-09-16 has no seed: its map cannot be rebuilt
     recs.push({ key: k, rec });
   }
+  console.log(`${keys.length} voyage log(s) written since ${new Date(from).toISOString()}`);
   return recs;
 }
 function fromDir(dir) {

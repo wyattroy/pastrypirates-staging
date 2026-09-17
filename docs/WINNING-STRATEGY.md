@@ -134,6 +134,12 @@ brain and −33.8 for a lobotomised one), and the mechanism he named never appea
 in the game; the finding under it — that the bot's objective cannot see an off-recipe crate at all — is what to fix
 instead, and `src/engine/index.js` `wantsCrate` carries the note.
 
+**That fix was built the same day and won nothing either.** The bot's route planner learned to count two spares as
+a black-market crate, and to buy a crate when it shortened the voyage. It did so about 0.2 times a voyage, and
+nothing else moved: same days, same crates, barters still 0.13, edge +0.0 / +0.1 over 1000 voyages an arm on two
+seed sets. Reverted. One caveat keeps it open: the bots practise on the engine's voyage, which still starts with
+equal purses, has no crow's-nest calls and fights its own fight — re-run once those match the live game.
+
 ### Income is not a goal
 
 You need ~19🌕 and your five dock turns generate ~10🌕 at the dock this game actually pays (3 and 1

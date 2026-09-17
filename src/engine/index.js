@@ -2104,7 +2104,11 @@ class Game{
      just makes the bot spend money its own objective says was wasted. The honest fix is to let the objective
      SEE a spare — price tour3's bare-shelf leg in crates as well as coins, so two spares in the hold genuinely
      shorten the route — and then the buy falls out of the valuation, which is what principle 2 asks for.
-     Wyatt has the numbers; whoever builds that reads this paragraph first. */
+     THAT FIX WAS BUILT AND MEASURED THE SAME DAY, AND WON NOTHING (commit e8482ca1, reverted): tour3 priced a
+     black-market leg at two spares, and a buy was "worth" it when it shortened the voyage. It fired about 0.2
+     times a voyage; days, crates bought and barters (0.13) did not move, and the edge was +0.0 / +0.1 over 1000
+     voyages an arm on two seed sets. Caveat: measured on the engine's voyage, which in 2026-09 still differed
+     from the live one (equal purses, no crow's-nest calls, its own fight). Re-run it once those are one. */
   wantsCrate(p,ing,price){
     if(!this.cfg.dockBuy||price===null||price===undefined)return "";
     if(this.needs(p).includes(ing))return "needs";

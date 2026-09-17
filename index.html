@@ -1170,14 +1170,26 @@
      hover and the timing are all unchanged — transform-box/transform-origin go because an HTML box
      already scales about its own centre, and the colour moves from a `fill` attribute to a
      background. cqw units keep the geometry identical to the 640-unit board. */
-  .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer;
+  .sailCell { position: absolute; box-sizing: border-box; pointer-events: auto; cursor: pointer; overflow: hidden;
     background: #ffc23a; border-radius: 6px; opacity: .5;
-    animation: sailBounce 1.15s ease-in-out infinite, sailPop var(--sailPopMs, 440ms) ease-out backwards;   /* ONE number for the whole wave, set per square by flow.js SAIL_POP_MS — see there */
+    animation: sailBounce 1.15s ease-in-out infinite, sailPop var(--sailPopMs, 540ms) cubic-bezier(.25,.6,.35,1) backwards;   /* the wave's timing is set per square by flow.js SAIL_POP_MS — see there */
     transition: opacity .12s ease, filter .12s ease; }
-  /* THE SQUARES POP IN FROM THE BOAT OUTWARD — his game feel audit, PASSED (2026-09-13). LISTED LAST so its hidden start
-     wins over the bounce until each square's own --sailPopDelay (renderPickPrompt, by distance from the boat); `scale`,
-     so it composes with the bounce's transform. */
-  @keyframes sailPop { 0% { scale: .2; opacity: 0; } 60% { scale: 1.12; opacity: .8; } 100% { scale: 1; opacity: .5; } }
+  /* ⭐ SCALES ROLLED OUT FROM THE BOAT. Wyatt, 2026-09-16, on his tuner: "I want it to look flowier ... juicy, wavy, reflective, as if
+     shimmering fish scales are being rolled out from the boat. this looks horribly jagged, with no bounce or momentum -- but i want it."
+     Three things made it jagged, and each is answered here and in flow.js:
+       - a square's pop lasted exactly one ring's step, so each ring finished as the next began: steps, not a wave. It now lasts
+         three rings, so they overlap and roll;
+       - it eased out to a stop with one small overshoot: no momentum. It now springs — past full size, back under, settles;
+       - after the pop, every square breathed on a diagonal stripe pattern that had nothing to do with the boat (flow.js). The
+         breathing now starts with the pop, so it keeps rolling outward from the boat for as long as the squares are up.
+     Each square grows out of its edge nearest the boat (its transform-origin, flow.js), and a glint of light crosses it as it lands.
+     The pop is `scale` from 0, never opacity, so its hidden start (backwards fill) hides the square until its turn and the
+     breathing alone owns the opacity: nothing jumps when the pop hands over. LISTED LAST, so it wins over the bounce. */
+  @keyframes sailPop { 0% { scale: 0; } 42% { scale: 1.2; } 64% { scale: .93; } 83% { scale: 1.04; } 100% { scale: 1; } }
+  .sailCell::after { content: ""; position: absolute; inset: -20%; pointer-events: none; opacity: 0;
+    background: linear-gradient(115deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.9) 50%, rgba(255,255,255,0) 62%);
+    animation: sailGlint var(--sailPopMs, 540ms) ease-in-out calc(var(--sailPopDelay, 0ms) + var(--sailPopMs, 540ms) * .3) backwards; }
+  @keyframes sailGlint { 0% { translate: -70% 0; opacity: 0; } 35% { opacity: 1; } 100% { translate: 70% 0; opacity: 0; } }
   /* UI-04: a more distinct hover. Was opacity .85 + brightness 1.12 + a 4px glow, which on an
      already-pulsing square read as "slightly brighter" rather than "this one". Now the hovered
      square goes FULLY opaque, gains a white outline, and throws a wider two-stage glow — three cues
@@ -1195,7 +1207,7 @@
   @keyframes sailBounce {
     0%, 100% { transform: scale(1); opacity: var(--pulseLo, .5); }
     50%      { transform: scale(1.11); opacity: var(--pulseHi, .72); } }
-  @media (prefers-reduced-motion: reduce) { .sailCell { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .sailCell, .sailCell::after { animation: none; } }
   /* playtest 20: a sail square that sits in the TRADE-WIND RIM does not park you there — the
      current sweeps you to that arc's clockwise end (RULES-V2 line 24). It used to be drawn in the
      same amber as every other legal square, so the one square that costs you the rest of your turn

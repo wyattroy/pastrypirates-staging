@@ -613,8 +613,10 @@ export function sailHighlightRect(c,cellPx,svg){
   d.className="sailCell";
   d.style.left=CQ(c[0]*cellPx+inset); d.style.top=CQ(c[1]*cellPx+inset);
   d.style.width=CQ(side); d.style.height=CQ(side);
-  // two delays, one per animation in .sailCell's list: the bounce's stagger, then the pop-in's own (renderPickPrompt)
-  d.style.animationDelay=((c[0]+c[1])%4)*0.12+"s, var(--sailPopDelay, 0ms)";
+  /* two delays, one per animation in .sailCell's list, and they are the SAME: the breathing starts as the square pops, so it rolls
+     outward from the boat the way the pop did (renderPickPrompt sets --sailPopDelay). It used to be staggered by ((x+y)%4)*120ms, a
+     diagonal stripe pattern that had nothing to do with the boat — the "horribly jagged" half of his 2026-09-16 note (index.html). */
+  d.style.animationDelay="var(--sailPopDelay, 0ms), var(--sailPopDelay, 0ms)";
   // THE GRID COORDINATES, CARRIED. Two readers used to recover these by inverting the maths above
   // (camFitSail and the trade-wind preview, both in src/ui/stage.js) — a second copy of this
   // function's arithmetic that had to be kept in step with it by hand. They read these instead.
@@ -674,8 +676,11 @@ export function sailHighlightRect(c,cellPx,svg){
    Both were right, and not only on the tuner: the game timed each square by its straight-line distance from the boat, so squares one
    sail apart popped at different moments and the pop spread like a circle. Now a square's RING is how many sails of water it is from
    the boat — squares on the same ring pop together — and each ring starts one pop after the ring before, so the whole wave takes a pop
-   per ring. SAIL_POP_MS is the only number (index.html's sailPop reads it as --sailPopMs). 250 -> 375 -> 560 -> his 440. */
-const SAIL_POP_MS=440, SAIL_PRESS_MS=180;
+   per ring. SAIL_POP_MS is the only number (index.html's sailPop reads it as --sailPopMs). 250 -> 375 -> 560 -> his 440 -> his 180. */
+const SAIL_POP_MS=180, SAIL_PRESS_MS=180;   // was 440 — his tuner, 2026-09-16 (the step from one ring to the next)
+/* A square's pop lasts SAIL_POP_RINGS rings' steps, so each ring is still springing when the next begins: a wave, not a staircase. A
+   ratio, not a second number — his ruling was that the wave has one (index.html's sailPop has the whole story). */
+const SAIL_POP_RINGS=3;
 const sailReduced=()=>typeof matchMedia==="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches;
 function pressSailSquare(r){
   if(sailReduced()||typeof r.animate!=="function")return;
@@ -734,7 +739,9 @@ export function renderPickPrompt(spec,answer){
   squares.forEach(({c,stay})=>{
     const r=sailHighlightRect(c,cellPx,svg);
     r.style.setProperty("--sailPopDelay",(reach(c)*SAIL_POP_MS)+"ms");
-    r.style.setProperty("--sailPopMs",SAIL_POP_MS+"ms");
+    r.style.setProperty("--sailPopMs",(SAIL_POP_MS*SAIL_POP_RINGS)+"ms");
+    // it grows out of its edge nearest the boat, so the scales unroll away from the ship rather than swelling in place
+    if(spec.pos)r.style.transformOrigin=`${50-50*Math.sign(c[0]-spec.pos[0])}% ${50-50*Math.sign(c[1]-spec.pos[1])}%`;
     if(stay){
       r.classList.remove("sailSwept");delete r.dataset.sweptTo;
       r.classList.add("pp4StayCell");
