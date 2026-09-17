@@ -13,20 +13,24 @@
 // build. That is deliberate: a pure derivation with a discipline-only promise of purity is a
 // promise that gets broken by the first convenient import.
 //
-// WHAT IT DOES NOT DO: it never writes anything. The writer for the active seat is
-// applyActiveSeat() in src/ui/util.js — one derivation here, one writer there.
+// WHAT IT DOES NOT DO: it never writes anything. "Whose turn is it" has NO writer at all any more —
+// it is read, by every surface, from turnShown() below (architecture item 3, 2026-09-16).
 //
 // FIRST INHABITANT (2026-08-31): the active seat. It was derived in three places; two of them
-// now call in here. The third — consumeEvent()'s applyActiveSeat(e.p) — is deliberately NOT
-// rerouted, and the reason is in the note on deriveActiveSeat below.
+// called in here, and the third — consumeEvent()'s applyActiveSeat(e.p), which every prompt also
+// wrote — was left out on purpose until it could be measured. Item 3 measured it and deleted it:
+// see the note on turnShown below.
 
 /* WHICH EVENTS ESTABLISH WHOSE TURN IT IS.
    Extracted verbatim from the private backward walk that lived in src/ui/board.js, where the
    list was earned rather than guessed: the walk originally knew only about `turn`, and a bake
    is not a turn — the engine emits {t:"ovens",p} when a captain steps up and {t:"bake",p} for
    each attempt — so during a bake the most recent `turn` was still the PREVIOUS captain's and
-   the ring pointed at them. `ovens` and `bake` are in this list because of that. */
-export const TURN_ESTABLISHING = Object.freeze(["turn", "ovens", "bake"]);
+   the ring pointed at them. `ovens` and `bake` are in this list because of that.
+   `bakeTurn` (architecture item 3, 2026-09-16) is the engine's record that a baking captain's turn has
+   BEGUN — on every day after the one they arrive, nothing else is recorded until the attempt is scored,
+   so without it the whole bench still named the previous captain. */
+export const TURN_ESTABLISHING = Object.freeze(["turn", "ovens", "bakeTurn", "bake"]);
 
 /* WHERE THE WALK STOPS. A new round is a clean slate: nothing before it establishes whose turn
    it is now. Walking past it would resurrect the previous round's last captain. */
@@ -76,12 +80,13 @@ export function normalizeSeat(seat, seatCount) {
    the guest, returning null on the 46 samples whose event carries no seat. It is not a second
    opinion about the active seat; it is the same answer, computed from the stream.
 
-   WHY consumeEvent() DOES NOT CALL THIS, and do not "converge" it without measuring first.
-   src/orchestrator.js:1601 runs applyActiveSeat(e.p) for the event it is consuming, and `p`
-   rides turn/sail/dock/pass/attack — a WIDER set than TURN_ESTABLISHING. Routing that call
-   through this walk would narrow it, which is a behaviour change to the one consumer both tiers
-   run, on a path that was measured correct. Two questions, honestly distinct: consumeEvent asks
-   "which seat does THIS event name", this asks "who holds the turn at this playhead". */
+   "WHICH SEAT DOES THIS EVENT NAME" WAS NEVER THIS QUESTION, AND IT IS GONE. A note here once said
+   consumeEvent's applyActiveSeat(e.p) must not be converged without measuring first, because `p`
+   rides a WIDER set of events than this list. Architecture item 3 (2026-09-16) measured it: that
+   wider answer is exactly what moved the top bar off the attacker to the defender's coin and each
+   crow's-nest caller — against his ruling, "The top bar shows whose turn it is -- which is the
+   active player who decided to attack. this does not need to change during a battle; it should
+   not." So the top bar reads this walk too now (through turnShown), and the consumer line is deleted. */
 export function deriveActiveSeat(events, playhead, opts) {
   if (!Array.isArray(events)) return null;
   const lookback = (opts && Number.isInteger(opts.lookback)) ? opts.lookback : DEFAULT_LOOKBACK;
@@ -101,6 +106,38 @@ export function deriveActiveSeat(events, playhead, opts) {
     if (TURN_BOUNDARY.includes(e.t)) return null;
   }
   return null;
+}
+
+/* WHOSE TURN THE SCREEN SHOWS — THE ONE ANSWER (architecture item 3, 2026-09-16).
+   The top bar, the ring, the captains-box highlight, the pass-and-play row order, the bobbing boat and
+   the "Check my recipe" button all read THIS, through one helper (src/ui/util.js whoseTurn). There
+   used to be four answers: this walk for the ring/box/order, a slot every PROMPT wrote for the top bar
+   (so the defender's flip moved it), the `turn` event alone for the bob (so it stayed on the previous
+   captain through a bake), and a flag humanTurn set for Check my recipe.
+   TWO NAMED INPUTS, NOTHING ELSE:
+     - the event stream at the playhead — who holds the turn (deriveActiveSeat above);
+     - `askedSeat` — the captain a prompt on THIS screen is asking right now, or null. It is published
+       only by the one door a local prompt comes through (raiseLocalPrompt), and it never decides
+       whose turn it is once the recipes are set.
+   THE RECIPE DRAFT IS ITS OWN PHASE — everything before the engine records the chosen recipes
+   (`recipeSet`): the Ahoy card and the draft itself, including a shared device's hand-over cards
+   between two captains choosing (passGate asks the captain holding the device to pass it on). Nobody
+   holds a turn yet, so the screen shows the captain it is ASKING — his settled call (2026-09-16,
+   relayed by Mac: Dev): the draft's top bar keeps exactly what it showed. Each screen asks its own
+   captain in a crew game, and a shared device asks one captain at a time, so this is a rule that
+   takes the viewer as an input, not two rules. Once the recipes are set, the stream answers: nobody
+   holds a turn until the first captain takes one, and nobody is shown.
+   A FINISHED CAPTAIN HOLDS NO TURN: the `done` filter the ring and the box always applied lives here
+   now, read off the snapshot at the playhead, so no surface can apply it and another forget it.
+   scripts/qa/whose_turn_shown_once_check.mjs holds all of this. */
+export function turnShown({ events, playhead, askedSeat }) {
+  if (!Array.isArray(events)) return null;
+  if (!events.some(e => e && e.t === "recipeSet")) return askedSeat == null ? null : askedSeat;
+  const seat = deriveActiveSeat(events, playhead);
+  if (seat == null) return null;
+  const at = Number.isInteger(playhead) ? events[Math.min(playhead, events.length - 1)] : null;
+  const st = at && at.state;
+  return st && st[seat] && st[seat].done ? null : seat;
 }
 
 /* ============================================================================

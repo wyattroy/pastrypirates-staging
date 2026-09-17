@@ -28,7 +28,14 @@
 // all read it. Nothing else in either body moved.
 // (This paragraph said "nothing else in either body moved" while render()'s body had moved a second
 // time — caught by CEO review 40. The header is what the unruled-exception gate blesses, so a
-// header that is behind its own region is the one comment in this file that must never be stale.) The same fact was being derived FIVE times in three files; it is now
+// header that is behind its own region is the one comment in this file that must never be stale.)
+// AND ARCHITECTURE ITEM 3 (2026-09-16), under his ruling on what "architectural" means (DECISIONS.md, 2026-09-16:
+// "Make that count ONE: send every existing path through it and delete the copies"): render()'s and
+// renderLiveShips()'s whose-turn read is now whoseTurn() (src/ui/util.js) — the same deriveActiveSeat walk, with the
+// `done` filter both bodies applied moved INTO the helper — so the top bar, the bob and Check my recipe read the one
+// answer the ring and the box read. render() also reads it BEFORE its rows loop now, because Check my recipe needs it
+// there. Same kind of edit as the paragraph above: a function call returning the same value, no layer, no animation.
+// The same fact was being derived FIVE times in three files; it is now
 // derived once, and the shared module is a leaf tier that scripts/module_graph_check.js forbids
 // from importing src/ui/ or src/state/ at all.
 // WHY THAT IS SAFE, in BUG-01's own terms — the same test the two exceptions below apply. BUG-01
@@ -154,8 +161,8 @@ import {
   assignBadges, pname, pn, buildPlayerRows, applyCaptainOrder, SHIP_GLIDE_MS, vwPx, vhPx, say, seat, fixedOrigin,
   fitHold,   // 2026-09-11: every hold on one line (his check-9 note)
   fitRecipeName,   // 2026-09-12: the recipe's name at the largest size that fits its card
+  whoseTurn,       // architecture item 3: the ONE answer to whose turn the screen shows
 } from "./util.js";
-import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
 import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playCoinChink, playAwardWhoosh } from "./audio.js";
@@ -647,7 +654,18 @@ export function stopTurnBob(){
   turnBob.pic.remove();
   turnBob=null;
 }
-export function bobShip(seat){
+/* THE BOAT WHOSE TURN IT IS — read from the one helper (architecture item 3, 2026-09-16). It used to start only on a `turn`
+   event (orchestrator.js consumeEvent, `bobShip(e.p)`), a fourth answer to whose turn it is: it kept bobbing the PREVIOUS
+   captain through every bake while the ring and the box had moved to the baker. Called by the one event consumer after
+   every event; it changes nothing while the answer has not changed, and stops when nobody holds a turn (a new day before
+   its first captain, the voyage over). */
+export function bobTheTurn(){
+  const seat=whoseTurn();
+  if(seat===(turnBob?turnBob.seat:null))return;
+  if(seat==null){stopTurnBob();return;}
+  bobShip(seat);
+}
+function bobShip(seat){
   stopTurnBob();
   const g=shipEls[seat], im=g&&g.querySelector("image"), host=$("bobHost");   // NOT dockCoinHost: that layer is above the weather, and a boat must not be (index.html #bobHost)
   if(!im||!host||!cell||typeof im.animate!=="function")return;
@@ -1859,7 +1877,7 @@ export function renderLiveShips(){
     if(chatBubbles[i])positionChatBubble(i,x,y); // keep an active chat bubble riding along with its boat
   });
   // the active-turn ripple has to travel with the ship it's ringing, or it's left behind mid-push.
-  // G14: the whose-turn-is-it scan now lives in activeTurnSeat() below, shared with paintShipAt().
+  // G14: the whose-turn-is-it scan lives in whoseTurn() (util.js, architecture item 3), shared with paintShipAt().
   // CORRECTED 2026-08-31: the two copies are NOT identical and have not been since ovens/bake was
   // added to render()'s alone. Both now call one walk (shared/storyboard.js); they differ only in
   // the event list each passes, which is stated at each call site instead of hidden in a loop body.
@@ -1868,8 +1886,8 @@ export function renderLiveShips(){
   // Safari storm-crash fix). render() KEEPS its own copy and is still NOT touched; extracting the
   // duplicate out of THIS function removes the second copy rather than adding a third.
   if(activeRing){
-    const a=activeTurnSeat();
-    if(a!=null&&live[a]&&!live[a].done){
+    const a=whoseTurn();   // the one answer — its `done` filter included (util.js, architecture item 3)
+    if(a!=null&&live[a]){
       const [ax,ay]=shipXY(live[a].pos,a,live,cell);
       ringTo(a,ax,ay);
     }
@@ -1913,19 +1931,8 @@ function ringTo(seat,x,y){
   if(activeRing.style.transition!==want)activeRing.style.transition=want;
   activeRing.style.transform=xf;
 }
-// G14: which seat currently owns the turn, by walking back from the current event to the nearest
-// `turn` (stopping at a round boundary). Extracted from renderLiveShips so paintShipAt can ring the
-// right ship too. render() has an identical inline copy which is deliberately LEFT ALONE — see the
-// file header's BYTE-IDENTICAL rule.
-/* ONE WALK (2026-08-31). This was the FOURTH private copy of the backward scan, found by the
-   sweep. It now shares the walk in src/shared/storyboard.js, which has one rule and no options
-   what it was — this scan has never known about ovens/bake, unlike render()'s — and the split is
-   now VISIBLE at this one line instead of being a silent difference between two lookalike loops. */
-function activeTurnSeat(){
-  // TURN_ESTABLISHING, moved here with render()'s copy on 2026-08-31 — "rings follow active player
-  // the whole game with no exception including during bakeoff". The gate keeps these two in step.
-  return deriveActiveSeat(appState.game.events,appState.evIdx);
-}
+/* (activeTurnSeat() stood here — a private wrapper around the shared walk, "G14: which seat currently owns the turn".
+   Architecture item 3 (2026-09-16) replaced every call with whoseTurn() in util.js: one helper, read by every surface.) */
 // G14 (Wyatt-approved 2026-07-30): move ONE ship element to an arbitrary cell, without touching game
 // state or the event stream. The per-square painter behind the trade-wind rim sweep.
 //
@@ -1992,7 +1999,7 @@ function shipGlideCss(ms,ease){ return `${ms}ms ${ease||SHIP_GLIDE_EASE}`; }
    Restores whatever transitions were in force, so a caller can arm its own glide afterwards. */
 export function snapShipTo(seat,c){
   if(!shipEls.length||!shipEls[seat])return;
-  const ringing=activeRing&&activeTurnSeat()===seat;
+  const ringing=activeRing&&whoseTurn()===seat;
   const prevShip=shipEls[seat].style.transition;
   const prevRing=ringing?activeRing.style.transition:null;
   shipEls[seat].style.transition="none";
@@ -2007,7 +2014,7 @@ export function setShipGlideMs(seat,ms,ease){
   if(!shipEls.length||!shipEls[seat])return;
   const css=`transform ${shipGlideCss(ms==null?SHIP_GLIDE_MS:ms,ms==null?null:ease)}`;
   shipEls[seat].style.transition=css;
-  if(activeRing&&activeTurnSeat()===seat)activeRing.style.transition=ms==null?"":css;
+  if(activeRing&&whoseTurn()===seat)activeRing.style.transition=ms==null?"":css;
 }
 // Move one ship to an arbitrary FRACTIONAL cell position — the sub-square painter behind the smooth
 // trade-wind arc. paintShipAt() below can only address whole cells, which is precisely the
@@ -2023,7 +2030,7 @@ export function paintShipAtPoint(seat,fx,fy){
   const x=(fx+.5)*cell, y=(fy+.5)*cell;
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y);
-  if(activeRing&&activeTurnSeat()===seat)ringTo(seat,x,y);
+  if(activeRing&&whoseTurn()===seat)ringTo(seat,x,y);
 }
 export function paintShipAt(seat,c){
   if(appState.replaying)return;
@@ -2035,7 +2042,7 @@ export function paintShipAt(seat,c){
   const [x,y]=shipXY(c,seat,st,cell);
   shipEls[seat].style.transform=`translate(${x}px,${y}px)`;
   if(chatBubbles[seat])positionChatBubble(seat,x,y); // the bubble rides along, as renderLiveShips does
-  if(activeRing&&activeTurnSeat()===seat)ringTo(seat,x,y);
+  if(activeRing&&whoseTurn()===seat)ringTo(seat,x,y);
 }
 /* ONE PLACE DRAWS A PURSE (rule 23 / DISPLAY-RULES §1).
    These four lines lived inline in render(), which was fine while render() was the only thing that
@@ -2447,6 +2454,9 @@ export function render(){
   const humanIdxs=appState.game.players.map((player,i)=>player.strategy==="human"?i:-1).filter(i=>i>=0);
   const youIdx=humanIdxs.length===1?humanIdxs[0]:-1;
   const spectator=humanIdxs.length===0;
+  /* WHOSE TURN IT IS, READ ONCE, BEFORE THE ROWS — the ring, the captains-box highlight, the pass-and-play row order and
+     "Check my recipe" all take it from this one name (architecture item 3; the long notes on why are at the ring below). */
+  const active=whoseTurn();
   let bandHtml="";   // the viewer's recipe, for #capRecipeBand — filled by the loop, written once after it
   appState.game.players.forEach((player,i)=>{
     const [x,y]=shipXY(st[i].pos,i,st,cell);
@@ -2491,9 +2501,14 @@ export function render(){
     /* WHO IS LOOKING is read ONCE, here, and every secrecy decision below takes it from these two
        names — the two rules, and the band. It used to be read inline in each rule's call, so adding
        the band would have been a third read of the same fact in a file that draws (mode_fork_check). */
-    const mine=i===appState.mySeat, sharedDevice=appState.passAndPlay;
+    /* WHILE A SHARED DEVICE IS CHANGING HANDS IT BELONGS TO NO CAPTAIN (appState.handOver, set by passGate for the length of its
+       card). Nothing else said so: "Check my recipe" used to be kept off the hand-over by humanTurn clearing a flag of its own
+       (appState.activeTurnSeat) when its turn ended. It reads whose turn it is now (architecture item 3), and the event stream
+       still names the OUTGOING captain until the incoming one's turn is recorded — which must wait for the tap. So the
+       hand-over itself says the device is between captains, and the band stays the blank strip it always was there. */
+    const mine=i===appState.mySeat&&appState.handOver==null, sharedDevice=appState.passAndPlay;
     const canReveal=mayRevealRecipe({isMySeat:mine,spectator,sharedDevice,askedThisTurn:appState.recipeRevealed});
-    const offerCheckBtn=offersRecipeCheck({isMySeat:mine,isActiveSeat:i===appState.activeTurnSeat,sharedDevice,askedThisTurn:appState.recipeRevealed});
+    const offerCheckBtn=offersRecipeCheck({isMySeat:mine,isActiveSeat:i===active,sharedDevice,askedThisTurn:appState.recipeRevealed});
     /* ⭐ YOUR RECIPE LIVES IN THE BAND, NOT IN YOUR ROW — Wyatt's Q4 ruling, 2026-09-10: "A header
        band across the top of the plaque — above all the captain rows. Coins and crates are facts
        about the table; a recipe is a fact about you." So every row, yours included, shows the same
@@ -2614,7 +2629,7 @@ export function render(){
      So the ring, the captains-box highlight and the pass-and-play row order all read THIS value,
      derived once from TURN_ESTABLISHING — the list that counts `ovens` and `bake`, because during
      a bake the captain at the ovens IS the active player. renderLiveShips()'s ring reads the same
-     list through activeTurnSeat().
+     list through activeTurnSeat() — whoseTurn() since architecture item 3.
 
      THE HISTORY, because two reversals in one day is exactly what a later reader will mistake for
      drift. Earlier today he ruled "no ripple ring in the ovens", which was applied to the ring and
@@ -2632,8 +2647,12 @@ export function render(){
      scripts/qa/ripple_one_answer_check.mjs fails the build if any surface comes apart from the
      others — it asserts AGREEMENT first and the current ruling second, which is what let this
      reversal be a one-line change instead of an argument. */
-  let active=deriveActiveSeat(appState.game.events,appState.evIdx);
-  if(active!=null&&st[active].done)active=null;
+  /* ⭐ AND THE TOP BAR, THE BOB AND CHECK MY RECIPE READ IT TOO — architecture item 3, 2026-09-16. `active` is whoseTurn(),
+     read once above the rows: the same walk, with the `done` filter that stood on the next line moved INTO the helper, so no
+     surface can apply it and another forget it. The top bar used to draw a slot every prompt wrote (the "TWO independent
+     answers" the T-09 note above names), and it moved to the defender's coin mid-fight. His ruling, 2026-09-16: "The top
+     bar shows whose turn it is -- which is the active player who decided to attack. this does not need to change during a
+     battle; it should not." scripts/qa/whose_turn_shown_once_check.mjs holds all six surfaces to this one read. */
   if(activeRing){
     if(active!=null){
       const [ax,ay]=shipXY(st[active].pos,active,st,cell);
@@ -3074,9 +3093,10 @@ export function syncBoardSizing(){
       that latency. No two flips were alike because no two resumptions were.
 
    THE CLOCK IS STAMPED WHERE THE SPIN IS PAINTED, which is here — `setFlipCoin("spin")` is the one
-   spelling of a spinning coin in the whole game, reached by the dock tap, by broadcastFlip, and by
-   a guest's Firebase listener alike. Every caller then waits the REMAINDER of FLIP_SPIN_MS, so the
-   length on screen is the same however slow the chain that got there was.
+   spelling of a spinning coin in the whole game, and since architecture item 6 (2026-09-17) it is
+   reached from exactly one place: the tap (armFlipTap, below), for every flip kind on every tier.
+   The landing (landFlipCoin) waits the REMAINDER of FLIP_SPIN_MS, so the length on screen is the
+   same however slow the chain that got there was.
 
    ONE CLOCK, THREE WAITS, and the split is deliberate: this module owns WHEN the spin began and
    HOW LONG a flip lasts; each call site owns HOW it waits, through its own `sleep`, which is what
@@ -3152,9 +3172,9 @@ export function setFlipCoin(state){
   const el=$("flipCoinWrap");if(!el)return;
   // see ceremonyHoldsTheCoin() below — only a BLANKING is deferred, never a face and never a spin
   if(state==="wait"&&ceremonyHoldsTheCoin())return;
-  // IDEMPOTENT for "spin", because the tap now paints it and broadcastFlip repaints it a beat
-  // later (setFlipActive below) — re-entering the state ye are already in must not re-play the
-  // sound, or every flip is heard twice.
+  // IDEMPOTENT for "spin": re-entering the state ye are already in must not re-play the sound, or a flip
+  // is heard twice. (The repaint this guarded against — broadcastFlip's, a beat after the tap — is gone
+  // with architecture item 6; the guard stays because it costs nothing and a second paint must never ring.)
   const wasSpin=el.classList.contains("spin");
   /* THE SPIN SOUND STOPS HERE, ON THE ONE LINE THAT ENDS EVERY SPIN. Every state change clears the
      classes through this line — a landed face, a re-arm, a disarm, a cancelled prompt — so stopping
@@ -3167,8 +3187,8 @@ export function setFlipCoin(state){
   if(state==="H"){el.classList.add("heads");el.style.backgroundImage=`url(${FLIP_HEADS_IMG})`;el.textContent="";}
   else if(state==="T"){el.classList.add("tails");el.style.backgroundImage=`url(${FLIP_TAILS_IMG})`;el.textContent="";}
   // D-49: the flip's clock starts on the frame the spin is PAINTED, and only on the frame it
-  // actually starts — the `wasSpin` guard that already stops the sound doubling is the same
-  // guard that stops broadcastFlip's repaint a beat later restarting the timer under the tap.
+  // actually starts — the `wasSpin` guard that stops the sound doubling also stops a repaint
+  // restarting the timer under the tap.
   else if(state==="spin"){el.classList.add("spin");el.style.backgroundImage=`url(${COIN_SPIN_IMG})`;el.textContent="";if(!wasSpin){flipSpinAt=performance.now();startFlipSpinSound();}}
   else{el.classList.add("wait");el.textContent="";}
 }
@@ -3178,15 +3198,15 @@ export function setFlipCoin(state){
    veil coming down clear it."
 
    IT WAS TWO CLOCKS DISAGREEING, and the arithmetic is the whole bug:
-     the battle flow holds the landed face  FLIP_LAND_HOLD_MS = 800ms, then calls broadcastFlip("wait")
+     the flip holds the landed face         FLIP_LAND_HOLD_MS = 800ms, then clears it (landFlipCoin, since item 6)
      the ceremony holds the veil up         CER_REVEAL_MS    = 1100ms, then tears down
    So for 300ms the stage stood there with a blank coin on it. Shortening the veil would have fixed
    the symptom and left two clocks to drift; his answer removes one of them instead.
 
    SO WHILE A CEREMONY IS STANDING, A CLEAR IS THE CEREMONY'S TO MAKE. cerTeardown() does it as the
    veil leaves, so the face is on screen for every frame the stage is. A landed face is NOT
-   suppressed here — only the blanking — so nothing can hide a result. And the wire write in
-   broadcastFlip() is untouched: a guest with no veil of its own still resets normally. */
+   suppressed here — only the blanking — so nothing can hide a result. (A screen with no veil of its
+   own still resets normally: landFlipCoin's "wait" goes straight through.) */
 function ceremonyHoldsTheCoin(){
   return typeof document !== "undefined" && document.body && document.body.classList.contains("pp4Cer");
 }
@@ -3210,4 +3230,35 @@ export function setFlipActive(onClick){
      that still clears it for the spin. */
   else{const wasArmed=el.classList.contains("active");el.classList.remove("active");el.onclick=null;
     if(!(ceremonyHoldsTheCoin()&&!wasArmed)){el.style.backgroundImage="";el.textContent="";}}
+}
+
+/* ⭐ ONE COIN FLIP, ONE PIPE — architecture item 6, 2026-09-17. Wyatt, playing build .5: "it seems like the coin flip sound is being
+   played twice." MEASURED before this change (headless, the sample's starts counted): a bot's fight flip on a solo phone started the
+   spin sound TWICE in the same millisecond, and a crew guest watching the host's fight flip heard it twice, 696ms apart. A flip reached
+   another screen by two routes — the `flip` node (broadcastFlip -> watchFlip -> setFlipCoin("spin"), whose big coin is hidden on the
+   stage, so its only effect there was the sound) and the `coinflip` event (-> the small coin, which plays the sound too) — and it was
+   tossed by three routines (humanFlip, hFlip, bFlip) that each slept, broadcast and held on their own.
+   NOW: a flip is decided and recorded by flow.js flipFor (the one toss), the one event consumer draws it on every screen, and these
+   two are the only halves a screen can play:
+     · armFlipTap  — THE TAP STARTS THE SPIN, for every flip kind (a dock, a fight's attacker or defender, the host's screen or a
+                     guest's). It used to be written for the ordinary flip only (renderAskPrompt, "THE TAP IS THE FLIP"); both fight taps
+                     skipped it and waited for the host — a crew guest's own fight coin sat still ~118ms (measured) until the wire
+                     brought the spin back. The sound starts with the picture, here, on the screen that tapped.
+     · landFlipCoin — the screen that tapped lands its big coin on the face the engine recorded, when the consumer reaches that
+                     coinflip: the rest of the spin, the face, the hold, the clear. Every other screen draws the small coin over the
+                     boat instead (dockcoin.js flipDockCoin), which starts its own spin sound — the ONE starter for a flip this screen
+                     did not make. scripts/qa/coin_flip_one_pipe_check.mjs holds all of it.
+   The ORDER inside the tap is today's ordinary-flip order and it matters: disarm first (the flip stage launches only off an ARMED
+   coin — stage.js flipArmed), then the answer, then the spin (a later disarm inside the answer must not blank a spinning coin). */
+export function armFlipTap(onTap){
+  setFlipActive(()=>{setFlipActive(null);onTap();setFlipCoin("spin");});
+}
+/* `sleep` is the caller's (the consumer's replay- and fast-forward-aware one) — the same split D-49 describes above: this module owns
+   how long a flip lasts, the caller owns how it waits. */
+export async function landFlipCoin(heads,sleep){
+  await sleep(flipSpinLeftMs());
+  setFlipCoin(heads?"H":"T");
+  // playtest 13 / T-34: the landed face holds FLIP_LAND_HOLD_MS, the one hold the small coin waits out too
+  await sleep(FLIP_LAND_HOLD_MS);
+  setFlipCoin("wait");
 }

@@ -66,33 +66,39 @@ hold curve against the same field. Verified both-sides in 02.15-01: the wait lin
 screen after nine seconds — past where the ordinary 2550–6750ms hold curve would have retired it —
 on both host and guest, then replaced together.
 
-### The active seat — `applyActiveSeat()`
+### Whose turn the screen shows — `whoseTurn()` (architecture item 3, 2026-09-16)
 
-**Entry point:** `applyActiveSeat(seat)`, `src/ui/util.js`. The ONE function that sets both
-`appState.curSeat` (drives the ribbon) and `S.activeSeat` (drives the camera), so the two can never
-be aimed differently:
+**Entry point:** `whoseTurn()`, `src/ui/util.js`, over the pure rule `turnShown()` in
+`src/shared/storyboard.js`. **Nothing writes whose turn it is** — every surface reads it: the top bar
+and the ⏩ chip beside it (`stage.js` ribbonTick), the ring, the captains-box highlight and the
+pass-and-play row order (`board.js` render / renderLiveShips), the bobbing boat (`board.js`
+bobTheTurn, called by the one event consumer) and "Check my recipe" (`board.js` render).
 
-```js
-export function applyActiveSeat(seat){
-  if(seat==null)return;
-  const ps=appState.game&&appState.game.players;
-  if(!ps||!(seat>=0&&seat<ps.length))return;
-  setActor(seat);
-  if(window.__pp4)window.__pp4.actor(seat);
-}
-```
+Two named inputs, nothing else:
+- **the event stream at the playhead** — the latest `turn`, `ovens`, `bakeTurn` or `bake` since the
+  day began (`deriveActiveSeat`), and a captain who has finished holds no turn;
+- **`appState.askedSeat`** — the captain a prompt on THIS screen is asking right now, written only by
+  `raiseLocalPrompt(seat, draw)` (util.js), the one door a local prompt comes through (a pass-and-play
+  hand-over card goes through it too, asking the captain holding the device). It decides the answer for
+  one phase only: **the recipe draft** (with the Ahoy card before it), until the engine records the
+  chosen recipes — his settled call that the draft's top bar keeps what it showed.
 
-Called by the host's turn loop (`humanTurn`/`botTurn`) and by `watchEvents`, reading the `p` field
-every meaningful event already carries (`turn`/`sail`/`dock`/`pass`/`attack`). **No engine change**
-— `ev()` records no actor field, this reads an existing one. Two guards, both deliberate: an event
-carrying no seat (`newround`, `end`) leaves the indicator alone rather than blanking it, and the seat
-is bounded to the known range before use as an index (T-02.2-08) — the `ev` node is
-host-authoritative, the same trust already relied on for board positions, but a bounded index costs
-nothing and a trusted one eventually does.
+**What it replaced:** `applyActiveSeat(seat)` wrote a slot (`appState.curSeat` and stage.js's
+`S.activeSeat`) that the top bar drew, from 19 callers — most of them for whoever was being ASKED, and
+the event consumer for whichever seat each event named — so the defender's coin and each crow's-nest
+caller moved the top bar off the attacker. His ruling, 2026-09-16: *"The top bar shows whose turn it is
+-- which is the active player who decided to attack. this does not need to change during a battle; it
+should not."* `ask(seat, msg, …)` now takes who it asks as its first argument.
 
-**`setActor(seat)`** is a one-line assignment to `appState.curSeat`, not a renderer — it is
-`SUPERSEDED` in the parity gate, reached through `applyActiveSeat` on both tiers. Promoted to shared
-in **02.15-01 Stage 2**.
+**A baking captain's turn is recorded** (`Game.bakeTurn` → `{t:"bakeTurn",p}`), after the hand-over, at
+the start of every attempt — otherwise the bench had no record of its own until it was scored.
+
+**While a shared device changes hands** (`passGate`'s card, `appState.handOver`) it belongs to no
+captain, so the outgoing captain's "Check my recipe" is not offered on the hand-over card.
+
+Gates: `scripts/qa/whose_turn_shown_once_check.mjs` (every surface reads the one helper; nothing writes
+the turn; posed streams), `scripts/qa/whose_turn_one_fact_check.mjs` (one writer of who is being asked),
+`scripts/qa/handover_before_turn_check.mjs` (the device changes hands before the screen changes captain).
 
 ### The sail prompt — `renderPickPrompt()` (02.15-02 Task 3, THE TRACER — first prompt-channel fork converged)
 

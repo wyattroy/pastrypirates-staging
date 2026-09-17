@@ -82,7 +82,7 @@ const pose = async () => ev(`(async()=>{ const {st,flow,board}=window.__G; const
   const seat=st.mySeat??0, p=g.players[seat];
   p.pos=[(g.cfg.grid/2|0),(g.cfg.grid/2|0)]; board.paintShipAt(seat,p.pos);
   await new Promise(r=>setTimeout(r,700));
-  const cells=g.reachableFrom(p)||[]; const cellPx=640/g.cfg.grid; const svg=document.getElementById('board');
+  const cells=g.sailChoices(p)||[];   /* the sail window's own call (architecture item 18) */ const cellPx=640/g.cfg.grid; const svg=document.getElementById('board');
   for(const cc of cells) flow.sailHighlightRect(cc,cellPx,svg);
   window.__pp4.subject=seat; window.__pp4.narr("Ahoy, Davy Scones — yer turn!");
   return {sails:document.querySelectorAll('.sailCell').length}; })()`);

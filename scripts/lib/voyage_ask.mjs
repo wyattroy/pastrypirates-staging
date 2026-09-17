@@ -112,11 +112,11 @@ const asBots = (g, s, askAs) => { for (const q of g.players) if (q.strategy === 
    its OWN brain had sailed, a bot disagreed on 35 of 302 turns (11.6%) — 16 of them wanting to open a trade the real bot
    had just been refused, 8 wanting a fight it was on a rematch cooldown for. None of that is a secret: every refusal,
    trade and fight happened in front of the table, and principle 5 allows "the whole history of what everyone did".
-   So it is replayed with the ENGINE'S OWN recorders — recordSkirmish, rememberRefusal, noteDemand (the table's public
+   So it is replayed with the ENGINE'S OWN recorders — recordSkirmish, rememberHail (the one memory of a hail), noteDemand (the table's public
    record of what each captain has been seen chasing, which every offer's price and every read of an answer leans on),
    the gaveAway stamp settleTrade writes — never a copy of their rules. The refusals are the one re-derivation: the log says an offer was hailed, not
-   who said no, so the responses are asked again on the board as it stood (composeOffer, collectResponses and
-   offerWorthTurns only read and return — checked, 2026-09-16). Walks events [from, to). */
+   who said no, so the responses are asked again on the board as it stood (composeOffer and collectResponses
+   only read and return — checked, 2026-09-16). Walks events [from, to). */
 export function replayMemory(g, E, from, to) {
   for (let j = from; j < to; j++) {
     const x = E[j];
@@ -139,15 +139,10 @@ export function replayMemory(g, E, from, to) {
       const p = g.players[x.p], offer = g.composeOffer(p, x.want);
       g.noteDemand(p, x.want, 1);                                         // tryTrade notes the ask BEFORE anyone answers
       if (!offer) continue;
-      const responses = g.collectResponses(offer, p).filter(r => !offer.audience || offer.audience.includes(r.q.idx));
-      const worth = g.offerWorthTurns(p, offer);
-      for (const r of responses) if (r.kind === "deny") {
-        g.rememberRefusal(p, x.want, r.q.idx, worth);
-        p.refused[x.want + "|" + r.q.idx].wantedOurs = offer.giveIng && g.likelyNeeds(r.q, offer.giveIng) ? 1 : 0;
-      }
+      const responses = g.collectResponses(offer, p);                     // put to the offer's own audience (Game.hailAudience)
       let dealt = false;
       for (let k = j + 1; k < E.length && E[k].t !== "turn"; k++) if (E[k].t === "trade" && E[k].a === x.p) { dealt = true; break; }
-      if (!dealt) for (const r of responses) if (r.kind === "counter") g.rememberRefusal(p, x.want, r.q.idx, worth);
+      g.rememberHail(p, offer, responses, dealt);                          // the engine's one memory of a hail (architecture item 15)
     }
   }
 }

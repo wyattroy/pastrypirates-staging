@@ -38,7 +38,7 @@ import {
   HEXCOL, DEVICE_IMG, ANCHOR_IMG, CLOCK_IMG, FLIP_SOCKET_IMG, HOURGLASS_IMG,
   CLOSE_X_IMG, iconImg, emojify, unusedDefaultName,
 } from "../shared/index.js";
-import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN, decisionIsLocal, say, sayText } from "./util.js";
+import { pname, pn, getLastName, saveLastName, MAX_NAME_LEN, decisionIsLocal, say, sayText, raiseLocalPrompt } from "./util.js";
 // F2/UI-06 (2026-07-29): escHtml's only use here was the duplicate seat-name rendering that this
 // task removed. The remaining name rendering escapes through pn() -> pname() -> escHtml, so the
 // escaping is preserved and this import is now dead — dropped rather than left (D-33/D-34/D-40).
@@ -371,13 +371,19 @@ export function passGate(seatIdx){
      table to hand the phone to Flaky Jack. The fact lives HERE, in the gate, so all three callers
      (and the next one) are right without each remembering it. A bot's seat also never becomes
      mySeat, which is what the replay branch below used to do to it. */
-  if(!appState.passAndPlay||seatIdx===appState.mySeat||!decisionIsLocal(seatIdx))return Promise.resolve();
+  const holder=appState.mySeat;if(!appState.passAndPlay||seatIdx===holder||!decisionIsLocal(seatIdx))return Promise.resolve();
   if(appState.replaying){appState.mySeat=seatIdx;return Promise.resolve();} // silently keep mySeat in sync so it's
   // already correct the moment replay catches up to the live edge — no UI shown mid-replay
   // The outgoing captain's turn is over, so their checked recipe locks the moment the wheel
   // changes hands — playtest 18's "reveal lasts the turn" rule, and the reason nothing private
   // can be on screen while the ceremony (or the old blur) holds the board.
   appState.recipeRevealed=false;
+  /* ⭐ AND FOR THE LENGTH OF THE CARD THE DEVICE BELONGS TO NO CAPTAIN (architecture item 3, 2026-09-16). "Check my recipe"
+     is offered to the captain whose turn it is, read from the event stream — which still names the OUTGOING captain here,
+     because the incoming captain's turn is recorded only after the tap (the device changes hands before the screen
+     changes captain). render() reads this so the outgoing captain's button is not offered on the hand-over card.
+     Local by construction: a flag on this screen, no event (decider_table_check). */
+  appState.handOver=seatIdx;
   /* ⚠ AND THE BOX IS REDRAWN NOW, or the lock is only on paper. Measured 2026-09-10 by
      scripts/qa/_pnp_band_handover.mjs: 3 of 8 "Pass the wheel to …" cards shared the screen with
      the OUTGOING captain's recipe in the band. Clearing the flag changes what MAY be drawn; nothing
@@ -390,8 +396,14 @@ export function passGate(seatIdx){
   // dim sea, minimal white card (name + button, no briefing), the button in the incoming
   // captain's own boat color. The v2 blur overlay below survives only as the non-stage fallback,
   // so a missing stage still fails safe to something that hands the device over.
+  /* ⭐ THE CARD IS A PROMPT ON THIS DEVICE, AND IT ASKS THE CAPTAIN HOLDING IT TO PASS IT ON — so it comes through the one door a
+     local prompt comes through, naming that captain (architecture item 3, 2026-09-16). During the recipe draft — walked seat by
+     seat behind this card — "who is being asked" is what the top bar shows (util.js whoseTurn), and this keeps the outgoing
+     drafter lit on the card exactly as it was (his settled call: the draft's top bar keeps what it showed). Once the recipes
+     are set the event stream answers and this changes nothing. AFTER renderBoard() above, deliberately: the board
+     was drawn with nobody being asked, so the ring does not appear mid-draft. */
   if(document.body.classList.contains("pp4Stage")){
-    return new Promise(res=>{
+    return raiseLocalPrompt(holder,()=>new Promise(res=>{
       const ap=$("actionPanel");
       ap.dataset.pp4Stage="1";
       /* THE HAND-OFF CARD IS SIZED BY ITS OWN WORDS. Wyatt, 2026-08-20: the "Pass the wheel to /
@@ -410,15 +422,15 @@ export function passGate(seatIdx){
         <div class="apBtns"><button class="apBtn" id="passHelmGo" type="button"
           style="border-color:${HEXCOL[seatIdx]};color:${HEXCOL[seatIdx]}">${say("pass.go",{})}</button></div>`,true);
       const go=$("passHelmGo");
-      const took=()=>{delete ap.dataset.pp4Stage;delete ap.dataset.pp4Hand;panel("");appState.mySeat=seatIdx;res();};
+      const took=()=>{delete ap.dataset.pp4Stage;delete ap.dataset.pp4Hand;panel("");appState.mySeat=seatIdx;appState.handOver=null;res();};
       if(!go){took();return;}
       go.onclick=()=>{go.onclick=null;took();};
-    });
+    }));
   }
   /* THE OLD "Pass the board to…" OVERLAY STOOD HERE — the fallback for a game with no stage. Every voyage builds the stage
      (stage.js buildStage), so no player could reach it. His pass, 2026-09-13: "I've never seen this in pass-and-play --
      are you sure it's in the game? cut it if not." With no stage there is no card to show; the device changes hands. */
-  appState.mySeat=seatIdx;
+  appState.mySeat=seatIdx;appState.handOver=null;
   return Promise.resolve();
 }
 

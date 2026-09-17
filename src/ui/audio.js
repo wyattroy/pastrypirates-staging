@@ -279,9 +279,8 @@ const CANNON_SOUND = "cannon";
 // 260801-7f4 — a REAL choice, and so is WIN_SOUND above now (it stopped being a placeholder at
 // departed SHOTCLOCK one); this stem literally is a sword clash; it is not on any shopping
 // list for Luis. Named as a constant (not inlined) so the DOM-free harness can assert it by name.
-// This is the moment cue for a battle being JOINED — see playBattleEngage() below — fired from the
-// orchestrator's own battle-opening seams, never from the `battle` event, because that event does
-// not exist until the whole fight has already resolved.
+// This is the moment cue for a battle being JOINED — EVENT_SOUND.engage below, the event the engine records the moment a fight is
+// called (Game.beginBattle) — never the `battle` event, because that event does not exist until the whole fight has already resolved.
 const BATTLE_ENGAGE_SOUND = "battle-swords";
 
 // D-01/D-03/D-04/D-06/D-21: the 25-key event->sound mapping, mirroring EVENT_NARRATION's exact
@@ -323,16 +322,24 @@ const EVENT_SOUND = {
      ⭐ THIS IS THE ONE SOUND NOT HEARD BY THE WHOLE TABLE — see LOCAL_ONLY_SOUND_EVENTS. */
   turn: "bells",
   newround: null, tradewind: null, bakeoff: null,
+  // architecture item 19: a boat that comes into the current AT its head rides no squares — explicit silence, like the ride itself
+  rimhead: null,
   // playtest 21 item 3: the storm's one summary line. Deliberately SILENT — every ship in it has
   // already played its own cue (windmove/blownOut -> ship-move, anchorHold -> fishing) as it moved,
   // so a sound here would be a fifth noise describing four that just happened.
   stormSummary: null,
   end: null, finish: null,
   // 260801-7f4 — explicit silence, not an oversight. The `battle` event only fires once the whole
-  // fight has resolved (src/engine/index.js:581), which is exactly why the clash used to land at
-  // the end instead of the start. The clash moved to engage time — see playBattleEngage() and its
-  // two call sites in src/orchestrator.js (asyncBattle and watchBattle).
+  // fight has resolved (engine winBattle), which is exactly why the clash used to land at the end
+  // instead of the start. The clash plays at engage time — the entry below.
   battle: null,
+  /* ⭐ THE CLASH IS THE FIGHT BEING CALLED, ON EVERY SCREEN, THROUGH THIS ONE DISPATCHER — architecture item 4, 2026-09-17. His ruling
+     (2026-09-06): "I want the clashing sound to happen when battles are first called; the sound is exciting." It was played by two
+     named calls instead: the host's fight played it before its opening line, and a crew guest played it on the first battle snapshot it
+     heard — measured 4.35 s after the opening line, and 9.6 s after it when the guest was asked for a crow's-nest call. The engine now
+     records the call (`engage`, Game.beginBattle) and this map sounds it wherever that event is drawn. The fight's end (`disengage`,
+     the camera letting go) is silent. */
+  engage: BATTLE_ENGAGE_SOUND, disengage: null,
   /* ⭐ THE CANNON RIDES THE LANDED SHOT, ON EVERY SCREEN — Wyatt, 2026-09-14: "Fix this too" (a crew guest heard no cannon).
      It used to be played by the fight itself (`if(scorer)playCannon()` in src/orchestrator.js), and the fight runs only on
      the device that owns it, so every other screen in a crew watched the hit in silence. The fight now RECORDS the hit as a
@@ -986,8 +993,9 @@ function soundReady(name) {
   return !ctx || isMuted() || !!buffers[name];
 }
 
-// The single exported flip sound — every flip in the game passes through
-// src/ui/board.js's setFlipCoin() "spin" branch, on both host and guest (D-02/D-07).
+// The single exported flip sound. A flip is heard ONCE per screen (architecture item 6, 2026-09-17): the screen that tapped starts it
+// with the spin its tap paints (src/ui/board.js setFlipCoin "spin", reached only from armFlipTap), and every other screen starts it
+// with the small coin over the flipping boat (src/ui/dockcoin.js flipDockCoin) — never both on one screen (D-02/D-07).
 function playFlip() {
   play("coin-flip");
 }
@@ -1480,13 +1488,8 @@ function playWinScreen() {
   play(WIN_SOUND, { bus: masterGain });
 }
 
-// 260801-7f4 — the moment a fight is JOINED, not the `battle` event (which only exists once the
-// fight is already over, spoils moved and all — see the `battle: null` comment above). Called
-// directly from the orchestrator's own battle-opening seams: once on the host tier (asyncBattle,
-// after the powder guard, before the opening announcement) and once on the guest tier (watchBattle,
-// on the false->true edge of appState.spectatingBattle). A named moment cue, built the same way as
-// playWinScreen() — calls the private play() primitive with a fixed stem and the master bus, and
-// nothing else.
+/* (playBattleEngage stood here — the clash as a named call the orchestrator made from two seams, the host's fight and a guest's
+   battle snapshot. Architecture item 4 made it EVENT_SOUND.engage; scripts/qa/fight_on_screen_one_door_check.mjs holds it.) */
 /* HOW LONG IS A STEM, IN MILLISECONDS — read off the decoded buffer, never typed.
  *
  * RULE 9, and this is the case the rule was written for: the drumroll's narration box has to be
@@ -1510,10 +1513,6 @@ function playCannon() {
   play(CANNON_SOUND, { bus: masterGain });
 }
 
-function playBattleEngage() {
-  play(BATTLE_ENGAGE_SOUND, { bus: masterGain });
-}
-
 export {
   SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
   kickAudioSession,
@@ -1530,7 +1529,7 @@ export {
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,
-  BATTLE_ENGAGE_SOUND, playBattleEngage,
+  BATTLE_ENGAGE_SOUND,
   /* The bed. startAmbience/stopAmbience have exactly three call sites between them, all in
      src/ui/lobby.js's three screen functions — see the runtime block's header, and the gate that
      holds it to that. The constants are exported so a headless harness can assert his tuned values

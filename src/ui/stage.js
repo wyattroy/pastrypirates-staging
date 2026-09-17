@@ -21,7 +21,7 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
-import { say, sayText } from "./util.js";   // every word from src/shared/words.js
+import { say, sayText, whoseTurn } from "./util.js";   // every word from src/shared/words.js; whose turn it is (architecture item 3)
 import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.17.3-staging@0a688baf";
+const PP4_STAMP = "2026.09.17.3-staging@c9cea8eb";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -118,6 +118,17 @@ const S = {
   stripW: 0,                // …the board window's last untransformed width, which is what it reads instead
   bandWatch: null,          // the ResizeObserver on the ribbon and the wind pill (see buildStage)
 };
+/* THE WHEEL HAS CHANGED HANDS — the counter the prompt-placement memos key on (the pill lock, the fan's placement key, the
+   director's frame key, the sail window's retry budget), so a NEW turn re-anchors the ask pill and an ongoing one never
+   moves it (playtest 15). It was bumped by __pp4.actor whenever the slot every prompt and every event wrote changed seat —
+   the slot architecture item 3 deleted. It is counted here instead, at the moment it is READ, from the one answer to whose
+   turn it is: a read can never see a stale count, and nothing but a change of turn moves it. */
+let serialTurn;
+function turnSerial(){
+  const t = whoseTurn();
+  if (t !== serialTurn){ serialTurn = t; S.turnSerial = (S.turnSerial || 0) + 1; }
+  return S.turnSerial;
+}
 
 /* ================= camera ================= */
 function svgEl(){ return $("board"); }
@@ -273,15 +284,20 @@ function camFitSail(seat, pos){
   // the squares became HTML sized in cqw rather than SVG rects with x/width attributes.
   /* THE SQUARES ON SCREEN — OR, ON A SCREEN WATCHING SOMEBODY ELSE'S TURN THAT HAS DRAWN NONE, THE SAME
      SQUARES FROM THE ENGINE. Only the captain choosing gets gold squares, so a frame built from the DOM
-     alone could only ever be right on one device. reachableFrom() is the engine's own answer to "where
-     may this captain sail", and the picker's squares are drawn from it, so the two agree by
-     construction (Wyatt, 2026-09-13, note 6: the guest camera was not framing anybody's sail). */
+     alone could only ever be right on one device (Wyatt, 2026-09-13, note 6: the guest camera was not
+     framing anybody's sail). Game.sailChoices is the engine's one answer to "where may this captain
+     sail", and the chooser's gold squares are drawn from that same call (ui/flow.js reachable).
+     ARCHITECTURE ITEM 18, 2026-09-17: this used to ask reachableFrom — the same search WITHOUT the
+     trade winds' rim — under a comment claiming the two "agree by construction". They did not: on 40
+     seeded boards, from 3,430 of 4,432 sea squares the watchers' frame left out rim squares the chooser
+     was offered, and on 3,296 the framed rectangle was smaller. One call now; the gate is
+     scripts/qa/sail_frame_same_squares_check.mjs. */
   const drawn = [...document.querySelectorAll(".sailCell")]
     .map(r => [+r.dataset.gx, +r.dataset.gy])
     .filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1]));
   let cells = drawn;
-  if (!drawn.length && who && typeof g.reachableFrom === "function"){
-    try { cells = g.reachableFrom(who).filter(c => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1])); }
+  if (!drawn.length && who && typeof g.sailChoices === "function"){
+    try { cells = g.sailChoices(who).filter(c => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1])); }
     catch (err) { cells = []; }
   }
   cells.push(own);
@@ -348,7 +364,7 @@ function sailContainTick(){
   const sq = document.querySelectorAll(".sailCell");
   if (!sq.length){ scKey = ""; return; }
   const now = Date.now();
-  const key = (S.turnSerial || 0) + "|" + sq.length;
+  const key = turnSerial() + "|" + sq.length;
   if (key !== scKey){ scKey = key; scTries = 0; scAt = now; return; }
   if (scTries >= 3 || now - scAt < 350) return;
   const svg = svgEl(); if (!svg) return;
@@ -812,7 +828,7 @@ function liftAskClearOfFan(ap, tSafeV, capTV){
      the first could spend all three and leave the second none. The question's own text is what
      makes a prompt distinct, and this file already uses exactly that key for `S.frameKey` — reused
      here rather than invented. (CEO review 4 caught the coarse key.) */
-  const stamp = S.turnSerial + "|" + (msg.textContent || "").slice(0, 60) + "|" + btns.length;
+  const stamp = turnSerial() + "|" + (msg.textContent || "").slice(0, 60) + "|" + btns.length;
   if (_refan.key !== stamp) _refan = { key: stamp, n: 0 };
   if (sitsOn(fixedRect(msg)) && _refan.n < 3){ _refan.n++; S.radKey = null; }
 }
@@ -1568,7 +1584,13 @@ function ribbonTick(){
   const r = $("pp4Round"), g = appState.game;
   if (r && g) r.textContent = sayText("ribbon.day",{n:g.round || 1});
   const boats = document.querySelectorAll("#pp4Ribbon .pp4Boat");
-  const act = (S.activeSeat != null) ? S.activeSeat : (appState.curSeat ?? -1);
+  /* WHOSE TURN IT IS — the one helper every surface reads (architecture item 3, 2026-09-16). This line used to draw a slot
+     every PROMPT wrote (`S.activeSeat ?? appState.curSeat`), so asking the defender to flip lit the defender, and the
+     ⏩ chip below — which reads the same `act` — then offered to skip "a bot's turn" in the middle of his own. His ruling:
+     "The top bar shows whose turn it is -- which is the active player who decided to attack. this does not need to
+     change during a battle; it should not." */
+  const turn = whoseTurn();
+  const act = turn == null ? -1 : turn;
   // playtest 15 item 1: the circles read LEFT TO RIGHT in the drawn TURN ORDER, not seat order
   const ord = g && g.turnOrder;   // the engine's record, so a reloaded voyage keeps it (his note 4, 2026-09-11)
   boats.forEach((b, i) => {
@@ -1836,8 +1858,8 @@ function stageFlash(msg, ms, holdMs, variants, opts){
      The card was built after the calls were collected, so its own test could not cover the part
      of a battle that asks a spectator anything: the crow's-nest call ran with the camera still on
      whoever the opening line named, and then every "X calls Y" line glided it to the CALLER. So
-     the hold is now armed by the battle itself (S.battle, set at the top of asyncBattle); the
-     card, and the test that read it, were removed at his ask on 2026-09-14. */
+     the hold is now armed by the battle itself (S.battle — held by the one event consumer on the fight's `engage` and let go on its
+     `disengage`, on every screen: architecture item 4); the card, and the test that read it, were removed at his ask on 2026-09-14. */
   else if (S.battle) { /* hold the shot on the fight until it resolves */ }
   else if (subj != null) camToSeat(subj);
   return new Promise(res => {
@@ -2555,7 +2577,8 @@ function recipeGuard(){
          voyage for three of the four. S.activeSeat is the seat whose prompt is actually up — the
          same source ribbonTick already reads — so this draws one captain's course from one rule
          rather than forking on who is looking. (scripts/qa's mode-fork gate caught this on the
-         first run; it is exactly the class of thing that gate exists for.) */
+         first run; it is exactly the class of thing that gate exists for.) It is appState.askedSeat now —
+         the same fact under its own name, published by raiseLocalPrompt (architecture item 3). */
       chartFrontRecipe(btn);      // ONE place decides which docks a recipe sends you to
     }
   }, true);
@@ -3098,7 +3121,7 @@ function chartFrontRecipe(card){
   if (rcCourseHeld) { rcCourseCard = card; return; }
   const g = appState.game; if (!g || !card) return;
   const ids = [...card.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
-  const seat = (S.activeSeat != null) ? S.activeSeat : appState.curSeat;
+  const seat = appState.askedSeat;   // the captain the picker is asking (util.js raiseLocalPrompt) — see the cream box's note
   const me = (seat != null && g.players) ? g.players[seat] : null;
   if (me) showCourseFor(g, me, svgEl(), cellPx(), ids, { trace: true });   // the picker's route draws itself (course.js)
   else paintMarks(ids.map(i => (g.dockOf && g.dockOf[i]) || (g.islandOf && g.islandOf[i])).filter(Boolean), cellPx());
@@ -4064,8 +4087,8 @@ function promptTick(force){
      Reusing the SAME flag for the wrapper's own visibility (rather than inventing a second gate
      that could disagree with the first) means the whole popup — box, dim and buttons alike — now
      waits together. `pendingReveal` is only ever added when the prompt HAS buttons (panel.js:546),
-     so a buttonless wait-line or battle flip-card (already framed synchronously by
-     window.__pp4.battle, and not what D-20 was complaining about) is untouched by this and keeps
+     so a buttonless wait-line or battle flip-card (already framed by the fight's hold, the
+     engage event's __pp4.battle, and not what D-20 was complaining about) is untouched by this and keeps
      appearing immediately, exactly as before. */
   /* pendingStage, NOT pendingReveal (Wyatt's blank-space lag, 2026-08-23 tier 1). The paragraph
      above still holds — the whole popup waits for the BOARD — but the flag it read also waited for
@@ -4494,9 +4517,10 @@ function promptTick(force){
        byte-identically, and a captain who typed markup does not get to render it. */
     /* ⚠ NEVER appState.curSeat. That is whichever seat the ENGINE is on, which on a guest is the
        HOST — and naming the host on the guest's own picker is exactly the bug Wyatt caught in crew
-       (see draftDispatch's note in flow.js, where the real fix lives). S.activeSeat is now
-       published by the dispatcher on EVERY local ask rather than only on the pass-play path, so it
-       is authoritative here.
+       (see draftDispatch's note in flow.js, where the real fix lives). The asked seat is published by
+       the one door every local ask comes through (raiseLocalPrompt, util.js) — appState.askedSeat since
+       architecture item 3, when it stopped sharing a slot with whose turn it is — so it is
+       authoritative here.
        ⚠ AND THERE IS NO FALLBACK AT ALL, WHICH THE MODE-FORK GATE IS RIGHT TO INSIST ON. My first
        attempt fell back to appState.mySeat and the gate caught it the same minute: stage.js went
        9 forks to 10, "a place two captains can see different games". It was also the wrong instinct
@@ -4504,7 +4528,7 @@ function promptTick(force){
        on the guest's screen in the first place. Both seams that raise a local prompt now publish
        the seat before the panel is drawn, so this is never null in practice; if it somehow is, the
        box simply does not appear for a tick. No name beats the wrong name. */
-    const askSeat = S.activeSeat;
+    const askSeat = appState.askedSeat;
     let ask = box.querySelector(".pp4RcAsk");
     if (askSeat == null){ if (ask) ask.remove(); ask = null; }
     else if (!ask){
@@ -4787,7 +4811,7 @@ function promptTick(force){
     if (!S.lock && sx != null){
       const gp = appState.game && appState.game.players;
       const where = gp ? anchorSeats.map(s => (gp[s] && gp[s].pos ? gp[s].pos.join(".") : "?")).join(",") : "";
-      const key = S.turnSerial + "|" + (ap.querySelector(".apMsg") || {}).textContent
+      const key = turnSerial() + "|" + (ap.querySelector(".apMsg") || {}).textContent
                 + "|" + anchorSeats.join(",") + "|" + where;
       if (S.frameKey !== key){
         S.frameKey = key;
@@ -4914,7 +4938,7 @@ function promptTick(force){
     // the anchors are a placement INPUT, so they belong in the memo key — without them the layout
     // would be computed once, on the first frame of the camera's glide into the fight, and frozen
     // there while the boats slid across the screen underneath it
-    const radKey = [S.turnSerial, menu.length, sx | 0, sy | 0, Math.round(capT), Math.round(tSafe),
+    const radKey = [turnSerial(), menu.length, sx | 0, sy | 0, Math.round(capT), Math.round(tSafe),
       cellRects.length, vwPx(), hasSlider, menu.map(b => b.textContent.length).join(","),
       anchors.map(a => a ? (a[0] | 0) + "," + (a[1] | 0) : "-").join(";")].join("|");
     /* THE MEMO KEY DESCRIBES THE LAYOUT, NOT THE BUTTONS — so two consecutive prompts that happen
@@ -5060,7 +5084,7 @@ function promptTick(force){
          low spot, with the whole sea empty above it. Adding the ship's square to the key keeps the
          pill still while the ship is still, which is what he actually asked for, and re-picks the
          moment the ship has moved. */
-      else if (S.pillLock && S.pillLock.key === S.turnSerial && S.pillLock.at === (sx|0)+","+(sy|0)){
+      else if (S.pillLock && S.pillLock.key === turnSerial() && S.pillLock.at === (sx|0)+","+(sy|0)){
         cxA = S.pillLock.cx; mTop = S.pillLock.top;
       } else {
         cxA = sx;
@@ -5070,7 +5094,7 @@ function promptTick(force){
         // a sail prompt's pill dodges the whole sail window: above it if there's room under
         // the ribbon, else just below it
         if (cb){ mTop = (cb.t - 42 >= tSafe - 34) ? cb.t - 42 : clampTop(Math.min(cb.b + 8, capT - 44)); }
-        S.pillLock = { key: S.turnSerial, at: (sx|0)+","+(sy|0), cx: cxA, top: mTop };
+        S.pillLock = { key: turnSerial(), at: (sx|0)+","+(sy|0), cx: cxA, top: mTop };
       }
       /* …AND THE PILL'S BOTTOM CLEARS THE CAPTAINS CARD, WHICHEVER SPOT WAS CHOSEN (Group G
          fault 3, judged on solo-phone-023: "the ask pill's bottom edge meets the top edge of the
@@ -5943,8 +5967,8 @@ export function initStage(){
     // `pos` (optional) is the asked captain's authoritative square off the prompt spec — see
     // camFitSail. renderPickPrompt passes it; the spectating host's pickCell call passes seat only.
     sailCells: (seat, pos) => { if (S.active) camFitSail(seat, pos); },
-    /* THE SHOT IS THE FIGHT, AND IT IS HELD. Called at the top of asyncBattle (before the opening
-       line, so the camera is already there when it speaks) and again by every battle-card render.
+    /* THE SHOT IS THE FIGHT, AND IT IS HELD. Called by the one event consumer on the fight's `engage` — drawn before the opening line,
+       so the camera is already there when it speaks — and let go (battleEnd) on its `disengage`, on every screen (architecture item 4).
        It used to centre the MIDPOINT at a fixed 2.0x, which frames two adjacent ships and crops two
        that are not — camFitSeats derives the zoom from the gap instead, so both boats are on screen
        whatever the fight looks like. Re-fitting only when the pair changes: an unchanged re-fit
@@ -5956,11 +5980,10 @@ export function initStage(){
       if (!same) camFitSeats([a, d]); },
     battleEnd: () => { S.battle = null; },
     flip: flipArmed,
-    // turnSerial: bumps whenever the wheel changes hands — the pill-lock and placement memo key
-    // on it, so a NEW turn re-anchors the ask pill and an ongoing one never moves it (playtest 15)
     // the captains box stops hiding the instant a recipe is actually chosen — see capEmptyTick
     recipePicked: () => { S.recipePicked = true; },
-    actor: seat => { if (S.activeSeat !== seat) S.turnSerial = (S.turnSerial || 0) + 1; S.activeSeat = seat; },
+    /* (actor: stood here — the writer of S.activeSeat, the slot the top bar drew and every prompt wrote, which also bumped
+       turnSerial. Deleted by architecture item 3; turnSerial() at the top of this file reads whose turn it is instead.) */
     // a rim ride spans the whole board — pull out so the sweep never plays off screen; the
     // narration that follows glides the camera back down to the ship at its whirlpool
     sweepCam: () => { if (S.active){ S.lock = false; camFull(); } },

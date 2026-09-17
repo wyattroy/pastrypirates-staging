@@ -84,10 +84,30 @@ else ok("every flip reads the clock", `${clockSites} spin wait(s) on flipSpinLef
 // flips held 800ms, the human's dock flip held for its narration, and the BOT's dock flip held for
 // nothing at all — it set the face and returned. Four paths, three answers. This counts the sites
 // so a future path cannot quietly skip the beat again.
+/* RE-ANCHORED BY ARCHITECTURE ITEM 6 (2026-09-17). There are no longer four flip PATHS to count — humanFlip, hFlip and bFlip were
+   folded into one toss (src/ui/flow.js flipFor), and a flip is DRAWN in exactly two ways: the big coin the tapping screen lands
+   (src/ui/board.js landFlipCoin) and the small coin every other screen throws (src/ui/dockcoin.js flipDockCoin). "Holds everywhere" is
+   therefore asserted of those two by name — each must wait its spin and its hold on the named clocks — and no flip wait may exist
+   outside them. That is stronger than the count it replaces: a count of three could be met by three copies. */
 const holdDefs = srcFiles.filter(f => /(?:export\s+)?const\s+FLIP_LAND_HOLD_MS\s*=/.test(read(f)));
+const fnBody = (src, name) => {
+  const m = new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(src); if (!m) return "";
+  let j = src.indexOf(")", m.index); j = src.indexOf("{", j); let d = 0;
+  for (let k = j; k < src.length; k++) { if (src[k] === "{") d++; else if (src[k] === "}" && --d === 0) return src.slice(m.index, k + 1); }
+  return "";
+};
+const land = fnBody(read("src/ui/board.js"), "landFlipCoin"), small = fnBody(read("src/ui/dockcoin.js"), "flipDockCoin");
+const holds = s => /await\s+sleep\s*\(\s*FLIP_LAND_HOLD_MS\s*\)/.test(s);
+const flipWaitsOutside = srcFiles.reduce((n, f) => {
+  const s = read(f).replace(land, "").replace(small, "");
+  return n + (s.match(/await\s+sleep\s*\(\s*(?:flipSpinLeftMs\s*\(\s*\)|FLIP_LAND_HOLD_MS|FLIP_SPIN_MS[^)]*)\s*\)/g) || []).length;
+}, 0);
 if (holdDefs.length !== 1) bad("one landed-hold clock", `FLIP_LAND_HOLD_MS defined in ${holdDefs.length} file(s)`);
-else if (holdSites < 3) bad("one landed-hold clock", `only ${holdSites} flip(s) hold their landed face — the battle pair and the bot's dock coin all must`);
-else ok("one landed-hold clock", `FLIP_LAND_HOLD_MS defined once in ${holdDefs[0]}, read by ${holdSites} flip path(s)`);
+else if (!land || !small) bad("one landed-hold clock", `the flip's two drawings were not found (landFlipCoin: ${!!land}, flipDockCoin: ${!!small}) — this check is not measuring anything`);
+else if (!holds(land) || !/await\s+sleep\s*\(\s*flipSpinLeftMs\s*\(\s*\)\s*\)/.test(land)) bad("one landed-hold clock", "the big coin's landing (landFlipCoin) does not wait out the spin on flipSpinLeftMs() and hold on FLIP_LAND_HOLD_MS");
+else if (!holds(small)) bad("one landed-hold clock", "the small coin (flipDockCoin) does not hold its landed face on FLIP_LAND_HOLD_MS");
+else if (flipWaitsOutside) bad("one landed-hold clock", `${flipWaitsOutside} flip wait(s) outside the two drawings — a toss that sleeps out its own spin or hold is a second copy of the flip's clock`);
+else ok("one landed-hold clock", `FLIP_LAND_HOLD_MS defined once in ${holdDefs[0]}; both drawings of a flip — the big coin's landing and the small coin — hold on it, and no flip wait exists outside them (${holdSites} hold site(s))`);
 
 /* ---- 3. the coin cannot land after its own sound ------------------------ */
 /* MEASURED ONCE, PROPERLY, and pinned to the exact bytes it was measured from.

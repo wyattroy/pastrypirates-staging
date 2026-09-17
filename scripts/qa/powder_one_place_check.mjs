@@ -6,7 +6,10 @@
    consumer reads that event. RULES (red-proofed below):
      1. powder leaves a purse in exactly one place: Game.payPowder
      2. both fights pay through it — the engine's battle() and the orchestrator's asyncBattleRun
-     3. the consumer shows the coins leaving from the `powder` event */
+     3. the consumer shows the coins leaving from the `powder` event
+   REPOINTED 2026-09-16 (architecture item 1): a fight now BEGINS in one engine step, Game.beginBattle, which pays the powder; so rule 2
+   reads "payPowder is called only by beginBattle, and both fights begin through beginBattle". scripts/qa/one_fight_rules_check.mjs holds
+   the rest of the fight. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,9 +32,11 @@ function rules(files) {
   rule(takes === 0 && /coins\s*-=\s*cost/.test(pay) && /t:"powder"/.test(pay),   // `takes` counts powder taken anywhere BUT payPowder
     "powder leaves a purse in exactly one place, Game.payPowder, which records it",
     `powder is taken ${takes} other time(s) outside payPowder, or payPowder does not take and record it`);
-  rule(/this\.payPowder\(att\)/.test(body(eng, "battle(att,def){")) && /\.payPowder\(att\)/.test(body(orch, "async function asyncBattleRun(")),
-    "both fights — the engine's and the one a player watches — pay their powder through it",
-    "a fight pays its powder without payPowder");
+  const payCallers = Object.values(files).reduce((n, s) => n + (strip(s).match(/\.payPowder\(/g) || []).length, 0);
+  rule(payCallers === 1 && /this\.payPowder\(att\)/.test(body(eng, "beginBattle(att,def){"))
+       && /this\.beginBattle\(att,def\)/.test(body(eng, "battle(att,def){")) && /\.beginBattle\(att,def\)/.test(body(orch, "async function asyncBattleRun(")),
+    "both fights — the engine's and the one a player watches — pay their powder through it, by beginning in Game.beginBattle",
+    `a fight pays its powder without payPowder, or payPowder is called from somewhere other than beginBattle (${payCallers} call(s))`);
   const consume = body(orch, "export async function consumeEvent(e){");
   rule(/"powder"/.test(consume) && /payOut\(/.test(consume),
     "the one event consumer shows powder leaving the purse from the `powder` event",
@@ -41,8 +46,8 @@ function rules(files) {
 const files = Object.fromEntries(walk("src").map(f => [f.split(path.sep).join("/"), fs.readFileSync(path.join(REPO, f), "utf8")]));
 const real = rules(files);
 for (const r of real) console.log(`  ${r.ok ? "PASS" : "FAIL"}  ${r.text}`);
-const orch = files["src/orchestrator.js"], a = "  appState.game.payPowder(att);";
-const m1 = orch.includes(a) ? { ...files, "src/orchestrator.js": orch.replace(a, "  if(c.powder)att.coins-=c.powder;") } : null;
+const orch = files["src/orchestrator.js"], a = "  const F=appState.game.beginBattle(att,def);";
+const m1 = orch.includes(a) ? { ...files, "src/orchestrator.js": orch.replace(a, "  if(c.powder)att.coins-=c.powder;const F={att,def,rounds:[]};") } : null;
 const red1 = !!m1 && !rules(m1)[0].ok, red2 = !!m1 && !rules(m1)[1].ok;
 console.log(`  ${red1 && red2 ? "PASS" : "FAIL"}  red-proof: the watched fight taking its own powder again ${red1 && red2 ? "goes red" : m1 ? "STAYS GREEN" : "could not be built"}`);
 const fails = real.filter(r => !r.ok).length, bad = fails || !(red1 && red2);

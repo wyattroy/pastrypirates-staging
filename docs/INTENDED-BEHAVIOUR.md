@@ -280,8 +280,11 @@ session neither re-reports it as a bug nor assumes it is proven fine.
 
 | Looks like | Actually | Citation |
 |---|---|---|
-| A ship with cargo cannot be attacked but an empty one can | The reverse: **an empty hold cannot be attacked at all** — there is nothing to take | `src/engine/index.js:1750` (v2 rule 13e), `src/ui/flow.js:2094` |
-| A captain with no coins and no cargo is offered a trade | They are correctly blocked — *"Ye've nothin' to trade — an empty hold and an empty purse."* | `src/ui/flow.js:2172`, `:1839` |
+| A ship with cargo cannot be attacked but an empty one can | The reverse: **an empty hold cannot be attacked at all** — there is nothing to take | `Game.whyNoAttack` in `src/engine/index.js` (v2 rule 13e) |
+| Attack is greyed beside a captain whose hold is FULL | **Sanctuary.** That captain is baking at Tortuga (their ship is drawn faded), and once the ovens are lit nobody can touch them — Wyatt, 2026-08-06; the rules page: *"once a captain's ovens are lit they're beyond yer reach"*. The greyed button says so. Their crates are not for trading either, so a table whose only cargo is a baker's greys Trade | `Game.whyNoAttack` / `Game.whyNoTrade` in `src/engine/index.js`; `scripts/qa/action_reasons_from_engine_check.mjs` (architecture item 13, 2026-09-17) |
+| A captain with no coins and no cargo is offered a trade | They are correctly blocked — *"Ye've nothin' to trade — an empty hold and an empty purse."* | `Game.whyNoTrade` in `src/engine/index.js`, worded by `humanAct` in `src/ui/flow.js` |
+| Countering a captain who has coin, "Coin instead" is greyed | **Every coin aboard is already in their offer.** The counter slider's number is coin IN ALL (Wyatt, 2e9e06b1: *"i should be able to slide the slider up to 8, no?"*), so there is no total above it — the offer screen already said *"no coin left to sweeten the deal"*, and the greyed button agrees. Ask for one of their crates instead | `Game.counterRoom` in `src/engine/index.js`; `scripts/qa/counter_ceiling_one_place_check.mjs` (architecture item 20, 2026-09-17) |
+| A counter slider starts above 1 | A coins-only counter starts at **one coin more than the offer** — the number is the whole price, and asking the offer back is just accepting it | `Game.counterRoom` |
 
 ## 2. The board and what is drawn on it
 

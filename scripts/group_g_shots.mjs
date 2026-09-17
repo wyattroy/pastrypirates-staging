@@ -291,9 +291,11 @@ const settle = (ms = 2800) => sleep(ms);
    RED-PROOF: the bubble is first raised with NO sail squares on the board (it must overlap zero),
    then the squares are drawn under it. A probe that reports "overlapping" in both states is not
    measuring overlap. */
-/* THE SAIL WINDOW IS THE ENGINE'S OWN — g.reachableFrom(p) is the twin of the UI's reachable()
-   helper and is what a real sail prompt highlights, so the squares this draws are the squares a
-   captain would actually be looking at. Drawn with flow.sailHighlightRect, the game's own renderer
+/* THE SAIL WINDOW IS THE ENGINE'S OWN — g.sailChoices(p) is the one call the UI's reachable()
+   makes and is what a real sail prompt highlights, so the squares this draws are the squares a
+   captain would actually be looking at. (It read g.reachableFrom(p) until architecture item 18,
+   2026-09-17 — the same search without the trade winds' rim, so this probe drew fewer squares than a
+   real prompt whenever the captain could reach the current.) Drawn with flow.sailHighlightRect, the game's own renderer
    (one function, host and guest alike), at the game's own cellPx. No geometry of this file's. */
 async function poseBubbleOverSails(cell, msg) {
   return ev(`(async(S)=>{ const {st,flow,board} = window.__G; S=JSON.parse(S);
@@ -302,7 +304,7 @@ async function poseBubbleOverSails(cell, msg) {
     p.pos = S.cell.slice();
     board.paintShipAt(seat, p.pos);
     await new Promise(r=>setTimeout(r,700));
-    const cells = g.reachableFrom(p) || [];
+    const cells = g.sailChoices(p) || [];
     const cellPx = 640 / g.cfg.grid;
     const svg = document.getElementById('board');
     for (const c of cells) flow.sailHighlightRect(c, cellPx, svg);

@@ -54,12 +54,12 @@ import {
   CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled, BAKE_REWATCH_COST,
   buildRoster, emojify,
 } from "../shared/index.js";
-import { el, boardCell, setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo, render as renderBoard } from "./board.js";
+import { el, boardCell, setFlipActive, armFlipTap, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo, render as renderBoard } from "./board.js";
 import {
   liveRender, panel, setNeedsAction, narrateLastEvent, flash, showNarration,
 } from "./panel.js";
 import {
-  pn, poss, apBtnStyle, optionButtonsHTML, backButtonHTML, sliderWrapHTML, wireSlider, ask, stepDelay, botBeat, applyActiveSeat, seatLocal,
+  pn, poss, apBtnStyle, optionButtonsHTML, backButtonHTML, sliderWrapHTML, wireSlider, ask, stepDelay, botBeat, raiseLocalPrompt, seatLocal,
   decisionIsLocal, sleepMs, seatStrat, saveSoloState,
   getSeaBase, advanceSeaCursor,
   replayShortfall, STORM_STEP_MS, describeFor, narrationVariants, isLocalTo, NEUTRAL_VIEWER,
@@ -71,6 +71,7 @@ import {
   buildPlayerRows,                // endReplay: the captains' rows, rebuilt once in sailing order
   say, sayAll, sayText, seat,     // the one door to src/shared/words.js
   eventDrawn,   // a dock's buy waits for its coins to land (humanDock)
+  narrateEvent, // showTheWind narrates the trade-wind event it is handed (architecture item 19)
 } from "./util.js";
 /* A line every screen reads its own way, in one call: the words and their "ye" versions come from words.js. */
 const sayFlash=(id,facts,ms)=>{const w=sayAll(id,facts);return flash(w.html,ms,undefined,w.variants);};
@@ -217,9 +218,9 @@ export function renderAskPrompt(spec,answer){
     // stage.js's `!fm && btl` "⚔️ Broadside!" fallback needs fm null for battles).
     if(!spec.battle&&window.__pp4)window.__pp4.flipMsg={m:msg||"",s:sub||""};
     setNeedsAction(true);
-    // THE TAP IS THE FLIP — playtest 22: the tap paints the spin in its own frame; the
-    // broadcastFlip("spin") that follows finds it already spinning and is a no-op.
-    setFlipActive(()=>{setFlipActive(null);setFlipCoin("spin");setNeedsAction(false);answer(0);});
+    // THE TAP IS THE FLIP — playtest 22: the tap paints the spin in its own frame. armFlipTap (board.js) is where every
+    // flip's tap does that now, a fight's included (architecture item 6).
+    armFlipTap(()=>{setNeedsAction(false);answer(0);});
     return;
   }
   const backIdx=opts.findIndex(o=>o&&o.back);
@@ -229,7 +230,7 @@ export function renderAskPrompt(spec,answer){
   if(flipIdx!==-1){
     if(!spec.battle&&window.__pp4)window.__pp4.flipMsg={m:msg||"",s:sub||""};   // same stash as the pure flip
     // same rule as the pure-flip path above: choosing the coin paints the spin at once
-    setNeedsAction(true);setFlipActive(()=>{done(flipIdx);setFlipCoin("spin");});
+    setNeedsAction(true);armFlipTap(()=>done(flipIdx));
   }
   else setFlipActive(null);
   const rest=opts.map((o,i)=>({o,i})).filter(x=>x.i!==flipIdx&&x.i!==backIdx);
@@ -267,38 +268,9 @@ export function renderAskPrompt(spec,answer){
     b.onclick=()=>done(sl?{i:+b.dataset.i,n:sl.ref.value}:+b.dataset.i);
   });
 }
-/* ══════════════════════════════════════════════════════════════════════════════════════════════
-   ⭐ THE ONE DOOR A LOCAL PROMPT COMES THROUGH — Wyatt, 2026-09-09.
-
-   He caught the guest's recipe picker naming the HOST, and when I described the fix as "both seams
-   must publish the same fact" he stopped me:
-
-     "This seems like sloppy architecture that's easy to mess up in future -- is there a better way
-      to do it in alignment with our design values (eg one central engine?)"
-
-   He is right and the rule is already written down: *when a second consumer of the same thing
-   appears, converge — never run two side by side.* Two seams each remembering to publish the seat
-   is two things kept in step by nothing, and the way I found out is that I fixed one of them,
-   watched every local mode go green, and shipped a guest that was still broken.
-
-   SO "WHO IS BEING ASKED" IS PUBLISHED IN EXACTLY ONE PLACE: here. A caller cannot raise a local
-   prompt without saying whose it is, because the seat is the first argument and the drawing is the
-   second. Forgetting is no longer possible; it would mean not calling this function at all.
-
-   ⚠ AND THE DEEPER DUPLICATION IS STILL THERE, NAMED HERE SO IT IS NOT LOST. The guest does not
-   merely publish its own seat — it hand-rolls its own copy of this renderer. watchDraftPrompt
-   (src/orchestrator.js) builds `<div class="apMsg">…<div class="apBtns recipes">` itself and
-   re-derives the SAME rule renderAskPrompt uses one line from here (`opts.some(o => o.cls)` ->
-   " recipes"). That is the actual root: two renderers for one card. Converging them means the
-   guest calling localAsk() and sending the resolved answer over the wire instead of resolving it
-   locally — which is the sanctioned host/guest difference (who computes), leaving one renderer.
-   It is a change to the network path and it wants the two-window rig and a fresh head, so it is
-   written down rather than attempted at the end of a long day. This door is the half that removes
-   the fault he actually hit; the other half is the one that stops it coming back in a new form. */
-export function raiseLocalPrompt(forSeat, draw){
-  applyActiveSeat(forSeat);
-  return draw();
-}
+/* (THE ONE DOOR A LOCAL PROMPT COMES THROUGH — raiseLocalPrompt, Wyatt 2026-09-09 — stood here. It moved to
+   src/ui/util.js in architecture item 3 (2026-09-16), with its whole note, so ask() in that file can go through
+   the same door; it publishes who is being asked, never whose turn it is.) */
 export function localAsk(msg,opts,colors,sub,extra){
   // a decision is landing in front of the player — the ff skip is over; when a recap is owed it
   // plays FIRST and the prompt builds after it resolves (no bubble/pill overlap, his rule).
@@ -312,39 +284,34 @@ export function localAsk(msg,opts,colors,sub,extra){
   return new Promise(res=>{renderAskPrompt({msg,opts,colors,sub,slider:extra&&extra.slider},res);});
 }
 export async function humanFlip(player,label,allowBack,sub,why){
-  applyActiveSeat(player.idx);
   const opts=[{label:say("flip.button",{}),value:1,flip:true}];
   if(allowBack)opts.push({label:say("button.back",{}),back:true,value:"back"});
   // `sub` is the italic helper line beneath the buttons — used by the dock flip to explain what
   // the two faces of the coin actually pay (Wyatt, 2026-08-05).
   // @copy prompt.flip.fallback
-  const v=await ask(label||say("flip.ask",{}),opts,null,sub);
+  const v=await ask(player.idx,label||say("flip.ask",{}),opts,null,sub);
   if(v==="back")return "back";
-  /* THE RESULT IS DECIDED AT THE TAP, AND EVERY OTHER SCREEN HEARS OF IT AT ONCE. It used to be decided 795ms
-     later, after this device's spin, and a dock's result reached nobody until the whole dock — buy included —
-     was over. Deciding it here draws exactly the same random number (nothing else draws between the tap and
-     the old line), and when the flip is FOR something the engine records a coinflip event, which is published
-     and drained immediately: other screens start their tiny coin as this captain's big coin starts spinning. */
+  return flipFor(player,why);
+}
+/* ⭐ THE ONE TOSS — architecture item 6, 2026-09-17. A dock's flip (humanFlip above) and every flip of a fight (orchestrator.js
+   asyncBattleRun, a captain's or a bot's) come here once the captain has tapped, or once a bot has simply decided to. There used to be
+   three of these — humanFlip, the fight's hFlip and bFlip — each painting the spin, sleeping out the rest of it, broadcasting the face
+   over its own wire node, holding, and clearing, so the two timing fixes below had to be made three times, and a watching screen heard
+   the spin sound from the node AND from the small coin. Measured before: two starts in the same millisecond for a bot's fight flip on a
+   solo phone; two starts 696ms apart on a crew guest watching the host's fight flip.
+   THE RESULT IS DECIDED AT THE TAP, AND EVERY OTHER SCREEN HEARS OF IT AT ONCE (2026-09-13, kept): the engine records a coinflip event,
+   which is published and drained immediately. Then this AWAITS THE DRAIN, which is where the flip is drawn on every screen — the one
+   event consumer lands the big coin on the screen that tapped (board.js landFlipCoin) and throws the small coin everywhere else
+   (dockcoin.js flipDockCoin) — so the flip's pacing is the drawing's own:
+     · D-49, kept: the spin lasts FLIP_SPIN_MS from the frame the TAP painted it (flipSpinLeftMs), not a flat sleep from wherever this
+       line happens to resume;
+     · T-34 / playtest 13, kept: the landed face holds FLIP_LAND_HOLD_MS, the same hold the small coin waits out;
+     · 2026-09-13, kept: no "Crustbeard flips HEADS!" line — the coin's own face is the answer.
+   Through the drain, so fast-forward, pause and reload-replay behave exactly as before (a replay does not drain, and draws no coin). */
+export async function flipFor(player,why){
   const h=appState.game.flip(player,why);
-  if(why){publishNow();liveRender();}
-  netHandlers().onBroadcastFlip("spin");
-  /* D-49 — WAIT OUT THE REST OF THE FLIP, not a fixed 340ms from wherever this line happens to
-     resume. The coin has already been spinning since the TAP (localAsk paints it in the tap's own
-     frame, the playtest-22 fix), and everything between the tap and here — the promise resolving,
-     ask()'s shot-clock wrapper unwinding, this function being scheduled again — is latency nobody
-     designed and nobody can predict. Adding a flat 340 on top of it is why no two flips were the
-     same length. flipSpinLeftMs() is measured from the frame the spin was painted (board.js), so
-     the coin is on screen for FLIP_SPIN_MS however slow the chain was. Through this file's own
-     `sleep`, so fast-forward, pause and reload-replay behave exactly as before. */
-  await sleep(flipSpinLeftMs());
-  netHandlers().onBroadcastFlip(h?"H":"T");
-  /* NO "Crustbeard flips HEADS!" LINE ANY MORE — his pass, 2026-09-13: "We can all now see what the coin flips to --
-     i think we can cut this". Checked: this captain sees the big coin land, and every other screen draws the small
-     coin over the boat (dockcoin.js) from the coinflip event published at the tap. The face HOLDS for
-     FLIP_LAND_HOLD_MS — the one hold every other flip already waits out (a battle's, a bot's dock coin) — where it
-     used to hold for however long a sentence nobody needed took to read. */
-  await sleep(FLIP_LAND_HOLD_MS);
-  netHandlers().onBroadcastFlip("wait");
+  publishNow();
+  await liveRender();
   return h;
 }
 // v2 rule 3: fishing is gone entirely. fishCast() and its whole flip-for-coins path are deleted
@@ -353,12 +320,11 @@ export async function humanFlip(player,label,allowBack,sub,why){
 // correctly (rule 5). The sugarfish/candycrab art and the "fishing" sfx stay on disk in the
 // shared assets/ and sfx/ at the repo root — the classic game at /classic reaches them as ../assets and ../sfx.
 export function reachable(player){
-  // v2 rule 1, and the ONE place the human's highlighted squares are computed. The rule itself
-  // lives in the engine (Game.sailStates) so the board a player is shown can never disagree with
-  // where a bot is allowed to sail — humans and bots read the same function. A human may
-  // deliberately ride the trade winds, so the rim stays a legal destination here (throughRim);
-  // bots stay out of the channel except via rimEscape().
-  return [...appState.game.sailStates(player,{throughRim:true}).keys()].map(k=>k.split(",").map(Number));
+  /* v2 rule 1: the gold squares a captain choosing where to sail is shown. Not computed here — Game.sailChoices is where a captain
+     may sail this turn (the trade winds' rim included), and it is the SAME function every other screen's camera frames that turn
+     from (ui/stage.js camFitSail), so the squares one screen offers and the squares another frames cannot differ (architecture
+     item 18, 2026-09-17; scripts/qa/sail_frame_same_squares_check.mjs). */
+  return appState.game.sailChoices(player);
 }
 // D-25/D-35 (Wyatt-approved 2026-07-29): the one sail-prompt message, shared by BOTH transports —
 // composed once in pickCell() and rendered by the ONE converged renderer, renderPickPrompt()
@@ -572,8 +538,9 @@ const SAIL_HL_SCALE=0.9;
 // CORRECTION (Wyatt, 2026-08-13): an earlier version of this note called the rim "impassable".
 // It is not, and the distinction matters for anything built on top of this. The rim is a LEGAL,
 // DELIBERATE move — sailStates' own `throughRim` option exists precisely so "a human may
-// deliberately ride the trade winds". What is true is narrower: BOTS pass throughRim:false and
-// so never choose it. That is a bot-routing decision, not a rule, and it is being changed.
+// deliberately ride the trade winds". What was true then was narrower: bots never chose it — a bot-routing decision, not a rule,
+// and it was changed (bots ride the current since 2026-08-13). Every ship's sail, a bot's or a person's, now goes through
+// Game.sailTo with the rim allowed (architecture item 7); the bots' route request that still said throughRim:false is gone.
 // A wrong reason is what the next change gets built on — see HARD-WON-LESSONS section 5.
 /* THE SAIL CARD CARRIES NO HELPER LINE AT ALL — playtest 22 items 2 and 9 (Wyatt).
 
@@ -691,6 +658,18 @@ function pressSailSquare(r){
 }
 export function clearSailWindow(){
   document.querySelectorAll(".sailCell").forEach(el=>el.remove());
+}
+/* Is a sail prompt open on THIS screen — its gold squares on the sea? The squares exist only on the screen being asked, and they
+   leave through the prompt's own teardown or clearSailWindow() above. Read by the one event consumer: a dotted course drawn by an
+   open sail prompt belongs to the turn being played, however late that turn's own event is drawn (orchestrator.js consumeEvent).
+   HIS RULINGS ON THE COURSE: 2026-09-09 (quoted at the parrot-off teardown below) "on 'Polly' mode, the dotted line should appear for
+   the whole game, not fade out"; 2026-09-10 (2b40b7bd, his SS1) "the dotted line is ONLY visible on the player's turn, and auto
+   updates with their current location each turn"; 2026-09-11 (DECISIONS.md, playtest notes) "should disappear the moment your boat
+   starts animatedly sailing". WHY THIS GUARD EXISTS IS A MEASUREMENT, NOT A RULING (architecture item 12, 2026-09-17): this screen's
+   own open sail prompt IS "the player's turn" on that screen, and a crew guest's event feed can trail its prompt, so a late `turn`
+   must not end that turn early — without the guard 1 of 3 slowed guest prompts lost its course; with it, 0 of 3. */
+export function sailWindowOpen(){
+  return !!document.querySelector(".sailCell");
 }
 export function renderPickPrompt(spec,answer){
   clearSailWindow();
@@ -822,24 +801,14 @@ export function pickCell(player,cells){
     if(appState.dlogIdx<appState.dlog.length){
       appState.dlogN++;
       const rec=appState.dlog[appState.dlogIdx++];
-      /* A RECORDED SQUARE ONLY MEANS ANYTHING AGAINST THE BOARD THAT WAS ACTUALLY REBUILT.
-         This used to be handed straight back, unchecked — so if a replay ever diverged (the coin
-         slider did exactly that until logQuantity, above), the ship was teleported to a square it
-         had no legal route to, and everything downstream reasoned about a position the rules could
-         not have produced. Same posture resolveOpt() already takes for a stale option index: warn,
-         fall back to something the rules allow, and let the voyage carry on. "Stay put" is the
-         outcome the sail prompt already has for a captain who chooses nothing, so it costs a move
-         rather than inventing one. */
-      if(rec==null)return Promise.resolve(null);
-      if(!(cells&&cells.some(c=>c[0]===rec[0]&&c[1]===rec[1]))){
-        console.warn("pickCell(): recorded square",rec,"is not reachable in the rebuilt voyage — staying put");
-        return Promise.resolve(null);
-      }
-      return Promise.resolve(rec);
+      /* A RECORDED SQUARE ONLY MEANS ANYTHING AGAINST THE BOARD THAT WAS ACTUALLY REBUILT — and it is checked where EVERY square is
+         checked now, live or replayed: Game.sailTo (a sail, Move instead, a flight through Game.flee) writes nothing for a square the
+         captain may not sail to, so a diverged replay stays put rather than teleporting. That check lived HERE, for replays alone,
+         while a live square went in unchecked; one check at the write is architecture item 7's. */
+      return Promise.resolve(rec==null?null:rec);
     }
     endReplay();
   }
-  applyActiveSeat(player.idx);
   // /4 stage: frame the whole sail window once the highlight cells exist (they are drawn just
   // after this call returns its promise — a beat later is soon enough for a lerping camera).
   // player.idx, NOT the viewer: on a spectating host this used to frame the HOST's own ship at the
@@ -934,12 +903,14 @@ export function pickCell(player,cells){
    the server fires it if the tab closes, and the tail below sees a null and forfeits to the
    engine's own guess having bought nothing — the same one entry a completed bake writes.
 
-   PASS THE DEVICE FIRST. A bake is a whole turn, but it is taken in the END-OF-DAY loop rather
-   than the seat loop, so it never passes through humanTurn — and humanTurn is where every other
-   handoff happens. Without the gate here, pass-and-play hands the bench to whoever last held the
-   board: the preview would play in the wrong person's hands, and two captains baking on the same
-   day would get no handoff between them at all. passGate is a no-op in solo and whenever the
-   device is already with the right seat, so this costs those modes nothing.
+   PASS THE DEVICE FIRST. A bake is a whole turn, but it is not taken through takeTurn — and takeTurn
+   is where every other handoff happens. Without a gate, pass-and-play hands the bench to whoever last
+   held the board: the preview would play in the wrong person's hands, and two captains baking on the
+   same day would get no handoff between them at all. THE GATE MOVED UP ONE CALL, into bakeTurnLive
+   (src/orchestrator.js), in architecture item 3 (2026-09-16): the engine now records that a baking
+   captain's turn has begun (Game.bakeTurn), and the screen must not change captain before the device
+   has changed hands — so the hand-over has to come before that record, which is made for bots and
+   humans alike, before this prompt is ever reached.
 
    THE REMOTE PATH EXISTS NOW (04-01 Task 2, MP-04). The note that stood here said there was none,
    and it was right when it was written: *"This is all built for v2 which doesn't have multiplayer"*
@@ -958,11 +929,8 @@ export function pickCell(player,cells){
    forfeit, which any mode can hit, and which a `null` reply from a remote captain reuses. */
 export async function bakeoffPrompt(player,setup,fallback){
   await (ffEndNow()||0);   // the bake is his own hands-on turn — recap first if a skip was live
-  // Before the replay early-return, exactly as humanTurn does it: passGate self-handles replay by
-  // silently syncing appState.mySeat rather than showing anything, and a baker never takes an
-  // ordinary turn on the day they bake — so this is the ONLY thing keeping mySeat in step with a
-  // baking seat across a resumed pass-and-play voyage.
-  await passGate(player.idx);
+  // (the hand-over — passGate, which also keeps mySeat in step with a baking seat across a resumed
+  // pass-and-play voyage — has already happened: bakeTurnLive runs it first, see the note above)
   if(appState.replaying){
     if(appState.dlogIdx<appState.dlog.length){
       appState.dlogN++;
@@ -973,7 +941,6 @@ export async function bakeoffPrompt(player,setup,fallback){
     }
     endReplay();
   }
-  applyActiveSeat(player.idx);
   // {wait:true} — same fault, found by the rule-8 sweep rather than by Wyatt: this is the other
   // per-turn spectator line whose subject is "nothing is happening yet". Also fire-and-forget.
   netHandlers().onBroadcast(sayAll("wait.ovens",{p:seat(player.idx)}).html,[{seat:player.idx,html:""}],{wait:true});
@@ -1507,7 +1474,7 @@ export async function animateRimSweepRun(seat,from,to){
    one move in six, and up to three land squares at a time. The MOVE was always legal; only the line
    drawn between its endpoints was a lie.
 
-   The route comes from Game.sailPath, which is the very BFS that decides which squares are legal
+   The route comes from Game.sailTo, which walks the very BFS that decides which squares are legal
    (sailStates is now that same search's `out`). So the path a ship is drawn along and the rule that
    permitted the move cannot disagree — the alternative, a second pathfinder in the UI, is precisely
    the shape of bug this project keeps paying for.
@@ -1914,7 +1881,7 @@ async function pickBarterCrates(player,ing){
        leave the Sugar Seas fer good." on the second. The message above already says the market
        takes TWO crates and names the one already given, so the grey slab underneath was restating
        the bargain a captain had just read while they were reaching for the second crate. */
-    const v=await ask(msg,opts);
+    const v=await ask(player.idx,msg,opts);
     if(appState.turnExpired)return null;
     if(v==="__back__"||v==null){
       if(first===null)return null;
@@ -1931,7 +1898,6 @@ async function pickBarterCrates(player,ing){
    outcome, on the same turn, with the coins just earned (rule 10a/10c), and the price is
    6 − however many crates are left on the island, so it climbs 3 → 4 → 5 as the island empties. */
 export async function humanDock(player,port){
-  applyActiveSeat(player.idx);
   const ing=port;
   const g=appState.game;
   // v2 rule 10d: an empty island still pays. There is treasure in the sand and work on the dock
@@ -2037,7 +2003,7 @@ export async function humanDock(player,port){
          (U+FE0F) — every other flip, here and in util.js, uses the bare ⚪/⚫. Same family as the
          minus sign that must be U+2212: a character nobody can see is still a difference the font
          renders. */
-      const v=await ask(say(h?"dock.buyAsk.treasure":"dock.buyAsk.work",{n:h?g.cfg.dockHeads:g.cfg.dockTails,goods:dockFlavorIcon(ing)}),opts,null,sub);
+      const v=await ask(player.idx,say(h?"dock.buyAsk.treasure":"dock.buyAsk.work",{n:h?g.cfg.dockHeads:g.cfg.dockTails,goods:dockFlavorIcon(ing)}),opts,null,sub);
       if(appState.turnExpired)break;
       // D-40 safety net: buyCrate re-reads the purse itself — `canBuy` was computed BEFORE the
       // await, and the shot clock's penalty can take a coin while this prompt sits open. One
@@ -2170,13 +2136,16 @@ async function counterOffer(q,player,offer){
   const g=appState.game;
   // what THEY are carrying, minus the crate already on the table — offering it back is not a counter
   const theirs=[...new Set(player.ing)].filter(i=>i!==offer.giveIng);
-  const room=Math.max(0,player.coins);
+  // whether a coins-only counter exists at all — the engine's answer (Game.counterRoom), the same one the Counter button and its
+  // "no coin left to sweeten the deal" line read in humanAnswersHail, so the two screens cannot disagree
+  const coinRoom=g.counterRoom(player,offer,null);
   for(;;){
     if(appState.turnExpired)return null;
     const opts=theirs.map(i=>crateOpt(player.ing,i));
-    // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost
-    opts.push({label:say("counter.coin",{}),short:say("counter.coinShort",{}),value:"__coinsonly__",disabled:room<1,
-      why:sayText("counter.noCoin",{p:seat(player.idx)},q.idx)});
+    // coin-only is still a legal counter — it is what the old flow could do, kept rather than lost. Greyed when the asker has no
+    // coin at all, or has already offered every coin aboard (architecture item 20)
+    opts.push({label:say("counter.coin",{}),short:say("counter.coinShort",{}),value:"__coinsonly__",disabled:!coinRoom,
+      why:sayText(offer.giveCoins?"counter.allOffered":"counter.noCoin",{p:seat(player.idx)},q.idx)});
     opts.push({label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"__deny__"});
     opts.push({label:say("button.back",{}),back:true,value:"__back__"});
     // @copy prompt.trade.counterwant — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
@@ -2185,40 +2154,32 @@ async function counterOffer(q,player,offer){
     // UNCONDITIONALLY on an array indexed by that string: undefined.replace, a TypeError, thrown on
     // the first line of the first counter prompt. That is the whole of playtest 22's counter stall —
     // see the note above counterOffer.
-    const pick=await ask(say("counter.ask",{q:pn(q.idx),whose:poss(player.idx)}),opts,null,
+    const pick=await ask(q.idx,say("counter.ask",{q:pn(q.idx),whose:poss(player.idx)}),opts,null,
       theirs.length?null:say("counter.noCargo",{p:seat(player.idx)},q.idx));
     if(appState.turnExpired)return null;
     if(pick==null||pick==="__back__")return "__back__";
     if(pick==="__deny__")return "deny";
     const askIng=(pick==="__coinsonly__")?null:pick;
-    /* ...and how much coin on top, if any. A crate counter may take none at all, so the floor is 0.
+    /* ...and how much coin, if any — the room is the engine's (Game.counterRoom). A crate counter may take none at all, so its floor
+       is 0; a coins-only counter asks at least one coin more than the offer.
 
-       THE CEILING IS THEIR PURSE, NOT A NUMBER. playtest 21 (Wyatt, countering Dough Hook's 8🌕
-       with the slider stuck at 6): "i cannot ask for all that he has — i should be able to slide
-       the slider up to 8, no?" He should, and the 6 was answering a question nobody is asking any
-       more. It dates from the ±1 STEPPER (d63d14f, "circles adjust one coin at a time"), where the
-       ceiling was really a limit on how many taps a price could cost. A slider has no such cost,
-       and the constant outlived the control it was protecting.
-
-       It also broke both trade invariants at once (docs/TRADE-SYSTEM.md):
-         I4, nothing that prices a trade may be a constant — there is no 6-coin rule anywhere in
-             RULES-V2, and a purse ranges over an order of magnitude across a voyage;
-         I3, bots and humans have the same affordances — openingBid bounds a bot's bid by
-             `player.coins - reserve`, its whole purse, so the cap applied to the human alone. */
-    const minC=askIng?0:1;
-    const maxC=room;
-    if(maxC<minC){
-      if(askIng)return {askIng,askCoins:0};
-      continue;                                  // coin-only asked for but there is none — re-pick
-    }
+       THE NUMBER DRAGGED IS COIN IN ALL, AND THE CEILING IS THEIR WHOLE PURSE. playtest 21 (Wyatt, countering Dough Hook's 8🌕 with
+       the slider stuck at 6, 2e9e06b1): "i cannot ask for all that he has — i should be able to slide the slider up to 8, no?" The 6
+       dated from the ±1 STEPPER (d63d14f), and breaking it fixed I4 (no constant prices a trade) and I3 (openingBid lets a bot bid
+       its whole purse). But the slider then ran to the whole purse ON TOP of what was offered, so "ye're ASKIN' 40" from a captain
+       with 40 who had offered 1 settled as 41 and was always refused (architecture item 20, measured on a phone). The pill reads as
+       a total — "Coin instead" — so the slider IS the total: it runs the room, and coinSlider hands back the coin above room.base,
+       which is the counter's own shape (askFor on top, Game.counterTerms). */
+    const room=askIng?g.counterRoom(player,offer,askIng):coinRoom;
+    if(!room)continue;                           // no such counter can be made — re-pick
     const bits=n=>[askIng?ilabelImg(askIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
     // @copy prompt.trade.countercoins — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
     const n=await coinSlider(q.idx,
       k=>say("counter.asking",{q:pn(q.idx),what:bits(k)||say("trade.nothin",{}),want:ilabelImg(offer.want)}),
-      minC,minC,maxC,say("counter.go",{}));
+      room.min,room.min,room.max,say("counter.go",{}),null,null,room.base);
     if(n==null)return null;
     if(n==="__back__")continue;                  // BACK MEANS BACK — return to the crate picker
-    return {askIng,askCoins:n};
+    return {askIng,askCoins:n};                  // coin ON TOP of room.base — what the engine settles
   }
 }
 /* A CONFIRMED QUANTITY IS ITS OWN DECISION, AND ask() ONLY EVER LOGS WHICH BUTTON WAS PRESSED.
@@ -2255,7 +2216,11 @@ function logQuantity(n){
    {i,n} unpack. That means the ONE logQuantity() call below fires for a remote drag exactly as it
    does for a local one, and for the first time the decision log's LENGTH does not depend on how the
    trade was routed: an N-coin counter cost N+2 entries on the stepper and costs 2 either way now. */
-async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declineLabel){
+async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declineLabel,base){
+  /* `base` — coin already on the table that the dragged number INCLUDES (a coins-only counter's offer: Game.counterRoom, architecture
+     item 20). The captain drags coin in all; the log and the caller get the number above base — the counter's own shape — so a
+     recorded counter replays in the units it was always recorded in. */
+  base=base||0;
   if(max<=min){
     /* W6-1 (Wyatt): "'Would ye offer any coin on top?' appears with NO SLIDER when the player has no
        money left. Expectation: the slider appears greyed out, and the button reads 'Nah' instead of
@@ -2283,9 +2248,9 @@ async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declin
     const opts=[{label:(nothingOffered && declineLabel) || confirmLabel,value:"ok",cls:"primary"}];
     if(extraOpt)opts.push(extraOpt);
     opts.push({label:say("button.back",{}),back:true,value:"__back__"});
-    const v0=await ask(msgFor(min),opts,null,null,{slider:{min,max:min,start:min,ref:{value:min},fmt:msgFor,aria:"Coins",disabled:true}});
+    const v0=await ask(seat,msgFor(min),opts,null,null,{slider:{min,max:min,start:min,ref:{value:min},fmt:msgFor,aria:"Coins",disabled:true}});
     if(appState.turnExpired)return null;
-    if(v0==="ok")return logQuantity(min);
+    if(v0==="ok")return logQuantity(min-base);
     if(v0==="__back__"||v0==null)return "__back__";
     return v0;
   }
@@ -2293,34 +2258,34 @@ async function coinSlider(seat,msgFor,start,min,max,confirmLabel,extraOpt,declin
   const opts=[{label:confirmLabel,value:"ok",cls:"primary"}];
   if(extraOpt)opts.push(extraOpt);
   opts.push({label:say("button.back",{}),back:true,value:"__back__"});
-  const v=await ask(msgFor(start),opts,null,null,{slider:{min,max,start,ref,fmt:msgFor,aria:"Coins"}});
+  const v=await ask(seat,msgFor(start),opts,null,null,{slider:{min,max,start,ref,fmt:msgFor,aria:"Coins"}});
   if(appState.turnExpired)return null;
   if(v==="ok"){
-    const n=logQuantity(Math.max(min,Math.min(max,ref.value)));
+    const n=logQuantity(Math.max(min,Math.min(max,ref.value))-base);
     // clamped AGAIN on the way out, against the range THIS call was given: the number coming back
     // may be a replayed one, and a save made when the purse was richer must not spend coins the
     // captain does not have now
-    return Math.max(min,Math.min(max,n));
+    return Math.max(min-base,Math.min(max-base,n));
   }
   if(v==="__back__"||v==null)return "__back__";
   return v;
 }
+/* Returns {spoken, struck}, like every hail runner: spoken once the offer is put to the table (the `openoffer` below), never
+   before. Whether that ends the turn is Game.hailEndsTurn's (architecture item 14). */
 export async function humanTrade(player){
-  applyActiveSeat(player.idx);
   const g=appState.game;
-  // DEFENSE IN DEPTH, symmetric with step 0's "nobody has cargo I want" guard four lines below:
-  // a captain with nothing at all to give (0 coins AND an empty hold) can never complete step 1
-  // regardless of what they WANT — step 1 is built purely from player.ing/player.coins, never from st.want —
-  // so decline here, before the want prompt even renders, instead of dead-ending them one screen
-  // deeper with no way out. humanAct's own canOffer gate (the button itself) is the real fix and
-  // makes this unreachable through the normal menu; this guard exists for any other caller.
+  // DEFENSE IN DEPTH, for any caller but the menu (which greys Trade on the same answer): whether this captain may open a trade
+  // is the engine's (Game.whyNoTrade — nothing to give, or nobody still on the board holding a crate), so decline here, before the
+  // want prompt renders, rather than dead-end them a screen deeper. Each reason keeps the refusal line it always had.
   // @copy adhoc.trade.nothingtogive
-  if(!player.coins&&!player.ing.length){await sayFlash("trade.nothingAtAll",{p:seat(player.idx)});return false;}
+  // @copy adhoc.trade.nocargo
+  const cannot=g.whyNoTrade(player);
+  if(cannot){await sayFlash({nothingToTrade:"trade.nothingAtAll",noCargo:"trade.noCargo"}[cannot],{p:seat(player.idx)});return {spoken:false,struck:false};}
   const st={want:undefined,baseIng:undefined,extraCoins:undefined};
   let step=0;
   while(step<3){
     // CR-02 layer 1: the shot clock can expire on ANY prompt below. No partial trade, ever.
-    if(appState.turnExpired)return false;
+    if(appState.turnExpired)return {spoken:false,struck:false};
     if(step===0){
       // every crate in the game, with the ones nobody holds greyed out (rule 4, Wyatt's ruling)
       const opts=g.ings.map(i=>{
@@ -2330,15 +2295,12 @@ export async function humanTrade(player){
         return {label:ilabelImg(i),value:i,disabled:!holders.length,
           why:sayText("trade.nobodyHas",{ing:iname(i)})};
       });
-      const anyHeld=opts.some(o=>!o.disabled);
-      // @copy adhoc.trade.nocargo
-      if(!anyHeld){await flash(say("trade.noCargo",{}));return false;}
       opts.push({label:say("button.back",{}),back:true,value:"__back__"});
       // @copy prompt.trade.want
       // no shared helper line: every greyed crate above carries "No captain on the water is
       // carryin' <that crate>", which names the crate the general sentence could not (2026-08-25).
-      const want=await ask(say("trade.want",{}),opts);
-      if(want==="__back__"||want==null)return false;
+      const want=await ask(player.idx,say("trade.want",{}),opts);
+      if(want==="__back__"||want==null)return {spoken:false,struck:false};
       st.want=want;step=1;
     }else if(step===1){
       // An offer is a crate, coins, or both — sweeten a crate with a few coins on top.
@@ -2350,9 +2312,9 @@ export async function humanTrade(player){
       // no shared helper line: the greyed "— coins only —" option already carries "Yer purse is
       // empty — ye've no coin to offer, so it must be a crate." (2026-08-25)
       // @copy prompt.trade.give
-      const baseIng=await ask(say("trade.give",{want:ilabelImg(st.want)}),ingOpts);
+      const baseIng=await ask(player.idx,say("trade.give",{want:ilabelImg(st.want)}),ingOpts);
       if(baseIng==="__back__"){step=0;continue;}
-      if(baseIng==null)return false;
+      if(baseIng==null)return {spoken:false,struck:false};
       st.baseIng=(baseIng==="__coinsonly__")?null:baseIng;step=2;
     }else{ // step 2 — playtest 13: the coin stepper, never an option grid
       // ye may offer everything ye have — the same ceiling the counter now uses, and the same one
@@ -2362,7 +2324,7 @@ export async function humanTrade(player){
       const minC=st.baseIng?0:1; // a coins-only offer needs at least 1 coin
       if(maxC<minC){
         // @copy prompt.trade.nothingtooffer
-        await ask(say("trade.nothingToOffer",{}),[{label:say("button.back",{}),back:true,value:-1}]);
+        await ask(player.idx,say("trade.nothingToOffer",{}),[{label:say("button.back",{}),back:true,value:-1}]);
         step=1;continue;
       }
       const giveBits=n=>[st.baseIng?ilabelImg(st.baseIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
@@ -2385,12 +2347,12 @@ export async function humanTrade(player){
       const n=await coinSlider(player.idx,
         k=>say(st.baseIng?"trade.coinOnTop":"trade.howMany",{}),
         minC,minC,maxC,say("trade.offerGo",{}),null,say("button.nah",{}));
-      if(n==null)return false;
+      if(n==null)return {spoken:false,struck:false};
       if(n==="__back__"){step=1;continue;}
       st.extraCoins=n;step=3;
     }
   }
-  if(appState.turnExpired)return false;
+  if(appState.turnExpired)return {spoken:false,struck:false};
   const offer={want:st.want,giveIng:st.baseIng,giveCoins:st.extraCoins||0};
   const offerDisplay=g.offerLabel(offer,0)||"nothing";
   // announcing an offer is itself public information — the whole table now knows what player is after,
@@ -2400,67 +2362,9 @@ export async function humanTrade(player){
   liveRender();
   await narrateLastEvent();
 
-  // ---- every holder answers. Bots reason (engine-side); human captains are asked. ----
-  const responses=[];
-  // Only hail captains for whom something has actually changed since they last said no — the
-  // memory lives in the engine so bots spam neither each other nor, more importantly, the human.
-  for(const q of g.holdersOf(offer.want,player).filter(q=>g.worthReAsking(player,q,offer.want,offer))){
-    if(q.strategy==="human"){
-      applyActiveSeat(q.idx);
-      // @copy prompt.trade.accept
-      // playtest 20 (Mando: "Bug in 'name your price' - the game simply acted as if I had rejected
-      // the trade and moved on"). TWO separate ways that happened, both fixed here:
-      //
-      //   1. A counter is "+k coins on top of the offer", so it needs the offerer to have coins
-      //      LEFT OVER. When they did not, tapping "Name yer price" was recorded as a DENIAL, with
-      //      no prompt and no word to the captain who tapped it — from their seat the game simply
-      //      moved on. The option is now greyed with the reason said out loud (Wyatt's pick), the
-      //      same way the game already greys crates nobody is carrying, so it can never be a silent
-      //      no again.
-      //   2. "← Back" out of the coin stepper was ALSO recorded as a denial. Everywhere else in
-      //      this flow Back steps BACK (see humanTrade's `step=0`/`step=1` above) — one gesture,
-      //      two meanings, which is the consistency rule this project keeps. Back now returns to
-      //      this prompt, and only "✗ Deny" denies.
-      //
-      // `room` is what the offerer has spare AFTER the coins already in the offer.
-      const room=Math.max(0,player.coins-offer.giveCoins);
-      let answered=false;
-      while(!answered){
-        if(appState.turnExpired)return false;
-        const v=await ask(say("trade.offered",{q:pn(q.idx),p:seat(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)},q.idx),[
-          {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
-          // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
-          // crates instead. So it is live whenever they hold anything at all to give, not only
-          // when they have coin spare, and the label says what it now does.
-          {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
-            disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:sayText("trade.nothingElse",{p:seat(player.idx)},q.idx)},
-          {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
-          // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?say("trade.noSweetener",{p:seat(player.idx)},q.idx):null);
-        // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
-        // is Accept. Without this guard a captain who merely ran out of time is recorded as
-        // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
-        if(appState.turnExpired)return false;
-        if(v==="counter"){
-          const c=await counterOffer(q,player,offer);
-          if(c==null)return false;                 // shot clock expired mid-counter
-          if(c==="__back__")continue;              // BACK MEANS BACK — re-ask, never a denial
-          if(c==="deny")responses.push({q,kind:"deny",why:"chose"});
-          else responses.push({q,kind:"counter",askIng:c.askIng,askFor:c.askCoins});
-        }else responses.push({q,kind:v==="accept"?"accept":"deny",why:"chose"});
-        answered=true;
-      }
-    }else{
-      responses.push(g.respondToOffer(q,offer,player));
-    }
-  }
-  applyActiveSeat(player.idx);
-  if(!responses.length){
-    // @copy adhoc.trade.silence
-    await sayFlash("trade.silence",{p:seat(player.idx)});
-    return true;
-  }
+  // ---- every captain the hail is put to answers: bots reason (engine-side), human captains are asked ----
+  const responses=await hearHail(player,offer);
+  if(responses==null)return {spoken:true,struck:false};   // the clock ran out on a captain answering
 
   // ---- the asker sees EVERY answer at once and picks one, or walks away (rule 4a/4b) ----
   /* WHAT EACH CAPTAIN IS ASKING FOR MUST BE ON SCREEN BEFORE YE TAP — playtest 21, and this was a
@@ -2505,7 +2409,8 @@ export async function humanTrade(player){
       opts.push({label:say("trade.wants",{q:seat(r.q.idx),what:bits||say("trade.nothin",{})},player.idx),
         short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?say("trade.coinsShort",{n:t.giveCoins}):""}`,
         value:i,
-        disabled:t.giveCoins>player.coins||!haveIng,
+        // the engine's one test of what an asker can honour — the same one it applies for a bot
+        disabled:!g.canTakeAnswer(player,offer,r),
         why:!haveIng?sayText("trade.notCarrying",{ing:t.giveIng?iname(t.giveIng):say("trade.that",{})})
           :sayText("trade.tooDear",{n:t.giveCoins,coins:player.coins})});
     }
@@ -2514,45 +2419,26 @@ export async function humanTrade(player){
   const colors=opts.map(o=>HEXCOL[responses[o.value].q.idx]);
   opts.push({label:say("trade.walkAway",{}),value:-1});colors.push(null);
   const denyNote=denials.length
-    ?denials.map(r=>say(r.why==="blocking"?"trade.refuses":"trade.declines",{q:pn(r.q.idx)})).join(" · ")
+    ?denials.map(r=>say(r.why==="blocking"?"trade.refuses":"trade.declines",{q:seat(r.q.idx)},player.idx)).join(" · ")
     :null;
-  if(!opts.some(o=>o.value!==-1&&!o.disabled)){
-    // nobody said anything ye can act on
-    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
-    liveRender();
-    // @copy adhoc.trade.alldeclined
-    await sayFlash("trade.allDeclined",{p:seat(player.idx),want:ilabelImg(offer.want)});
-    return true;
-  }
+  // Nobody said anything ye can act on (or nobody answered at all): no choice to put to ye, and the
+  // engine says why below. Otherwise:
   // @copy prompt.trade.pick — APPROVED as written, Wyatt 2026-08-14. One captain per line: the whole point is that
   // the price is readable BEFORE a finger moves, so this deliberately does not compress.
-  const pick=await ask(
-    say("trade.answers",{want:ilabelImg(offer.want),lines:answerLines.join("<br>")}),
-    opts,colors,denyNote);
-  if(appState.turnExpired)return false;
-  if(pick===-1||pick==null){
-    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
-    liveRender();
-    // @copy adhoc.trade.walkaway
-    await sayFlash("trade.walksAway",{p:seat(player.idx)});
-    return true;
+  let pick=-1;
+  if(responses.some(r=>g.canTakeAnswer(player,offer,r))){
+    pick=await ask(player.idx,say("trade.answers",{want:ilabelImg(offer.want),lines:answerLines.join("<br>")}),opts,colors,denyNote);
+    if(appState.turnExpired)return {spoken:true,struck:false};
   }
-  const chosen=responses[pick];
-  // the deal that was actually agreed — a crate counter REPLACES what was offered rather than
-  // adding to it (Wyatt: the counter is a fresh deal, no money riding along invisibly)
-  const terms=chosen.kind==="counter"?counterTerms(offer,chosen):offer;
-  const extra=0;
-  // CR-02 layer 2: settleTrade validates BOTH legs before EITHER mutates, so a trade is atomic —
-  // a crate that is no longer held, or coins that are no longer there, routes into the decline
-  // path below rather than half-completing.
-  if(!g.settleTrade(player,chosen.q,terms,extra)){
-    // @copy adhoc.trade.refusalhuman
-    await sayFlash("trade.declined",{q:seat(chosen.q.idx),p:seat(player.idx)});
-    return true;
-  }
+  /* THE HAIL IS RESOLVED BY THE ENGINE, and the WORDS for one that falls through are the narration
+     table's, read off the `parley` event's reason — the same lines a bot's failed hail now gets
+     (architecture item 15). CR-02 layer 2 lives there too: settleTrade validates BOTH legs before
+     EITHER mutates, so a deal that can no longer be honoured falls through rather than half-completing. */
+  const hail=g.resolveHail(player,offer,responses,pick===-1||pick==null?null:responses[pick]);
+  if(!hail.struck){liveRender();await narrateLastEvent();return {spoken:true,struck:false};}
   await narrateLastEvent();
   liveRender();
-  return true;
+  return {spoken:true,struck:true};
 }
 /* WHICH LADDER SPEAKS AT THE ACT MENU — one helper slot, four teachable buttons.
    FIRST SIGHTING, NOT TURN COUNT. The ladder with the most rungs still to give wins, so a captain
@@ -2571,40 +2457,49 @@ function actLadder(opts){
   }
   return best;
 }
+/* The engine's reasons (Game.whyNoAttack / whyNoAttackHere / whyNoTrade) in the game's words — one entry per reason, and
+   nothing else in this file picks these lines. A reason the engine gains without an entry here would throw in say();
+   scripts/qa/action_reasons_from_engine_check.mjs fails first, because it words every reason the engine can give. */
+const WHY_WORDS={noPowder:"act.noPowder",sanctuary:"act.sanctuary",emptyHolds:"act.emptyHolds",
+  nothingToTrade:"act.nothingToTrade",noCargo:"act.noCargoOnWater"};
+/* ⭐ AFTER A BOAT LANDS, THE TRADE WIND — ONE STEP FOR EVERY SAIL (architecture item 19, 2026-09-17).
+   A human's sail (humanTurn), a human's Move instead (humanAct) and a bot's sail (botTurn) each carried their own copy of these
+   lines, and only the first had the line for a boat that comes into the current AT its head ("rim.head", said here with
+   sayFlash) — so a human who took Move instead, and every bot, rode a zero-square ride in silence. The ENGINE's trade-wind step
+   now records that ride as well as a real one (Game.tradewind: a `tradewind` or a `rimhead` event), and the one narration table
+   words it for whoever is reading. A flight from a fight takes the same engine step inside Game.flee, and the fight shows
+   what it recorded through showTheWind below, once its card is down — before the Lookout's line, the way a won or a null
+   fight says its result before the calls are settled (src/orchestrator.js asyncBattleRun). Without that, a flee's wind was
+   never said at all: the calls settle after it, and the attacker's closing narration finds only the settled calls.
+   scripts/qa/after_sail_one_step_check.mjs holds it. */
+async function afterSail(player){
+  await showTheWind(appState.game.tradewind(player));
+}
+/* The trade-wind step SHOWN: the table told, the drain waited on (the ride, if there was one), and the event narrated —
+   the event it is handed, never the top of the pile (W7). Nothing when the step recorded nothing. */
+export async function showTheWind(ev){
+  if(!ev)return;
+  publishNow();await liveRender();await narrateEvent(ev);
+}
 export async function humanAct(player,sailCtx){
-  applyActiveSeat(player.idx);
   const port=appState.game.adjPort(player);
   const canDock=port&&!(appState.game.cfg.singleDock&&appState.game.dockOccupiedBy(port,player));
-  // v2 rule 13: EVERY dock is raidable now, and a captain who has already fired up the ovens is
-  // still a legal target ("nobody is safe"). So the target list is simply everyone adjacent — a
-  // berth protects no one, and `done` no longer grants immunity.
-  const targets=appState.game.players.filter(q=>q!==player&&man(player.pos,q.pos)<=1);
-  const canAfford=player.coins>=appState.game.cfg.powder;
-  // v2 rule 13e: a ship with an empty hold cannot be attacked — there is nothing to take, and the
-  // prize is a crate or nothing (rule 9d). Compute real availability once and drive both the
-  // button's greying and the action guard from it.
-  const attackable=targets.filter(q=>appState.game.canAttack(player,q));
-  // D-41 EXTENDED (Wyatt-approved 2026-07-29): Parley/Trade is offered whenever any opponent is
-  // alive, but the action itself only ever works against someone HOLDING cargo — compute real
-  // availability once and drive both the button's `disabled` flag and the action guard (:602 below)
-  // from it, following the same pattern already used for Attack.
-  // v2 rule 4: a trade reaches the WHOLE TABLE from wherever ye happen to be floating — there is
-  // no partner to be adjacent to. It is available whenever anybody, anywhere, is holding cargo.
-  //
-  // 02.2 FINAL-QA FIX (a captain who cannot take their turn): a captain with NOTHING TO OFFER —
-  // 0 coins AND an empty hold — could still click an enabled Trade button (this line used to check
-  // only whether an OPPONENT held cargo, never whether P did). humanTrade()'s "what will ye GIVE"
-  // step is built purely from player.ing/player.coins, independent of what P chose to WANT, so that captain
-  // was guaranteed to reach a give-prompt with one permanently-disabled button and no possible way
-  // forward — Back only re-asks WANT (step 0), which can never fix a GIVE-side problem, so the
-  // captain (and the whole table, which waits on their turn) was stuck forever. Same defect shape
-  // Attack already had and already fixed here: two INDEPENDENT conditions must each get their own
-  // `if`, never folded into one, or one silently suppresses the other's reason (see the Attack
-  // comment just below). Bot parity check: engine/index.js's composeOffer already refuses to hail
-  // when `!giveIng&&!giveCoins` — bots have always declined this state cleanly; canOffer brings the
-  // human path to the same rule (rule 13, bot/human parity), not a new behaviour.
-  const canOffer=player.coins>0||player.ing.length>0;
-  const canTrade=canOffer&&appState.game.players.some(q=>q!==player&&!q.done&&q.ing.length>0);
+  /* ⭐ WHETHER YE MAY ATTACK OR TRADE, AND WHY NOT, IS THE ENGINE'S ANSWER — this menu greys the buttons and words the reason,
+     and decides nothing (architecture item 13, 2026-09-17). Game.alongside, attackTargets, whyNoAttackHere and whyNoTrade hold
+     the rules; WHY_WORDS below is the only thing that turns a reason into a sentence.
+     WHAT STOOD HERE, so it is not rebuilt: a target list of everyone adjacent with no in-play test, justified by a comment saying
+     "a captain who has already fired up the ovens is still a legal target ('nobody is safe')" — the v2 classic rule, false since
+     his SANCTUARY ruling of 2026-08-06; its own powder test; a reason picked by elimination (powder, else "Their holds are empty");
+     and a Trade test that counted a baker's crates. So beside a captain baking at Tortuga with five crates aboard, Attack said
+     their holds were empty, and when the only cargo on the water was a baker's, Trade was live and bounced when tapped.
+     The Attack button still SHOWS whenever a ship lies alongside — a baker included, greyed, saying why. The two trade reasons
+     keep their own ruling history in the engine (D-41; the 02.2 FINAL-QA "nothing to offer" strand). */
+  const g=appState.game;
+  const alongside=g.alongside(player.pos,player);
+  const attackable=g.attackTargets(player);
+  const attackWhy=g.whyNoAttackHere(player);
+  const tradeWhy=g.whyNoTrade(player);
+  const canTrade=!tradeWhy;
   const opts=[];
   // F5 (Wyatt-approved 2026-07-29), his own example: *"In the 'Dock at Full Cream Folly' the icon
   // should go directly in front of the island name — 'Dock at 🥛 Full Cream Folly'"*. The icon used
@@ -2649,17 +2544,16 @@ export async function humanAct(player,sailCtx){
   // #5b/#5d: shorter label, and the Attack button always shows when there's a target — greyed out
   // (disabled) rather than hidden when you can't afford powder.
   // playtest 21 item 5: a greyed circle carries its OWN reason, spoken at the circle when tapped.
-  // Attack has two independent ways to be greyed and they used to share one line — the powder one
-  // is checked first because it is the one the captain can actually do something about.
+  // Attack has three ways to be greyed — no powder, sanctuary, an empty hold — and they used to share one line. The engine
+  // orders them (Game.whyNoAttack): powder first, because it is the one the captain can actually do something about.
   // @copy adhoc.why.* — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine").
-  if(targets.length)
-    opts.push({label:say(appState.game.cfg.powder?"act.attack":"act.attackFree",{n:appState.game.cfg.powder}),value:"attack",disabled:!canAfford||!attackable.length,
-      why:!canAfford?sayText("act.noPowder",{n:appState.game.cfg.powder})
-        :sayText("act.emptyHolds",{})});
+  // The reason is read to the captain being asked, so "ye"/"yer" is derived for that seat (player.idx), wherever the menu is drawn.
+  if(alongside.length)
+    opts.push({label:say(g.cfg.powder?"act.attack":"act.attackFree",{n:g.cfg.powder}),value:"attack",disabled:!attackable.length,
+      why:attackWhy?sayText(WHY_WORDS[attackWhy],{n:g.cfg.powder,p:seat(player.idx)},player.idx):null});
   // @copy adhoc.why.nothingtotrade
   opts.push({label:say("act.trade",{}),value:"trade",disabled:!canTrade,
-    why:!canOffer?sayText("act.nothingToTrade",{})
-      :sayText("act.noCargoOnWater",{})});
+    why:tradeWhy?sayText(WHY_WORDS[tradeWhy],{p:seat(player.idx)},player.idx):null});
   // (the classic "Start yer bakery!" button stood here — the classic day is gone, his word of 2026-09-13)
   // THE OVENS BUTTON (Wyatt, 2026-08-09: "Where did the button go? This is a celebratory moment!
   // It feels terrible to have to click 'pass'").
@@ -2812,7 +2706,7 @@ export async function humanAct(player,sailCtx){
   if(helpId)pilotSee(helpId);
   const prompt=say("act.ask",{name:pn(player.idx)});
   // @copy prompt.act.menu
-  const v=await ask(prompt,opts,null,sub);
+  const v=await ask(player.idx,prompt,opts,null,sub);
   if(appState.turnExpired)return;
   // the clock keeps running (and re-arms fresh) through dock/attack/trade/fish now, instead of
   // stopping here — each ask() inside those sub-flows re-arms it for its own decision
@@ -2824,14 +2718,10 @@ export async function humanAct(player,sailCtx){
     // destination" outcome — the ship simply does not move, which renders nothing, so nothing is
     // invented. appState.turnExpired above does NOT cover this: it is set at 30s, the coin
     // penalty fires at 20s and sets no flag at all.
-    if(dest){
-      // playtest 21 item 6: the route is derived from the PRE-MOVE square, so it must be taken
-      // before player.pos is written. sailPath asks the same search that made `dest` legal in the first
-      // place, so the drawn line and the rule can never disagree.
-      const from=[...player.pos];
-      // the drawn line INCLUDES the square being left, so what lands on the wire is self-contained
-      const route=[from,...appState.game.sailPath(player,dest,{throughRim:true})];
-      player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route});
+    /* THE SAIL IS THE ENGINE'S (architecture item 7): Game.sailTo checks the square, writes it, and records the move with the route
+       the same search takes — the one every captain's sail gets. A square it refuses is no move at all. */
+    if(dest&&appState.game.sailTo(player,dest)){
+      player.justDocked=false;
       /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
          Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
          are supposed to feed actions to an engine, which feeds events back, which a different piece
@@ -2851,8 +2741,7 @@ export async function humanAct(player,sailCtx){
          (W9 — it calls only the broadcast half, never the local drain), so no other browser is held
          still for the length of this captain's own animation. */
       publishNow();await liveRender();
-      const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();await liveRender();await narrateLastEvent();}}
+      await afterSail(player);}
     await humanAct(player,sailCtx);return;
   }
   if(v==="pass"){
@@ -2879,7 +2768,7 @@ export async function humanAct(player,sailCtx){
     // #5d: safety net — the button is disabled when you can't afford powder, but guard the action
     // too (e.g. a forced/edge selection) so we never enter a battle you can't pay for.
     // @copy adhoc.act.nopowder
-    if(player.coins<appState.game.cfg.powder||!attackable.length){await sayFlash("act.cantAttack",{p:seat(player.idx)},1400);await humanAct(player,sailCtx);return;}
+    if(!attackable.length){await sayFlash("act.cantAttack",{p:seat(player.idx)},1400);await humanAct(player,sailCtx);return;}
     const t=attackable.length===1?attackable[0]:
       // @copy prompt.act.attacktarget
       // SEAT-ANCHORED, joining the ONE placement rule (Wyatt, 2026-09-01, from the Glass: attack
@@ -2891,11 +2780,10 @@ export async function humanAct(player,sailCtx){
       // carries the CHOOSER's seat because the anchored mode is all-or-nothing — one seatless
       // button would silently drop the whole menu back into the fan. Held by
       // scripts/qa/attack_buttons_on_target_check.mjs, proven red on the seatless shape.
-      await ask(say("act.whom",{}),attackable.map(o=>({label:pn(o.idx),value:o,seat:o.idx})).concat([{label:say("button.back",{}),back:true,value:null,seat:player.idx}]),
+      await ask(player.idx,say("act.whom",{}),attackable.map(o=>({label:pn(o.idx),value:o,seat:o.idx})).concat([{label:say("button.back",{}),back:true,value:null,seat:player.idx}]),
         attackable.map(o=>HEXCOL[o.idx]));
     if(t===null){await humanAct(player,sailCtx);return;}
-    await netHandlers().onAsyncBattle(player,t);
-    await narrateLastEvent();
+    await netHandlers().onAsyncBattle(player,t);   // the fight has said how it ended, before the calls settled (architecture item 9)
   }
   else if(v==="trade"){
     // #5d: safety net, same shape as Attack's own two lines up — the button is disabled when P
@@ -2903,7 +2791,10 @@ export async function humanAct(player,sailCtx){
     // forced/edge selection) so we never enter a trade P cannot possibly complete.
     // @copy adhoc.act.notrade
     if(!canTrade){await sayFlash("act.cantTrade",{p:seat(player.idx)},1400);await humanAct(player,sailCtx);return;}
-    const done=await humanTrade(player);if(!done){await humanAct(player,sailCtx);}return;
+    // A hail put to the table IS this turn's action, struck or refused; backing out before a word was said is not — back to the
+    // menu. The same one rule the simulator's turn and botTurn ask (Game.hailEndsTurn, architecture item 14).
+    if(!g.hailEndsTurn(await humanTrade(player)))await humanAct(player,sailCtx);
+    return;
   }
 }
 /* ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -2919,8 +2810,10 @@ export async function humanAct(player,sailCtx){
    THREE THINGS ARE TRUE OF EVERY TURN WHOEVER IS SAILING, and they live here now:
      · the device changes hands first (passGate — a no-op outside pass-and-play, so it is honest to
        run it for a bot too rather than branching on who is playing)
-     · the screen then turns to that captain (applyActiveSeat)
-     · and the engine records that a turn began (the `turn` event)
+     · and the engine records that a turn began (the `turn` event) — which IS what turns the screen to
+       that captain: the top bar, the ring, the box, the bob and Check my recipe all read whose turn it
+       is from the event stream (util.js whoseTurn, architecture item 3, 2026-09-16). What stood as a
+       step of its own here was applyActiveSeat(), the writer of the slot the top bar used to draw.
    A fourth shared step will be added HERE, once, rather than to two functions by somebody who
    remembers both exist.
 
@@ -2932,23 +2825,9 @@ export async function humanAct(player,sailCtx){
    choosing. The rest is in .planning/BACKLOG.md with its own entry. */
 export async function takeTurn(player){
   await passGate(player.idx);
-  applyActiveSeat(player.idx);
-  /* ⭐ THE DOTTED COURSE BELONGS TO ONE CAPTAIN'S TURN — Wyatt, playtest 2026-09-10: "the dotted
-     line stays up on others' turns and doesn't seem to update until the player's next turn.
-     Expectation: the dotted line is ONLY visible on the player's turn, and auto updates with their
-     current location each turn."
-     WHY IT LINGERED: with Polly on, the sail prompt draws the course and NOTHING takes it down —
-     the `else forgetCourse()` beside that draw only runs when the parrot is OFF, which was the
-     whole point of his earlier ruling that the line should last the voyage rather than fade after
-     three turns. Both rulings are right and they are about different things: the line should
-     persist through HIS turn, not through everybody's.
-     A FOURTH SHARED STEP, HERE, which is exactly what this door was built for. Clearing at the top
-     of EVERY turn answers both halves of his ask at once: a bot's turn draws no course, so the sea
-     is clear while it sails; and his own next turn re-charts from wherever he is standing NOW,
-     because the sail prompt draws it fresh from `spec.pos`. No new flag, no second clock, and
-     pass-and-play gets it right for free — every seat there is a local captain taking its own
-     turn. */
-  forgetCourse();
+  /* (forgetCourse() stood here — "the dotted line is ONLY visible on the player's turn", Wyatt, playtest 2026-09-10. It ran only
+     on the machine running the game, so a crew guest's course never came down with it. The `turn` event below takes the course
+     down now, in the one consumer, on every screen — architecture item 12, 2026-09-17; course_down_one_place_check.mjs.) */
   appState.game.ev({t:"turn",p:player.idx});
   /* PUBLISHED AND DRAWN BEFORE THE CHOOSING BEGINS — so the one consumer frames this captain's turn on
      every device (a guest the moment the event lands; the host here) before anybody is asked anything.
@@ -2980,22 +2859,23 @@ export async function humanTurn(player){
      noticed. Gate: scripts/qa/handover_before_turn_check.mjs.
 
      NOTHING CHANGES OUTSIDE PASS-AND-PLAY — passGate returns immediately in every other mode. */
-  // (passGate, applyActiveSeat and the `turn` event now happen in takeTurn — the one door)
+  // (passGate and the `turn` event now happen in takeTurn — the one door)
   // a prior player's shot-clock expiry can leave this set from their forfeited turn — this
   // flag only ever got cleared by the clock's arming deep inside a decision, too late to
   // save this turn's own early "did the previous turn just die?" guards below, so clear it
   // fresh the moment a new human turn actually begins
   appState.turnExpired=false;
-  // pass & play: this seat's own "check my recipe" button is only ever offered while its
-  // turn is genuinely live (see render()) — any reveal from a prior turn is already gone.
-  appState.activeTurnSeat=player.idx;appState.recipeRevealed=false;
-  liveRender();   // draws the `turn` event takeTurn just emitted, now that the seat flags are set
+  // pass & play: any reveal from a prior turn is already gone. (The "check my recipe" button is offered to the
+  // captain whose turn it is — render() reads that from the one helper, whoseTurn — so no flag is set here any more;
+  // appState.activeTurnSeat, which humanTurn alone wrote, was deleted by architecture item 3.)
+  appState.recipeRevealed=false;
+  liveRender();   // draws the `turn` event takeTurn just emitted, now that the reveal is locked
   /* (The human-only "Ahoy, yer turn!" banner stood here. The start of every captain's turn now says ONE line, from
      takeTurn — the one door — through the one narrator: "turn.start" in src/shared/words.js, silent by his word.) */
   // the clock only starts once the player actually reaches a decision (wind response, sail
   // pick, action choice, ...) — not from the raw top of the turn, since the wind step itself
   // eats no time. (Each ask()/pickCell() call re-armed it fresh while the clock lived.)
-  if(appState.turnExpired){appState.activeTurnSeat=null;appState.recipeRevealed=false;return;}
+  if(appState.turnExpired){appState.recipeRevealed=false;return;}
   // normal turns no longer get force-moved by the wind (see #7) — only a storm still shoves
   // ships around; otherwise the wind only shapes this player's own sail budget below
   // v2.1: a storm can no longer cost anyone a turn — land simply stops the push. The forfeit
@@ -3009,14 +2889,10 @@ export async function humanTurn(player){
     // playtest 18 (Wyatt's pick): a checked recipe STAYS OPEN for the whole turn — the mid-turn
     // re-locks (here after the sail, and after the action below) are gone. The reveal ends at the
     // turn's own boundaries instead: humanTurn's entry, the expiry path, and passGate itself.
-    if(appState.turnExpired){appState.activeTurnSeat=null;return;}
-    if(dest){
-      // playtest 21 item 6 — see the moveInstead site above; both human sail legs route, because a
-      // ship that sails honestly on one of them and cuts the corner on the other is the same
-      // inconsistency in a new place.
-      const fromSail=[...player.pos];
-      const routeSail=[fromSail,...appState.game.sailPath(player,dest,{throughRim:true})];
-      player.pos=dest;player.justDocked=false;const evSail=appState.game.ev({t:"sail",p:player.idx,route:routeSail});
+    if(appState.turnExpired)return;
+    // the sail, its square checked and its route recorded, is Game.sailTo's — the same call as Move instead above and every bot's sail
+    if(dest&&appState.game.sailTo(player,dest)){
+      player.justDocked=false;
       /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
          Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
          are supposed to feed actions to an engine, which feeds events back, which a different piece
@@ -3036,21 +2912,83 @@ export async function humanTurn(player){
          (W9 — it calls only the broadcast half, never the local drain), so no other browser is held
          still for the length of this captain's own animation. */
       publishNow();await liveRender();
-      const evWind=appState.game.tradewind(player);
-      if(evWind){publishNow();await liveRender();await narrateLastEvent();}
-      // /4 playtest 8: entering the current AT its quadrant head gives a zero-square ride, and
-      // silence there reads as a stall. Say why. Draft copy — Wyatt's to rewrite.
-      else if(appState.game.onRim(player.pos))await sayFlash("rim.head",{p:seat(player.idx)});
+      await afterSail(player);
     }
   }
-  if(appState.turnExpired){appState.activeTurnSeat=null;return;}
+  if(appState.turnExpired)return;
   if(!appState.game.adjPort(player))player.dockedNow.clear();
   await humanAct(player,{preSailPos,preSailCoins});
   appState.recipeRevealed=false; // the TURN is over — the reveal ends with it (playtest 18: no mid-turn re-locks)
-  appState.activeTurnSeat=null;
   // refresh now, not at the next turn's render — otherwise this seat's "check my recipe"
   // button sits frozen (blurred but visible) behind the next pass-the-device screen
   if(appState.passAndPlay)liveRender();
+}
+/* ⭐ WHO ANSWERS A HAIL, AND HOW — ONE LOOP FOR EVERY CAPTAIN WHO HAILS (architecture item 15, 2026-09-17).
+   The engine says who a hail is put to (Game.hailAudience); a bot holder answers by reasoning
+   (respondToOffer), a human holder is asked (humanAnswersHail). Both a human's hail (humanTrade) and a
+   bot's (botOpenTradeLive) come through here, so a bot hailing the table reaches exactly the captains
+   its own offer was composed for — it used to ask EVERY holder, including ones it had decided were not
+   worth asking (TRADE-SYSTEM invariant I1: every prompt is something a player has to swat away).
+   Returns the answers in seat order, or null when the clock ran out on a captain answering. */
+async function hearHail(asker,offer){
+  const g=appState.game;
+  const responses=[];
+  for(const q of g.hailAudience(asker,offer)){
+    const r=q.strategy==="human"?await humanAnswersHail(q,asker,offer):g.respondToOffer(q,offer,asker);
+    if(r==null)return null;
+    responses.push(r);
+  }
+  return responses;
+}
+/* THE PROMPT A CAPTAIN SEES WHEN A HAIL IS PUT TO THEM — one, whoever hailed. It stood here twice,
+   verbatim, once for a human's hail and once for a bot's (architecture item 15).
+   Returns {q, kind, …} — the same response shape Game.respondToOffer gives — or null if the clock ran out. */
+async function humanAnswersHail(q,asker,offer){
+  const offerDisplay=appState.game.offerLabel(offer,0)||"nothing";
+  // @copy prompt.trade.accept
+  // playtest 20 (Mando: "Bug in 'name your price' - the game simply acted as if I had rejected
+  // the trade and moved on"). TWO separate ways that happened, both fixed here:
+  //
+  //   1. A counter is "+k coins on top of the offer", so it needs the offerer to have coins
+  //      LEFT OVER. When they did not, tapping "Name yer price" was recorded as a DENIAL, with
+  //      no prompt and no word to the captain who tapped it — from their seat the game simply
+  //      moved on. The option is now greyed with the reason said out loud (Wyatt's pick), the
+  //      same way the game already greys crates nobody is carrying, so it can never be a silent
+  //      no again.
+  //   2. "← Back" out of the coin stepper was ALSO recorded as a denial. Everywhere else in
+  //      this flow Back steps BACK (see humanTrade's `step=0`/`step=1` above) — one gesture,
+  //      two meanings, which is the consistency rule this project keeps. Back now returns to
+  //      this prompt, and only "✗ Deny" denies.
+  //
+  // Whether a coins-only counter exists at all — none when every coin aboard is already offered. The engine's answer
+  // (Game.counterRoom, architecture item 20), read by the Counter button, the line under it, and the Coin button inside the counter.
+  const coinRoom=appState.game.counterRoom(asker,offer,null);
+  for(;;){
+    if(appState.turnExpired)return null;
+    const v=await ask(q.idx,say("trade.offered",{q:pn(q.idx),p:seat(asker.idx),offer:offerDisplay,want:ilabelImg(offer.want)},q.idx),[
+      {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
+      // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
+      // crates instead. So it is live whenever they hold anything at all to give, not only
+      // when they have coin spare, and the label says what it now does.
+      {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
+        disabled:!coinRoom&&![...new Set(asker.ing)].some(i=>i!==offer.giveIng),
+        why:sayText("trade.nothingElse",{p:seat(asker.idx)},q.idx)},
+      {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
+      // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
+      !coinRoom?say("trade.noSweetener",{p:seat(asker.idx)},q.idx):null);
+    // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
+    // is Accept. Without this guard a captain who merely ran out of time is recorded as
+    // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
+    if(appState.turnExpired)return null;
+    if(v==="counter"){
+      const c=await counterOffer(q,asker,offer);
+      if(c==null)return null;                    // shot clock expired mid-counter
+      if(c==="__back__")continue;                // BACK MEANS BACK — re-ask, never a denial
+      if(c==="deny")return {q,kind:"deny",why:"chose"};
+      return {q,kind:"counter",askIng:c.askIng,askFor:c.askCoins};
+    }
+    return {q,kind:v==="accept"?"accept":"deny",why:"chose"};
+  }
 }
 /* v2 rule 4, the bot's side of the open trade. A bot puts the same announcement to the same table
    a human does — the difference is only who answers the prompts. Bot holders reason in the engine
@@ -3060,126 +2998,31 @@ export async function humanTurn(player){
    priceHailOffer, hailWorthIt and the cooldown). That existed because v1 had no way for a bot to
    reach a player it wasn't standing next to, and it only ever fired as a last resort when an
    island had run dry. Rule 4 gives every captain that reach every turn, so the special case is
-   gone rather than left running alongside the general one. */
+   gone rather than left running alongside the general one.
+
+   ITS SETTLEMENT IS THE ENGINE'S NOW (architecture item 15). This function used to carry a THIRD
+   copy of which answer a bot takes and at what price — the one that once settled the raw offer
+   instead of a human's counter, and later priced a spare crate with a typed 1.1 — and its failed
+   hail recorded a reasonless `parley` the narration table had no words for, so the table heard
+   nothing. Wyatt, build .5: "when a captain denied my trade counter offer (in solo play, on his bot
+   turn), that trade fail resolution message did not appear." Game.resolveHail now chooses, settles
+   and says why, for this runner and the simulator alike. */
 export async function botOpenTradeLive(player){
   const g=appState.game;
   const offer=g.botOpenOffer(player);
-  if(!offer)return false;
+  if(!offer)return {spoken:false,struck:false};
   g.noteDemand(player,offer.want,1);
-  const offerDisplay=g.offerLabel(offer,0)||"nothing";
-  g.ev({t:"openoffer",p:player.idx,want:offer.want,offer:offerDisplay});
+  g.ev({t:"openoffer",p:player.idx,want:offer.want,offer:g.offerLabel(offer,0)||"nothing"});
   liveRender();
   await botBeat();
-  const responses=[];
-  for(const q of g.holdersOf(offer.want,player)){
-    if(q.strategy==="human"){
-      applyActiveSeat(q.idx);
-      // @copy prompt.trade.accept
-      // playtest 20 (Mando: "Bug in 'name your price' - the game simply acted as if I had rejected
-      // the trade and moved on"). TWO separate ways that happened, both fixed here:
-      //
-      //   1. A counter is "+k coins on top of the offer", so it needs the offerer to have coins
-      //      LEFT OVER. When they did not, tapping "Name yer price" was recorded as a DENIAL, with
-      //      no prompt and no word to the captain who tapped it — from their seat the game simply
-      //      moved on. The option is now greyed with the reason said out loud (Wyatt's pick), the
-      //      same way the game already greys crates nobody is carrying, so it can never be a silent
-      //      no again.
-      //   2. "← Back" out of the coin stepper was ALSO recorded as a denial. Everywhere else in
-      //      this flow Back steps BACK (see humanTrade's `step=0`/`step=1` above) — one gesture,
-      //      two meanings, which is the consistency rule this project keeps. Back now returns to
-      //      this prompt, and only "✗ Deny" denies.
-      //
-      // `room` is what the offerer has spare AFTER the coins already in the offer.
-      const room=Math.max(0,player.coins-offer.giveCoins);
-      let answered=false;
-      while(!answered){
-        if(appState.turnExpired)return false;
-        const v=await ask(say("trade.offered",{q:pn(q.idx),p:seat(player.idx),offer:offerDisplay,want:ilabelImg(offer.want)},q.idx),[
-          {label:say("button.accept",{icon:iconImg(CHECKMARK_IMG)}),value:"accept"},
-          // playtest 21 item 7: a counter is no longer "+coins" — it can ask for one of THEIR
-          // crates instead. So it is live whenever they hold anything at all to give, not only
-          // when they have coin spare, and the label says what it now does.
-          {label:say("trade.counter",{}),short:say("trade.counterShort",{}),value:"counter",
-            disabled:room<1&&![...new Set(player.ing)].some(i=>i!==offer.giveIng),
-            why:sayText("trade.nothingElse",{p:seat(player.idx)},q.idx)},
-          {label:say("button.deny",{icon:iconImg(CANCEL_X_IMG)}),value:"deny"}],null,
-          // @copy adhoc.trade.nocointosweeten — APPROVED as written, Wyatt 2026-08-14
-          room<1?say("trade.noSweetener",{p:seat(player.idx)},q.idx):null);
-        // CR-02 layer 1, the important one: expireShotClock forces default index 0 — which here
-        // is Accept. Without this guard a captain who merely ran out of time is recorded as
-        // agreeing. Re-checked at the top of the loop too, so a Back cannot outlive the clock.
-        if(appState.turnExpired)return false;
-        if(v==="counter"){
-          const c=await counterOffer(q,player,offer);
-          if(c==null)return false;                 // shot clock expired mid-counter
-          if(c==="__back__")continue;              // BACK MEANS BACK — re-ask, never a denial
-          if(c==="deny")responses.push({q,kind:"deny",why:"chose"});
-          else responses.push({q,kind:"counter",askIng:c.askIng,askFor:c.askCoins});
-        }else responses.push({q,kind:v==="accept"?"accept":"deny",why:"chose"});
-        answered=true;
-      }
-    }else responses.push(g.respondToOffer(q,offer,player));
-  }
-  applyActiveSeat(player.idx);
-  if(!responses.length)return false; // nobody left worth hailing — don't spend the turn on silence
-  // remember every refusal, so the same doomed offer is not put to the same captain again
-  const worth=g.offerWorthTurns(player,offer);
-  for(const r of responses)if(r.kind==="deny"){
-    g.rememberRefusal(player,offer.want,r.q.idx,worth);
-    g.refusedFlagWanted(player,offer,r.q);
-  }
-  /* THE HUMAN'S COUNTER IS A REAL COUNTER HERE TOO — and it was being thrown away.
-
-     playtest 21 item 7 taught counters to REPLACE the give side ("keep yer coin, I want yer
-     cocoa"), and updated the engine's tryTrade and humanTrade's own settlement to read
-     counterTerms(). This path — a BOT hailing the table, the HUMAN answering — is a THIRD copy of
-     the same settlement, and it was left reading the raw `offer`:
-
-         g.settleTrade(player, deal, offer, extra)      // the ORIGINAL deal, not what was agreed
-
-     So a captain who countered asking for a different crate had their counter accepted on screen
-     and the ORIGINAL trade executed instead — the crate they asked for never moved, and the one
-     they had offered still went. Every other test here was wrong in the same way: affordability
-     was judged on `offer.giveCoins + askFor` (blind to a crate counter costing no coin at all),
-     the sort was on `askFor` (not comparable across the two counter shapes), and the worth test
-     priced the deal as if the crate being asked for were free.
-
-     Now identical in shape to Game.tryTrade: price each answer in TURNS on its own terms, drop any
-     the bot cannot actually honour, and settle what was AGREED. Three copies of one decision is
-     the real defect; this at least makes them agree, and TRADE-SYSTEM.md now names all three. */
-  const accepts=responses.filter(r=>r.kind==="accept");
-  const counters=responses.filter(r=>{
-    if(r.kind!=="counter")return false;
-    const t=g.counterTerms(offer,r);
-    return (t.giveCoins||0)<=player.coins&&(!t.giveIng||player.ing.includes(t.giveIng));
-  });
-  let deal=null,terms=offer;
-  if(accepts.length){
-    accepts.sort((x,y)=>g.crateCostTurns(y.q,offer.want,player)-g.crateCostTurns(x.q,offer.want,player));
-    deal=accepts[0].q;
-  }else if(counters.length){
-    const priced=counters.map(r=>{
-      const t=g.counterTerms(offer,r);
-      let cost=g.coinTurns(t.giveCoins||0);
-      if(t.giveIng)cost+=(player.recipe&&player.recipe.includes(t.giveIng)&&g.cnt(player.ing,t.giveIng)<=1)
-        ?g.acquireTurns(player,t.giveIng).turns
-        :1.1;   // PLAN.leverageTurns — a spare costs little to let go
-      return {r,t,cost};
-    }).sort((a,b)=>a.cost-b.cost);
-    // only take a counter that still beats getting the crate the hard way — the same test the
-    // headless bot applies, so a bot never pays a price on screen it would refuse in simulation
-    if(priced[0].cost<=g.acquireTurns(player,offer.want).turns){deal=priced[0].r.q;terms=priced[0].t;}
-  }
-  if(!deal||!g.settleTrade(player,deal,terms,0)){
-    for(const r of responses)if(r.kind==="counter")g.rememberRefusal(player,offer.want,r.q.idx,worth);
-    g.ev({t:"parley",a:player.idx,b:null,offer:offerDisplay,want:offer.want});
-    liveRender();
-    await botBeat();
-    return true; // the offer itself WAS the action — a refused hail still ends the turn
-  }
+  const responses=await hearHail(player,offer);
+  if(responses==null)return {spoken:true,struck:false};               // the clock ran out on a captain answering
+  const hail=g.resolveHail(player,offer,responses);
   liveRender();
   await botBeat();
-  return true;
+  /* {spoken, struck}, like every hail runner; what it costs the turn is Game.hailEndsTurn's (architecture item 14). This
+     used to return whether anybody ANSWERED, so a hail nobody answered left the bot free to dock or muse after it. */
+  return {spoken:true,struck:hail.struck};
 }
 /* A BOT'S DOCK COIN IS NOT DRAWN HERE ANY MORE. It was, until 2026-09-13 — in this turn loop, which
    only the host runs and only for bots, so no human's dock ever drew one and a guest never drew its
@@ -3188,7 +3031,7 @@ export async function botOpenTradeLive(player){
    unchanged, and the narration still waits for it — through eventDrawn(), on every device. */
 
 export async function botTurn(player){
-  // (applyActiveSeat, the `turn` event and its one opening line now happen in takeTurn — the one door. A bot's
+  // (the `turn` event and its one opening line now happen in takeTurn — the one door. A bot's
   // turn used to open with its own botBeat() here, which narrated that event a second time.)
   const g=appState.game;
   // v2.1: no turn is ever lost to weather, so a bot has no forfeit branch either.
@@ -3200,19 +3043,12 @@ export async function botTurn(player){
   const plan=g.planTurn(player);
   const target=plan.cell;
   if(man(player.pos,target)>0){
-    const b=[...player.pos];
     // v2 rule 2: sailing is free. No coin to spend, none to refund.
-    // playtest 21 item 6: bots route too. `b` is already the pre-move square, and sailPlan writes
-    // player.pos — so the path is derived AFTER the move, from `b` to where the bot actually ended up,
-    // which is the one square sailPath can no longer be asked about from player. Hence the explicit
-    // `dest` read. A bot that cut corners while the human sailed honestly would be the same
-    // inconsistency wearing a different hat, and bots do most of the sailing a player watches.
+    /* A BOT SAILS THE WAY EVERY SHIP SAILS (architecture item 7): sailPlan picks the square and Game.sailTo checks it, writes it and
+       records the move with the route the sail search takes, the trade winds allowed — the same call as a person's sail. This loop
+       used to ask for the route itself, after sailPlan had written the square, WITHOUT the rim ({throughRim:false,from:b}), so a bot
+       sailing into the trade winds was recorded with no route and its boat glided the straight chord to the current, over the islands. */
     if(g.sailPlan(player,plan)){player.justDocked=false;
-      // `from:b` — sailPlan has already written player.pos, so the search is told the pre-move square
-      // outright rather than player.pos being temporarily rewound to read the route back out of it.
-      // The route is now taken BEFORE the event, because it rides ON the event (Game.ev/bakeDraw).
-      const route=[b,...g.sailPath(player,[...player.pos],{throughRim:false,from:b})];
-      const evSail=g.ev({t:"sail",p:player.idx,route});
       /* ⭐ THE TURN LOOP WAITS ON THE DRAIN, AND TOUCHES THE DISPLAY NOWHERE.
          Wyatt, 2026-09-08, reading my write-up of the sound-timing fix: "All players, bot or human,
          are supposed to feed actions to an engine, which feeds events back, which a different piece
@@ -3233,8 +3069,7 @@ export async function botTurn(player){
          still for the length of this captain's own animation. */
       publishNow();await liveRender();
       await botBeat();
-      const evWind=g.tradewind(player);
-      if(evWind){publishNow();await liveRender();await narrateLastEvent();}}
+      await afterSail(player);}
     // G18: a boxed-in bot escapes through the rim, exactly as the engine's own takeTurn does.
     // rimEscape() records its own events (windmove, then tradewind's sweep line).
     /* rimEscape returns whether the ship escaped, not the event, so the sweep it just pushed is
@@ -3250,18 +3085,19 @@ export async function botTurn(player){
   // The plan was costed from plan.cell; a storm or a blocked route can leave the ship short of it,
   // so anything needing adjacency is re-checked against where the ship ACTUALLY is. Not a second
   // decision — the same plan, refusing to pretend it arrived.
-  if(plan.type==="attack"&&man(player.pos,plan.target.pos)<=1&&g.canAttack(player,plan.target)){
+  if(plan.type==="attack"&&g.attackTargets(player).includes(plan.target)){
     await netHandlers().onAsyncBattle(player,plan.target);
+    /* the bot's ordinary beat, the one it takes after every move — and it adds no words here: the fight has already said how it ended
+       (architecture item 9), and the event on top of the pile is now the fight's own `disengage`, which has none */
     await botBeat();return;
   }
-  if(plan.type==="trade"){
-    if(await botOpenTradeLive(player))return;
-  }
+  // A hail put to the table IS this turn's action, struck or refused; a trade never spoken costs nothing and falls through to
+  // the berth or the muse below. The same one rule the simulator's turn and humanAct ask (Game.hailEndsTurn, architecture item 14).
+  if(plan.type==="trade"&&g.hailEndsTurn(await botOpenTradeLive(player)))return;
   if(plan.type==="dock"&&g.adjPort(player)===plan.ing){
     const n0=g.events.length;
     if(g.doDock(player,plan.ing)){
       await botBeat();
-      netHandlers().onBroadcastFlip("wait");
       return;
     }
   }
@@ -3275,7 +3111,6 @@ export async function botTurn(player){
     const n0=g.events.length;
     if(g.doDock(player,fallbackPort)){
       await botBeat();
-      netHandlers().onBroadcastFlip("wait");
       return;
     }
   }
@@ -3357,15 +3192,15 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
      the seat (`S.activeSeat ?? appState.curSeat`) because nothing told it — and on a guest neither
      of those is the guest: `curSeat` is whoever's turn the ENGINE is on, and `S.activeSeat` still
      held the last captain the camera pointed at, which is the host.
-     ⚠ THE ASYMMETRY IS THE BUG, AND IT WAS ALREADY VISIBLE HERE. The pass-play branch below calls
+     ⚠ THE ASYMMETRY IS THE BUG, AND IT WAS ALREADY VISIBLE HERE. The pass-play branch below called
      applyActiveSeat(seat) before asking; the simultaneous branch never did. Two branches of one
      dispatcher disagreeing about whether "who is being asked" gets published is exactly the
      one-display-path rule broken inside the function that exists to enforce it. Every local ask now
      says who it is for, on every path, so no caller downstream has to guess — and the picker's own
      derivation is deleted rather than corrected.
-     WHY IT IS SAFE ON A GUEST: applyActiveSeat only ever names a seat the game already has, and
-     during a simultaneous draft each device SHOULD be pointing at its own captain — that is what
-     every other surface (the ribbon, the camera) already assumes it means. */
+     WHY IT IS SAFE ON A GUEST: raiseLocalPrompt only ever names a seat the game already has, and
+     during a simultaneous draft each device SHOULD be pointing at its own captain — which is what the
+     top bar shows during the draft (whoseTurn: the recipe draft is its own phase, architecture item 3). */
   const askLocal = (seat) => raiseLocalPrompt(seat, () => localAsk(localMsg(seat),localOpts(seat),null,sub(seat)));
   if(appState.passAndPlay){
     if(isPublic){
@@ -3376,13 +3211,10 @@ export async function draftDispatch({seats,isPublic,msgFor,optsFor,waitMsg,annou
     // one device, secret options: draft in turn, each behind the pass-the-device screen
     for(const seat of seats){
       await passGate(seat);
-      /* ⚠ THE EXPLICIT CALL STAYS HERE EVEN THOUGH askLocal() ALSO MAKES IT, and that is not
-         belt-and-braces — it is a gate holding a decision. pass_play_handover_check asserts, in the
-         SOURCE, that the screen turns to the incoming captain only AFTER the device has changed
-         hands; hiding that call inside a helper made the ordering invisible to it and it failed the
-         same minute. applyActiveSeat only bumps turnSerial when the seat actually changes, so the
-         second call is free. A rule somebody can read is worth more than one fewer line. */
-      applyActiveSeat(seat);
+      /* THE DEVICE CHANGES HANDS, THEN THE SCREEN ASKS THE INCOMING CAPTAIN — in that order, in the source.
+         An explicit applyActiveSeat(seat) stood between these two lines so handover_before_turn_check could
+         read the order; it wrote the slot the top bar drew, and architecture item 3 deleted that slot. The
+         screen turns to this captain through askLocal's raiseLocalPrompt now, and the gate reads THAT. */
       results[seat]=await askLocal(seat);
     }
     return results;
@@ -3592,7 +3424,8 @@ export function battleSnapshot(o){
 }
 export function renderBattleFromSnap(snap,extra){
   if(!appState.game||!appState.game.players[snap.attIdx]||!appState.game.players[snap.defIdx])return;
-  if(window.__pp4)window.__pp4.battle(snap.attIdx,snap.defIdx);
+  // (the camera's hold stood here, re-armed by every snapshot a guest drew and never released — architecture item 4: it is the fight's
+  //  `engage` event now, held and let go by the one event consumer on every screen)
   netHandlers().onRenderBattle(Object.assign({att:appState.game.players[snap.attIdx],def:appState.game.players[snap.defIdx]},snap,extra||{}));
 }
 // The Lookout's Call: every spectator MUST call a winner from the crow's nest —
@@ -3608,20 +3441,19 @@ export function renderBattleFromSnap(snap,extra){
    (rule 9: crosswind stand-off, attacker declines to pay) has no winner, so no call is correct
    and nobody is paid. */
 export async function collectSideBets(att,def){
-  const bets=[],ns=pn;
+  const bets=[];
   const spectators=appState.game.players.filter(player=>player!==att&&player!==def&&!player.done);
   for(const s of spectators){
     if(s.strategy==="human"){
-      applyActiveSeat(s.idx);
       // NAMED, because on one device the prompt arrives out of nowhere (Wyatt, 2026-08-08: "it is
       // wyyy's turn and they are attacking, but juju must call; so the narration should say 'Juju —
       // A battle's brewing!'"). The caller is a SPECTATOR of someone else's fight, so nothing about
       // whose turn it is tells you the screen is now asking you. The name is the only thing that does.
       // @copy prompt.sidebet.call
-      const who=await ask(say("call.ask",{name:ns(s.idx),n:appState.game.cfg.callBounty}),
+      const who=await ask(s.idx,say("call.ask",{name:pn(s.idx),n:appState.game.cfg.callBounty}),
         // `seat` puts each circle ON THE BOAT IT NAMES (Wyatt's pick, playtest 22) rather than
         // fanning both around the caller's own ship, which the director no longer has on screen.
-        [{label:say("call.button",{name:ns(att.idx)}),value:"a",seat:att.idx},{label:say("call.button",{name:ns(def.idx)}),value:"d",seat:def.idx}],
+        [{label:say("call.button",{name:pn(att.idx)}),value:"a",seat:att.idx},{label:say("call.button",{name:pn(def.idx)}),value:"d",seat:def.idx}],
         [HEXCOL[att.idx],HEXCOL[def.idx]]);
       bets.push({idx:s.idx,on:who});
       // D-08: a call names two seats — the caller AND the captain called — so both get an

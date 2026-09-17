@@ -93,14 +93,22 @@ export const appState = {
   gameStarted: false,
   appliedMeta: false,
   passAndPlay: false,
-  activeTurnSeat: null,
+  // (activeTurnSeat stood here — "Check my recipe"'s own copy of whose turn it is, written by humanTurn alone. Deleted by
+  // architecture item 3, 2026-09-16: that button reads src/ui/util.js whoseTurn, as every surface does.)
+  // handOver: the seat a pass-and-play hand-over card is passing the device TO, for as long as the card is up (passGate,
+  // src/ui/lobby.js); null otherwise. While it is set this device belongs to no captain.
+  handOver: null,
   recipeRevealed: false,
 
   // index.html:2015-2051 — live (human) mode: networked-turn bookkeeping, shot clock, replay
   live: false,
   liveDone: false,
   liveGen: 0,
-  curSeat: 0,
+  // askedSeat: the captain a prompt on THIS screen is asking right now, or null — written only by raiseLocalPrompt
+  // (src/ui/util.js), the one door a local prompt comes through. It is NOT whose turn it is: that is read, never stored
+  // (util.js whoseTurn), and this decides it for one phase only, the recipe draft. It replaced curSeat (architecture
+  // item 3, 2026-09-16), which every prompt wrote and the top bar drew as the turn.
+  askedSeat: null,
   inBattlePrompt: false,
   spectatingBattle: false,
   // The clock's six fields left with the shot clock; shotClockPaused and autoPausedByHide left

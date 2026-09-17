@@ -1,59 +1,73 @@
 #!/usr/bin/env node
-/* WHOSE TURN IS IT — ONE FACT, ONE WRITER.  (Step 3 gate, MEASURER 2026-08-31)
-   "whose turn is it" is stored TWICE: appState.curSeat (written by setActor, src/ui/util.js:1822)
-   and stage.js's S.activeSeat (written by window.__pp4.actor, src/ui/stage.js:3682).
-   ribbonTick draws `S.activeSeat ?? appState.curSeat` (src/ui/stage.js:1206) — so a write that
-   moves ONLY curSeat is a write the ribbon does not draw.
-   applyActiveSeat() (src/ui/util.js:1840) is the converged writer: it moves BOTH.
-   THIS GATE: every write to the fact goes through applyActiveSeat. Any direct setActor() call
-   outside its definition and outside applyActiveSeat is a second writer of one fact. */
+/* WHOSE TURN IT IS — ONE FACT, AND NOW NO WRITER AT ALL. WHO IS BEING ASKED — ITS OWN FACT, ONE WRITER.
+   (Step 3 gate, MEASURER 2026-08-31; RE-ANCHORED BY ARCHITECTURE ITEM 3, 2026-09-16.)
+
+   WHAT THIS HELD UNTIL 2026-09-16: "whose turn is it" was stored twice — appState.curSeat (setActor) and stage.js's S.activeSeat
+   (window.__pp4.actor) — and ribbonTick drew `S.activeSeat ?? appState.curSeat`, so a write that moved only one was a write the top bar
+   did not draw. applyActiveSeat() moved both; this gate made it the only writer.
+
+   WHY THE ANCHOR MOVED: that one writer was the fault. 19 callers wrote the slot, most of them for whoever was being ASKED (a defender's
+   flip, a crow's-nest call, a trade partner) and the event consumer for whichever seat each event named — so the top bar left the attacker
+   mid-fight, against his ruling (DECISIONS.md, 2026-09-16): "The top bar shows whose turn it is -- which is the active player who decided
+   to attack. this does not need to change during a battle; it should not." Item 3 split the one slot into the two facts it was carrying:
+     · WHOSE TURN IT IS — read, never stored: src/ui/util.js whoseTurn() over the event stream (scripts/qa/whose_turn_shown_once_check.mjs
+       holds every surface to it);
+     · WHO IS BEING ASKED — appState.askedSeat, written by exactly one function, raiseLocalPrompt (util.js), the one door a local prompt
+       comes through.
+   THIS GATE, NOW: (1) no store of the turn survives — no setActor/applyActiveSeat/curSeat/S.activeSeat/__pp4.actor definition or write
+   anywhere in src; (2) appState.askedSeat is assigned only inside raiseLocalPrompt, which is defined once, in util.js. Red-proofed below
+   against both, in memory. */
 import fs from 'node:fs';import path from 'node:path';import { fileURLToPath } from 'node:url';
-/* ⚠ ROOT OFF THIS MODULE, NEVER OFF A TYPED PATH. This line used to read
-   `process.argv[2] || '/home/user/pastrypirates'`, and `npm test` passes no argument — so on any
-   machine that is not this container the gate CRASHED with exit 1 at gate 32 of 55 and the
-   remaining 23 NEVER RAN. Found by CEO Review 37 before it reached Wyatt's Mac.
-   The lesson was already in the repo, three days old, and this made it again in the direction
-   nothing checks: `doc_command_check` fails a home-rooted path in a DOC and prints "it runs the
-   same in a cloud container as on the laptop" — in the same run that this gate would have died in.
-   41 of the 42 sibling gates already do it this way. */
+import { stripComments } from './lib/strip_comments.mjs';
+/* ⚠ ROOT OFF THIS MODULE, NEVER OFF A TYPED PATH. This line once read `process.argv[2] || '/home/user/pastrypirates'`, and `npm test`
+   passes no argument — so on any machine that was not that container the gate CRASHED and the gates after it NEVER RAN (CEO Review 37). */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC=path.join(ROOT,'src');
-const files=[];(function walk(d){for(const f of fs.readdirSync(d,{withFileTypes:true})){
-  const p=path.join(d,f.name);if(f.isDirectory())walk(p);else if(f.name.endsWith('.js'))files.push(p);}})(SRC);
-// INSTRUMENT REACHED ITS SUBJECT? prove the three anchors exist before believing any count.
-const util=fs.readFileSync(path.join(SRC,'ui/util.js'),'utf8');
-const stage=fs.readFileSync(path.join(SRC,'ui/stage.js'),'utf8');
-const anchors={
-  'setActor defined in util.js (NOT exported)':/(?<!export )function setActor\(s\)\{appState\.curSeat=s;\}/.test(util),
-  'setActor is not exported':!/export function setActor\(/.test(util),
-  'applyActiveSeat defined in util.js':/export function applyActiveSeat\(seat\)\{/.test(util),
-  'applyActiveSeat calls setActor':/applyActiveSeat\(seat\)\{[\s\S]{0,1200}?setActor\(/.test(util),
-  'applyActiveSeat calls __pp4.actor':/applyActiveSeat\(seat\)\{[\s\S]{0,1200}?__pp4\.actor\(/.test(util),
-  'ribbonTick prefers S.activeSeat':/S\.activeSeat != null\) \? S\.activeSeat : \(appState\.curSeat/.test(stage),
-};
-console.log('SUBJECT REACHED:');for(const[k,v]of Object.entries(anchors))console.log('  '+(v?'yes':'NO ')+'  '+k);
-if(Object.values(anchors).some(v=>!v)){console.log('\nINCONCLUSIVE — the code this gate describes has moved. Fix the gate, do not trust it.');process.exit(2);}
-/* COMPARE PATHS IN POSIX, NEVER IN THE PLATFORM'S OWN SEPARATOR. `f` comes from path.join, so on
-   Windows it is backslash-separated and f.endsWith('ui/util.js') is FALSE -- the exemption for
-   the ONE legitimate call never fires, and this gate then reports the converged writer itself as
-   a second writer. It did exactly that on the Razer 2026-08-31: RED, with the backslashes plainly
-   visible in its own output, while src/ held that one call and no other. Same fault, same day, as
-   tree_health_check's PROSE_OK allowlist. A gate that is red on one OS and green on another is
-   not measuring the code. */
+/* COMPARE PATHS IN POSIX: on Windows path.join is backslash-separated, and a gate that is red on one OS and green on another is not
+   measuring the code (the Razer, 2026-08-31). */
 const rel=f=>path.relative(ROOT,f).split(path.sep).join('/');
-const viol=[];
-for(const f of files){const lines=fs.readFileSync(f,'utf8').split('\n');
-  lines.forEach((L,i)=>{
-    const code=L.replace(/\/\/.*$/,'');
-    if(!/\bsetActor\s*\(/.test(code))return;
-    if(/^\s*(export )?function setActor\(s\)\{appState\.curSeat=s;\}/.test(code))return; // the definition itself
-    if(rel(f).endsWith('ui/util.js')&&/^\s*setActor\(s\);\s*$/.test(code))return;    // the one call, inside applyActiveSeat
-    if(/^\s*(import|export)\b/.test(code)||/^\s*[\w,\s]+,\s*$/.test(code)&&!/\(/.test(code.replace(/setActor\s*\(/,'')))return;
-    viol.push(`${rel(f)}:${i+1}: ${L.trim().slice(0,90)}`);});}
-// drop import-manifest lines (setActor listed among imported names, no call parens after it)
-const real=viol.filter(v=>/setActor\s*\(/.test(v));
-console.log(`\nDIRECT setActor() CALLS OUTSIDE applyActiveSeat: ${real.length}`);
-for(const v of real)console.log('  '+v);
-if(real.length){console.log(`\nRED — "whose turn is it" has ${real.length+1} writers (${real.length} direct + applyActiveSeat).`);
-  console.log('Each direct call moves appState.curSeat and leaves S.activeSeat stale; stage.js:1206 draws S.activeSeat first.');process.exit(1);}
-console.log('\nGREEN — applyActiveSeat is the only writer of the active seat.');process.exit(0);
+const files={};(function walk(d){for(const f of fs.readdirSync(d,{withFileTypes:true})){
+  const p=path.join(d,f.name);if(f.isDirectory())walk(p);else if(f.name.endsWith('.js'))files[rel(p)]=fs.readFileSync(p,'utf8');}})(SRC);
+
+function bodyAt(src,h){ if(h<0)return ''; let j=src.indexOf('(',h),d=0;
+  for(;j<src.length;j++){if(src[j]==='(')d++;else if(src[j]===')'){d--;if(!d)break;}}
+  j=src.indexOf('{',j);d=0; for(;j<src.length;j++){if(src[j]==='{')d++;else if(src[j]==='}'){d--;if(!d)break;}}
+  return src.slice(h,j+1); }
+
+function measure(fl){
+  const code=Object.fromEntries(Object.entries(fl).map(([k,v])=>[k,stripComments(v)]));
+  const slots=[];
+  for(const [f,c] of Object.entries(code)){
+    c.split('\n').forEach((L,i)=>{
+      if(/\bfunction\s+(setActor|applyActiveSeat)\s*\(|\b(setActor|applyActiveSeat)\s*\(|appState\.curSeat\b|\bcurSeat\s*:|S\.activeSeat\b|__pp4\.actor\b|activeTurnSeat\b/.test(L))
+        slots.push(`${f}:${i+1}: ${L.trim().slice(0,90)}`);
+    });
+  }
+  const doors=Object.entries(code).filter(([,c])=>/export function raiseLocalPrompt\s*\(/.test(c)).map(([f])=>f);
+  const util=code['src/ui/util.js']||'';
+  const door=bodyAt(util,util.indexOf('export function raiseLocalPrompt('));
+  const writesIn=(door.match(/appState\.askedSeat\s*=(?!=)/g)||[]).length;
+  const writesAll=Object.values(code).reduce((n,c)=>n+(c.match(/appState\.askedSeat\s*=(?!=)/g)||[]).length,0);
+  return {slots, doors, writesIn, writesAll};
+}
+const judge=m=>({noSlot:m.slots.length===0, oneWriter:m.doors.length===1&&m.doors[0]==='src/ui/util.js'&&m.writesIn>=1&&m.writesAll===m.writesIn});
+
+const real=measure(files), v=judge(real);
+console.log('SUBJECT REACHED:');
+console.log(`  ${real.doors.length?'yes':'NO '}  raiseLocalPrompt defined (${real.doors.join(', ')||'nowhere'})`);
+console.log(`  ${real.writesIn?'yes':'NO '}  it writes appState.askedSeat (${real.writesIn} write(s) inside it)`);
+if(!real.doors.length||!real.writesIn){console.log('\nINCONCLUSIVE — the code this gate describes has moved. Fix the gate, do not trust it.');process.exit(2);}
+
+console.log(`\n${v.noSlot?'PASS':'FAIL'}  no store of whose turn it is survives${v.noSlot?'':` — ${real.slots.length} line(s):\n    `+real.slots.join('\n    ')}`);
+console.log(`${v.oneWriter?'PASS':'FAIL'}  who is being asked has one writer, raiseLocalPrompt in util.js (${real.writesAll} assignment(s) in src, ${real.writesIn} of them inside it)`);
+
+/* RED-PROOF, in memory, through the same measure. */
+const put=(f,from,to)=>files[f].includes(from)?{...files,[f]:files[f].replace(from,to)}:null;
+const M1=put('src/ui/flow.js','export async function collectSideBets(att,def){','export async function collectSideBets(att,def){\n  appState.askedSeat=att.idx;');
+const M2=put('src/ui/util.js','export function whoseTurn(){','function setActor(s){appState.curSeat=s;}\nexport function whoseTurn(){');
+const r1=M1&&!judge(measure(M1)).oneWriter, r2=M2&&!judge(measure(M2)).noSlot;
+console.log(`${r1?'PASS':'FAIL'}  red-proof: a second writer of who is being asked (collectSideBets) ${r1?'goes red':M1?'STAYS GREEN':'could not be built'}`);
+console.log(`${r2?'PASS':'FAIL'}  red-proof: setActor, the old store of the turn, put back ${r2?'goes red':M2?'STAYS GREEN':'could not be built'}`);
+
+if(!v.noSlot||!v.oneWriter||!r1||!r2){console.log('\nRED — whose turn it is has a store again, or who is being asked has a second writer (or a red-proof did not hold).');process.exit(1);}
+console.log('\nGREEN — whose turn it is is read, never stored; raiseLocalPrompt is the only writer of who is being asked.');process.exit(0);

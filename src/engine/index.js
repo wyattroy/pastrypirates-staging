@@ -5,18 +5,24 @@
 // Imports from `../shared/index.js`; must never be imported BY
 // `src/shared/` (shared is a leaf, engine depends on it, never the reverse).
 
-import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, bake2Enabled, endCardEnabled, man, ilabelImg, VOYAGE_POINTS, voyageScoreRows, voyageCloseness } from "../shared/index.js";
+import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, bake2Enabled, endCardEnabled, man, ilabelImg, VOYAGE_POINTS, voyageScoreRows, voyageCloseness, startingPurse } from "../shared/index.js";
 import { recipeSteps } from "../shared/recipe-steps.js";
 import { newBake, scrambleBench, shuffleSlots, scoreAttempt, applyResult, botGuess, unsolvedCount } from "./bakeoff.js";
 
 // notes/edits #1a: roll a storm for the round, but never allow a 3rd in a row. Always consumes
 // exactly one g.r() so the seeded RNG sequence stays identical live vs. host-refresh replay.
+/* It READS the storms running and writes nothing (architecture item 44, 2026-09-17). It used to write the count
+   too — and it draws TOMORROW's weather, so by the time the day's record read the count it already held tomorrow:
+   the first of two storms in a row said "Storm's now blowin'" and the second "Storm's blowin'". The count is kept
+   once, in Game.advanceWind, the moment the forecast becomes today; the roll and the cap it reads are unchanged. */
 function rollStorm(g){
   const roll=g.r()<g.cfg.storm;
-  const storm=(g.stormStreak||0)>=2?false:roll;
-  g.stormStreak=storm?(g.stormStreak||0)+1:0;
-  return storm;
+  return (g.stormStreak||0)>=2?false:roll;
 }
+/* THE DAY CAP — the most days a voyage may run before it ends with whoever is crowned by then (nobody, if
+   nobody has baked). ONE named number (architecture item 2, 2026-09-16): it was typed as a bare 150 three
+   times — playBakeoff, playClassic and the live runLiveNet — and Game.beginDay is now the only reader. */
+const DAY_CAP=150;
 
 // v2: bots are PLANNERS, not weighted gates (Wyatt, 2026-08-04: "don't give them gates, give them
 // strategy"). Each bot builds a route through every ingredient it still needs, costed in TURNS —
@@ -268,7 +274,9 @@ class Game{
       let b=this.sample(this.ings,cfg.recipeSize);
       let tries=0;
       while(tries++<20&&a.slice().sort().join()===b.slice().sort().join())b=this.sample(this.ings,cfg.recipeSize);
-      return {idx:i,strategy:s,pos:[...this.home],coins:cfg.startCoins,
+      // Until the sailing order is drawn (Game.beginVoyage) every captain holds the first captain's purse —
+      // what the captains' rows show during the opening, before the order is known.
+      return {idx:i,strategy:s,pos:[...this.home],coins:startingPurse(cfg,0),
         ing:[],recipe:a,recipeChoices:[a,b],firstFlip:new Set(),dockedNow:new Set(),
         done:false,heads:0,flips:0,corner:null,justDocked:false,shipwrecked:false,
         coolUntil:{},grudge:null,justLost:null,fightLog:{},
@@ -308,10 +316,10 @@ class Game{
     // v2 bot AI: public evidence of what each captain has been chasing (see noteDemand/demandFor).
     // Never contains anybody's recipe — only actions the whole table watched happen.
     this.demand=this.players.map(()=>({}));
-    this.stormStreak=0; // notes/edits #1a: consecutive-storm counter — caps storms at 2 back-to-back
+    this.stormStreak=0; // notes/edits #1a: storm days running, TODAY included (0 on a calm day) — kept only by advanceWind; caps storms at 2 back-to-back
     // notes/edits NARR-04: how many rounds running the wind has held one direction (1 = first round
-    // of it). Separate from stormStreak, which exists to CAP repeat storms — this one is purely
-    // narration and counts calm rounds too.
+    // of it). Separate from stormStreak, which counts storm days (to CAP repeat storms, and to tell a new storm
+    // from a continuing one) — this one is purely narration and counts calm rounds too.
     this.windStreak=0;this.windPrev=null;
   }
   r(){this.randCalls++;return this.rng();}
@@ -365,6 +373,20 @@ class Game{
     this.ev({t:"turnOrder",order:this.turnOrder.slice()});
     return this.turnOrder;
   }
+  /* ⭐ HOW A VOYAGE STARTS — ONE STEP, CALLED BY EVERY VOYAGE (architecture item 2, 2026-09-16).
+     The sailing order is drawn once and never rotates, each captain is dealt the purse for their place in
+     it (startingPurse: the first gets cfg.startCoins, each after one more — the stagger that levels the
+     one-time first-mover edge), and the order is published on the one pipe.
+     It used to be written twice: runLiveNet shuffled, staggered and published; playBakeoff / playClassic
+     shuffled and did neither, so every headless voyage started at 3/3/3/3 with no turnOrder event. The
+     ENGINE FOLLOWS THE LIVE GAME: same draws in the same order (one shuffle), same purses, same event. */
+  beginVoyage(){
+    const order=this.players.map((_,i)=>i);
+    this.shuffle(order);
+    order.forEach((i,place)=>{this.players[i].coins=startingPurse(this.cfg,place);});
+    this.setTurnOrder(order);
+    return order;
+  }
   ev(o){if(!this.record)return;o.round=this.round;o.wind=this.windNow;o.storm=this.stormNow;o.wind2=this.windNow2;
     // `baking` rides in the snapshot so the board can render a captain's out-of-play state from the
     // EVENT rather than from live state — which is what keeps the scrubber honest when you drag it
@@ -380,7 +402,7 @@ class Game{
        belong here.
        It is baked in the SAME breath as the snapshot on purpose: bakeDraw checks the route against
        the pos it was baked beside and refuses one that does not land there, so the drawn line and
-       the recorded move can never be published disagreeing. Same refusal sailPath and rimSweepPath
+       the recorded move can never be published disagreeing. Same refusal sailTo and rimSweepPath
        make — no route is better than an invented one. */
     o.state=this.players.map(p=>({pos:[...p.pos],coins:p.coins,ing:[...p.ing],done:p.done,baking:!!p.baking}));const draw=this.bakeDraw(o.route,o.state[o.p]);delete o.route;if(draw)o.draw=draw;
     o.tokens={...this.tokens};this.events.push(o);
@@ -511,17 +533,28 @@ class Game{
      the engine that records it — the alternative, guessing in the narration table from whatever
      event came before, is the kind of second source of truth this project keeps paying for.
      Only windLeg's storm push passes true; a chosen sail, a rim escape and a flight from a battle
-     are all the ship moving under its own canvas. */
+     are all the ship moving under its own canvas.
+     ⭐ THE ONE TRADE-WIND STEP AFTER A BOAT LANDS, FOR EVERY CAPTAIN (architecture item 19, 2026-09-17). A human's sail, a human's
+     Move instead and a bot's sail (src/ui/flow.js afterSail), a bot's sail in a headless voyage (takeTurn), a boxed-in bot's escape
+     (rimEscape) and a flight from a battle (flee) all come through here. */
   tradewind(p,blown){
     if(!this.isRound)return false;
     const head=this.rimHead[p.pos[0]+","+p.pos[1]];
-    if(head&&(head[0]!==p.pos[0]||head[1]!==p.pos[1])){
+    if(!head)return false;
+    if(head[0]!==p.pos[0]||head[1]!==p.pos[1]){
       /* RETURNS THE EVENT IT PUSHED, for the same reason ev() does: a caller that wants to draw
          this sweep can hold the event itself instead of reaching back for the top of the pile.
          Still falsy when no sweep happened, so every `if(tradewind(...))` reads the same. */
       p.pos=[...head];return this.ev({t:"tradewind",p:p.idx,blown:!!blown});
     }
-    return false;
+    /* A RIDE OF NO SQUARES — the boat came into the current AT its head, so there is nowhere to carry her. /4 playtest 8 (Wyatt):
+       silence there reads as a stall, so it is explained. It used to be explained only to a human who sailed there, by a line
+       humanTurn said itself — a human who took Move instead, a bot, or a captain fleeing a fight got nothing. Recorded HERE, once, so
+       every one of them gets it and every screen hears it (words: "rim.head", worded by the narration table for bots and humans
+       alike). A kind of its own, not a `tradewind` of length 0: every reader of `tradewind` means the current CARRIED a boat (the
+       speed lines, the ride and the lesson before it, the wait for arrival), and a boat that did not move must reach none of them.
+       NOT for a storm: the storm is reported once, in its own summary (Wyatt, 2026-08-23c, item 8). */
+    return blown?false:this.ev({t:"rimhead",p:p.idx});
   }
   // D-21: the FIRST matching cause, same precedence moored()'s || chain already used — null when
   // none match. moored() is now defined in terms of this, not a parallel rule.
@@ -688,13 +721,13 @@ class Game{
       .map(p=>({p,proj:p.pos[0]*d[0]+p.pos[1]*d[1]}))
       .sort((a,b)=>b.proj-a.proj).map(o=>o.p);
   }
-  // v2 rule 1 reachability, shared by the engine and (via reachableFrom) the UI's highlighting.
+  // v2 rule 1 reachability, shared by the engine and (via sailChoices) every screen's gold squares and sail frame.
   // Breadth-first over states of (cell, hasGoneUpwind): a route is legal when it stayed off the
   // wind's nose and is <= SAIL_RANGE long, OR touched upwind and is <= SAIL_RANGE_UPWIND long.
   // You may sail PAST other ships but never END on one, so occupied cells expand but don't land.
   //
-  // `opts.throughRim` lets a caller keep the rim as a legal destination (a human may deliberately
-  // ride the trade winds); bots pass it false and stay out of the channel except via rimEscape().
+  // `opts.throughRim` keeps the rim as a legal destination — any captain may deliberately ride the trade winds. Without it the search
+  // is a BOT's ordinary-move list (stepToward, reachableFrom: how a bot chooses, its rides weighed separately), never where a ship may go.
   /* THE ONE SAIL SEARCH. sailStates() is this function's `out` and nothing else, so the squares a
      player may sail to and the ROUTE a ship takes to reach one are answered by the same walk of the
      board — they cannot disagree about what is legal, which a second pathfinder would eventually
@@ -718,12 +751,10 @@ class Game{
     };
     const occ=o=>this.players.some(q=>q!==p&&this.inPlay(q)&&q.pos[0]===o[0]&&q.pos[1]===o[1]);
     const k=(c,u)=>c[0]+","+c[1]+","+(u?1:0);
-    // `opts.from` lets a caller ask the search from a square the ship is no longer standing on —
-    // the bot path needs it, because sailPlan has already committed p.pos by the time the route is
-    // wanted. An explicit origin, NEVER a temporary write to p.pos: mutating live game state to
-    // read something back out of it is the shortcut HARD-WON-LESSONS records as having wedged a
-    // whole run, and it would be invisible here right up until something rendered mid-way.
-    const origin=opts.from||p.pos;
+    /* FROM WHERE THE SHIP STANDS, ALWAYS. `opts.from` stood here for the two bot turn paths, which wrote p.pos first (sailPlan) and
+       asked for the route afterwards; nothing writes a sailing ship's square before its route is taken now (sailTo, below), so a
+       search from anywhere else has nothing left to answer (architecture item 7). */
+    const origin=p.pos;
     const startKey=k(origin,false);
     const seen={[startKey]:0};
     const out=new Map(); // "x,y" -> fewest steps to reach it legally
@@ -758,18 +789,38 @@ class Game{
     return {out,prev,bestK,startKey};
   }
   sailStates(p,opts){return this.sailSearch(p,opts).out;}
-  /* The squares a ship actually crosses to reach `dest`, in order, EXCLUDING the square it starts
-     on and INCLUDING dest. Empty when dest is not legally reachable — callers animate nothing
-     rather than invent a route, the same refusal rimSweepPath makes.
-
-     playtest 21 item 6: a ship was drawn gliding straight from its old square to its new one, so a
-     move around the corner of an island read as sailing THROUGH the island. Nothing was wrong with
-     the move; only with the line drawn between its endpoints. */
-  sailPath(p,dest,opts){
-    if(!dest)return [];
-    const {prev,bestK,startKey}=this.sailSearch(p,opts);
+  /* WHERE A CAPTAIN MAY SAIL THIS TURN — every square a ship may legally finish a move on, the trade winds' rim included (a captain
+     may deliberately ride the current). THE ONE ANSWER, asked by everything that shows it: the gold squares the captain choosing is
+     given (ui/flow.js reachable), the squares every OTHER screen's camera frames for that captain's turn (ui/stage.js camFitSail),
+     and where a fleeing ship may go (fleeSquares — his ruling: a flee is an ordinary sail).
+     ARCHITECTURE ITEM 18, 2026-09-17: the watching screens' frame asked reachableFrom — this search WITHOUT the rim — under a
+     comment saying the two "agree by construction". Measured on 40 seeded boards: from 3,430 of 4,432 legal sea squares the
+     chooser's gold squares included rim squares the watchers' frame left out (18,267 squares), and on 3,296 of them the framed
+     rectangle itself was smaller. scripts/qa/sail_frame_same_squares_check.mjs holds it to one. (A BOT's ordinary-move list is
+     still reachableFrom, with its rides weighed as the head of the current — how a bot chooses, not where it may go. Where any ship
+     actually goes, and the squares it crosses on the way, is sailTo below: item 7.) */
+  sailChoices(p){return [...this.sailStates(p,{throughRim:true}).keys()].map(k=>k.split(",").map(Number));}
+  /* ⭐ A SHIP SAILS — WHETHER SHE MAY LAND WHERE SHE IS SENT, AND THE SQUARES SHE CROSSES TO GET THERE, DECIDED ONCE FOR EVERY CAPTAIN
+     (architecture item 7, 2026-09-17). A bot's sail in a headless voyage and on screen (both through sailPlan), a person's sail, a
+     person's Move instead, and a flight from a fight (Game.flee) all come through here.
+     ONE SEARCH ANSWERS BOTH HALVES, WITH THE RIM ALLOWED: the square is legal exactly when this search reached it (bestK and out are
+     written together, so it is Game.sailChoices' answer, square for square), and the route is that same search's own prev chain. Then
+     the ship's square is written and the move recorded — a `sail`, unless the caller names what the move is (`as`: a flight is a
+     `battleflee`) — with the whole drawn line, the square left behind included, riding on the event (Game.ev / bakeDraw).
+     WHAT STOOD BEFORE, five route requests and two legality paths: the two bot turn paths wrote the square first (sailPlan) and asked
+     for the route afterwards WITHOUT the rim (sailPath {throughRim:false, from}), so every bot sail into the trade winds was recorded
+     with no route — measured over 400 headless voyages, 1,958 of 22,977 bot sails, all route-less — and its boat glided the straight
+     chord to the current, over land, instead of sailing; a person's sail and Move instead (ui/flow.js) and the flee each asked for
+     their own route and wrote their own square, and a person's square was checked only when a save was replayed.
+     A square this captain may not sail to this turn writes nothing and records nothing: null. Otherwise the move's record — the event
+     itself, or the same object when the voyage records no events — so `if(sailTo(…))` means "she sailed" in every voyage.
+     The trade wind that may carry her on from there is NOT here: it is the one step after a boat lands (Game.tradewind; on screen,
+     ui/flow.js afterSail, drawn once the sail has been), item 19. scripts/qa/one_sail_move_check.mjs holds all of this. */
+  sailTo(p,dest,as){
+    if(!dest)return null;
+    const {prev,bestK,startKey}=this.sailSearch(p,{throughRim:true});
     let cur=bestK.get(dest[0]+","+dest[1]);
-    if(!cur)return [];
+    if(!cur)return null;   // not a square this captain may sail to this turn
     const path=[];
     // bounded by the sail budget; the guard is against a malformed prev chain, never expected
     for(let i=0;cur&&cur!==startKey&&i<64;i++){
@@ -777,8 +828,10 @@ class Game{
       path.push([+parts[0],+parts[1]]);
       cur=prev[cur];
     }
-    if(cur!==startKey)return [];   // the chain did not reach the start — refuse rather than guess
-    return path.reverse();
+    if(cur!==startKey)return null;   // the chain did not reach the start — refuse rather than guess
+    const move={...(as||{t:"sail",p:p.idx}),route:[[p.pos[0],p.pos[1]],...path.reverse()]};
+    p.pos=[dest[0],dest[1]];
+    return this.ev(move)||move;
   }
   // How far every water square is from `target`, sailing around the islands rather than through
   // them — a plain BFS flood, wind ignored (wind prices how FAR you get in a turn, not which
@@ -881,19 +934,19 @@ class Game{
      headless, src/ui/flow.js botTurn animated), so a route that exists in one can never be
      missing from the other. The ordinary case is stepToward. A plan that rides the trade winds
      names the square where the ship ENTERS the channel; the caller's tradewind(p) then does what
-     it does for a human who sails onto the rim, which is the whole of the ride. */
+     it does for a human who sails onto the rim, which is the whole of the ride.
+     IT CHOOSES THE SQUARE AND SAILS THROUGH sailTo, like every other ship (architecture item 7): the ride's entry square if the ship
+     may sail there this turn — sailTo's own answer, the one a person's sail gets — otherwise the step toward the plan's square. So a
+     bot riding into the current is recorded with the route it sailed, and nothing here writes a position. Returns what sailTo does. */
   sailPlan(p,plan){
-    if(plan.via&&this.sailStates(p,{throughRim:true}).has(plan.via[0]+","+plan.via[1])){
-      p.pos=[...plan.via];return true;
-    }
-    return this.stepToward(p,plan.cell);
+    return (plan.via&&this.sailTo(p,plan.via))||this.sailTo(p,this.stepToward(p,plan.cell));
   }
-  // Move as close to `target` as this turn's sailing allows, measured in real sailing distance.
-  // Ties break toward the shorter move, so a bot never burns its whole range drifting sideways
-  // when it is already as close as it can get.
+  // The square that moves as close to `target` as this turn's sailing allows, measured in real sailing distance — or null, to hold
+  // position. Ties break toward the shorter move, so a bot never burns its whole range drifting sideways
+  // when it is already as close as it can get. It CHOOSES; sailPlan sails there (through sailTo).
   stepToward(p,target){
     const cells=this.sailStates(p);
-    if(!cells.size)return false;
+    if(!cells.size)return null;
     const field=this.waterField(target);
     const here=field[p.pos[0]+","+p.pos[1]];
     const cur=here===undefined?man(p.pos,target):here;
@@ -921,13 +974,12 @@ class Game{
       const score=d*1000+n+stormPenalty;
       if(score<bestScore){bestScore=score;best=c;}
     }
-    if(!best)return false;
+    if(!best)return null;
     const bd=field[best[0]+","+best[1]];
     const bestDist=bd===undefined?man(best,target)+1000:bd;
     // nothing in range gets us any closer — hold position rather than drift for the sake of it
-    if(bestDist>=cur)return false;
-    p.pos=[...best];
-    return true;
+    if(bestDist>=cur)return null;
+    return best;
   }
   // AI-05: is this bot walled in — every orthogonal neighbour blocked, an island, home, occupied,
   // or the rim? (The rim counts as "not an ordinary move" because stepToward refuses it.) When
@@ -981,9 +1033,7 @@ class Game{
     for(const q of this.players)if(q!==exclude&&this.inPlay(q)&&q.pos[0]===d[0]&&q.pos[1]===d[1])return q;
     return null;
   }
-  adjOpp(p){const out=this.players.filter(q=>q!==p&&this.inPlay(q)&&man(p.pos,q.pos)<=1);this.shuffle(out);return out;}
-  tradeOpp(p){if(this.cfg.parley)return this.players.filter(q=>q!==p&&this.inPlay(q));
-    return this.players.filter(q=>q!==p&&this.inPlay(q)&&man(p.pos,q.pos)<=1);}
+  adjOpp(p){const out=this.foesAt(p.pos,p);this.shuffle(out);return out;}
   // v2 rule 11: price = 6 − crates still on the island. 3 left → 3🌕, 2 → 4🌕, 1 → 5🌕. Shared by
   // the whole table, and self-correcting if a crate ever comes back into supply — it is a function
   // of the board, not a counter anybody has to maintain. Returns null when there is nothing to buy.
@@ -1220,6 +1270,19 @@ class Game{
   holdersOf(ing,exclude){
     return this.players.filter(q=>q!==exclude&&this.inPlay(q)&&q.ing.includes(ing));
   }
+  /* ⭐ WHETHER A CAPTAIN MAY OPEN A TRADE, AND WHY NOT — decided here, once (architecture item 13, 2026-09-17; the attack half
+     is whyNoAttack). v2 rule 4: a hail reaches the whole table from wherever ye float, so there are exactly two reasons:
+       "nothingToTrade"  an empty hold AND an empty purse — the give step could never be built (02.2 FINAL-QA: such a captain was
+                         once stranded on a give prompt with no way forward; composeOffer refuses a bot the same)
+       "noCargo"         nobody still on the board holds a crate — asked through holdersOf, so a captain baking at Tortuga, who is
+                         off the board, is not somebody to trade with
+     The action menu used to decide this itself, counting any captain not yet `done` — a baker included — so when the only cargo on
+     the water was aboard a baker, Trade was live and tapping it bounced with "No one has cargo to trade for." */
+  whyNoTrade(p){
+    if(!p.coins&&!p.ing.length)return "nothingToTrade";
+    return this.ings.some(i=>this.holdersOf(i,p).length)?null:"noCargo";
+  }
+  canOpenTrade(p){return !this.whyNoTrade(p);}
   // How a bot prices a crate somebody is asking it for. Wyatt's ruling, 2026-08-04: price it in
   // TURNS — how long would it take me to replace this myself — PLUS a denial premium when the
   // asker looks close to finishing. That is the whole valuation; there is no flat threshold.
@@ -1295,15 +1358,18 @@ class Game{
       if(bestIng&&bestVal*bias>=shortTurns)return {q,kind:"counter",askIng:bestIng,askFor:0};
     }
     const askFor=Math.max(1,Math.ceil(shortTurns*PLAN.coinsPerDockTurn));
-    if(asker&&askFor>asker.coins-(offer.giveCoins||0))return {q,kind:"deny",why:"toodear"};
-    return {q,kind:"counter",askFor};
+    const counter={q,kind:"counter",askFor};
+    // too dear: a counter the asker could not take — asked of canTakeAnswer, the very test the asker's side applies (counterRoom)
+    if(asker&&!this.canTakeAnswer(asker,offer,counter))return {q,kind:"deny",why:"toodear"};
+    return counter;
   }
-  // Every answer to an open offer, in seat order. The asker sees all of them at once (rule 4a) —
-  // human captains are skipped here and prompted by the UI instead.
+  // Every answer to an open offer, in seat order, from the captains the hail is put to (hailAudience).
+  // The asker sees all of them at once (rule 4a) — human captains are skipped here and prompted by
+  // the UI instead.
   collectResponses(offer,asker,opts){
     opts=opts||{};
     const out=[];
-    for(const q of this.holdersOf(offer.want,asker)){
+    for(const q of this.hailAudience(asker,offer)){
       if(q.strategy==="human"&&!opts.includeHumans)continue;
       out.push(this.respondToOffer(q,offer,asker));
     }
@@ -1687,65 +1753,138 @@ class Game{
     }
     return null;
   }
-  // A bot's whole trade turn: put the offer to the table, read every answer, take the best one it
-  // can afford — or walk away. Exactly the flow a human gets in the UI (rule 4).
-  tryTrade(p){
-    const offer=this.botOpenOffer(p);
-    if(!offer)return false;
-    // announcing what you want is itself public information — everyone now knows p wants this
-    this.noteDemand(p,offer.want,1);
-    this.ev({t:"openoffer",p:p.idx,want:offer.want,offer:this.offerLabel(offer,0)});
-    // composeOffer already decided who is worth hailing; honour that list rather than re-deriving it
+  /* ⭐ ONE HAIL, WHOEVER HAILS AND WHOEVER ANSWERS — architecture item 15, 2026-09-17.
+     A hail is put to the table, answered, and then it either strikes a deal or falls through. That was
+     decided in THREE places (docs/TRADE-SYSTEM.md "A deal is settled in THREE places"): this engine's
+     tryTrade, humanTrade's settlement and botOpenTradeLive's settlement (src/ui/flow.js). The live bot's
+     copy had drifted from this one in the ways the doc warned it would: it asked EVERY holder where this
+     asks only the offer's audience, it priced a spare crate with a typed 1.1 where this reads
+     PLAN.leverageTurns, and its failed hail ended in silence — Wyatt, playing build .5: "when a captain
+     denied my trade counter offer (in solo play, on his bot turn), that trade fail resolution message
+     did not appear." Now every runner asks hailAudience who to hail, collects the answers its own way
+     (a bot reasons, a person is asked), and hands them to resolveHail — which remembers, chooses for a
+     captain who is not choosing for themselves, settles, and records WHY a hail fell through on the
+     `parley` event, which the one narration table words for every captain. */
+  // Who a hail is put to. A bot's offer carries the audience composeOffer already judged worth asking
+  // (worthReAsking, at the price it was composing) — honour that list rather than re-deriving it; an
+  // offer without one is put to every holder still worth asking.
+  hailAudience(p,offer){
     const aud=offer.audience;
-    const responses=this.collectResponses(offer,p)
-      .filter(r=>!aud||aud.includes(r.q.idx));
-    if(!responses.length)return false;
-    // remember every no, with what it cost them to say it — see rememberRefusal
-    const worth=this.offerWorthTurns(p,offer);
-    for(const r of responses)if(r.kind==="deny"){
-      this.rememberRefusal(p,offer.want,r.q.idx,worth);
-      p.refused[offer.want+"|"+r.q.idx].wantedOurs=offer.giveIng&&this.likelyNeeds(r.q,offer.giveIng)?1:0;
-    }
-    const accepts=responses.filter(r=>r.kind==="accept");
-    // affordability is judged on the counter's OWN terms — a crate counter may cost no coin at all,
-    // and the old test would have thrown those away as unaffordable
-    const counters=responses.filter(r=>{
-      if(r.kind!=="counter")return false;
-      const t=this.counterTerms(offer,r);
-      return (t.giveCoins||0)<=p.coins&&(!t.giveIng||p.ing.includes(t.giveIng));
-    });
-    let deal=null,terms=offer;
+    return this.holdersOf(offer.want,p).filter(q=>aud?aud.includes(q.idx):this.worthReAsking(p,q,offer.want,offer));
+  }
+  // An answer the asker could act on: every yes, and a counter it can honour on the counter's OWN
+  // terms — a crate counter may cost no coin at all, so coin alone is never the test. The coin a counter may ask for is counterRoom's.
+  canTakeAnswer(p,offer,r){
+    if(!r)return false;
+    if(r.kind==="accept")return true;
+    if(r.kind!=="counter")return false;
+    const room=this.counterRoom(p,offer,r.askIng),paid=this.counterTerms(offer,r).giveCoins||0;
+    return !!room&&paid>=room.min&&paid<=room.max;
+  }
+  /* ⭐ THE MOST COIN A COUNTER-OFFER MAY ASK FOR — decided here, once (architecture item 20, 2026-09-17).
+     `askIng` is the crate the counter asks for instead, or null for a coins-only counter. Returns the coin the counter may come to
+     IN ALL — the number a captain drags — as {base, min, max}, or null when no such counter can be made:
+       coins-only  one coin more than the offer, up to the asker's whole purse. `base` is the coin already offered, which that total
+                   includes: a counter's own shape is still askFor ON TOP (counterTerms adds it), so a screen hands the engine
+                   total − base, and settling is untouched.
+       a crate     "instead" means instead — counterTerms clears the give side — so from no coin up to the whole purse; base 0.
+       null        the asker is not carrying the crate the counter would take, or (coins-only) every coin aboard is already offered.
+     HIS RULING — the number dragged is coin in all. Countering Dough Hook's 8🌕 with the slider stuck at 6 (2e9e06b1, 2026-08-14): "i
+     cannot ask for all that he has — i should be able to slide the slider up to 8, no?"
+     It was decided in four places that disagreed: respondToOffer refused a bot's ask above purse − offered; counterOffer let a person
+     drag the WHOLE purse on top of the offer, so a drag to the end was always refused; the Counter button and its "no coin left to
+     sweeten the deal" line used purse − offered while the Coin button one tap later was live on the whole purse; and canTakeAnswer
+     judged the full terms. Now canTakeAnswer reads this, respondToOffer asks canTakeAnswer, and every screen reads this.
+     Guarded by scripts/qa/counter_ceiling_one_place_check.mjs. */
+  counterRoom(asker,offer,askIng){
+    const t=this.counterTerms(offer,{kind:"counter",askIng,askFor:0});   // what the counter hands over before it asks for any coin
+    if(t.giveIng&&!asker.ing.includes(t.giveIng))return null;
+    const base=t.giveCoins||0,min=base+(askIng==null?1:0),max=asker.coins;   // asking no more than the offer is accepting it
+    return min<=max?{base,min,max}:null;
+  }
+  /* resolveHail(p, offer, responses, pick) -> {struck, why}
+     `pick` is the answer the asker chose, or null to walk away — or LEFT OUT, when nobody is choosing
+     at the table and the engine chooses for the captain (a bot). A captain who chooses for themselves
+     keeps their own memory of who said no; the engine keeps its bots'.
+     `why` when it falls through, and on the `parley` event:
+       silence     nobody answered
+       declined    nobody gave an answer the asker could act on
+       walkaway    there was one, and the asker took none
+       fellThrough the chosen deal could not be settled (b: the captain it was struck with) */
+  resolveHail(p,offer,responses,pick){
+    const choosing=pick===undefined;
+    const fall=(why,b)=>{
+      if(choosing)this.rememberHail(p,offer,responses,false);
+      this.ev({t:"parley",a:p.idx,b:b==null?null:b,offer:this.offerLabel(offer,0)||"nothing",want:offer.want,why});
+      return {struck:false,why};
+    };
+    if(!responses.length)return fall("silence");
+    const takeable=responses.filter(r=>this.canTakeAnswer(p,offer,r));
+    const chosen=choosing?this.chooseAnswer(p,offer,takeable):pick;
+    if(!chosen)return fall(takeable.length?"walkaway":"declined");
+    // a counter REPLACES or adds to the give side; an acceptance takes the offer as it stood
+    if(!this.settleTrade(p,chosen.q,this.counterTerms(offer,chosen),0))return fall("fellThrough",chosen.q.idx);
+    if(choosing)this.rememberHail(p,offer,responses,true);
+    return {struck:true,why:null};
+  }
+  // How a bot takes its pick of the answers it could act on — or none.
+  chooseAnswer(p,offer,takeable){
+    const accepts=takeable.filter(r=>r.kind==="accept");
     if(accepts.length){
       // several yeses: take the crate from whoever can spare it most easily
       accepts.sort((x,y)=>this.crateCostTurns(y.q,offer.want,p)-this.crateCostTurns(x.q,offer.want,p));
-      deal=accepts[0].q;
-    }else if(counters.length){
-      /* playtest 21 item 7: a counter may now ask for one of MY crates instead of coin, so the
-         answers are no longer comparable on askFor alone and are priced in TURNS — the currency
-         everything else in this planner uses. What a counter costs me is what I hand over: the
-         coins, plus (if they want a crate) what replacing that crate would cost me, discounted
-         hard when it is surplus I never needed. Cheapest first, and still only struck if it beats
-         fetching the crate myself, which is the test that was already here. */
-      const priced=counters.map(r=>{
-        const t=this.counterTerms(offer,r);
-        let cost=this.coinTurns(t.giveCoins||0);
-        if(t.giveIng)cost+=(p.recipe&&p.recipe.includes(t.giveIng)&&this.cnt(p.ing,t.giveIng)<=1)
-          ?this.acquireTurns(p,t.giveIng).turns
-          :PLAN.leverageTurns;
-        return {r,t,cost};
-      }).filter(x=>!x.t.giveIng||p.ing.includes(x.t.giveIng))
-        .sort((a,b)=>a.cost-b.cost);
-      const mine=this.acquireTurns(p,offer.want).turns;
-      if(priced.length&&priced[0].cost<=mine){deal=priced[0].r.q;terms=priced[0].t;}
+      return accepts[0];
     }
-    if(!deal){
-      // walking away from a counter is this offer being refused too — remember it, or the bot
-      // re-opens the identical hail next turn and gets the identical price back
-      for(const r of responses)if(r.kind==="counter")this.rememberRefusal(p,offer.want,r.q.idx,worth);
-      this.ev({t:"parley",a:p.idx,b:null,offer:this.offerLabel(offer,0)||"nothing",want:offer.want});
-      return false;
-    }
-    return this.settleTrade(p,deal,terms,0);
+    /* playtest 21 item 7: a counter may now ask for one of MY crates instead of coin, so the
+       answers are no longer comparable on askFor alone and are priced in TURNS — the currency
+       everything else in this planner uses. What a counter costs me is what I hand over: the
+       coins, plus (if they want a crate) what replacing that crate would cost me, discounted
+       hard when it is surplus I never needed. Cheapest first, and still only struck if it beats
+       fetching the crate myself. */
+    const priced=takeable.filter(r=>r.kind==="counter").map(r=>{
+      const t=this.counterTerms(offer,r);
+      let cost=this.coinTurns(t.giveCoins||0);
+      if(t.giveIng)cost+=(p.recipe&&p.recipe.includes(t.giveIng)&&this.cnt(p.ing,t.giveIng)<=1)
+        ?this.acquireTurns(p,t.giveIng).turns
+        :PLAN.leverageTurns;
+      return {r,cost};
+    }).sort((a,b)=>a.cost-b.cost);
+    if(priced.length&&priced[0].cost<=this.acquireTurns(p,offer.want).turns)return priced[0].r;
+    return null;
+  }
+  // What a hail teaches the captain who made it: every no, with what it cost them to say it (see
+  // rememberRefusal) — and, when no deal was struck, every counter too, because walking away from a
+  // counter is this offer being refused as well; forget it and the bot re-opens the identical hail
+  // next turn and gets the identical price back. Nothing the choosing or the settling reads.
+  rememberHail(p,offer,responses,struck){
+    const worth=this.offerWorthTurns(p,offer);
+    for(const r of responses)if(r.kind==="deny"){this.rememberRefusal(p,offer.want,r.q.idx,worth);this.refusedFlagWanted(p,offer,r.q);}
+    if(!struck)for(const r of responses)if(r.kind==="counter")this.rememberRefusal(p,offer.want,r.q.idx,worth);
+  }
+  // A bot's whole trade turn: put the offer to the table, read every answer, take the best one it
+  // can afford — or walk away. Exactly the flow a human gets in the UI (rule 4).
+  // Returns {spoken, struck}, as every hail runner does; what that costs the turn is hailEndsTurn's.
+  tryTrade(p){
+    const offer=this.botOpenOffer(p);
+    if(!offer)return {spoken:false,struck:false};
+    // announcing what you want is itself public information — everyone now knows p wants this
+    this.noteDemand(p,offer.want,1);
+    this.ev({t:"openoffer",p:p.idx,want:offer.want,offer:this.offerLabel(offer,0)});
+    return {spoken:true,struck:this.resolveHail(p,offer,this.collectResponses(offer,p)).struck};
+  }
+  /* ⭐ WHAT A SPOKEN HAIL COSTS THE CAPTAIN WHO MADE IT — decided here, once (architecture item 14, 2026-09-17).
+     Every hail runner hands back {spoken, struck}: this engine's tryTrade (the simulator's turn), flow.js botOpenTradeLive (a bot
+     on screen) and humanTrade (a person). `spoken` means an offer was put to the table — an `openoffer` was recorded. The
+     simulator's turn, botTurn and humanAct all ask THIS whether the turn is over.
+     HIS CALL (relayed by Mac: Dev, 2026-09-17): a hail put to the table ends the turn, struck or refused, everywhere —
+     docs/TRADE-SYSTEM.md "A trade is one captain's turn ACTION"; rules.html "Ye see every answer together, then take one or walk
+     away." A trade that was never spoken costs nothing: a bot still works the berth under it or muses, a person is back at the menu.
+     It was decided in three places that disagreed. The simulator ended its turn only on a STRUCK deal, so a refused bot went on to
+     dock or muse — 114 of 264 hails over 150 voyages, every one (19 docked, 95 mused); the rules audit counted 195 of 416 in 200.
+     A live bot ended its turn once anybody answered but not after a hail nobody answered; a person's always ended.
+     Guarded by scripts/qa/spoken_hail_one_rule_check.mjs. */
+  hailEndsTurn(hail){
+    return !!(hail&&hail.spoken);
   }
   // called on every battle resolution (win or flee) — cools the opportunistic "rich" attack
   // trigger against this specific opponent for a few rounds (mutual, since either side's coin
@@ -1782,9 +1921,11 @@ class Game{
     const f=p.fightLog[q.idx];
     return (f&&f.until>=this.round)?f.n:0;
   }
-  // Every square this ship could legally finish a move on, as a plain array — the engine-side
-  // twin of the UI's reachable() helper. A fleeing defender uses the ordinary v2 sail rules
-  // (4 squares, 2 if the escape route touches upwind), which is Wyatt's ruling for rule 9's flee.
+  /* A BOT'S ORDINARY MOVES: the squares this ship could finish on WITHOUT touching the trade winds, as a plain array. Read only by
+     the bots' choosing (planTurnV3 adds each ride as the head of the current it reaches; strikeFrom looks for a square to fire from).
+     It is NOT where a captain may sail — that is sailChoices, the rim included — and it is not what any screen shows or frames. It
+     used to say it was "the engine-side twin of the UI's reachable()" and that a fleeing defender used it; neither was true any more
+     (architecture items 1 and 18). */
   reachableFrom(p){
     return [...this.sailStates(p).keys()].map(k=>k.split(",").map(Number));
   }
@@ -1842,7 +1983,7 @@ class Game{
       if(this.isIsland(c))return this.islands[c];}
     return null;
   }
-  foesAt(cell,p){return this.players.filter(q=>q!==p&&this.inPlay(q)&&man(cell,q.pos)<=1);}
+  foesAt(cell,p){return this.alongside(cell,p).filter(q=>this.inPlay(q));}
   // Would a ship on `cell` hold the weather gauge over q? Rule 9 gives a both-heads round to the
   // downwind ship, and downwindSide grants it at exactly one square along the wind — so this is the
   // single cell that doubles the odds, and there is nothing to search for.
@@ -1864,12 +2005,21 @@ class Game{
   // v2 rule 9/13 prize: ONE CRATE, winner's choice. No coin alternative, and no place-swap — a
   // swap would hand the loser the advantageous square (Wyatt, 2026-08-04). A ship with no crates
   // cannot be attacked at all (rule 13e), so `lose.ing` is never empty by the time we get here.
-  awardSpoil(win,lose){
+  /* WHICH CRATE A WINNER WHO IS NOT ASKED TAKES — a bot, or a captain with only one kind of crate to choose from. ONE place, and the
+     bots' planner prices a fight with this same call. It was written three times (this engine's fight, the fight a player watches, and
+     the planner "mirroring" it), and the watched fight's copy had lost the middle step: measured 2026-09-16, 46 of 3166 winner/loser
+     pairings took a different crate in the game people play than in the game bots are tuned on. Pure — it moves nothing. */
+  botSpoilPick(win,lose){
     if(!lose.ing.length)return null;
     const wanted=lose.ing.filter(i=>this.needs(win).includes(i));
     // no recipe need of its own? take what somebody else at the table plainly wants — leverage
     const leverage=lose.ing.filter(i=>this.players.some(q=>q!==win&&q!==lose&&this.inPlay(q)&&this.likelyNeeds(q,i)));
-    const pick=(wanted[0]!==undefined)?wanted[0]:(leverage[0]!==undefined?leverage[0]:lose.ing[0]);
+    return (wanted[0]!==undefined)?wanted[0]:(leverage[0]!==undefined?leverage[0]:lose.ing[0]);
+  }
+  /* THE CRATE CHANGES HANDS HERE, AND ONLY HERE — whoever chose it (a human's plunder pick, or botSpoilPick). A pick the loser does
+     not hold moves nothing and returns null. */
+  takeSpoil(win,lose,pick){
+    if(pick==null||!lose.ing.includes(pick))return null;
     lose.ing.splice(lose.ing.indexOf(pick),1);win.ing.push(pick);
     // the whole table just watched the winner choose that crate — public evidence of what it wants
     this.noteDemand(win,pick,1);
@@ -1894,7 +2044,21 @@ class Game{
     if(k>=0)this.finishOrder.splice(k,1);
     this.ev({t:"unfinish",p:p.idx});
   }
-  // Can this ship legally be attacked? v2 rule 13e: an empty hold is not a target — there is
+  /* ⭐ WHETHER YE MAY ATTACK, AND WHY NOT — DECIDED HERE, ONCE (architecture item 13, 2026-09-17).
+     It was decided here AND again in the action menu (src/ui/flow.js humanAct), and the two disagreed about one captain: the one
+     baking at Tortuga. The menu listed every ship alongside with no in-play test, re-tested the powder itself, and picked its
+     greyed reason by elimination — powder, else "Their holds are empty" — so beside a baker carrying five crates, Attack was
+     greyed with a sentence about an empty hold. Its comment still taught the rule sanctuary replaced ("a captain who has already
+     fired up the ovens is still a legal target"), the same rot the paragraph above canAttack records. Now:
+       alongside(cell,p)     who lies within a broadside of a square — the ONE range test (foesAt, adjOpp and attackTargets read it)
+       canPayPowder(att)     whether the purse covers a broadside — the ONE affordability test
+       whyNoAttack(att,def)  why att may not fire on def, or null when it may — canAttack is its yes/no
+       attackTargets(p)      who p may fire on from where it floats; whyNoAttackHere(p) says why nobody, for the Attack button
+     The trade half is whyNoTrade / canOpenTrade, beside holdersOf. The menu greys its buttons and picks its words from these
+     answers and nothing else; scripts/qa/action_reasons_from_engine_check.mjs holds it. */
+  alongside(cell,p){return this.players.filter(q=>q!==p&&man(cell,q.pos)<=1);}
+  canPayPowder(att){return !this.cfg.powder||att.coins>=this.cfg.powder;}
+  // Can this ship legally be attacked, and if not, why? v2 rule 13e: an empty hold is not a target — there is
   // nothing to take, and the option greys out rather than wasting the attacker's powder.
   /* ⛔ THE PARAGRAPH THAT USED TO SIT HERE STATED THE OPPOSITE OF THE LINE BELOW, AND IT COST
      SOMETHING. It read: "there is deliberately no `def.done` check: v2 rule 13c is 'nobody is
@@ -1905,26 +2069,37 @@ class Game{
      would have had its mistake CONFIRMED by the commentary sitting above the code.
      Rule 6, in its exact shape — a comment is not a measurement. If you want to know what this
      function does, call it: scripts/qa/rules_sanctuary_matches_engine_check.mjs does. */
-  canAttack(att,def){
-    if(!def||def===att)return false;
+  // The reasons, in the order a captain is told them: powder first, because it is the one a captain can do
+  // something about (playtest 21 item 5); then sanctuary; then an empty hold.
+  whyNoAttack(att,def){
+    if(!def||def===att)return "noTarget";
+    if(!this.canPayPowder(att))return "noPowder";
     // v2.1 SANCTUARY (Wyatt, 2026-08-06). Once the ovens are lit nobody can touch them. The raid
     // does not die, it moves earlier: you rob a captain carrying a full recipe on their way home,
     // which is the more skilful version of the same play and the one the bots already hunt for.
     // Tortuga becomes the thing you are racing for rather than a place you get mugged.
-    if(this.cfg.bakeoff&&def.baking)return false;
-    if(this.cfg.powder&&att.coins<this.cfg.powder)return false;
-    return def.ing.length>0;
+    if(this.cfg.bakeoff&&def.baking)return "sanctuary";
+    return def.ing.length>0?null:"emptyHolds";
+  }
+  canAttack(att,def){return !this.whyNoAttack(att,def);}
+  attackTargets(p){return this.alongside(p.pos,p).filter(q=>this.canAttack(p,q));}
+  // The Attack button's reason: null when there is somebody to fire on, or nobody alongside at all (then there is no
+  // button to grey). Otherwise the first reason, in whyNoAttack's own order, that any ship alongside gives.
+  whyNoAttackHere(p){
+    const near=this.alongside(p.pos,p);
+    if(!near.length||near.some(q=>this.canAttack(p,q)))return null;
+    const whys=near.map(q=>this.whyNoAttack(p,q));
+    return ["noPowder","sanctuary","emptyHolds"].find(w=>whys.includes(w));
   }
   // v2 rule 9 — the battle is ONE round.
   //
   //   heads vs tails            → the heads ship wins outright
   //   both heads, one downwind  → the downwind ship wins (the wind carries the shot home)
-  //   both heads, crosswind     → cannonballs collide. The ATTACKER may pay 2🌕 to re-fire ALONE
-  //                               against the defender's standing heads, repeatable as often as
-  //                               they can pay. Decline and the battle ends NULL — nobody gains.
+  //   both heads, crosswind     → cannonballs collide, and the fight is over with NO WINNER — no
+  //                               re-fire (Wyatt, 2026-09-15; see refireOffered).
   //   both tails                → both shots went wild. The defender may flee, FREE, under the
   //                               ordinary v2 sail rules. Stand their ground and the attacker may
-  //                               pay 2🌕 to re-fire, same as above; decline → NULL.
+  //                               pay 2🌕 to re-fire ALONE, as often as they can pay; decline → NULL.
   //
   // Prize: one crate, winner's choice, no coin alternative and no place-swap (rule 9d).
   /* ⭐ A FIGHT TAKES ITS POWDER HERE, AND ONLY HERE — and says so, so every screen can show the coins leave the purse. It was taken in TWO
@@ -1936,83 +2111,161 @@ class Game{
     if(cost>0){att.coins-=cost;this.ev({t:"powder",a:att.idx,cost});}
     return cost;
   }
-  battle(att,def){
-    const c=this.cfg;
+  /* ⭐ THE FIGHT IS WRITTEN ONCE — AS STEPS, AND BOTH FIGHTS CALL THEM (architecture item 1, 2026-09-16).
+     There were two fights. This engine's battle() ran only in headless voyages (every bot ladder); the fight a player actually plays
+     is src/orchestrator.js asyncBattleRun, which carried its own copy of every rule. The copies had drifted four times, and the fourth
+     was his ruling: "in crosswinds, there should be no reflip option… if both get heads, there's simply no winner" (2026-09-15) reached
+     only this copy, so every real game still offered "Fire again". Now each RULE of a fight is one step below, the shape payPowder
+     already had. battle() is the headless driver (bot choosers); asyncBattleRun keeps only pacing, animation and asking.
+     WHAT STAYS WRITTEN TWICE, said here so nobody mistakes it for done: the ORDER of the steps and the re-fire loop itself, one in each
+     runner. Making that one needs a generator both runners drive, which has never been tried.
+     A fight is a plain object — {att, def, downwind, rounds, why, winner, fled} — made by beginBattle and handed to every step.
+     scripts/qa/one_fight_rules_check.mjs holds it. */
+  /* The fight begins: a legal target, the fight CALLED, the powder paid, the battle counted, and the wind read once (positions never change
+     mid-fight). THE CALL IS RECORDED FIRST, AS `engage` — architecture item 4, 2026-09-17: every screen's one event consumer holds the camera
+     on both ships and sounds the clash from it (his ruling, 2026-09-06: "I want the clashing sound to happen when battles are first
+     called"), so a fight on screen starts from the same fact on the host, a guest and a solo phone. Its pair is endBattle. */
+  beginBattle(att,def){
     if(!this.canAttack(att,def))return null; // empty hold or no powder — never a legal fight
+    const downwind=this.downwindSide(att,def);
+    this.ev({t:"engage",a:att.idx,d:def.idx,downwind});
     this.payPowder(att);
     this.battles++;
-    const downwind=this.downwindSide(att,def);
-    const rounds=[];
-    let flips=0,win=null,fled=false,nulled=false;
-    // ---- THE round. Both cannons speak once. ----
-    const ah=this.flip(att,"battle"),dh=this.flip(def,"battle");flips+=2;   // recorded, as the live battle's flips are (orchestrator hFlip/bFlip)
-    let scorer=null;
-    if(ah&&dh){
-      if(downwind==="a"){win=att;scorer="a";}
-      else if(downwind==="d"){win=def;scorer="d";}
-      // crosswind: the cannonballs collide. Falls through to the re-fire below.
-    }else if(ah){win=att;scorer="a";}
-    else if(dh){win=def;scorer="d";}
-    rounds.push([ah?1:0,dh?1:0,0,scorer]);
-    if(!win){
-      // ---- both tails: the defender's FREE escape (rules 9a + 2c) ----
-      if(!ah&&!dh){
-        // a bot slips away when the wind is against it (it loses the next both-heads) or when it
-        // is carrying a crate it cannot afford to lose; otherwise it stands and takes its chances
-        // "carrying a crate it cannot afford to lose" = a RECIPE crate it holds no spare of.
-        // NOT `needs(def).includes(i)`: needs() is the recipe MINUS what you already hold, so
-        // testing held crates against it is always false and the defender would never flee.
-        const holdingCritical=def.ing.some(i=>def.recipe&&def.recipe.includes(i)&&this.cnt(def.ing,i)<=1);
-        if(downwind==="a"||holdingCritical){
-          const cells=this.reachableFrom(def);
-          if(cells.length){
-            def.pos=cells.reduce((best,cc)=>man(cc,att.pos)>man(best,att.pos)?cc:best,cells[0]);
-            this.tradewind(def);
-            fled=true;
-            this.recordSkirmish(att,def,null);
-            this.ev({t:"battleflee",a:att.idx,d:def.idx,rounds,flips,downwind});
-          }
-        }
-      }
-      // ---- the attacker's paid re-fire (rule 9b, extended by rule 9a to the both-tails case).
-      // The defender's cannon is spent for this exchange; the attacker buys a fresh broadside for
-      // 2🌕 and fires ALONE. Heads and the shot lands — attacker wins. Tails and they may pay
-      // again, as often as they can afford it. Decline at any point and the battle ends NULL:
-      // no crate, no coins, no caller paid, and the powder already spent stays spent. ----
-      /* NO RE-FIRE IN A CROSSWIND. Wyatt, 2026-09-15: "in crosswinds, there should be no reflip option; it's too weird and
-         complicated. if both get heads, there's simply no winner." Two heads with nobody downwind ends the fight NULL on the spot:
-         no crate, no coins, no caller paid. The powder already spent stays spent, his ruling when asked (the same as any null
-         battle today). A both-TAILS round still buys a fresh broadside — that is rule 9b and he did not touch it. */
-      const crossTie=!downwind&&rounds.length===1&&rounds[0][0]===1&&rounds[0][1]===1;
-      if(!fled&&crossTie)nulled=true;
-      if(!fled&&!crossTie){
-        const refire=c.refire||0;
-        while(!win){
-          if(!refire||att.coins<refire||!this.wantsRefire(att,def,downwind,rounds.length)){nulled=true;break;}
-          att.coins-=refire;
-          this.ev({t:"refire",a:att.idx,d:def.idx,cost:refire});
-          const rh=this.flip(att,"battle");flips++;
-          rounds.push([rh?1:0,null,0,rh?"a":null]);
-          if(rh)win=att;
-        }
-      }
+    return {att,def,downwind,rounds:[],why:null,winner:null,fled:false};
+  }
+  /* THE FIGHT IS OVER — recorded as `disengage`, and every screen's one event consumer lets the camera go on it (architecture item 4).
+     It comes LAST, after the crow's-nest calls are settled: the hold is around the WHOLE fight (Wyatt, playtest 22: "the director should
+     focus battles on the players fighting, not the player calling the battle"), which is when the fight a player watches has always let
+     go. Both fights call it in a finally, so no way out of a fight can leave a screen's camera held. */
+  endBattle(att,def){
+    return this.ev({t:"disengage",a:att.idx,d:def.idx});
+  }
+  /* WHO WINS A ROUND OF SHOTS, AND WHY — decided here and nowhere else, and the screen reads `why` rather than re-deriving it:
+       "hit"     one heads, one tails — the heads ship's shot lands
+       "wind"    both heads, one ship downwind — the wind carries its shot home
+       "collide" both heads in a crosswind — the cannonballs collide
+       "miss"    both tails — both shots go wild
+     A landed shot is recorded as it lands (shotLands: the cannon, the kick, the flash and the shake on every screen). `by`, not `p`:
+     a shot is not a turn, and `p` would hand the active-captain highlight to the shooter for the length of the fight. */
+  resolveRound(fight,ah,dh){
+    let scorer=null,why;
+    if(ah&&dh){if(fight.downwind){scorer=fight.downwind;why="wind";}else why="collide";}
+    else if(ah||dh){scorer=ah?"a":"d";why="hit";}
+    else why="miss";
+    fight.rounds.push([ah?1:0,dh?1:0,0,scorer]);
+    return this.landRound(fight,scorer,why);
+  }
+  // A re-fire is the attacker's cannon alone: heads and it lands, tails and it misses.
+  resolveRefire(fight,rh){
+    const scorer=rh?"a":null;
+    fight.rounds.push([rh?1:0,null,0,scorer]);
+    return this.landRound(fight,scorer,rh?"hit":"miss");
+  }
+  landRound(fight,scorer,why){
+    fight.why=why;
+    if(scorer){
+      fight.winner=scorer==="a"?fight.att:fight.def;
+      this.ev({t:"shotLands",by:fight.winner.idx,a:fight.att.idx,d:fight.def.idx});
     }
-    if(fled)return null;
-    if(nulled){
-      // NULL: the battle ends with no player gaining anything. No spoil, no swap, no caller paid.
-      this.recordSkirmish(att,def,null);
-      this.ev({t:"battlenull",a:att.idx,d:def.idx,rounds,flips,downwind});
-      return null;
-    }
-    const lose=win===att?def:att;
+    return {scorer,why};
+  }
+  // How many coins this fight has flipped: two for the opening round, one for each re-fire. Counted from the rounds, never kept beside them.
+  fightFlips(fight){return fight.rounds.reduce((n,r)=>n+(r[1]==null?1:2),0);}
+  /* MAY THE ATTACKER PAY TO FIRE AGAIN — the one place this is decided, for a bot and a human alike.
+     NO RE-FIRE IN A CROSSWIND. Wyatt, 2026-09-15: "in crosswinds, there should be no reflip option; it's too weird and complicated. if
+     both get heads, there's simply no winner." A collision ends the fight NULL on the spot: no crate, no coins, no caller paid, and the
+     powder already spent stays spent (his ruling when asked — the same as any null battle). A both-TAILS round that the defender stood
+     through still buys a fresh broadside — that is rule 9b and he did not touch it. And the attacker must be able to pay. */
+  refireOffered(fight){
+    const cost=this.cfg.refire||0;
+    if(!cost||fight.winner||fight.fled)return false;
+    if(fight.why==="collide")return false;
+    return fight.att.coins>=cost;
+  }
+  // The re-fire's price leaves the purse here, and says so — the same shape as payPowder, so every screen can show the coins leave.
+  payRefire(fight){
+    const cost=this.cfg.refire||0;
+    fight.att.coins-=cost;
+    this.ev({t:"refire",a:fight.att.idx,d:fight.def.idx,cost});
+    return cost;
+  }
+  /* WHEN A DEFENDER MAY FLEE: both shots went wild in the opening round (rules 9a + 2c — fleeing is free), and there is somewhere to go. */
+  mayFlee(fight){
+    return !fight.fled&&fight.rounds.length===1&&fight.why==="miss"&&this.fleeSquares(fight.def).length>0;
+  }
+  /* WHERE A FLEEING SHIP MAY GO: the ordinary v2 sail (4 squares, 2 if the route touches upwind), and the rim IS a legal square — a
+     fleeing ship may ride the trade winds, which the W9 ride animates. The headless fight used to forbid the rim here while the fight
+     people play allowed it: measured 2026-09-16, 483 of 1842 fights put a fleeing bot on a different square.
+     And it is the SAME answer as where a captain may sail this turn, so it asks that one function rather than repeating its search
+     (architecture item 18). */
+  fleeSquares(def){
+    return this.sailChoices(def);
+  }
+  /* WHETHER A BOT FLEES: when the wind is against it (it would lose the next both-heads) or when it carries a crate it cannot afford to
+     lose — a RECIPE crate it holds no spare of. NOT `needs(def).includes(i)`: needs() is the recipe MINUS what ye already hold, so
+     testing held crates against it is always false and the defender never flees (it fled 0 times in 3000 sims; HARD-WON-LESSONS). */
+  botWantsFlee(fight){
+    const def=fight.def;
+    return fight.downwind==="a"||def.ing.some(i=>def.recipe&&def.recipe.includes(i)&&this.cnt(def.ing,i)<=1);
+  }
+  // WHICH SQUARE A FLEEING BOT TAKES: the one furthest from its attacker.
+  botFleeSquare(fight,cells){
+    const at=fight.att.pos;
+    return cells.reduce((best,cc)=>man(cc,at)>man(best,at)?cc:best,cells[0]);
+  }
+  /* THE FLEE, RECORDED — for a human's chosen square and a bot's alike. A flee IS a sail (his ruling), so it sails through Game.sailTo
+     like every other ship (architecture item 7): the square checked, the route the sail search really takes (mean 3.93 squares over 600
+     posed flees; 13.3% of straight lines crossed an island) on the event, and the event names the captain who fled (`p`), because ev()
+     bakes the drawn route against o.state[o.p]. Recorded as what it is — a `battleflee`, not a sail.
+     AND IT IS RECORDED AT THE DESTINATION, BEFORE THE TRADE WINDS TAKE IT. Recorded after the sweep, the last snapshot before it still
+     held the pre-battle square, and a ship that fled into the channel got no ride on either tier — it simply appeared at the whirlpool.
+     `dest` null (a human who chose to stay where they are) flees without moving, and so does a square she may not sail to. */
+  flee(fight,dest){
+    const {att,def}=fight;
+    fight.fled=true;
+    this.recordSkirmish(att,def,null);
+    const flight={t:"battleflee",p:def.idx,a:att.idx,d:def.idx,rounds:fight.rounds,flips:this.fightFlips(fight),downwind:fight.downwind};
+    const moved=this.sailTo(def,dest,flight);
+    const evFlee=moved||this.ev(flight);
+    const evWind=moved?this.tradewind(def):false;
+    return {evFlee,evWind};
+  }
+  // NULL: the battle ends with no player gaining anything. No spoil, no swap, no caller paid.
+  nullBattle(fight){
+    this.recordSkirmish(fight.att,fight.def,null);
+    return this.ev({t:"battlenull",a:fight.att.idx,d:fight.def.idx,rounds:fight.rounds,flips:this.fightFlips(fight),downwind:fight.downwind});
+  }
+  /* A WON FIGHT: the count, the crate (`pick` — the human winner's choice, or botSpoilPick), the skirmish remembered, and the event.
+     `why` rides the event so the line can say WHY a two-heads tie went the way it did (playtest 20). BATL-03 carried into v2 and
+     hardened by rule 9d: nobody moves after a battle — a swap would put the loser in the advantageous square. */
+  winBattle(fight,pick){
+    const {att,def}=fight,win=fight.winner,lose=win===att?def:att;
     if(win===att)this.attWins++;
-    const spoilIng=this.awardSpoil(win,lose);
+    const spoilIng=this.takeSpoil(win,lose,pick);
     const spoil=spoilIng?ilabelImg(spoilIng):"nothing";
-    // BATL-03 carried into v2 and hardened by rule 9d: nobody moves after a battle. A swap would
-    // put the loser in the advantageous square, which is exactly backwards.
     this.recordSkirmish(att,def,lose,spoilIng);
-    this.ev({t:"battle",a:att.idx,d:def.idx,rounds,winner:win.idx,spoil,spoilIng,flips,downwind});
-    return win;
+    return this.ev({t:"battle",a:att.idx,d:def.idx,rounds:fight.rounds,winner:win.idx,spoil,spoilIng,flips:this.fightFlips(fight),downwind:fight.downwind,why:fight.why});
+  }
+  /* THE HEADLESS FIGHT — every bot ladder and matrix. The same steps the fight a player watches calls; only the choosers differ, and
+     they are the bots' own (botWantsFlee, botFleeSquare, wantsRefire, botSpoilPick). */
+  battle(att,def){
+    const fight=this.beginBattle(att,def);
+    if(!fight)return null;
+    try{
+      this.resolveRound(fight,this.flip(att,"battle"),this.flip(def,"battle"));   // recorded, as the watched fight's flips are
+      if(this.mayFlee(fight)&&this.botWantsFlee(fight)){
+        this.flee(fight,this.botFleeSquare(fight,this.fleeSquares(def)));
+        return null;
+      }
+      while(this.refireOffered(fight)&&this.wantsRefire(att,def,fight.downwind,fight.rounds.length)){
+        this.payRefire(fight);
+        this.resolveRefire(fight,this.flip(att,"battle"));
+      }
+      if(!fight.winner){this.nullBattle(fight);return null;}
+      const win=fight.winner;
+      this.winBattle(fight,this.botSpoilPick(win,win===att?def:att));
+      return win;
+    }finally{this.endBattle(att,def);}   // the fight is over, however it ended (architecture item 4)
   }
   /* ================= v2 bot AI: planners, not gates =================
      Wyatt, 2026-08-04: *"have them make a plan for their entire ingredient trajectory that they
@@ -2208,7 +2461,7 @@ class Game{
       consider((PLAN.tradeTurns+sweetener+theirPrice)/bias.dealBias,"deal",null,q);
       // take: sail into range, then fight. A fight is only worth planning when it is legal
       // (rule 13e — an empty hold is never a target) and when I can pay for powder.
-      if(this.canAttack(p,q)||p.coins>=(this.cfg.powder||0)){
+      if(this.canAttack(p,q)||this.canPayPowder(p)){
         if(q.ing.includes(ing)){
           // v2.1: sail to CUT THEM OFF, not to where they are standing. For a captain who is going
           // nowhere this is their own square and nothing changes; for one running for home it is a
@@ -2839,10 +3092,8 @@ class Game{
         const rematch=PLAN.rematchEscalate*this.recentFights(p,q);
         const revenge=(grudge&&grudge.against===q.idx&&grudge.expires>=this.round)?0.6:0;
         const drag=rematch-revenge;
-        // the crate the winner actually takes, mirroring awardSpoil's own pick order
-        const wanted=q.ing.filter(i=>this.needs(p).includes(i));
-        const lever=q.ing.filter(i=>this.players.some(x=>x!==p&&x!==q&&this.inPlay(x)&&this.likelyNeeds(x,i)));
-        const spoil=wanted[0]!==undefined?wanted[0]:(lever[0]!==undefined?lever[0]:q.ing[0]);
+        // the crate the winner actually takes — the fight's own pick, asked, not mirrored
+        const spoil=this.botSpoilPick(p,q);
         // stand: I sailed here and paid powder, coins landed nowhere
         const standT=this.turnsToWin3If(p,{cell,coins:purse},ctx)+drag;
         const sFlee=this.raceScore3(standT,ctx.plans);
@@ -2864,7 +3115,8 @@ class Game{
            a rusher feels it deeper. The probabilities stay honest. */
         const feltLose=sFlee-(sFlee-sLose)/bias.fightBias;
         const v=pWin*sWin+pFlee*sFlee+pLose*feltLose;
-        consider({cell,type:"attack",target:q,value:v,why:wanted.length?"opportunity":"denial",
+        // botSpoilPick takes a crate I need whenever the target holds one, so "the pick is on my recipe" is "they hold what I need"
+        consider({cell,type:"attack",target:q,value:v,why:(spoil!=null&&this.needs(p).includes(spoil))?"opportunity":"denial",
                   detail:{downwind,pWin,pLose:+pLose.toFixed(2),spoil,
                           sWin:+sWin.toFixed(4),sFlee:+sFlee.toFixed(4),sLose:+sLose.toFixed(4),
                           rematch:+rematch.toFixed(2)}});
@@ -3012,12 +3264,9 @@ class Game{
     const before=[...p.pos];
     // sailing is free now (rule 2) — no coin gate, no refund, no "too poor to sail"
     if(man(p.pos,plan.cell)>0){
-      const moved=this.sailPlan(p,plan);
-      // The drawn route rides WITH the move (see ev/bakeDraw above). sailPlan has already written
-      // p.pos, so the search is told the pre-move square outright via `from`, and `before` heads
-      // the polyline — the wire then carries the whole line instead of a destination that the far
-      // side would have to guess a line to.
-      if(moved){this.ev({t:"sail",p:p.idx,route:[[...before],...this.sailPath(p,[...p.pos],{throughRim:false,from:before})]});this.tradewind(p);}
+      // The sail, its route and its record are Game.sailTo's, reached through sailPlan exactly as the bot on screen reaches it
+      // (architecture item 7); then the one step after a boat lands, the trade wind (item 19).
+      if(this.sailPlan(p,plan))this.tradewind(p);
       else if(this.boxedIn(p)&&this.rimEscape(p)){/* rim sweep recorded its own event */}
     }
     if(p.pos[0]!==before[0]||p.pos[1]!==before[1])p.justDocked=false;
@@ -3025,14 +3274,19 @@ class Game{
     // The plan was costed from plan.cell; a storm or a blocked route can leave the ship short of it,
     // so anything needing adjacency is re-checked against where the ship ACTUALLY is. Not a second
     // decision — the same plan, refusing to pretend it arrived.
-    if(plan.type==="attack"&&man(p.pos,plan.target.pos)<=1&&this.canAttack(p,plan.target)){
+    if(plan.type==="attack"&&this.attackTargets(p).includes(plan.target)){
       this.battle(p,plan.target);return;}
-    if(plan.type==="trade"&&this.tryTrade(p))return;
+    // A hail put to the table IS this turn's action, struck or refused (hailEndsTurn, architecture item 14);
+    // a trade never spoken costs nothing, and the turn goes on to the fallback below.
+    if(plan.type==="trade"&&this.hailEndsTurn(this.tryTrade(p)))return;
     if(plan.type==="dock"&&this.adjPort(p)===plan.ing&&this.doDock(p,plan.ing))return;
-    // THE FALLBACK. chooseAction picks ONE action and, before this, a refusal ended the turn: a
-    // hail nobody would answer, or a berth already taken, and the captain went to look at the sea —
+    // THE FALLBACK. chooseAction picks ONE action and, before this, a plan that could not be carried
+    // out ended the turn: a trade with nothing worth saying from where the ship ended up, or a berth
+    // already taken, and the captain went to look at the sea —
     // even standing on a dock that pays whether or not there is a crate left to buy (rule 10d).
-    // A human does the next best thing instead, so a bot does too. Deliberately only the DOCK, not
+    // A human does the next best thing instead, so a bot does too. NOT after a refused hail: a person
+    // who hails and is turned down has spent the turn, and so has a bot (architecture item 14 — this
+    // fallback used to catch refused hails too, in the simulator only). Deliberately only the DOCK, not
     // a second full pass through chooseAction: re-running the menu could pick a fight the planner
     // had already priced and rejected this turn, and working the berth under your feet is the one
     // move that is never wrong.
@@ -3113,7 +3367,16 @@ class Game{
     const fallback=botGuess(p.bake,rng,BAKE_ATTENTION);
     return {setup,fallback};
   }
+  /* A BAKING CAPTAIN'S TURN BEGINS — recorded, so every screen can see whose turn it is (architecture item 3, 2026-09-16).
+     A baking captain's turn IS their attempt (A-1), and nothing said so until the attempt RESOLVED: `ovens` is recorded only on the day
+     a captain arrives, `bake` only once the guess is scored. So for a whole bench on every later day the event stream still named the
+     PREVIOUS captain, and "whose turn is it" (src/shared/storyboard.js, TURN_ESTABLISHING) could only answer from a prompt's side
+     channel — which is how the top bar and the ring came to disagree through every bake (T-09). Draws no random number. */
+  bakeTurn(p){
+    this.ev({t:"bakeTurn",p:p.idx});
+  }
   bakeAttempt(p,guess){
+    this.bakeTurn(p);
     const {setup,fallback}=this.bakeSetup(p);
     return {setup,...this.bakeResolve(p,guess||fallback)};
   }
@@ -3210,11 +3473,33 @@ class Game{
     if(!this.next)this.next=this.drawWeather();
     const cur=this.next;
     this.windNow=cur.dir;this.stormNow=cur.storm;
+    /* ⭐ WHETHER TODAY'S STORM IS A NEW ONE OR A CONTINUING ONE — counted HERE, once, before tomorrow is drawn
+       (architecture item 44, 2026-09-17): the storm days running, today included — 1 a new storm, 2 one going
+       on from yesterday, 0 a calm day. Tomorrow's roll below only READS it (the cap: never a third in a row), and
+       the day's record (beginDay) carries it to every screen. */
+    this.stormStreak=cur.storm?(this.stormStreak||0)+1:0;
     this.next=this.drawWeather();
     this.windNext=this.next.dir;this.stormNext=this.next.storm;
     // v1's second perpendicular gust is gone (rule 7): a storm is one direction, one distance.
     this.windNow2=null;
     return cur;
+  }
+  /* ⭐ HOW EACH DAY BEGINS — ONE STEP, CALLED BY EVERY VOYAGE (architecture item 2, 2026-09-16).
+     Returns null once the voyage has run DAY_CAP days (the voyage then ends); otherwise the day is counted,
+     the forecast wind becomes today's (advanceWind), and the day-start record is written — `newround` with
+     the wind, `streak` (the storm days running, today included, as advanceWind counted them before tomorrow was
+     drawn — 2 or more is a storm going on from yesterday, read by the narration's "now/still blowin'" lines), the
+     wind's own streak, and tomorrow's forecast. Returns today's {wind, storm}; the caller runs the storm (headless
+     at once, live with its pictures).
+     It used to be written three times with a bare 150 in each: playBakeoff, playClassic and runLiveNet —
+     and only the live record carried `streak`. The ENGINE FOLLOWS THE LIVE GAME: the record's fields, their
+     order and every draw are the live loop's. */
+  beginDay(){
+    if(this.round>=DAY_CAP)return null;
+    this.round++;
+    const {dir:wind,storm}=this.advanceWind();
+    this.ev({t:"newround",dir:wind,streak:this.stormStreak,windStreak:this.noteWind(wind),next:this.forecastWind(),nextStorm:this.stormNext}); // NARR-04
+    return {wind,storm};
   }
   /* v2 rule 7: ONE storm event for the whole table, at the top of the round, before anybody acts.
      Resolved downwind-first (Wyatt's ruling) so the lead ship clears its square before the ship
@@ -3244,12 +3529,9 @@ class Game{
          a fair race instead of seat order deciding it
      The old one-lap final round is gone entirely: the baking days ARE the catch-up window. */
   playBakeoff(){
-    let order=this.players.map((_,i)=>i);
-    this.shuffle(order);
-    while(this.round<150){
-      this.round++;
-      const {dir:wind,storm}=this.advanceWind();
-      this.ev({t:"newround",dir:wind,windStreak:this.noteWind(wind),next:this.forecastWind(),nextStorm:this.stormNext});
+    const order=this.beginVoyage();
+    for(let day;(day=this.beginDay());){
+      const {wind,storm}=day;
       if(storm)this.runStorm(wind);
       for(const i of order){
         const p=this.players[i];
@@ -3273,12 +3555,9 @@ class Game{
     return this.resolveEnd();
   }
   playClassic(){
-    let order=this.players.map((_,i)=>i);
-    this.shuffle(order);
-    while(this.round<150){
-      this.round++;
-      const {dir:wind,storm}=this.advanceWind();
-      this.ev({t:"newround",dir:wind,windStreak:this.noteWind(wind),next:this.forecastWind(),nextStorm:this.stormNext}); // NARR-04
+    const order=this.beginVoyage();
+    for(let day;(day=this.beginDay());){
+      const {wind,storm}=day;
       if(storm)this.runStorm(wind); // rule 7: everyone at once, before anyone acts
       for(const i of order){
         const p=this.players[i];
@@ -3328,7 +3607,9 @@ class Game{
   eligibleFinishers(){
     return this.finishOrder.filter(i=>!this.needs(this.players[i]).length);
   }
-  /* ⭐ HOW THE WINNER IS CROWNED — ONE PLACE. Two engine steps, because the live voyage speaks between them:
+  /* ⭐ HOW THE WINNER IS CROWNED — ONE PLACE (architecture item 2, 2026-09-16). It was written twice: here
+     (resolveEnd) and in the live liveResolveEndNet, which re-ran the same eligibility, ranking and events by
+     hand. Now two engine steps, because the live voyage speaks between them:
        crownWinner() — who may be crowned (a full recipe), the winner, and when several captains finished,
                        the shared bakery ({t:"collab"}, ranked by bakeRank). Returns true when it recorded one,
                        so the live voyage can narrate it before the voyage ends.
@@ -3352,6 +3633,16 @@ class Game{
   /* The `end` event carries THE WHOLE RESULT every screen draws the victory card from — each captain's score
      rows and the closeness order — so a guest never reads the result from anywhere else (architecture item 5:
      "number routes 2→1"). Built here, once, from the engine's own state. */
+/* ⭐ A VOYAGE THAT CANNOT GO ON IS A FACT OF THE GAME, SO IT IS AN EVENT. Wyatt, 2026-09-17, AGREED: when the host's voyage breaks,
+     every screen is told. Before, the host drew its own "run aground" box and published nothing, so a crew guest sat on "… is at the
+     ovens — watch the crates" for seven minutes (seen in a two-window run, 2026-09-16) — the bake has no clock by his ruling, and the
+     "host left" warning only fires when the host's tab DISCONNECTS, which a live-but-broken host never does.
+     Recorded once per voyage: later faults are noise, and the first one is the one that stopped the game. */
+  halt(where){
+    if(this.halted)return null;
+    this.halted=true;
+    return this.ev({t:"halted",where:String(where||"")});
+  }
   declareEnd(){
     this.ev({t:"end",winner:this.winner,voyage:this.voyageSummary()});
     return this.winner;

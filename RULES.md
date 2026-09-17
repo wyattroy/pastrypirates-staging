@@ -14,7 +14,7 @@ Collect **every ingredient on your recipe map**, then sail home and dock at Barb
 
 ## Setting Sail
 
-Each captain gets a **recipe map** (5 ingredients), **3 gold coins**, and a ship docked at Barbados, in the middle of the sea. Each island holds only a few **crates** of its ingredient — when they're gone, they're gone. The player who looks most like a pirate goes first (after that, the first turn passes around the table each round).
+Each captain gets a **recipe map** (5 ingredients), a **purse of gold coins** — **3** for the captain who sails first, **4** for the next, and so on (the later you sail, the fuller your purse) — and a ship docked at Barbados, in the middle of the sea. Each island holds only a few **crates** of its ingredient — when they're gone, they're gone. The player who looks most like a pirate goes first (after that, the first turn passes around the table each round).
 
 **Keep your recipe map to yourself.** It's secret — don't show or tell rivals which ingredients you're after. Crates in your ship's hold, on the other hand, are fair game for anyone to see: every captain's cargo is out in the open.
 

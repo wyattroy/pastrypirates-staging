@@ -29,8 +29,9 @@
                                every line about a captain, even one only other screens read today.
        {name}                  a captain's name as a LABEL — the line is put TO them by name ("{name}, choose yer
                                recipe:"), or names them on a badge, a tally or a table ("{name's} HEADS"). A name
-                               never becomes "ye", which is the point of it. words_one_place_check holds the list of
-                               lines allowed a name, so a line about a captain cannot quietly take one.
+                               never becomes "ye", which is the point of it. scripts/qa/lines_take_the_seat_check.mjs
+                               holds the list of lines allowed a name, and follows a name through a variable, a helper,
+                               a template or a field it was stored in, so a line about a captain cannot quietly take one.
 
    THE RULE THIS FILE EXISTS TO HOLD: A BOT AND A HUMAN ARE DESCRIBED IN THE SAME WORDS. A captain's type
    decides how a move is CHOSEN, never which sentence describes it; which screen is reading decides "ye".
@@ -219,6 +220,9 @@ export const WORDS = {
   "act.attackFree": "⚔️ Attack",
   "act.noPowder": "Ye can't afford the powder — {n}🌕 a broadside, and yer purse won't stretch.",
   "act.emptyHolds": "Their holds are empty — there's nothin' aboard worth takin'.",
+  /* architecture item 13, 2026-09-17: the ship alongside is baking at Tortuga (sanctuary, his ruling of 2026-08-06) — this line is
+     drafted in the voice of the one above and the rules page's "they're beyond yer reach"; his to rewrite. "yer" is derived. */
+  "act.sanctuary": "Their ovens are lit at Tortuga — they're beyond {p's} reach now.",
   "act.trade": "🤝 Trade",
   "act.nothingToTrade": "Ye've nothin' to trade — an empty hold and an empty purse.",
   "act.noCargoOnWater": "Not a captain on the water is carryin' cargo to trade for.",
@@ -274,8 +278,8 @@ export const WORDS = {
   "trade.tooDear": "That'd cost ye {n}🌕, and ye've only {coins}🌕 aboard.",
   "trade.coinsShort": "+{n}🌕",
   "trade.walkAway": "🚫 Walk away",
-  "trade.refuses": "{q} refuses outright",
-  "trade.declines": "{q} declines",
+  "trade.refuses": "{q} {q:refuses|refuse} outright",
+  "trade.declines": "{q} {q:declines|decline}",
   "trade.allDeclined": "No captain will part with {want} for {p:that|that offer of yers}.",
   "trade.answers": "Fer yer {want} the table answers:<br>{lines}<br>Take a deal, or walk away?",
   "trade.walksAway": "{p} {p:walks|walk} away from the table.",
@@ -283,6 +287,10 @@ export const WORDS = {
   "counter.coin": "💰 Coin instead",
   "counter.coinShort": "💰 Coin",
   "counter.noCoin": "{p} {p:has|have} no coin at all — it must be an ingredient.",
+  /* architecture item 20, 2026-09-17: "Coin instead" greyed because the asker's whole purse is already in the offer (the slider's number
+     is coin in all, his ruling of 2e9e06b1, so there is no total above it) — drafted in the voice of the line above and of
+     "no coin left to sweeten the deal"; his to rewrite. The captain is derived. */
+  "counter.allOffered": "{p} {p:has|have} already offered every coin aboard — it must be an ingredient.",
   "counter.ask": "{q}: what o' {whose} will ye have instead?",
   "counter.noCargo": "{p} {p:has|have} no other cargo — ye can ask for coin, or deny.",
   "counter.asking": "{q}: ye're ASKIN' {what} for yer {want}",
@@ -335,7 +343,7 @@ export const WORDS = {
   /* his pass, 2026-09-13 */
   "battle.downwindHits": "⚪ {w's} downwind shot hits!",
   "battle.crosswindMiss": "⚪ No hit — cannonballs collide in the crosswind.",
-  "battle.hit": "{name} lands a hit!",
+  "battle.hit": "{w} {w:lands|land} a hit!",
   "battle.bothMiss": "⚫ Both miss.",
   "battle.fleeAsk": "{name}: both shots missed wildly! Slip away?",
   "battle.flee": "🏃 Flee!",

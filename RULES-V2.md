@@ -1,5 +1,7 @@
 # Pastry Pirates v2.1 — ruleset spec
 
+> **Note, 2026-09-16:** §2's "Starting coins stay **3**" is kept below as this record's 2026-08-04 answer; the game played today staggers the starting purses — 3🌕 for the captain who sails first and one more for each captain after (3/4/5/6), the rule since `06005ae8` (2026-07-18), kept by architecture item 2 (`adb237dd`).
+
 Solo/pass-and-play only. No Firebase. v1 (repo root) is untouched.
 Every line below is Wyatt's answer to a clarifying question, 2026-08-04.
 

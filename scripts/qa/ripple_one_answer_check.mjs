@@ -55,12 +55,13 @@ else fail(`cannot find the subject (ringTo sites:${ringSites} renderLiveShips:${
    So: take the seat EXPRESSION each ringTo() is actually passed, and trace THAT identifier back to
    its assignment. A ring fed by anything this cannot trace to a stated list is a FAILURE, not a
    silent pass — the same fail-closed rule the trial gate learned from CEO 39. */
+/* ARCHITECTURE ITEM 3 (2026-09-16): both ring sites read whoseTurn() now — the one helper in src/ui/util.js over the shared
+   walk, which the top bar, the bob and "Check my recipe" read too. board.js's private activeTurnSeat() wrapper is gone, and
+   a ring fed straight from deriveActiveSeat() would be a surface stepping round the helper, so ONLY whoseTurn() traces:
+   anything else is untraceable and fails, exactly as the note above requires. */
 const listOfAssignment = (name) => {
-  const a = code.match(new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*deriveActiveSeat\\s*\\(([^;]*?)\\)\\s*;`))
-        || code.match(new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*(activeTurnSeat)\\s*\\(`));
-  if (!a) return null;
-  if (a[1] === "activeTurnSeat") return "the shared walk";   // a wrapper that calls it IS it
-  return "the shared walk";
+  const a = code.match(new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*whoseTurn\\s*\\(\\s*\\)`));
+  return a ? "the one helper, whoseTurn()" : null;
 };
 const CALLS = [...code.matchAll(/(?<!function\s)ringTo\s*\(\s*([A-Za-z_$][\w$]*)\s*,/g)];
 const attributed = CALLS.map(m => ({ arg: m[1], list: m[1] === "seat" ? null : listOfAssignment(m[1]) }));

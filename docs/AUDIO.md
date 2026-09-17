@@ -260,9 +260,15 @@ The battles are written entirely as gunpowder. Counted across `4/src` and `index
 
 **Every one of those battles currently plays a sword clash.** Wyatt asked for a cannon on
 2026-08-01; this is not a preference, the audio is contradicting the game's own writing. The
-resolution he settled on: **cannon when the fight is joined** (`playBattleEngage()`, already wired
-and firing at the right moment since `260801-7f4`), **and a second sound when it resolves** — which
+resolution he settled on: **cannon when the fight is joined** (then `playBattleEngage()`, firing at
+the right moment since `260801-7f4`), **and a second sound when it resolves** — which
 is the `clash` slot still open in §4.
+
+> **Where the "fight joined" sound lives now (architecture item 4, 2026-09-17):** `EVENT_SOUND.engage`
+> — the engine records `engage` when a fight is called (`Game.beginBattle`) and the one event consumer
+> sounds it on every screen. `playBattleEngage()` is deleted; it played on the host before the opening
+> line and on a crew guest only at the first battle snapshot (measured 4.4–13.8 s late).
+> `scripts/qa/fight_on_screen_one_door_check.mjs` holds it.
 
 ---
 

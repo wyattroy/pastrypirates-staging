@@ -4,7 +4,7 @@
  * guest's boat slides in a straight line, cutting across land.
  *
  * The shape of it, in this tree:
- *   - the engine computes a REAL legal path — Game.sailPath (src/engine/index.js)
+ *   - the engine computes a REAL legal path — Game.sailTo (src/engine/index.js; Game.sailPath until architecture item 7)
  *   - only src/ui/flow.js asks for that path, and only src/ui/flow.js walks it (animateSailRoute)
  *   - flow.js's turn loop runs under runLiveNet(), which src/orchestrator.js attaches on the HOST ONLY
  *   - the event published to the guest is {t:"sail", p:<seat>} plus Game.ev's baked snapshot, and
@@ -60,8 +60,10 @@ const orch   = read("src/orchestrator.js");
    gate looked at the real thing and not at an empty string. */
 const subj = {};
 {
-  const m = engine.match(/\n\s*sailPath\s*\(/);
-  if (!m) missed("src/engine/index.js has no sailPath( — the engine's legal-path search. Re-anchor this gate; do not delete it.");
+  /* RE-ANCHORED 2026-09-17 (architecture item 7): the route is walked by Game.sailTo, the one place a ship sails — it checks the
+     square, writes it and records the move with its route. sailPath, which every mover used to ask separately, is gone. */
+  const m = engine.match(/\n\s*sailTo\s*\(/);
+  if (!m) missed("src/engine/index.js has no sailTo( — the engine's one sail, which walks the legal path. Re-anchor this gate; do not delete it.");
   subj.sailPath = `src/engine/index.js:${lineOf(engine, m.index + 1)}`;
 
   /* ⚠ `async` IS OPTIONAL HERE NOW. On 2026-09-08 animateSailRoute became a synchronous wrapper
@@ -97,12 +99,15 @@ const ROUTE_KEY = /\b(route|path|legs|via|squares|waypoints)\b/;
    Today each emitter publishes {t:"sail",p:<seat>} — the seat and nothing else — and Game.ev's
    baked snapshot adds only each captain's FINAL pos. */
 {
-  const emitters = [...`${flow}`.matchAll(/ev\(\{\s*t\s*:\s*"sail"[^}]*\}/g)]
+  /* RE-ANCHORED 2026-09-17 (architecture item 7): the one sail record is built in Game.sailTo as a STATEMENT — the {t:"sail"} and the
+     route it carries — and then handed to this.ev, so a record is read to the end of its statement, not to the literal's first "}".
+     A sail record whose statement carries no route is still exactly what fails below. */
+  const emitters = [...`${flow}`.matchAll(/\{\s*t\s*:\s*"sail"[^;]*;/g)]
         .map(m => ({ file: "src/ui/flow.js", src: flow, idx: m.index, text: m[0] }))
-    .concat([...`${engine}`.matchAll(/ev\(\{\s*t\s*:\s*"sail"[^}]*\}/g)]
+    .concat([...`${engine}`.matchAll(/\{\s*t\s*:\s*"sail"[^;]*;/g)]
         .map(m => ({ file: "src/engine/index.js", src: engine, idx: m.index, text: m[0] })));
 
-  if (!emitters.length) missed('no ev({t:"sail"…}) emitter found in flow.js or engine/index.js — this gate has lost its subject.');
+  if (!emitters.length) missed('no {t:"sail"…} record found in flow.js or engine/index.js — this gate has lost its subject.');
   console.log(`  (found ${emitters.length} sail emitter(s))`);
 
   for (const e of emitters) {

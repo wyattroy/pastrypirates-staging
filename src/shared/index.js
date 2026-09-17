@@ -496,6 +496,16 @@ const BAKE_ATTENTION=0.24;
 // gives coins a use at the very end of a voyage, where they had none — every other way to spend
 // them is out at sea.
 const BAKE_REWATCH_COST=1;
+/* ⭐ A CAPTAIN'S STARTING PURSE — THE ONE RULE (architecture item 2, 2026-09-16).
+   The captain who sails first gets cfg.startCoins, and each captain after them one more (3/4/5/6 at a
+   four-captain table). The played rule since 06005ae8 (2026-07-18: "starting coins staggered (3/4/5/6)
+   to level the resulting first-mover advantage"); kept by Mac: Dev relaying Wyatt, 2026-09-16.
+   It used to be written twice: the live voyage staggered the purses (orchestrator.js runLiveNet) and the
+   headless engine gave every captain cfg.startCoins, so every bot ladder measured a game nobody plays.
+   HERE, in the engine's pure leaf tier, because TWO readers need the same rule and one of them cannot
+   import the engine: Game.beginVoyage deals the purses with it, and rulesFacts (below) prints what the
+   first two captains start with on the rules page. `place` is a captain's place in the sailing order. */
+function startingPurse(cfg,place){ return cfg.startCoins+place; }
 /* rulesFacts(cfg) — EVERY NUMBER THE HOW-TO-PLAY PAGE TEACHES, computed from the same cfg the
    engine plays by (A-7 — Wyatt, 2026-08-28: the rules page must update "according to the latest
    rules" automatically). The page holds no copy of any amount: each one is an empty
@@ -505,7 +515,8 @@ const BAKE_REWATCH_COST=1;
    filler drifting apart. Takes cfg as an argument because shared/ sits below engine/ in the
    module graph — the caller passes the live game's cfg, or roundCfg's default. */
 function rulesFacts(cfg){
-  return {recipeSize:cfg.recipeSize,startCoins:cfg.startCoins,
+  // the starting purses: the first captain to sail, and the next (startingPurse is the one rule)
+  return {recipeSize:cfg.recipeSize,startCoins:startingPurse(cfg,0),startCoinsNext:startingPurse(cfg,1),
     sailRange:SAIL_RANGE,sailUpwind:SAIL_RANGE_UPWIND,stormPush:STORM_PUSH,
     dockHeads:cfg.dockHeads,dockTails:cfg.dockTails,
     /* ⚠ `crateBase` IS NOT HERE ANY MORE — Wyatt's playtest item 23, 2026-09-07. The rules used to
@@ -808,4 +819,4 @@ function voyageCloseness(a,b){
   return (b.won-a.won)||(b.baked-a.baked)||(b.named-a.named)||(b.crates-a.crates)||(a.squares-b.squares)||(b.coins-a.coins)||(a.seat-b.seat);
 }
 
-export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, devHost, BAKEOFF_ENABLED, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, rulesFacts, bakeoffEnabled, OVENS_NOW, ovensNowEnabled, BAKE2_NOW, bake2Enabled, ENDCARD_NOW, endCardEnabled, SEA_CREATURES, NAMES, DEFAULT_NAMES, unusedDefaultName, seatHeldName, withoutSeat, applyNameClaim, buildRoster, COLORS, HEXCOL, man, subjectOf, VOYAGE_POINTS, voyageLoserCeiling, voyageWinBonus, voyageScoreRows, voyageCloseness };
+export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, devHost, BAKEOFF_ENABLED, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, rulesFacts, bakeoffEnabled, OVENS_NOW, ovensNowEnabled, BAKE2_NOW, bake2Enabled, ENDCARD_NOW, endCardEnabled, SEA_CREATURES, NAMES, DEFAULT_NAMES, unusedDefaultName, seatHeldName, withoutSeat, applyNameClaim, buildRoster, COLORS, HEXCOL, man, subjectOf, VOYAGE_POINTS, voyageLoserCeiling, voyageWinBonus, voyageScoreRows, voyageCloseness, startingPurse };

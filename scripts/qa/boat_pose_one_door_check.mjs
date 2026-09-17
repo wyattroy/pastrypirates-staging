@@ -52,7 +52,7 @@ function rules(files) {
   rule(/liftOf\(/.test(hand) && /composite\s*:\s*"add"/.test(hand) && /currentTime\s*=\s*0/.test(hand),
     "the hand-over starts the picture where the copy was, and the copy's swell where the picture is",
     "handOver swaps without carrying the pose — the boat drops by however high the swell happened to be");
-  const bob = body(board, "export function bobShip(");
+  const bob = body(board, "function bobShip(");   // not exported since architecture item 3 (bobTheTurn is the door); the rule reads the same body
   rule(/offset\s*:\s*\.5\s*,\s*easing\s*:\s*"ease-in-out"/.test(bob) && /iterations\s*:\s*Infinity\s*,\s*easing\s*:\s*"linear"/.test(bob),
     "the swell eases per half and turns smoothly at its top", "the swell eases across the whole cycle again — fastest exactly at its peak");
   return out;

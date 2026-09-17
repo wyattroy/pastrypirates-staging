@@ -41,7 +41,7 @@
 import {
   appState,
 } from "../state/index.js";
-import { normalizeSeat, deriveActiveSeat, isDecisionLocal } from "../shared/storyboard.js";
+import { normalizeSeat, turnShown, isDecisionLocal } from "../shared/storyboard.js";
 import { roundCfg } from "../engine/index.js";
 import {
   // F5 (2026-07-29): dockFlavor -> dockFlavorIcon. EVENT_NARRATION.dock was this file's only
@@ -602,6 +602,18 @@ const EVENT_NARRATION={
     // no 🤝 stamp over the boats — his game feel audit, 2026-09-13: "This already happens, and it seems weird." → "Remove it"
     return {cls:"trade",txt};
   },
+  /* A HAIL THAT STRUCK NO DEAL — SAYS WHY, FOR EVERY CAPTAIN, WHOEVER HAILED (architecture item 15, 2026-09-17).
+     Wyatt, build .5: "when a captain denied my trade counter offer (in solo play, on his bot turn), that trade fail
+     resolution message did not appear." It could not: a human's failed hail was told by four flashes written into
+     humanTrade, and a bot's recorded a `parley` this table had no entry for — the entry that stood here was deleted
+     as collateral by the weather-line commit (693c2b0b, 2026-08-27), the same table edit that silenced the muse.
+     The engine's resolveHail now puts the reason on the event, and these are the four lines a human's hail already
+     said, word for word, moved here from those flashes; "ye" or the captain's name is words.js's business. */
+  parley:(e,at,cellPx,viewerSeat)=>{
+    const id={silence:"trade.silence",declined:"trade.allDeclined",walkaway:"trade.walksAway",fellThrough:"trade.declined"}[e.why];
+    if(!id)return null;   // a parley recorded before it carried a reason (an old save's replay) says nothing, as it did
+    return {cls:"trade",txt:say(id,{p:seat(e.a),q:e.b==null?null:seat(e.b),want:ilabelImg(e.want)},viewerSeat)};
+  },
   // v2 rule 5: a call is free and pays a flat bounty. Nothing is ever lost on a wrong one, so
   // there is no "backed the wrong ship (−N🌕)" form any more.
   sidebet:(e,at,cellPx,viewerSeat)=>{
@@ -619,9 +631,8 @@ const EVENT_NARRATION={
        through untouched (the config-dead raider spoil, queued for deletion in DETERMINISM-RERECORD-NEXT.md). */
     const spoilText=e.spoilIng?ilabelImg(e.spoilIng):(/ coins/.test(e.spoil)?fmtItem(e.spoil):e.spoil);
     /* playtest 20: rule 9 gives a two-heads tie to the DOWNWIND ship, and roughly one battle in four ends that
-       way — so the line says why. The deciding round is the last one that scored (`downwind` rides the event). */
-    const decidedRound=e.rounds&&e.rounds.filter(r=>r&&r[3]).pop();
-    const wonOnWind=!!(e.downwind&&decidedRound&&decidedRound[0]===1&&decidedRound[1]===1&&decidedRound[3]===e.downwind);
+       way — so the line says why. WHY is the engine's answer, carried on the event (engine resolveRound's `why`),
+       never re-derived here from the rounds: this line used to work it out a second time (architecture item 1). */
     /* playtest 20 (Wyatt: "losers of a battle without a crate don't always give 'all they have'"): an empty hold
        means the winner leaves with nothing, and the line says so — detected on the DATA, so a future coin prize
        cannot silently inherit it. Checked before the wind: "where did my crate go" is the question a loser asks. */
@@ -630,7 +641,7 @@ const EVENT_NARRATION={
        "gives up all they have" branches — v2 rule 9d makes the prize a crate, full stop, so a coin prize could no
        longer reach a player. Who reads "ye" or "yer" is words.js's business, from the seats named here. */
     const facts={winner:seat(e.winner),loser:seat(loser),spoil:spoilText};
-    const txt=say(tookNothing?"battle.nothing":wonOnWind?"battle.downwind":"battle.takes",facts,viewerSeat);
+    const txt=say(tookNothing?"battle.nothing":e.why==="wind"?"battle.downwind":"battle.takes",facts,viewerSeat);
     return {cls:"battle",
       txt,
       pops:[[[(x1+x2)/2,Math.min(y1,y2)-cellPx*.15],"⚔️",true],[at(loser),"💸"],[at(e.winner),sp||"💰",false,spImg]]};
@@ -642,6 +653,11 @@ const EVENT_NARRATION={
     // his pass, 2026-09-13: "Davy Scones slips away!" — the attack itself was announced when the fight opened.
     return {cls:"battle",txt:say("battle.slipsAway",{d:seat(e.d)},viewerSeat),pops:[[at(e.d),"🏃"]]};
   },
+  /* A BOAT THAT COMES INTO THE CURRENT AT ITS HEAD — a ride of no squares, explained (/4 playtest 8, Wyatt: silence there reads as a
+     stall). ONE line for every captain who lands there, bot or human, however they got there — a sail, Move instead, a flight from a
+     fight — and on every screen: the engine records it (Game.tradewind), and this is the only place it is worded. It used to be said
+     by humanTurn alone, for a human's own sail (architecture item 19, 2026-09-17). "ye" or the captain's name is words.js's business. */
+  rimhead:(e,at,cellPx,viewerSeat)=>({txt:say("rim.head",{p:seat(e.p)},viewerSeat)}),
   // notes/edits UI-04: on a catch, the emoji that rises from the boat is the SUGARFISH itself, not
   // the fishing line — you just landed a fish, so show the fish coming up out of the boat.
   // NARR-01/D-25/D-38 (Wyatt-approved 2026-07-29): signed catch amounts.
@@ -923,7 +939,7 @@ export function computeAwards(){
     // v2.1 (Wyatt, 2026-08-06: recalculate the lucky streak "over the course of the whole game").
     // MEASURED FIRST: the walk was already whole-game — `streak` is never reset between turns — but
     // it was BLIND TO `battlenull`, and that is where the reported symptom came from. A null battle
-    // (v2 rule 9: the crosswind stand-off nobody paid to break, and every declined re-fire) carries
+    // (v2 rule 9: a crosswind collision, which ends with no winner, and every declined re-fire) carries
     // its flips in `rounds` exactly like the other two outcomes, and they were being dropped.
     // Across 40 headless games that lost 74 of 816 flips — 9% — and the badge undercounted somebody's
     // streak in 4 of them. Always downward, which is why it read as "this only counted one turn".
@@ -1609,14 +1625,19 @@ export function resolveOpt(opts,i,fallback){
    above); the guest builds the SAME markup with the SAME builder, and the number it drags to comes
    home beside the button index as {i,n} and lands in this tier's `ref` below, before resolveOpt.
    coinStepper is gone from the tree, and with it the routing-dependent decision-log length. */
-export function ask(msg,opts,colors,sub,extra){
+/* WHO IS BEING ASKED IS THE FIRST ARGUMENT — architecture item 3 (2026-09-16). It used to be read off
+   appState.curSeat, a slot every prompt site wrote through applyActiveSeat() just before calling here —
+   the same slot the top bar drew as "whose turn it is", so asking a defender to flip moved every
+   screen's top bar off the attacker. The seat is now said at the call, the way raiseLocalPrompt(seat,…)
+   already took it, and nothing a prompt does can touch whose turn it is. */
+export function ask(forSeat,msg,opts,colors,sub,extra){
   // during reload-replay, return the recorded choice (an index) mapped through the freshly
   // rebuilt opts — so object-valued options resolve to live game references, not stale copies.
   if(appState.replaying){
     if(appState.dlogIdx<appState.dlog.length){appState.dlogN++;return Promise.resolve(resolveOpt(opts,appState.dlog[appState.dlogIdx++],0).opt.value);}
     netHandlers().onEndReplay();
   }
-  const askSeat=appState.curSeat;
+  const askSeat=forSeat;   // NOT named `seat`: that is words.js's seat(), called below for the table's "…is deciding…" line
   /* THE SHOT CLOCK IS TEMPORARILY OUT OF THE GAME — Wyatt, 2026-08-28, choosing removal over
      engineering the one-activity-engine convergence around it: "i'd prefer to do it even if it
      breaks shot clock, and to temporarily remove the shot clock from the game." What stood here
@@ -1652,7 +1673,7 @@ export function ask(msg,opts,colors,sub,extra){
   const isFlip=opts.length===1&&!!opts[0].flip;
   // `sub` is optional helper text rendered under the button row; an option flagged `disabled`
   // renders greyed and non-clickable (notes/edits #5) — used for the too-poor Attack button.
-  const base=decisionIsLocal(askSeat)?netHandlers().onLocalAsk(msg,opts,colors,sub,extra)
+  const base=decisionIsLocal(askSeat)?raiseLocalPrompt(askSeat,()=>netHandlers().onLocalAsk(msg,opts,colors,sub,extra))
     :netHandlers().onRemotePrompt(askSeat,{kind:"ask",msg,labels:opts.map(o=>o.label),
        colors:colors?colors.map(c=>c||""):null,classes:opts.map(o=>o.cls||""),
        // playtest 21 item 5: `why` rides across with `disabled`, because the two are one fact and
@@ -2007,39 +2028,65 @@ export async function narrateEvent(e){
   await eventCeremony(e);
 }
 export async function narrateCurrent(){ await narrateEvent(appState.game.events[appState.evIdx]); }
-/* NOT EXPORTED (2026-08-31). One fact, one writer: the only caller is applyActiveSeat below,
-   which also moves S.activeSeat — the value stage.js:1206 draws FIRST. Sixteen call sites used
-   to import this directly and leave the ribbon pointing at the previous captain; they now call
-   applyActiveSeat. Un-exporting is what stops the seventeenth from being added by hand.
-   scripts/qa/whose_turn_one_fact_check.mjs holds this. */
-function setActor(s){appState.curSeat=s;}
-/* ONE ACTIVE SEAT (02.15-01 Stage 2, D-25). THE fault of D-24 in miniature, and it was measured
-   before it was touched: ribbonTick (ui/stage.js) glows the boat at S.activeSeat ?? appState.curSeat;
-   curSeat is written only by setActor and S.activeSeat only by __pp4.actor; and every one of those
-   21 call sites lived in the host's live simulation or a local prompt. Not one of the guest's nine
-   listeners called either. Measured in a two-tab crew game 2026-08-20, fourteen consecutive samples:
-   host curSeat=1 / ribbon glow on boat 1, guest curSeat=0 / glow on boat 0, never moving. That is
-   his shot 21 — "top-bar boats: updating with the turn / not updating" — and, through camToSeat
-   reading the same notion of whose turn it is, his shot 20 as well.
-   ONE FUNCTION, BOTH TIERS, so the two cannot be aimed differently. The host's turn loop calls it
-   (humanTurn, botTurn) and so does watchEvents, off the `p: seat` field every meaningful event
-   already carries. NO ENGINE CHANGE and none is permitted here: ev() records no actor and the
-   schema has no actor field, but `turn`/`sail`/`dock`/`pass`/`attack` all carry `p`. This is the
-   same move watchEvents already makes for round, wind, storm and per-seat state.
-   TWO GUARDS, BOTH DELIBERATE. Events that carry no seat (`newround`, `end`) leave the indicator
-   alone rather than blanking it. And the seat is bounded to the known range before it is used as an
-   index (T-02.2-08) — the `ev` node is host-authoritative, which is the same trust already relied
-   on for board positions, but a bounded index costs nothing and a trusted one eventually does. */
-export function applyActiveSeat(seat){
-  /* THE ONE WRITER. Both guards now come from src/shared/storyboard.js's normalizeSeat, so the
-     rule for "is this a seat we may point at" has one spelling shared with the event-stream
-     derivation the board reads (2026-08-31). Behaviour is unchanged: null in -> nothing written,
-     out-of-range in -> nothing written. */
+/* ⭐ WHOSE TURN IT IS, AS EVERY SURFACE SHOWS IT — THE ONE HELPER (architecture item 3, 2026-09-16).
+   The top bar (stage.js ribbonTick, and the ⏩ chip beside it), the ring, the captains-box highlight and
+   the pass-and-play row order (board.js render/renderLiveShips), the bobbing boat (board.js bobTheTurn)
+   and "Check my recipe" (board.js render) all call this and nothing else. The rule is pure and lives in
+   src/shared/storyboard.js (turnShown); this knows only WHERE its two inputs live.
+   WHAT STOOD HERE: setActor() and applyActiveSeat(), the writer of a slot (appState.curSeat and stage.js's
+   S.activeSeat) that the top bar drew — written by 19 callers, most of them for whoever was being ASKED:
+   the defender's flip, each crow's-nest caller, a trade partner. His ruling, 2026-09-16: "The top bar
+   shows whose turn it is -- which is the active player who decided to attack. this does not need to
+   change during a battle; it should not." Nothing writes whose turn it is now; it is read.
+   scripts/qa/whose_turn_shown_once_check.mjs holds it. */
+export function whoseTurn(){
+  const g=appState.game;
+  if(!g||!g.events)return null;
+  return turnShown({events:g.events,playhead:appState.evIdx,askedSeat:appState.askedSeat});
+}
+/* ⭐ THE ONE DOOR A LOCAL PROMPT COMES THROUGH — Wyatt, 2026-09-09.
+
+   He caught the guest's recipe picker naming the HOST, and when I described the fix as "both seams
+   must publish the same fact" he stopped me:
+
+     "This seems like sloppy architecture that's easy to mess up in future -- is there a better way
+      to do it in alignment with our design values (eg one central engine?)"
+
+   He is right and the rule is already written down: *when a second consumer of the same thing
+   appears, converge — never run two side by side.* Two seams each remembering to publish the seat
+   is two things kept in step by nothing, and the way I found out is that I fixed one of them,
+   watched every local mode go green, and shipped a guest that was still broken.
+
+   SO "WHO IS BEING ASKED" IS PUBLISHED IN EXACTLY ONE PLACE: here. A caller cannot raise a local
+   prompt without saying whose it is, because the seat is the first argument and the drawing is the
+   second. Forgetting is no longer possible; it would mean not calling this function at all.
+
+   ⭐ AND IT IS ITS OWN FACT NOW, NOT THE TURN (architecture item 3, 2026-09-16). This used to call
+   applyActiveSeat(), which wrote the slot the top bar drew as whose turn it is. It now writes
+   appState.askedSeat and nothing else — only while the prompt is up, so a screen asking nobody names
+   nobody — and whoseTurn() reads it for exactly one phase: the recipe draft (with the Ahoy card before it),
+   before the recipes are set and any captain can hold a turn. MOVED HERE FROM src/ui/flow.js in the same change, so ask() (this file) goes through the
+   same door for its local branch; flow.js may import util.js, never the reverse.
+
+   ⚠ AND THE DEEPER DUPLICATION IS STILL THERE, NAMED HERE SO IT IS NOT LOST. The guest does not
+   merely publish its own seat — it hand-rolls its own copy of this renderer. watchDraftPrompt
+   (src/orchestrator.js) builds `<div class="apMsg">…<div class="apBtns recipes">` itself and
+   re-derives the SAME rule renderAskPrompt uses one line from here (`opts.some(o => o.cls)` ->
+   " recipes"). That is the actual root: two renderers for one card. Converging them means the
+   guest calling localAsk() and sending the resolved answer over the wire instead of resolving it
+   locally — which is the sanctioned host/guest difference (who computes), leaving one renderer.
+   It is a change to the network path and it wants the two-window rig and a fresh head, so it is
+   written down rather than attempted at the end of a long day. This door is the half that removes
+   the fault he actually hit; the other half is the one that stops it coming back in a new form. */
+let askedToken=0;
+export function raiseLocalPrompt(forSeat, draw){
   const ps=appState.game&&appState.game.players;
-  const s=normalizeSeat(seat,ps?ps.length:null);
-  if(s==null)return;
-  setActor(s);
-  if(window.__pp4)window.__pp4.actor(s);
+  const token=++askedToken;
+  appState.askedSeat=normalizeSeat(forSeat,ps?ps.length:null);
+  const answered=()=>{if(askedToken===token)appState.askedSeat=null;};
+  const p=draw();
+  Promise.resolve(p).then(answered,answered);
+  return p;
 }
 export function seatLocal(s){return s===appState.mySeat;}
 // D-10: a sentinel seat value no real seat index (0..3) can ever equal — passing it as
@@ -2077,17 +2124,9 @@ export function decisionIsLocal(s){const player=((appState.game&&appState.game.p
    hidden-tab history) are in git history at this file — read the log before re-deriving any of
    it. sleepMs's sweeper belt above is NOT pause residue: it is the measured defence against a
    browser dropping setTimeout callbacks, and it must stay. */
-// CORRECTED 2026-08-31: this comment used to say "mirrors render()'s derivation". IT DOES NOT —
-// render() also stops at `ovens` and `bake`; this walk knows only `turn`. It was true when written
-// and rotted when render()'s copy was widened, which is exactly the rot a behavioural comment
-// carries (rule 6). It is now one walk, shared/storyboard.js, with the difference passed in.
-// CURRENTLY UNCALLED (its last consumer, the
-// pause panel's "waiting" label, left with play/pause at A-10) — kept because the clock's return
-// needs exactly this derivation, and it is pure over the event stream.
-export function currentTurnSeat(){
-  if(!appState.game||!appState.game.events)return null;
-  return deriveActiveSeat(appState.game.events,appState.evIdx);
-}
+/* (currentTurnSeat() stood here, uncalled since A-10 and kept "because the clock's return needs exactly this
+   derivation". It is whoseTurn() above now — one helper, read by every surface — and the clock's return
+   should call that.) */
 /* ---------- board pops (event -> emoji animation) ---------- */
 export function spawnPops(e,cellPx){
   if(!e)return;
@@ -2225,7 +2264,20 @@ export const SESSION_SCHEMA_V=1;
 // trade, so replaying it would run every decision after the first such trade against the wrong
 // prompt — the exact failure the new entry exists to stop. The stamp is what makes an old blob
 // "no resume" instead of a mis-aligned one.
-export const SOLO_SCHEMA_V=3;   // 2->3 at A-1: the bake-day reorder changes replay — a v2 save must be refused, never desynced
+export const SOLO_SCHEMA_V=4;   // 2->3 at A-1: the bake-day reorder changes replay — a v2 save must be refused, never desynced
+// 3 -> 4, the architecture cleanup of 2026-09-16/17 (Mac: Dev relaying Wyatt: bump ONCE, at the Tier-1 checkpoint, naming every
+// item that changed the replayed stream). A v3 save replays a stream this build no longer produces, so it is refused:
+//   item 1  — every rule of a fight is an engine step: the fight's events and their order changed (65f80052 -> a7abf0a4)
+//   item 2  — beginVoyage/beginDay/crownWinner/declareEnd: the sailing order is recorded, the day record carries streak
+//   item 44 — a storm day at the head of a run is counted before tomorrow is drawn: `streak` values move
+//   item 6  — the `flip` net node is gone; a flip reaches every screen as the coinflip event alone
+//   item 15 — one Game.resolveHail: audience, refusal memory and the parley reason are the engine's
+//   item 20 — the counter's ceiling is Game.counterRoom; a v3 save can hold a coin counter this build would refuse
+//   item 19 — a landing at the head of the current records its own `rimhead` event
+//   item 4  — a fight records `engage` when it is called and `disengage` when it is over
+//   item 7  — Game.sailTo: every sail carries the route it really sails, checked when it is written
+//   item 14 — a hail put to the table ends the turn: what a captain does after a refusal changed
+//   item 10 — a recipe reaches another screen only as its `recipeSet` event
 export function getMyId(){
   let id=null;try{id=localStorage.getItem("pp_id");}catch(e){}
   if(!id){id="u"+Math.random().toString(36).slice(2,10);try{localStorage.setItem("pp_id",id);}catch(e){}}

@@ -61,8 +61,23 @@ if (!renderer) bad("renderAskPrompt not found in flow.js — check pointed at no
 else {
   /flipMsg/.test(renderer)       ? ok("the ONE renderer stamps window.__pp4.flipMsg, so the ceremony has a title and stakes on every tier")
                                  : bad("no flipMsg in renderAskPrompt — the ceremony draws an EMPTY title and EMPTY stakes (stage.js writes `fm ? … : \"\"`)");
-  /setFlipCoin\("spin"\)/.test(renderer) ? ok('the ONE renderer paints setFlipCoin("spin") in the tap\'s own frame')
-                                 : bad('no setFlipCoin("spin") in renderAskPrompt — the blank-coin-then-spin fault playtest 22 fixed');
+  /* RE-ANCHORED BY ARCHITECTURE ITEM 6 (2026-09-17). The tap's spin used to be painted inline here, in the renderer's two flip
+     shapes — and ONLY here: both FIGHT taps (battleAsk's on the host, watchPrompt's battle branch on a guest) armed the coin without it,
+     so a crew guest's own fight coin sat still until the host's answer came back over the wire (measured ~118ms). The paint now lives
+     in ONE place, board.js armFlipTap, and every arming goes through it; this gate asserts the renderer's two shapes, and both fight
+     taps, reach it — a STRONGER form of the assertion it replaces, which could not see the fight taps at all. */
+  const board = rd("src/ui/board.js");
+  const armTap = fnBody(board, "armFlipTap");
+  (armTap && /setFlipActive\(\s*\(\s*\)\s*=>\s*\{[^}]*setFlipCoin\("spin"\)/.test(armTap))
+    ? ok('the ONE tap (board.js armFlipTap) paints setFlipCoin("spin") in the tap\'s own handler')
+    : bad('armFlipTap does not paint setFlipCoin("spin") inside the tap handler — the blank-coin-then-spin fault playtest 22 fixed');
+  ((renderer.match(/armFlipTap\(/g) || []).length >= 2)
+    ? ok("both of the renderer's flip shapes (the pure flip and the flip-with-options) arm the coin through armFlipTap")
+    : bad("one of renderAskPrompt's two flip shapes arms the coin without armFlipTap — its tap would not start the spin");
+  const battleAskBody = fnBody(orch, "battleAsk");
+  (/armFlipTap\(/.test(battleAskBody) && /armFlipTap\(/.test(watchP))
+    ? ok("both FIGHT taps — the host's own (battleAsk) and a guest's (watchPrompt's battle branch) — arm through armFlipTap, so the tap starts the spin there too")
+    : bad("a fight's flip tap arms the coin without armFlipTap — that screen's coin waits for the host before it spins");
   /battle/.test(renderer)        ? ok("the stamp is guarded so a BATTLE flip is excluded")
                                  : bad("nothing excludes a battle flip — stamping unconditionally kills stage.js's `!fm && btl` \"⚔️ Broadside!\" title");
 }

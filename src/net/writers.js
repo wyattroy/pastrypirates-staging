@@ -44,11 +44,8 @@ function withReporter(promise, onError) {
   return onError ? promise.catch(onError) : promise;
 }
 
-/* ---------- flip / clock / timer --------------------------------------------------------------- */
-
-export function netSetFlip(db, room, state, onError) {
-  return withReporter(db.ref("rooms/" + room + "/flip").set({ state, t: Date.now() }), onError);
-}
+/* (netSetFlip stood here — rooms/<C>/flip. Architecture item 6, 2026-09-17: a coin flip reaches every screen on the event stream,
+   so the node, its writer and its watcher are gone.) */
 
 
 /* ---------- prompt / response (the shared singular prompt node) -------------------------------- */
@@ -132,11 +129,8 @@ export function netRemoveBattle(db, room, onError) {
   return withReporter(db.ref("rooms/" + room + "/battle").remove(), onError);
 }
 
-/* ---------- recipe drafting -------------------------------------------------------------------- */
-
-export function netSetRecipes(db, room, picks, onError) {
-  return withReporter(db.ref("rooms/" + room + "/recipes").set(picks), onError);
-}
+/* ⛔ netSetRecipes STOOD HERE, with the rooms/<C>/recipes node it wrote — architecture item 10 (2026-09-17). The pick
+   is an engine fact and rides the event stream; nothing writes it anywhere else now. */
 
 export function netSetDraftPrompt(db, room, seat, payload, onError) {
   return withReporter(db.ref("rooms/" + room + "/draftPrompts/" + seat).set(payload), onError);

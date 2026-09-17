@@ -57,7 +57,11 @@ function fnBody(src, name) {
        players." playForEvent() sat AFTER the two awaited animations, so every cue in the game was
        dispatched once the boat had stopped moving. It now sits above them and this order pins it.
        The pops stay below the walk on purpose — coins land where the boat arrives. */
-    const SEQ = ["applyActiveSeat(", "syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playVictoryBoard("];
+    /* ARCHITECTURE ITEM 3 (2026-09-16): "applyActiveSeat(" was the FIRST step here, and it is gone on purpose — the consumer
+       no longer WRITES whose turn it is from whichever seat an event names (that moved the top bar to the defender's coin).
+       Every surface reads it from the stream (util.js whoseTurn); scripts/qa/whose_turn_shown_once_check.mjs holds that
+       nothing in this consumer writes the turn again. */
+    const SEQ = ["syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playVictoryBoard("];
     let last = -1, ordered = true;
     for (const step of SEQ) {
       const at = body.indexOf(step);
@@ -65,7 +69,7 @@ function fnBody(src, name) {
       if (at < last) { fail(`consumeEvent(): ${step}) appears out of order — the guest's animate-before-render ordering is load-bearing`); ordered = false; }
       last = at;
     }
-    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (seat → log → SOUND → sweep → render → pops → the ending)");
+    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (log → SOUND → sweep → render → pops → the ending)");
     /* The specific regression his playtest caught, asserted on its own so a future reorder fails
        with the reason rather than with "out of order". */
     const iSound = body.indexOf("playForEvent("), iSail = body.indexOf("animateSailRoute(");

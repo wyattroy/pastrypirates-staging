@@ -316,13 +316,16 @@ checkTrue("cannon is a loadable stem", SFX_FILES.includes("cannon"));
   checkTrue("the fight no longer plays the cannon itself — one place, or a host would hear it twice", !/playCannon\(\)/.test(orch));
   /* THE GUARD, READ FROM SOURCE: the shot is recorded ONLY when a shot landed — `scorer` for the exchange, `rh` for a re-fire —
      so the cannon cannot be wired to the battle instead of to the hit, the one mistake his ruling explicitly forbids. */
+  /* 2026-09-16 (architecture item 1): the shot is recorded by the ENGINE's round step (Game.landRound, reached from resolveRound for
+     the exchange and resolveRefire for a re-fire), which both fights call — repointed here from the orchestrator's old copy. */
+  const eng = fs.readFileSync(new URL("../src/engine/index.js", import.meta.url), "utf8");
   checkTrue("a shot is recorded only when one landed — guarded by the engine's own scorer",
-    /if\s*\(\s*scorer\s*\)\s*\{\s*appState\.game\.ev\(\s*\{\s*t\s*:\s*"shotLands"/.test(orch));
+    /landRound\(fight,scorer,why\)\{[\s\S]{0,80}if\s*\(\s*scorer\s*\)\s*\{[\s\S]{0,120}t\s*:\s*"shotLands"/.test(eng) && !/t\s*:\s*"shotLands"/.test(orch));
   checkTrue("a re-fire records its shot only when it landed",
-    /if\s*\(\s*rh\s*\)\s*\{[^}]*appState\.game\.ev\(\s*\{\s*t\s*:\s*"shotLands"/.test(orch));
+    /resolveRefire\(fight,rh\)\{\s*const scorer=rh\?"a":null;[\s\S]{0,120}this\.landRound\(fight,scorer,/.test(eng));
   {
-    const i = orch.indexOf('t:"shotLands"');
-    const near = i < 0 ? "" : orch.slice(Math.max(0, i - 400), i + 400);
+    const i = orch.indexOf(".resolveRound(");
+    const near = i < 0 ? "" : orch.slice(Math.max(0, i - 400), i + 1200);
     checkTrue("no hand-typed delay sits beside the shot — the existing flip pacing IS the gap",
       i >= 0 && !/sleep\(\s*\d{2,4}\s*\)/.test(near.replace(/sleep\(hold\)/g, "")));
   }

@@ -29,15 +29,18 @@ const strip = (h) => String(h).replace(/<[^>]*>/g, "");
 const render = (e) => strip(EVENT_NARRATION.newround(e, null, 40, 0).txt);
 
 const CASES = [
+  /* `streak` is the storm days running, today included — what Game.advanceWind counts (architecture item 44, 2026-09-17): 0 calm,
+     1 a new storm, 2 one going on from yesterday, never more (no third storm in a row). Three storm payloads here carried 0 or 3,
+     which the engine cannot emit; they now carry the values it does, so each boundary (1 plain, 2 going on) is a real day. */
   ["calm",                    {round:6,dir:"S",next:"N",nextStorm:false,storm:false,streak:0,windStreak:1}, "Day 6: Wind SOUTH. Tomorrow: NORTH."],
   ["calm, storm forecast",    {round:6,dir:"S",next:null,nextStorm:true,storm:false,streak:0,windStreak:1}, "Day 6: Wind SOUTH. Tomorrow: a storm."],
   ["calm, wind held 2 days",  {round:6,dir:"W",next:"E",nextStorm:false,storm:false,streak:0,windStreak:2}, "Day 6: Wind still WEST. Tomorrow: EAST."],
   ["calm, wind held 3 days",  {round:6,dir:"W",next:"E",nextStorm:false,storm:false,streak:0,windStreak:3}, "Day 6: Wind still WEST. Tomorrow: EAST."],
-  ["storm starts",            {round:6,dir:"S",next:"N",nextStorm:false,storm:true,streak:0,windStreak:1},  "Day 6: Storm's blowin' SOUTH. Tomorrow: NORTH."],
+  ["storm starts",            {round:6,dir:"S",next:"N",nextStorm:false,storm:true,streak:1,windStreak:1},  "Day 6: Storm's blowin' SOUTH. Tomorrow: NORTH."],
   ["storm starts, wind held", {round:6,dir:"S",next:"N",nextStorm:false,storm:true,streak:1,windStreak:2},  "Day 6: Storm's blowin' SOUTH. Tomorrow: NORTH."],
   ["storm goes on, turned",   {round:9,dir:"N",next:"S",nextStorm:false,storm:true,streak:2,windStreak:1},  "Day 9: Storm's now blowin' NORTH. Tomorrow: SOUTH."],
-  ["storm goes on, same way", {round:9,dir:"N",next:"S",nextStorm:false,storm:true,streak:3,windStreak:3},  "Day 9: Storm's still blowin' NORTH. Tomorrow: SOUTH."],
-  ["storm, storm forecast",   {round:6,dir:"E",next:null,nextStorm:true,storm:true,streak:0,windStreak:1},  "Day 6: Storm's blowin' EAST. Tomorrow: a storm."],
+  ["storm goes on, same way", {round:9,dir:"N",next:"S",nextStorm:false,storm:true,streak:2,windStreak:3},  "Day 9: Storm's still blowin' NORTH. Tomorrow: SOUTH."],
+  ["storm, storm forecast",   {round:6,dir:"E",next:null,nextStorm:true,storm:true,streak:1,windStreak:1},  "Day 6: Storm's blowin' EAST. Tomorrow: a storm."],
 ];
 
 console.log("\nThe day-start weather line");

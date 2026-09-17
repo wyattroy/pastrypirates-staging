@@ -62,7 +62,7 @@
  *   node scripts/qa/rules_claims_match_engine_check.mjs --claims-only   skip the mutations
  */
 import { Game, roundCfg } from "../../src/engine/index.js";
-import { DIRS } from "../../src/shared/index.js";
+import { DIRS, rulesFacts } from "../../src/shared/index.js";
 
 /* THE RED PROOF RUNS ON EVERY BUILD, not by hand. It costs 0.75s for the whole mutation sweep, and
  * the 18 hand-run red proofs in scripts/qa/ are the reason nobody knows whether those gates still
@@ -101,6 +101,35 @@ function openWater(g, k, extra = []) {
 function measureAll() {
   const R = {};
   const claim = (id, page, ok, detail) => { R[id] = { page, ok: !!ok, detail }; };
+
+  /* ── SETTING SAIL: THE STARTING PURSES ───────────────────────────────────────
+     ADDED 2026-09-16 (architecture item 2). The page used to say every captain gets "3 gold coins"; the game a
+     player plays has staggered them by sailing order since 06005ae8 (2026-07-18), and the headless engine gave
+     everyone 3. Now one engine step (Game.beginVoyage) deals them for every voyage, and the page states the
+     stagger. The NUMERALS are rulesFacts' job (startCoins / startCoinsNext spans); what is measured here is
+     the rule the sentence teaches — by STARTING a real voyage at every table size, the two steps every voyage
+     opens with (beginVoyage, then beginDay), and reading each captain's purse on the first day's record, in
+     the sailing order the voyage itself published. Not a whole play(): that cost 25 s across the mutation
+     sweep, and scripts/qa/one_voyage_start_check.mjs already holds that every voyage opens with these steps. */
+  {
+    const rows = [];
+    let ok = true;
+    for (const n of [2, 3, 4]) {
+      const g = new Game(roundCfg(["human", "bot", "bot", "bot"].slice(0, n)), 20260916 + n, true);
+      const facts = rulesFacts(g.cfg);
+      g.beginVoyage(); g.beginDay();
+      const order = (g.events.find(e => e.t === "turnOrder") || {}).order;
+      const day1 = g.events.find(e => e.t === "newround");
+      if (!order || !day1) { ok = false; rows.push(`${n} captains: no turnOrder or no first day recorded`); continue; }
+      const purses = order.map(i => day1.state[i].coins);
+      const step = facts.startCoinsNext - facts.startCoins;
+      const ladder = purses.every((c, k) => c === facts.startCoins + k * step);
+      if (!(ladder && step > 0)) ok = false;
+      rows.push(`${n} captains, in sailing order: ${JSON.stringify(purses)} (page: first ${facts.startCoins}, next ${facts.startCoinsNext})`);
+    }
+    claim("voyage-purses-staggered", "the captain who goes first gets 3🌕, the next 4🌕, and so on down the line, so the later ye sail, the fuller yer purse",
+      ok, rows.join("; "));
+  }
 
   /* ── SAILING ──────────────────────────────────────────────────────────────── */
   {
@@ -236,43 +265,70 @@ function measureAll() {
       withCrate === true && withoutCrate === false,
       `a hold with a crate in it -> ${withCrate}; an empty hold -> ${withoutCrate}`);
 
+    /* REPOINTED 2026-09-16 (architecture item 1). These claims used to be measured on downwindSide and awardSpoil — the headless
+       fight's own copies, which the fight a player plays did not run. Both fights now call the SAME engine steps (beginBattle,
+       resolveRound, refireOffered, payRefire, resolveRefire, botSpoilPick, takeSpoil, winBattle), so that is what is measured here. */
     def.ing = [g.ings[0]];
     att.pos = [7, 7]; g.windNow = "N";
-    def.pos = [7, 6]; const north = g.downwindSide(att, def);
-    def.pos = [7, 8]; const south = g.downwindSide(att, def);
-    def.pos = [8, 7]; const east  = g.downwindSide(att, def);
-    def.pos = [6, 7]; const west  = g.downwindSide(att, def);
+    const shots = (dpos, ah, dh) => { def.pos = dpos; att.coins = 99; const f = g.beginBattle(att, def); const r = g.resolveRound(f, ah, dh); return { f, r }; };
+    const north = shots([7, 6], true, true), south = shots([7, 8], true, true);
+    const east = shots([8, 7], true, true), west = shots([6, 7], true, true);
     claim("attack-downwind-wins", "Both heads? The captain firing downwind lands the shot",
-      north === "a" && south === "d",
-      `wind N — defender to the N: ${north} (the attacker has the gauge); defender to the S: ${south} (the defender does)`);
-    claim("attack-crosswind-collides", "a crosswind clash and the cannonballs collide",
-      east === null && west === null,
-      `wind N — defender to the E: ${east}, to the W: ${west} (neither side may hold the gauge)`);
+      north.r.scorer === "a" && north.r.why === "wind" && south.r.scorer === "d" && south.r.why === "wind",
+      `wind N, both heads — defender to the N: ${north.r.scorer} scores (${north.r.why}); defender to the S: ${south.r.scorer} scores (${south.r.why})`);
+    const offeredE = g.refireOffered(east.f), offeredW = g.refireOffered(west.f);
+    claim("attack-crosswind-collides", "in a crosswind the cannonballs collide, and that's the end of it: no winner",
+      east.r.scorer === null && east.r.why === "collide" && west.r.scorer === null && west.r.why === "collide" && offeredE === false && offeredW === false,
+      `wind N, both heads — defender to the E: ${east.r.why}, scorer ${east.r.scorer}; to the W: ${west.r.why}, scorer ${west.r.scorer}; another broadside offered with 99 coins in the purse: E ${offeredE}, W ${offeredW} (must be false)`);
+
+    /* "If they stand their ground, the attacker may pay … to load another broadside and fire alone — heads and it lands — as often as
+       they can pay." Both tails, the defender standing: offered, the price leaves the purse, a miss is offered again, heads lands. */
+    {
+      const t = shots([8, 7], false, false), cost = g.cfg.refire || 0;
+      const first = g.refireOffered(t.f), c0 = att.coins;
+      g.payRefire(t.f); g.resolveRefire(t.f, false);
+      const again = g.refireOffered(t.f), paid = c0 - att.coins;
+      g.payRefire(t.f); const lands = g.resolveRefire(t.f, true);
+      const s = shots([8, 7], false, false); att.coins = cost - 1; const skint = g.refireOffered(s.f);
+      claim("attack-refire-after-tails", "the attacker may pay … to load another broadside and fire alone — heads and it lands — as often as they can pay",
+        cost > 0 && first === true && paid === cost && again === true && lands.scorer === "a" && t.f.winner === att && skint === false,
+        `both tails, defender stands: offered ${first}; price taken ${paid} (cfg.refire ${cost}); after a miss offered again ${again}; heads → ${lands.scorer} (${lands.why}); one coin short of the price → offered ${skint}`);
+    }
 
     const g3 = mk();
     const w = g3.players[0], l = g3.players[1];
     w.recipe = g3.ings.slice(0, 5);
     w.ing = []; l.ing = [g3.ings[5], g3.ings[2]];      // one the winner needs, one it does not
     const wPos = [...w.pos], lPos = [...l.pos];
-    const took = g3.awardSpoil(w, l);
-    const stayed = w.pos.join() === wPos.join() && l.pos.join() === lPos.join();
+    w.coins = 99; l.pos = [w.pos[0] + 1, w.pos[1]];
+    const lPosFight = [...l.pos];
+    const fight = g3.beginBattle(w, l); g3.resolveRound(fight, true, false);
+    const pick = g3.botSpoilPick(w, l);
+    g3.winBattle(fight, pick);
+    const took = w.ing[0];
+    const stayed = w.pos.join() === wPos.join() && l.pos.join() === lPosFight.join();
     claim("battle-one-crate-chosen", "The winner takes one crate of their choosing",
-      took === g3.ings[2] && w.ing.length === 1 && l.ing.length === 1,
-      `winner took ${took} (the one on its own recipe, out of ${JSON.stringify([g3.ings[5], g3.ings[2]])}); one crate moved, ${l.ing.length} left behind`);
+      pick === g3.ings[2] && took === pick && w.ing.length === 1 && l.ing.length === 1,
+      `winner chose ${pick} and took ${took} (the one on its own recipe, out of ${JSON.stringify([g3.ings[5], g3.ings[2]])}); one crate moved, ${l.ing.length} left behind`);
     claim("battle-nobody-moves", "Nobody changes squares",
-      stayed, `winner ${w.pos.join()} (was ${wPos.join()}), loser ${l.pos.join()} (was ${lPos.join()})`);
+      stayed, `winner ${w.pos.join()} (was ${wPos.join()}), loser ${l.pos.join()} (was ${lPosFight.join()})`);
   }
 
   /* ── TRADE ────────────────────────────────────────────────────────────────── */
+  /* REPOINTED 2026-09-17 (architecture item 13). This was measured on Game.tradeOpp — a function no game ever called, kept alive by
+     this gate alone, with its own range test that disagreed with the game whenever cfg.parley was off. The hail a player makes is
+     put to Game.hailAudience (built on holdersOf), and whether it may be made at all is Game.whyNoTrade — so that is what is played:
+     a captain alone in the far corner, every other captain holding the crate it wants. */
   {
     const g = mk();
-    const p = g.players[0];
-    g.players.forEach(q => { q.pos = [1, 1]; });
-    p.pos = [13, 13];                                 // nowhere near anybody
-    const hailed = g.tradeOpp(p);
+    const p = g.players[0], want = g.ings[0];
+    g.players.forEach(q => { q.pos = [1, 1]; q.ing = [want]; });
+    p.pos = [13, 13]; p.ing = []; p.coins = 5;       // nowhere near anybody
+    const may = g.canOpenTrade(p);
+    const hailed = g.hailAudience(p, { want, giveIng: null, giveCoins: 1 });
     claim("trade-hails-whole-table", "hail the whole table at once",
-      hailed.length === g.players.length - 1 && !hailed.includes(p),
-      `a captain alone in the far corner hails ${hailed.length} of the other ${g.players.length - 1} — distance is no object`);
+      may && hailed.length === g.players.length - 1 && !hailed.includes(p),
+      `a captain alone in the far corner may open a trade (${may}) and its hail reaches ${hailed.length} of the other ${g.players.length - 1} holders — distance is no object`);
   }
 
   /* ── THE TRADE WINDS ──────────────────────────────────────────────────────── */
@@ -285,8 +341,10 @@ function measureAll() {
       p.pos = [...c];
       const ev = g.tradewind(p, false);
       const head = g.rimHead[c.join(",")];
-      if (ev) { if (p.pos.join() === head.join()) swept++; }
-      else if (c.join() === head.join()) alreadyAtTheEnd++;
+      /* architecture item 19: the step now RECORDS a ride of no squares too (`rimhead`), so a swept ship is told apart by the
+         event's kind, never by the step merely returning something */
+      if (ev && ev.t === "tradewind") { if (p.pos.join() === head.join()) swept++; }
+      else if (c.join() === head.join() && p.pos.join() === head.join()) alreadyAtTheEnd++;
     }
     claim("tradewind-sweeps-to-the-end", "yer instantly swept to the far corner of that stretch",
       swept + alreadyAtTheEnd === rim.length && swept > 0,
@@ -444,6 +502,10 @@ const blindTo = name => P => {
 };
 
 const MUTATIONS = [
+  /* The voyage dealt every captain the same purse again — what the headless engine did until 2026-09-16, and
+     exactly what "the next 4, and so on down the line" denies. */
+  { id: "voyage-purses-staggered", breaks: ["voyage-purses-staggered"],
+    patch: P => { const o = P.beginVoyage; P.beginVoyage = function () { const order = o.call(this); const flat = this.players[order[0]].coins; order.forEach(i => { this.players[i].coins = flat; }); return order; }; } },
   /* Shrinking the range really does falsify BOTH sentences — "up to 4 squares" and "4 across the
      wind" — so listing one would be the gate lying about its own reach. */
   { id: "sail-range", breaks: ["sail-range", "sail-crosswind-free"],
@@ -471,20 +533,28 @@ const MUTATIONS = [
     patch: P => { const o = P.barterCrate; P.barterCrate = function (p, i, g) { return (g && g[0] === g[1]) ? null : o.call(this, p, i, g); }; } },
   { id: "attack-empty-hold", breaks: ["attack-empty-hold"],
     patch: P => { const o = P.canAttack; P.canAttack = function (a, d) { return o.call(this, a, d) || !!(d && d !== a && (!this.cfg.bakeoff || !d.baking)); }; } },
+  /* The round's own step gives the tie to the wrong ship — what the page's "the captain firing downwind lands the shot" denies. */
   { id: "attack-downwind-wins", breaks: ["attack-downwind-wins"],
-    patch: P => { const o = P.downwindSide; P.downwindSide = function (a, d) { const s = o.call(this, a, d); return s === "a" ? "d" : s === "d" ? "a" : s; }; } },
+    patch: P => { const o = P.resolveRound; P.resolveRound = function (f, ah, dh) { if (ah && dh && f.downwind) f.downwind = f.downwind === "a" ? "d" : "a"; return o.call(this, f, ah, dh); }; } },
+  /* A crosswind tie handed to the attacker: the cannonballs no longer collide. */
   { id: "attack-crosswind-collides", breaks: ["attack-crosswind-collides"],
-    patch: P => { const o = P.downwindSide; P.downwindSide = function (a, d) { return o.call(this, a, d) || "a"; }; } },
+    patch: P => { const o = P.resolveRound; P.resolveRound = function (f, ah, dh) { if (ah && dh && !f.downwind) f.downwind = "a"; return o.call(this, f, ah, dh); }; } },
+  /* HIS CROSSWIND RULING UNDONE: a collision offers another broadside again — the exact bug every real game carried until 2026-09-16. */
+  { id: "attack-crosswind-refire-offered", breaks: ["attack-crosswind-collides"],
+    patch: P => { const o = P.refireOffered; P.refireOffered = function (f) { const w = f.why; if (w === "collide") f.why = "miss"; try { return o.call(this, f); } finally { f.why = w; } }; } },
+  /* One paid broadside and no more — what "as often as they can pay" denies. */
+  { id: "attack-refire-after-tails", breaks: ["attack-refire-after-tails"],
+    patch: P => { const o = P.refireOffered; P.refireOffered = function (f) { return f.rounds.length > 1 ? false : o.call(this, f); }; } },
   { id: "battle-one-crate-chosen", breaks: ["battle-one-crate-chosen"],
-    patch: P => { const o = P.awardSpoil; P.awardSpoil = function (w, l) { const t = o.call(this, w, l); if (l.ing.length) { w.ing.push(l.ing.pop()); } return t; }; } },
+    patch: P => { const o = P.takeSpoil; P.takeSpoil = function (w, l, pick) { const t = o.call(this, w, l, pick); if (l.ing.length) { w.ing.push(l.ing.pop()); } return t; }; } },
   { id: "battle-nobody-moves", breaks: ["battle-nobody-moves"],
-    patch: P => { const o = P.awardSpoil; P.awardSpoil = function (w, l) { const t = o.call(this, w, l); const s = w.pos; w.pos = l.pos; l.pos = s; return t; }; } },
+    patch: P => { const o = P.winBattle; P.winBattle = function (f, pick) { const t = o.call(this, f, pick); const s = f.att.pos; f.att.pos = f.def.pos; f.def.pos = s; return t; }; } },
   { id: "tradewind-sweeps-to-the-end", breaks: ["tradewind-sweeps-to-the-end"],
     patch: P => { P.tradewind = function () { return false; }; } },
   /* Back to the pre-parley rule, where a hail only reached the ships you were standing next to —
-     which is what "the whole table at once" denies. */
+     which is what "the whole table at once" denies. Patched into holdersOf, the one place the game asks who can be traded with. */
   { id: "trade-hails-whole-table", breaks: ["trade-hails-whole-table"],
-    patch: P => { P.tradeOpp = function (p) { return this.players.filter(q => q !== p && this.inPlay(q) && Math.abs(p.pos[0] - q.pos[0]) + Math.abs(p.pos[1] - q.pos[1]) <= 1); }; } },
+    patch: P => { const o = P.holdersOf; P.holdersOf = function (ing, ex) { return o.call(this, ing, ex).filter(q => !ex || Math.abs(ex.pos[0] - q.pos[0]) + Math.abs(ex.pos[1] - q.pos[1]) <= 1); }; } },
   /* Every arc the same length in every game — which is precisely what "arcs of varying length each
      game" denies. The first attempt at this mutation was a STUB that set an unread flag and changed
      nothing; the red proof reported the claim staying green and that is how it was caught. A red

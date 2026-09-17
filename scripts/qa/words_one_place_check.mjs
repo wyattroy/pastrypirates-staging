@@ -14,7 +14,7 @@
  *      player (a narration line, a question, a button, a reason, an alert, a title), OR words inside markup (a button's
  *      text, a title or aria-label), fails unless it is on the short NOT_THE_GAME_SPEAKING list below, with its reason.
  *   3. NO PICTURE IS TYPED INTO ANY STRING in that code — a line's pictures live in words.js with its words.
- *   4. A LINE ABOUT A CAPTAIN HOLDS THE CAPTAIN, never a ready-made name that can never become "ye".
+ *   4. (moved) A LINE ABOUT A CAPTAIN HOLDS THE CAPTAIN — scripts/qa/lines_take_the_seat_check.mjs holds it (architecture item 43).
  *
  * WHAT IT DOES NOT SEE, SAID HERE SO ITS PASS IS NEVER READ AS MORE (a CEO review, 2026-09-14, found the old wording
  * claimed "everything a player reads" while it looked only beside display calls): it reads src/orchestrator.js and
@@ -242,58 +242,11 @@ picHits.length ? fail(`${picHits.length} picture(s) are typed into a line in the
 const redPic = scanPictures("src/ui/util.js", 'function x(){ return {txt:`🌊 ${seaLine(e.sea)}`}; } const bits=n=>n?`${n}🌕`:null;').length;
 redPic === 2 ? pass("RED-PROOF: a picture typed into a line is caught, beside a display call or not") : fail(`RED-PROOF: a typed picture was not caught (caught ${redPic} of 2)`);
 
-/* ---------- 4. a line about a captain holds the captain ---------- 
-   The review of 2026-09-14 counted 44 calls handing words.js a finished coloured name — which can never become "ye" on
-   that captain's own screen — beside 9 that handed the captain. words.js's header names the two roles; this holds them.
-   A ready-made name (pn / pname / nm / an escaped name) may go ONLY to these lines, where a captain is ADDRESSED or
-   LABELLED, each with its reason. Every other line takes seat(). */
-const NAME_LABELS = {
-  "battle.downwindTag": "a badge over the downwind captain's column, in capitals",
-  "battle.fire": "put TO the attacker, as their own flip prompt",
-  "battle.fleeAsk": "put TO the defender by name",
-  "battle.refireAsk": "put TO the attacker by name",
-  "battle.plunder": "put TO the winner by name",
-  "draft.choose": "put TO the captain choosing",
-  "act.ask": "put TO the captain whose turn it is",
-  "sail.ask": "put TO the captain sailing",
-  "counter.ask": "put TO the captain countering ({q})",
-  "counter.asking": "put TO the captain countering ({q})",
-  "trade.offered": "put TO the captain offered the trade ({q}); the offerer is a captain fact ({p})",
-  "call.paid": "a tally of the crow's-nest calls",
-  "call.unpaid": "the same tally",
-  "stats.heads": "a row label in the end-of-voyage stats table, his wording: \"Wyatt's HEADS\"",
-  "lobby.nameTaken": "the name a player typed, before any seat exists",
-  "bake.recipeName": "a recipe's name, not a captain's",
-  "captains.youTip": "a tooltip on the reader's own row — plain \"you\" by his F1 ruling",
-};
-const SAY_CALL = /\bsay(?:All|Text)?\(\s*((?:[\w.!]+\s*\?\s*)?"[A-Za-z0-9_.]+"(?:\s*:\s*"[A-Za-z0-9_.]+")?)\s*,\s*\{/g;
-const MADE_NAME = /\b(?:pn|nm|pname)\s*\(|escHtml\([^)]*name/;
-const lineIn = (src, snippet) => { const at = src.indexOf(snippet); return at < 0 ? "?" : src.slice(0, at).split("\n").length; };
-function nameFacts(rel, src) {
-  const code = stripComments(src), hits = [];
-  for (const m of code.matchAll(SAY_CALL)) {
-    const ids = [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
-    let i = m.index + m[0].length, depth = 1, j = i;
-    for (; j < code.length && depth > 0; j++) { if (code[j] === "{") depth++; else if (code[j] === "}") depth--; }
-    const parts = []; let cur = "", d = 0;
-    for (const ch of code.slice(i, j - 1)) { if ("([{".includes(ch)) d++; if (")]}".includes(ch)) d--; if (ch === "," && d === 0) { parts.push(cur); cur = ""; } else cur += ch; }
-    parts.push(cur);
-    for (const p of parts) {
-      const kv = /^\s*([A-Za-z0-9_]+)\s*:\s*([\s\S]*)$/.exec(p);
-      if (!kv || !MADE_NAME.test(kv[2]) || /\bseat\(/.test(kv[2])) continue;
-      for (const id of ids) if (!NAME_LABELS[id]) hits.push(`${rel}:${lineIn(src, code.slice(m.index, m.index + 60))}  "${id}" takes {${kv[1]}} as a ready-made name (${kv[2].trim().slice(0, 40)})`);
-    }
-  }
-  return hits;
-}
-const nameHits = FILES.flatMap((rel) => nameFacts(rel, fs.readFileSync(path.join(REPO, rel), "utf8")));
-nameHits.length ? fail(`${nameHits.length} line(s) about a captain are handed a ready-made name, so that captain's own screen can never read "ye" — hand over seat(i), or add the line to NAME_LABELS with the reason it addresses or labels them:\n  ${nameHits.join("\n  ")}`)
-  : pass(`every line about a captain is handed the captain (seat), not a finished name — ${Object.keys(NAME_LABELS).length} address/label lines take a name, each with its reason`);
-const staleLabels = Object.keys(NAME_LABELS).filter((id) => !(id in WORDS));
-staleLabels.length ? fail(`NAME_LABELS names line(s) words.js no longer has: ${staleLabels.join(", ")}`) : pass("every NAME_LABELS line still exists in words.js");
-const redNames = nameFacts("src/ui/flow.js", 'x=say("wait.deciding",{p:pn(3)}); y=say(ok?"battle.showsHeads":"battle.showsTails",{a:nm(1)}); z=say("act.ask",{name:pn(2)});').length;
-redNames === 3 ? pass("RED-PROOF: a ready-made name handed to a line about a captain is caught (ternary ids too), and an address line is not")
-  : fail(`RED-PROOF: the name check caught ${redNames}, expected 3`);
+/* ---------- 4. a line about a captain holds the captain — MOVED ----------
+   Held here from 2026-09-14 to 2026-09-17, and it looked only at a name written inline at the call — so the item-1 hit line, handed
+   `hitName` through an alias of pn(), walked past it (architecture item 43). It lives in scripts/qa/lines_take_the_seat_check.mjs now,
+   whole: the list of lines allowed a name, re-verified line by line, and a reading that follows a name through variables, aliases,
+   helpers, parameters, templates and stored fields. Not copied here — one list, in one gate. */
 
 /* ---------- red-proof ---------- */
 const doctoredCode = 'async function x(p){ await flash("A sentence typed straight into the code."); opts.push({label:say("button.back",{}),value:1}); }';

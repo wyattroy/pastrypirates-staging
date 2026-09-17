@@ -213,9 +213,13 @@ let guestRodeStorm = null;
     pass(`the two tiers agree on the posed storm (guest rode=${guestRodeStorm}, host rode=${hostRode}) — no rule-23 divergence here`);
 }
 
-/* Case 3 — THE FLEEING SHIP — has its own gate, scripts/qa/w9_rim_sweep_flee_check.mjs: two faults
-   at one site (no route on the wire; the rim ride skipped), both on BOTH screens, and a different
-   severity from the host/guest divergence measured here. Three defects, three before-pictures. */
+/* Case 3 — THE FLEEING SHIP — had its own gate, scripts/qa/w9_rim_sweep_flee_check.mjs: two faults
+   at one site (no route on the wire; the rim ride skipped), both on BOTH screens. Both were fixed when
+   the flee became one engine step (architecture item 1), and that gate — anchored on the old
+   orchestrator flee block — was deleted with architecture item 19. What holds them now:
+   scripts/qa/one_fight_rules_check.mjs rule 3 (Game.flee records the fleeing captain and its route
+   BEFORE the trade winds; a posed flee onto the rim emits battleflee then tradewind) and
+   scripts/qa/storyboard_sail_equivalence_check.mjs (a routed flee around an island walks). */
 
 /* ─── 4. THE RACE. A tradewind consumed while a LATER event already sits on top of the pile. ─
        watchEvents (src/orchestrator.js) pushes each arriving event BEFORE awaiting consumeEvent,
