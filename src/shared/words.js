@@ -424,6 +424,7 @@ export const WORDS = {
   "bake.and": "and",
   "bake.go": "Bake it!",
   "bake.watchClosely": "Watch closely — the crates move again.",
+  "bake.shuffling": "Watch closely — keep yer eyes on the crates!",
   "bake.inOven": "In the oven…",
   "bake.opening": "Opening the crates…",
   "bake.perfect": "Every crate in its place — ye baked it!",

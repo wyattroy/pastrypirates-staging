@@ -598,6 +598,11 @@ export async function playBakeoffLive(spec,io){
       go.onclick=()=>{go.onclick=null;go.disabled=true;res();};
     });
     bench({phase:"shuffle"});
+    /* THE LINE UNDER THE BENCH SAYS WHAT IS HAPPENING NOW. Wyatt, 2026-09-17: "yes, change the hint during the shuffle" — it still
+       read "Study the order. Start the shuffle when yer ready." while the lids came down and the crates crossed (seen mid-crossing
+       in Wy-Blade's bake-off probe, 2026-09-16). A paid re-watch already said "Watch closely — the crates move again." (below); the
+       first shuffle now has its own line, and the tap instructions replace it once the crates stop (bake.tapOrder). */
+    { const h=$("bkoHint"); if(h)h.textContent=sayText("bake.shuffling",{}); }
   }
 
   // ---- phase 2: crates down, ONE BY ONE, LEFT TO RIGHT ----
