@@ -698,8 +698,23 @@
      Hiding is right for the ORDER rule and wrong for the hand. Shown-but-inert says the same thing
      to the reveal order and something honest to the thumb: it is coming, it is not ready. Same
      treatment "Ready to bake!" already got for its own ghost window. */
-  #actionPanel.pendingReveal .bkoIntroBtns { visibility: visible; opacity: .4; pointer-events: none; }
+  /* ⭐ …AND A BUTTON YE CAN SEE IS A BUTTON YE CAN TAP. Wyatt, 2026-09-17, on "Get bakin'!": AGREED, one tap should do it. The line
+     above showed it at 40% and took `pointer-events: none` away from it, so the tap fell THROUGH to the card — and a tap on the card
+     means "hurry the words" (stage.js's tap-to-hurry, which stands aside for a button but never sees one that takes no taps). So the
+     first tap only finished the typing and the second pressed the button: his 8 August "I have to push it twice", by a different road.
+     Shown-but-inert is now shown-and-live: the tap lands on the button, the button's own handler answers, and the words it interrupts
+     were going to be replaced by the next card anyway. scripts/qa/seen_buttons_take_taps_check.mjs holds it. */
+  #actionPanel.pendingReveal .bkoIntroBtns { visibility: visible; opacity: .4; }
   .bkoIntroBtns { transition: opacity .2s ease; }
+  /* ⭐ AND THE BUTTON STEPS ASIDE WHILE THE CRATES SHUFFLE — Wyatt, 2026-09-17: AGREED, hide "Ready to bake!" then; it is spent and
+     offers a tap that does nothing until the crates stop, and it comes back as "Bake it!".
+     WHY A CLASS AND WHY !important: two reveal rules below force `visibility: visible !important` on any .apBtn once the card's words
+     have typed (#pp4Prompt.radial and #pp4Prompt.pp4Center, the blank-space-lag fix). An inline style loses to them, measured on
+     Wy-Blade's phone pose: hidden for three samples while the words were still typing, then drawn again for the rest of the shuffle.
+     This selector carries more classes than those two (and the row is .bkoBtns, not .apBtns — the bake-off's own row, index.html's
+     note above says why), so it wins wherever it sits in the file. My first try said .apBtns and matched nothing, which Wy-Blade's
+     pose caught: 18 of 18 samples still drew the button. */
+  #pp4Prompt #actionPanel .bkoBtns .apBtn.bkoGo.bkoAway { visibility: hidden !important; }
   /* .ahoyGlow is assigned in THE ATTENTION VOCABULARY block (end of this stylesheet) — it used
      to carry its own private @keyframes ahoyglow, the second of three hand-rolled copies of the
      same orange ring. One definition now: pp4Glow. */

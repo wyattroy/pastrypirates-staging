@@ -99,6 +99,37 @@ something is deliberate but cannot cite it, it goes in §7 as an open question, 
 
 ## 0. THE RECURRING ONES — got wrong more than once, so they lead
 
+### On someone else's turn, your camera is on THEIR BOAT — not on the waters they can reach (2026-09-17)
+
+**Wyatt, overruling the recommendation Mac: Dev and Wy-Blade both made:** *"we cannot see other players sail squares (bots or
+humans) so ALL other players turns should be zoomed in on their boat for maximum immersion."*
+
+So a watching screen frames the captain whose turn it is, whether a person or a bot is choosing. It does NOT frame the sail
+squares: those are drawn only on the chooser's own screen, so a watcher would be framing empty water.
+
+**The chooser's own screen is the opposite case and is not affected:** it frames every square it is offering, trade-wind
+squares included (architecture item 18). Two different screens, one rule each, and neither depends on whether a person or a
+bot is choosing.
+
+### One thing drawn over another is NOT a fault when it passes his rule (2026-09-17)
+
+**Wyatt's words, ruling on a fight's flip coin covering the word "HEADS", and on a gold sail square drawn over "…: tap to
+sail":** *"It's fine -- the coin is there for a short time, it actually is a GOOD thing that adds to the depth of the game.
+Look, here's a general rule: if important game elements like words or sail squares are blocked for a finite, short amount of
+time, or can be interacted with to stop them from covering each other, that's fine. that passes."*
+
+So a cover-up PASSES when either holds:
+- it clears ON ITS OWN within a few seconds (a coin that lands, a bubble that fades); or
+- the player can clear it themselves (drag the board off the overlap, close the card).
+
+**And the failing edge is HIS, given the same day** when Mac: Dev's stricter reading was put to him: *"the failing rule is
+'unless it hides a button that the player cannot access by either waiting for 0.5 seconds or shifting the screen themselves
+(eg. dragging the board)'"*. So: a cover-up FAILS only when it hides a BUTTON and the player can neither wait about half a
+second for it nor move the screen to reach it. Words covered for a moment, or a button reachable by waiting or dragging, pass.
+
+**For a sea trial's vision judge:** a screenshot showing two things overlapping is not by itself a finding. The finding must
+say how long it lasts, or that the player cannot clear it.
+
 ### The greyed, red-backed ingredient chips are what a captain STILL NEEDS. They are not the hold.
 
 **What it looks like:** the two human captains' ingredients disagree between screens — the host sees

@@ -403,7 +403,7 @@ function benchWatch(snap){
   playBakeoffLive({order:snap.order,before:snap.before,swaps:snap.swaps||[],
                    locked:snap.locked||[],attempts:snap.attempts||0,baker:snap.baker,
                    recipe:snap.recipe},{watch:ctl})
-    .catch(e=>{voyageAground(e,"bench watch");})   // this screen's own bench broke: its own box, nothing published
+    .catch(e=>{console.error("bench watch",e);})
     .then(()=>{if(_bench===sess)_bench=null;});
   // A watcher that arrives after the shuffle has begun does not sit on a Ready that will never be
   // pressed — it starts where the bench already is.
@@ -1435,21 +1435,6 @@ export function watchRecoveryState(){
     if(note)note.style.display=(v&&v.state)?"":"none";
   });
 }
-/* ⭐ THE ONE PLACE THAT SAYS A VOYAGE HAS STOPPED. Every catch that used to draw the wreck box itself now comes here instead: on the
-   host it records the engine's `halted` event and pushes it, so the crew hears it through the same feed as every other event, and the
-   one consumer draws it on every screen (consumeEvent below). The box itself is still util.js voyageAground, first-fault-wins, so a
-   second fault never stacks a second box — and a guest that breaks on its own still gets its own box without publishing anything.
-   THE ONE EXCEPTION, named: panel.js's drain catch keeps calling voyageAground directly, because the thing that threw there may BE the
-   drain, and a publish that rides a broken drain is not a promise worth making. scripts/qa/voyage_halt_reaches_crew_check.mjs. */
-export function haltVoyage(err,where){
-  try{
-    if(appState.isHost&&appState.game&&!appState.replaying&&typeof appState.game.halt==="function"){
-      appState.game.halt(where);
-      pushEvents();
-    }
-  }catch(e){ console.error("haltVoyage could not publish",e); }
-  voyageAground(err,where);
-}
 // host: broadcast new events to the shared feed
 export function pushEvents(){
   /* W9: THE HOST GUARD LIVES HERE, on the publisher itself, not on each caller. It used to sit
@@ -1620,9 +1605,6 @@ export async function consumeEvent(e){
      consumer by name — one_event_consumer_check reads its drawing steps out of this function's body. */
   expectEventDrawing(e);
   try{
-  /* THE VOYAGE HAS STOPPED — drawn here, on every screen, from the event the host recorded (Game.halt). A watcher's bench is released
-     first, or a guest would keep waiting for a Ready that is never coming. */
-  if(e.t==="halted"){ applyBenchSnap(null); voyageAground(new Error(sayText("aground.body",{})+(e.where?" ("+e.where+")":"")),"halted"); return; }
   if(!appState.isHost){
     // the guest's mirror of the host-authoritative state — see watchEvents' preserved history
     // below for the day the ribbon said DAY 1 while the board played day 2 (2026-08-19).
@@ -1936,7 +1918,7 @@ export function watchEvents(){
        by the sweep's duration, an event arriving mid-sweep snaps the ship true on the next paint. */
     // QUEUED, not awaited here: this callback has already done the ordering-critical work above.
     expectEventDrawing(e);   // queued: a narration naming it waits for its turn in this queue, not just its start
-    _evQ = _evQ.then(() => consumeEvent(e)).catch(err => haltVoyage(err, "consumeEvent"));   // a silent console line is how a game dies saying nothing
+    _evQ = _evQ.then(() => consumeEvent(e)).catch(err => { console.error("consumeEvent", err); });
     await _evQ;
   });
 }
@@ -2698,7 +2680,7 @@ export function beginGame(cfg,seed){
      anywhere beneath it — any round, any turn, any prompt — became an unhandled rejection that
      stopped the game with an empty panel and, measured, NOTHING in the console. See
      voyageAground()'s note in util.js for why that is worse than a crash. */
-  if(appState.isHost){runLiveNet().catch(e=>haltVoyage(e,"runLiveNet"));}
+  if(appState.isHost){runLiveNet().catch(e=>voyageAground(e,"runLiveNet"));}
   else{watchEvents();watchPrompt();watchNarr();watchDraftPrompt();watchRecoveryState();}
   /* EVERY CLIENT WATCHES THE BENCH NODE, THE HOST INCLUDED — watchChat's shape, one line below,
      and for the same reason (04-01 Task 3, MP-05). A bake-off bench is published by whoever is

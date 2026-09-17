@@ -598,6 +598,9 @@ export async function playBakeoffLive(spec,io){
       go.onclick=()=>{go.onclick=null;go.disabled=true;res();};
     });
     bench({phase:"shuffle"});
+    /* AND THE BUTTON GOES WITH IT. Wyatt, 2026-09-17: AGREED, hide "Ready to bake!" while the crates shuffle — it is spent, greyed and
+       offering a tap that does nothing until the crates stop. It comes back as "Bake it!" with the tap instructions below (phase 4). */
+    { const g=$("bkoGo"); if(g)g.classList.add("bkoAway"); }   // a class, not an inline style: the reveal rules force `visibility:visible !important` (index.html)
     /* THE LINE UNDER THE BENCH SAYS WHAT IS HAPPENING NOW. Wyatt, 2026-09-17: "yes, change the hint during the shuffle" — it still
        read "Study the order. Start the shuffle when yer ready." while the lids came down and the crates crossed (seen mid-crossing
        in Wy-Blade's bake-off probe, 2026-09-16). A paid re-watch already said "Watch closely — the crates move again." (below); the
@@ -772,7 +775,7 @@ export async function playBakeoffLive(spec,io){
   // The same button served as "Ready to bake!"; it becomes the confirm control now, disabled until
   // every open step has been assigned.
   const goBtn=$("bkoGo");
-  if(goBtn){goBtn.textContent=sayText("bake.go",{});goBtn.disabled=true;}
+  if(goBtn){goBtn.textContent=sayText("bake.go",{});goBtn.disabled=true;goBtn.classList.remove("bkoAway");}   // back from the shuffle, as "Bake it!"
 
   let rewatches=0;                        // paid replays, logged so a resume charges the same coins
 
