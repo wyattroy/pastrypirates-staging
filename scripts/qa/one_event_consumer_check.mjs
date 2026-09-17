@@ -57,7 +57,7 @@ function fnBody(src, name) {
        players." playForEvent() sat AFTER the two awaited animations, so every cue in the game was
        dispatched once the boat had stopped moving. It now sits above them and this order pins it.
        The pops stay below the walk on purpose — coins land where the boat arrives. */
-    const SEQ = ["applyActiveSeat(", "syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "applyEndMeta("];
+    const SEQ = ["applyActiveSeat(", "syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playVictoryBoard("];
     let last = -1, ordered = true;
     for (const step of SEQ) {
       const at = body.indexOf(step);
@@ -65,7 +65,7 @@ function fnBody(src, name) {
       if (at < last) { fail(`consumeEvent(): ${step}) appears out of order — the guest's animate-before-render ordering is load-bearing`); ordered = false; }
       last = at;
     }
-    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (seat → log → SOUND → sweep → render → pops → end-meta)");
+    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (seat → log → SOUND → sweep → render → pops → the ending)");
     /* The specific regression his playtest caught, asserted on its own so a future reorder fails
        with the reason rather than with "out of order". */
     const iSound = body.indexOf("playForEvent("), iSail = body.indexOf("animateSailRoute(");
@@ -90,7 +90,7 @@ function fnBody(src, name) {
 {
   const w = strip(fnBody(orch, "watchEvents") || "");
   let wOk = true;
-  for (const step of ["render(", "spawnPops(", "playForEvent(", "applyEndMeta(", "applyActiveSeat("]) {
+  for (const step of ["render(", "spawnPops(", "playForEvent(", "playVictoryBoard(", "applyEndMeta(", "applyActiveSeat("]) {
     if (w.includes(step)) { fail(`watchEvents() still inlines ${step}) beside the shared consumer — the drift the convergence exists to end`); wOk = false; }
   }
   if (wOk) pass("watchEvents(): no inline drawing beside the consumer");
@@ -161,19 +161,37 @@ function fnBody(src, name) {
       trial, both solo legs). liveRender() consumes each event exactly ONCE (A-13); calling it
       after a bare appState change draws NOTHING once the frontier is consumed. endVoyage set
       liveDone=true and called liveRender() — every event was already consumed, render() never
-      ran with liveDone set, and the End of Voyage screen never appeared IN ANY MODE. The engine
-      finished; the screen sat silent. So: every site that sets liveDone=true must call render()
-      itself, the way applyEndMeta (the guest twin) always has. Run RED against the drain-only
-      endVoyage. */
+      ran with liveDone set, and the End of Voyage screen never appeared IN ANY MODE. So: every
+      site that sets liveDone=true must call render() itself.
+   5b. ONE ENDING ON EVERY SCREEN — architecture item 5 ("End of Voyage — rituals 2→1, number routes
+      2→1"), done by the victory card, 2026-09-16. There were two endings: the host's ritual in
+      liveResolveEndNet (the last look, liveDone, the win cue, render, confetti) and applyEndMeta, the
+      guest's twin, which read the numbers from Firebase meta and drew the card ~3.4 s early with no
+      confetti. Now the engine's `end` event carries the result and the one consumer hands it to
+      playVictoryBoard (src/ui/victory.js) on every screen. So, across ALL of src: exactly one
+      liveDone=true, and it is not in the orchestrator; no applyEndMeta; the ending never asks who
+      is host. RED-PROOFED against origin/dev c1dc0171 (two liveDone sites, applyEndMeta present). */
 {
-  const clean = strip(orch);
-  const sites = [...clean.matchAll(/appState\.liveDone\s*=\s*true/g)];
-  if (!sites.length) fail("no liveDone=true site found in orchestrator — re-anchor this assertion, do not delete it");
-  for (const m of sites) {
-    const after = clean.slice(m.index, m.index + 400);
-    if (/(?<![a-zA-Z])render\(\)/.test(after)) pass("a liveDone=true site calls render() itself — the End of Voyage screen cannot depend on an unconsumed event existing");
-    else fail(`liveDone=true at orchestrator offset ${m.index} is not followed by a render() call — the drain has nothing left to consume there, so the End of Voyage screen never appears`);
+  const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name.endsWith(".js") ? [path.join(d, e.name)] : []);
+  let total = 0, inOrch = 0;
+  for (const file of walk(path.join(REPO, "src"))) {
+    const clean = strip(fs.readFileSync(file, "utf8")), rel = path.relative(REPO, file);
+    for (const m of clean.matchAll(/appState\.liveDone\s*=\s*true/g)) {
+      total++; if (rel === "src/orchestrator.js") inOrch++;
+      if (/(?<![a-zA-Z])render\(\)/.test(clean.slice(m.index, m.index + 400))) pass(`${rel}: its liveDone=true site calls render() itself — the card cannot depend on an unconsumed event existing`);
+      else fail(`${rel}: liveDone=true at offset ${m.index} is not followed by a render() call — the drain has nothing left to consume there, so the card never appears`);
+    }
   }
+  if (total === 1 && inOrch === 0) pass("ONE ending on every screen — the only liveDone=true in src is the one consumer's playVictoryBoard (architecture item 5: rituals 2→1)");
+  else fail(`endings: ${total} liveDone=true site(s) in src, ${inOrch} in the orchestrator — expected exactly one, in the ending the consumer reaches (item 5: the host's ritual and the guest's applyEndMeta were two)`);
+  if (/applyEndMeta\s*\(/.test(strip(orch))) fail("applyEndMeta — the guest's twin ending, reading the result from Firebase meta — is back (item 5: number routes 2→1)");
+  else pass("no applyEndMeta: every screen reads the result from the end event itself (item 5: number routes 2→1)");
+  const vPath = path.join(REPO, "src/ui/victory.js");
+  const v = fs.existsSync(vPath) ? strip(fs.readFileSync(vPath, "utf8")) : "";
+  const fn = v.slice(v.indexOf("async function playVictoryBoard"), v.indexOf("function boardBox"));
+  if (!fn) fail("src/ui/victory.js playVictoryBoard not found — the one ending is missing");
+  else if (/isHost|isGuest/.test(fn)) fail("playVictoryBoard asks who is host — the ending must be the same on every screen");
+  else pass("playVictoryBoard never asks who is host");
 }
 
 console.log(fails ? `\nFAILED — ${fails} assertion(s)` : "\nPASSED — one event consumer, three producers");

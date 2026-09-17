@@ -159,6 +159,7 @@ import { deriveActiveSeat } from "../shared/storyboard.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
 import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playCoinChink, playAwardWhoosh } from "./audio.js";
+import { victoryCard } from "./victory.js";
 import { popInHolds } from "./popin.js";
 
 // `$` is a classic-script-local `const $=id=>document.getElementById(id)` (index.html:863) —
@@ -2887,146 +2888,14 @@ export function showStats(){
   const ap=$("actionPanel");
   if(ap){$("apGridInner").innerHTML="";ap.style.display="none";ap.classList.remove("needsAction");}
   celebrateHomeDocks();
-  const w=appState.game.winner;
-  // WYATT, 2026-07-31 — THIS REVERSES EOV-02 ON HIS INSTRUCTION. Read this before "restoring"
-  // anything: EOV-02 moved the winner's recipe OUT of the End of Voyage summary and into a separate
-  // one-off victory box rendered through flash(), specifically so the summary would not double it
-  // up. He has now asked for the opposite, and for a reason that did not exist then — the blue box
-  // is hidden at the end of the voyage (UI-07), so the victory box was the one thing keeping it on
-  // screen. His words: "i want the golden victory box to say: 👑 {name} wins! {the recipe image} +
-  // {name} baked a {recipe} and won Best Baker in the Caribbean!"
-  //
-  // So all three pieces live here now, in the gold banner, and endLive no longer flashes a victory
-  // box at all — it plays "Drumroll..." in the blue box, fades it, and hides it. Nothing is
-  // duplicated: this is the ONLY place the win is announced.
-  //
-  // The two sentences are his existing approved copy, moved rather than rewritten — the banner line
-  // (@copy misc.board.eovbanner) and the victory line (formerly @copy adhoc.voyageend.victory in
-  // src/orchestrator.js, which is why that id now lives on this file's site).
-  // Two separate `const`s, each with its own @copy marker, because they are two separate approved
-  // strings with two separate ids — the extractor binds one marker per assignment site, and folding
-  // them into one template would make both ids point at the same site.
-  // @copy misc.board.eovbanner
-  const banner=w===null?say("end.nobodyBanner",{icon:iconImg(HOURGLASS_IMG)}):say("end.winsBanner",{icon:iconImg(CROWN_IMG),w:seat(w)});
-  // The winner's recipe is read defensively, and that is NOT belt-and-braces — it is a guest-path
-  // requirement. This code used to live in endLive() (src/orchestrator.js), which only ever runs on
-  // the HOST after a real finished game, so a recipe was guaranteed. showStats() is different: the
-  // guest reaches it through applyEndMeta(), which sets game.winner straight from Firebase meta and
-  // renders. A guest whose local game has not drafted recipes — joined late, or an incomplete replay
-  // — would hit `undefined.slice()` inside recipeInfo() and throw, taking the ENTIRE End of Voyage
-  // screen down with it: no banner, no awards, no stats. Caught exactly that way in a browser.
-  const winRecipe=w===null?null:(appState.game.players[w]||{}).recipe;
-  // @copy adhoc.voyageend.victory
-  const victoryLine=!winRecipe?"":`<div class="victoryText">${say("end.victory",{w:seat(w),article:(a=>a?a+" ":"")(recipeArticle(winRecipe)),recipe:winRecipeSpan(w)})}</div>`;
-  const wi=winRecipe?recipeInfo(winRecipe):null;
-  const victoryPic=wi&&wi.img?`<img class="victoryRecipe" src="${wi.img}" alt="">`:""; // art, not copy
-  const luck=appState.game.players.map(player=>player.flips?(player.heads/player.flips):0);
-  // notes/edits EOV-04: one keepsake per captain (see assignBadges) — emblem, pirate name + byline,
-  // the captain (big, colored, no seat dot) filling the card above a rule, and the stat beneath it.
-  const badges=assignBadges();
-  const awards=badges.map(b=>`<div class="awardCard" style="border-color:${HEXCOL[b.seat]}">
-      <img class="awardEmblem" src="${ASSET_BASE}badges/${b.def.img}.png" alt="">
-      <div class="awardName">${b.def.name}</div>
-      <div class="awardByline">${b.def.byline}</div>
-      <div class="awardCaptain" style="color:${HEXCOL[b.seat]}">${pname(b.seat)}</div>
-      <hr class="awardRule">
-      <div class="awardStat">${b.def.stat}${b.value!=null?` — <b>${b.value}${b.def.unit||""}</b>`:""}</div>
-    </div>`).join("");
-  // NARR-01: the stats table is hoisted into its own local purely so the wording audit can review it
-  // as one unit of copy (art-review/narration-audit.html, `// @copy` below). Pure string hoist — the
-  // rendered HTML is byte-identical to the inline version it replaced.
-  /* ITEM 7 (Wyatt, 2026-08-20 playtest): this row said "Bakery" and read `finishOrder.length`, which
-     counts captains who FINISHED a bake (engine/index.js:2859 pushes only the `won` list). It was not
-     miscounting — it was measuring something other than what the word promised. He watched three
-     captains reach Tortuga and start their bakeries and read "one baker home" as simply wrong, which
-     from where he sat it was.
-
-     His ruling: count the captains who GOT HOME. A captain is home once they have reached Tortuga and
-     fired the ovens — `baking` (engine/index.js:2774), which stays true for anyone still baking when
-     the voyage ends — or `done`, set when their bake completed. `done` is not implied by `baking`:
-     :2859 clears `baking` as it sets `done`, so BOTH terms are needed and neither is redundant.
-
-     This is a NEW quantity. `finishOrder` is untouched and still means what it always meant — it
-     orders the finishers and other code depends on that. Do not repoint it at this. */
-  const bakersHome = appState.game.players.filter(player => player.baking || player.done).length;
-  // @copy misc.board.statsheadings
-  const statsTable=`<table>
-    <tr><td>${say("stats.days",{})}</td><td>${appState.game.round}</td></tr>
-    <tr><td>${say("stats.battles",{})}</td><td>${say("stats.battlesValue",{n:appState.game.battles,pct:appState.game.battles?Math.round(100*appState.game.attWins/appState.game.battles):0})}</td></tr>
-    <tr><td>${say("stats.trades",{})}</td><td>${appState.game.trades}</td></tr>
-    <tr><td>${say("stats.bakeries",{})}</td><td>${say(bakersHome===0?"stats.noneHome":bakersHome===1?"stats.oneHome":"stats.manyHome",{n:bakersHome})}</td></tr>
-    ${appState.game.players.map((player,i)=>`<tr><td style="color:${HEXCOL[i]}">${emojify(say("stats.heads",{name:pname(i)}))}</td><td>${say("stats.headsValue",{pct:player.flips?Math.round(100*luck[i]):0,n:player.flips})}</td></tr>`).join("")}
-    </table>`;
-  $("statsPanel").innerHTML=`<div class="winner-banner">${banner}${victoryPic}${victoryLine}</div>
-    <div class="awardsRow">${awards}</div>
-    ${statsTable}`;
+  /* THE VICTORY CARD REPLACES WHAT STOOD HERE (his ruling, 2026-09-14: "the victory card ideas will replace the end of
+     voyage card -- not a toggle page"). The gold banner, the award grid and the stats table were drawn here; the
+     banner and awards are now the crown and Polly's awards, and the stats table is dropped (the PRD's recommendation;
+     the voyage score says the same things). victoryCard() builds the card once a voyage, so every repaint is cheap. */
   renderWindSummary();
-  endCardArrives($("statsPanel"),w);
+  victoryCard();
 }
-/* ⭐ THE END CARD ARRIVES — three ideas PASSED on his game feel audit (2026-09-13), as proposed: "Each award card flips in one
-   after another ..., instead of the list simply being there"; "Numbers roll up from zero ..."; and "One burst in the winner's
-   captain colour behind the pastry." (The whoosh and the ticking are sounds, and come with the sound page.)
-   ONCE A VOYAGE, ON EACH SCREEN. render() calls showStats() whenever the log sits at its end, so the same finished voyage can
-   be written more than once; the mark lives on the Game object it describes (as __idle does), so a new voyage starts unmarked
-   and a repaint of the same one never deals the cards twice. A repaint mid-arrival just writes the card at rest: every number
-   is final in the HTML, and the roll only rewrites what is on screen on its way there. */
-export const DEAL_MS=440, DEAL_GAP_MS=150, DEAL_START_MS=220, COUNT_MS=900, END_CONFETTI=26;
-function endCardArrives(panel,w){
-  const g=appState.game;
-  if(!panel||!g||g.__endArrived)return;
-  g.__endArrived=true;
-  if(fxReduced())return;
-  const cards=[...panel.querySelectorAll(".awardCard")];
-  cards.forEach((c,k)=>{
-    const a=c.animate([
-      {opacity:0,transform:"perspective(700px) translateY(18px) rotateY(85deg)"},
-      {opacity:1,transform:"perspective(700px) translateY(0) rotateY(-10deg)",offset:.7},
-      {opacity:1,transform:"perspective(700px) rotateY(0deg)"}],
-      {duration:DEAL_MS,delay:DEAL_START_MS+k*DEAL_GAP_MS,easing:"cubic-bezier(.2,.7,.3,1)",fill:"backwards",id:"end-deal"});
-    // his pick, 2026-09-14: a soft whoosh as each card deals in — from the moment its animation starts, then its own delay
-    a.ready.then(()=>setTimeout(()=>{ if(c.isConnected&&a.playState!=="idle")playAwardWhoosh(); },DEAL_START_MS+k*DEAL_GAP_MS)).catch(()=>{});
-  });
-  // the numbers roll up as the last card lands: every run of digits in the stats column and in each award's value
-  const texts=[];
-  const collect=node=>{for(const c of node.childNodes){if(c.nodeType===3){if(/\d/.test(c.nodeValue))texts.push([c,c.nodeValue]);}else collect(c);}};
-  for(const el of panel.querySelectorAll("table td:nth-child(2), .awardStat b"))collect(el);
-  if(texts.length){
-    // the stats tick as they roll — his pick, 2026-09-14: "The coin tick", the same abacus click as a coin count, once per visible change
-    const roll=t=>{let sum=0;for(const [n,full] of texts)if(n.isConnected)n.nodeValue=full.replace(/\d+/g,d=>{const v=Math.ceil(Number(d)*t);sum+=v;return String(v);});return sum;};
-    let shown=roll(0);
-    const start=performance.now()+DEAL_START_MS+Math.max(0,cards.length-1)*DEAL_GAP_MS;
-    const step=now=>{
-      if(!texts.some(([n])=>n.isConnected))return;
-      const u=Math.min(1,Math.max(0,(now-start)/COUNT_MS));
-      const sum=roll(1-Math.pow(1-u,3));
-      if(sum!==shown){shown=sum;playCoinTick();}
-      if(u<1)requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
-  const banner=panel.querySelector(".winner-banner"),pastry=banner&&banner.querySelector(".victoryRecipe");
-  if(w==null||!pastry)return;
-  const col=HEXCOL[w]||"#f5a623",colours=[col,`color-mix(in srgb, ${col} 55%, white)`,"#ffe6a0"];
-  setTimeout(()=>{                                             // as the pastry lands (its victoryPop settles at .55s)
-    if(!pastry.isConnected)return;
-    const b=banner.getBoundingClientRect(),r=pastry.getBoundingClientRect();
-    const cx=r.left+r.width/2-b.left,cy=r.top+r.height/2-b.top;
-    for(let k=0;k<END_CONFETTI;k++){
-      const d=document.createElement("div"),wd=6+(k*7)%4,ht=wd*.5;
-      d.className="endConfetti";d.style.background=colours[k%colours.length];
-      Object.assign(d.style,{left:(cx-wd/2)+"px",top:(cy-ht/2)+"px",width:wd+"px",height:ht+"px"});
-      banner.appendChild(d);
-      const ang=(k/END_CONFETTI)*Math.PI*2+((k*53)%10)/10,pow=Math.max(60,r.width*(.55+((k*31)%7)/12));
-      const ux=Math.cos(ang)*pow,uy=Math.sin(ang)*pow*.75,spin=((k*97)%360)-180;
-      const a=d.animate([{translate:"0px 0px",rotate:"0deg",opacity:0},
-        {translate:`${(ux*.2).toFixed(1)}px ${(uy*.2).toFixed(1)}px`,opacity:1,offset:.08},
-        {translate:`${ux.toFixed(1)}px ${uy.toFixed(1)}px`,rotate:`${spin}deg`,opacity:1,offset:.45},
-        {translate:`${(ux*1.15).toFixed(1)}px ${(uy+Math.max(40,r.height*.6)).toFixed(1)}px`,rotate:`${spin*2}deg`,opacity:0}],
-        {duration:1700+((k*41)%500),easing:"cubic-bezier(.2,.6,.4,1)",fill:"both",id:"end-confetti"});
-      a.onfinish=a.oncancel=()=>d.remove();
-    }
-  },300);
-}
+/* (endCardArrives — the old card's deal-in, count-up and burst — stood here; the victory card plays its own. 2026-09-16) */
 
 // LOAD-03 final (2026-08-02). This used to be renderDecorativeBoard(): it built a bot-vs-bot game
 // AND drew it behind the welcome modal, so new players glimpsed a board before choosing.

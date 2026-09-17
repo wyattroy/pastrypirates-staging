@@ -66,6 +66,7 @@
 // already live for the current room — the read + lobby-view refresh above the guard still runs
 // every time (harmless, and needed so a genuine re-entry still sees the current room state).
 
+import { playVictoryBoard } from "./ui/victory.js";
 import { appState } from "./state/index.js";
 import { pilotSpeaks, pilotSilence } from "./ui/pilot.js";
 import { pingVisit, pingStart, pingFin, usageGid } from "./ui/usage.js";
@@ -105,7 +106,7 @@ import {
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
   setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, payInto, payOut, crateFlightFrom, crateFlightTo, holdMovesFrom, holdMovesTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
-  seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
+  seedIdleGameState, syncBoardSizing, watchMutePlacement, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
@@ -945,30 +946,8 @@ export function fbInit(){
   return true;
 }
 
-export async function applyEndMeta(){
-  if(appState.isHost||appState.appliedMeta)return;
-  appState.appliedMeta=true;
-  const m=(await netReadMeta(appState.db,appState.room)).val();
-  if(!m)return;
-  appState.game.round=m.round;appState.game.battles=m.battles;appState.game.trades=m.trades;appState.game.attWins=m.attWins;
-  appState.game.finishOrder=m.finishOrder||[];appState.game.winner=m.winner;
-  (m.flips||[]).forEach((f,i)=>{if(appState.game.players[i]){appState.game.players[i].flips=f;appState.game.players[i].heads=(m.heads||[])[i]||0;}});
-  /* ⛔ NO DRUMROLL CALL HERE, AND NONE IN THE HOST EITHER — REMOVED 2026-09-06, DELIBERATELY.
-     A playDrumroll() was briefly pasted into BOTH end-of-voyage twins so the roll would not be
-     host-only. That "fix" was worse than the bug and Wyatt named it: two call sites kept in step by
-     memory IS drift, and citing playWinScreen's own twinning as precedent only spread the debt the
-     project has spent weeks paying down. It also produced two different MOMENTS — the host plays
-     the roll, holds a box, then the fanfare; this line fired both back to back — so the two screens
-     did not even hear the same thing.
-     WHAT IT NEEDS, and it is design rather than a line: ONE thing both clients run. The bell shows
-     the shape — EVENT_SOUND plus the single playForEvent dispatcher, where host and guest run the
-     same line and each answers for itself. The candidate is the `end` event through that same
-     dispatcher; what is UNMEASURED is whether `end` drains at the right instant relative to the
-     "Drumroll..." box (a comment at liveResolveEndNet says it is consumed "lines ago"), and that
-     timing is exactly the kind of thing this session has already been wrong about twice.
-     So: MEASURE FIRST, then wire once, in one place. Not two. */
-  appState.liveDone=true;playWinScreen();render();
-}
+/* (applyEndMeta, the guest's twin ending, stood here — deleted 2026-09-16 by the victory card: every screen now ends
+   through the `end` event in consumeEvent. See playVictoryBoard in src/ui/victory.js.) */
 
 /* ================= host game loop (networked) ================= */
 // Every human seat drafts at the same time instead of taking turns. Bots resolve instantly.
@@ -1469,25 +1448,16 @@ export async function runLiveNet(){
   if(appState.replaying)endReplay();   // whole game was in the log: leave replay mode & paint the result
 }
 export async function liveResolveEndNet(){
-  // same guard as Game.resolveEnd: nobody is crowned without a full recipe (v2.1)
-  appState.game.finishOrder=appState.game.eligibleFinishers();
-  if(!appState.game.finishOrder.length)appState.game.winner=null;
-  else if(appState.game.finishOrder.length===1)appState.game.winner=appState.game.finishOrder[0];
-  else{
-    // v2 rule 12: every captain who got home collaborates on ONE bakery — a scene, not a contest —
-    // and Best Baker goes to whoever brought the most to it. Ranked on crates (all of them, recipe
-    // or not), then coins, then who got home first. No flipping: the title is earned across the
-    // whole voyage rather than decided by one last coin. bakeRank is the engine's, so the live
-    // game and the headless simulator can never crown different winners.
-    const ranked=appState.game.finishOrder.slice().sort((x,y)=>appState.game.bakeRank(x,y));
-    appState.game.winner=ranked[0];
-    appState.game.ev({t:"collab",finishers:ranked.slice(),winner:appState.game.winner,
-      crates:ranked.map(i=>appState.game.players[i].ing.length),
-      coins:ranked.map(i=>appState.game.players[i].coins)});
+  /* WHO IS CROWNED IS THE ENGINE'S — Game.crownWinner, then Game.declareEnd (the names and contract of
+     architecture item 2): nobody without a full recipe; several finishers bake together on ONE bakery (v2 rule 12)
+     and Best Baker is ranked by bakeRank. This function used to re-run that eligibility, ranking and both events
+     itself. The two steps are separate so the shared bakery is said here BEFORE the voyage is declared over —
+     and the `end` event now carries the whole result the victory card draws. */
+  if(appState.game.crownWinner()){
     liveRender();
     await narrateLastEvent();
   }
-  appState.game.ev({t:"end",winner:appState.game.winner});
+  appState.game.declareEnd();
   await writeMeta();
   await writeGameLog();
   // WYATT, 2026-07-31 — the drumroll, and why liveDone moved BELOW it.
@@ -1515,75 +1485,12 @@ export async function liveResolveEndNet(){
      (`.bko`), so emptying the panel IS lowering the curtain — no separate teardown to keep in step.
      The wide shot reuses sweepCam, which is camFull; the rim sweep already trusts it to frame the
      entire board. */
-  await fadeOutPanel();
-  if(window.__pp4&&window.__pp4.sweepCam)window.__pp4.sweepCam();
+  /* THE HOST'S ENDING IS NOW EVERY SCREEN'S ENDING. The last look, the drumroll's place, liveDone, the win cue, the
+     render and the confetti used to be performed HERE, on the host only — with applyEndMeta as the guest's twin
+     (architecture item 5: rituals 2→1). They are played by the one consumer off the `end` event instead
+     (playVictoryBoard, src/ui/victory.js). The host only waits for its own screen to finish drawing it. */
   liveRender();
-  await sleepMs(BOARD_LAST_LOOK_MS);
-  // @copy adhoc.voyageend.drumroll
-  /* T-073 — THE DRUMROLL FINALLY MAKES A SOUND, and the box is held to fit it.
-     This line has staged a drumroll in silence since the moment was built: the board pulls back,
-     the blue box types the word, and nothing rolls.
-
-     WHY A HOLD IS PASSED AT ALL, measured 2026-09-06 rather than assumed: "Drumroll..." is 11
-     characters, so the reading-speed model (util.js narrationHoldMs) holds it 1130ms, while
-     PP_SFX_Drumroll.mp3 runs 3150ms — the roll would outlive its own box by two seconds and be
-     cut off by the winner reveal. Wyatt's ruling (s3 #3) is to move the BOX, not the audio:
-     "match the narration box timing to the sfx file."
-
-     ⚠ THE PRD SAID THIS WINDOW WAS A HARD 2550ms FLOOR AND THAT THE FILE WAS SIZED TO FIT IT.
-     Both halves were stale — D-34 deleted that floor when it replaced the hold model with reading
-     speed (see stage.js's own note), and the file is 3150ms, not ~2550ms.
-
-     DERIVED, NEVER TYPED (rule 9): soundDurationMs reads the decoded buffer, so a re-export of a
-     different length re-times the box on its own. It returns 0 when nothing is decoded — muted,
-     unsupported browser, fetch still in flight — and `|| undefined` then hands flash() no opinion
-     at all, so the box falls back to exactly the reading-speed hold it used before this existed.
-     A silent game must never hold the reveal open waiting for audio that is not coming. */
-  /* ⛔ THE HOLD OVERRIDE WAS REMOVED, 2026-09-06, AND IT MUST NOT COME BACK THIS WAY.
-     It read: flash("Drumroll...", undefined, soundDurationMs(DRUMROLL_SOUND) || undefined) — the
-     box held for the file's own 3148ms instead of the reading-speed 1130ms, which is exactly what
-     Wyatt asked for ("match the narration box timing to the sfx file").
-     IT WAS STILL WRONG, because flash's third argument NEVER LEAVES THIS MACHINE. The broadcast is
-     onNetBroadcast(msg, variants, opts, pre) (panel.js:1264) and sendNarr forwards only
-     `opts && opts.wait` (orchestrator.js:229) — no holdMs, and nothing in `opts` survives either.
-     So the host's box held 3148ms while every guest's held 1130ms, and the winner was revealed two
-     seconds earlier on their screens than on his. A fix for a timing complaint that desynchronises
-     the table is worse than the complaint.
-     ⭐ WHAT IT NEEDS INSTEAD, and it is a real piece of design rather than a line: ONE fact both
-     sides read for themselves. Both already have the decoded file, so both can derive the same
-     3148ms — but only if the narration render path itself knows this line carries a sound, which
-     is a shared-renderer change, not an argument at one call site. Until that exists the roll is
-     cut short by the reveal ON BOTH SCREENS EQUALLY, which is a smaller fault than a split table.
-     His ruling is NOT yet delivered; see .planning/wyclau/T-073-SLICE2-CANNON-MEASURED.md. */
-  /* (the "Drumroll..." line stood here — cut by his pass, 2026-09-13. The board's last look above is still the pause
-     before the reveal, and no sound was ever tied to the line.) */
-  await fadeOutPanel();
-  appState.liveDone=true;
-  playWinScreen(); // D-05: the host's win-screen cue, tied to the screen appearing — end/finish stay silent as events per D-06
-  liveRender();
-  /* A STATE CHANGE IS NOT AN EVENT (found by the 2026-08-28 sea trial, both solo legs stuck on a
-     silent board with the voyage over). Since A-13 the drain consumes each event exactly once, so
-     the liveRender() above draws NOTHING here — the `end` event was consumed lines ago, while
-     liveDone was still false, and board.js's showStats gate re-hid the stats on that render. The
-     redraw for the FLAG has to be explicit, exactly as applyEndMeta (this function's guest twin)
-     has always done: liveDone=true, playWinScreen(), render(). one_event_consumer_check §5 holds
-     both twins to it. */
-  render();
-  // The victory box that used to be flashed here is GONE, deliberately — do not restore it. Its
-  // three pieces (the "wins!" line, the recipe picture, the Best Baker sentence) now render in the
-  // gold End of Voyage banner via showStats(), which liveRender() has just called. Flashing them
-  // here as well would announce the win twice AND re-show the blue box that the drumroll just
-  // faded away, which is the exact defeat UI-07 suffered before this change: showStats() hid the
-  // box and the very next flash() put it straight back.
-  //
-  // "Nobody finished" keeps its blue-box line: there is no winner, no recipe and no gold banner
-  // content to move, so the drumroll would otherwise fade into an unexplained empty screen.
-  if(appState.game.winner==null){
-    // @copy adhoc.voyageend.nobodyfinished
-    await flash(say("end.nobody",{}));
-  }else{
-    victoryConfetti(appState.game.winner); // EOV-05: a burst of celebration over the board
-  }
+  await eventDrawn(appState.game.events[appState.game.events.length-1],60000);
   if(appState.db&&appState.room&&!appState.replaying){
     // CANCEL FIRST, then write "ended". An armed onDisconnect would otherwise overwrite this the
     // moment the host closes the tab on a game they actually finished, and every guest would be
@@ -1995,7 +1902,12 @@ export async function consumeEvent(e){
     (settledNow?settledNow():Promise.resolve()).then(()=>sailArrives(e.p));
   }
   spawnPops(e,boardCell());
-  if(e.t==="end")applyEndMeta();  // self-guarded: host/already-applied return immediately
+  /* ⭐ ONE ENDING ON EVERY SCREEN — architecture item 5, the victory card (docs/VICTORY-CARD-PRD.md). The engine's
+     `end` event carries the whole result; this one door plays it on the host, every guest, solo and pass-and-play:
+     the board's last look, the crown, the podium, then liveDone + render(), which opens the card. There used to be
+     two endings — the host's ritual in liveResolveEndNet and applyEndMeta, the guest's twin, which read the numbers
+     from Firebase meta and drew the card ~3.4 s early with no confetti. Both are gone. */
+  if(e.t==="end")await playVictoryBoard(e,{fadeOutPanel,sweepCam:()=>{if(window.__pp4&&window.__pp4.sweepCam)window.__pp4.sweepCam();},leanCam:(s,z)=>{if(window.__pp4&&window.__pp4.leanCam)window.__pp4.leanCam(s,z);},lastLookMs:BOARD_LAST_LOOK_MS,render,shipEls:boardShipEls});
   } finally { finishEventDrawing(e); }
 }
 

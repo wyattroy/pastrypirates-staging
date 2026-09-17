@@ -770,4 +770,42 @@ const COLORS=["var(--p0)","var(--p1)","var(--p2)","var(--p3)"];
 const HEXCOL=["#f2679e","#1d96a6","#27c78d","#f5a623"];
 const man=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
 
-export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, devHost, BAKEOFF_ENABLED, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, rulesFacts, bakeoffEnabled, OVENS_NOW, ovensNowEnabled, BAKE2_NOW, bake2Enabled, ENDCARD_NOW, endCardEnabled, SEA_CREATURES, NAMES, DEFAULT_NAMES, unusedDefaultName, seatHeldName, withoutSeat, applyNameClaim, buildRoster, COLORS, HEXCOL, man, subjectOf };
+/* ⭐ THE VOYAGE SCORE — the treasure tally on the victory card (docs/VICTORY-CARD-PRD.md §3).
+   A score for ONE captain on ONE voyage that pays for choices, never for luck (dock flips, battle flips and
+   storms pay nothing; musing pays nothing — Wyatt, 2026-09-16). The points are HIS, tuned on the Victory Card
+   sheet (round 4); change them there first.
+   WINNING HAS NO NUMBER OF ITS OWN (his ruling: "Players who WIN should get at least double the points as
+   players who don't win -- winning is really hard"). The win pays whatever it takes for the slowest possible
+   winner to score double the most any non-winner can ever reach — worked out from the other points here, so
+   it stays true when they change. That is why coins, trades and days ahead count only up to a cap, and why
+   the perfect bake-off is a WINNER's prize: a captain who also named every crate at a shared bakery but was
+   not crowned may score every named crate, never the perfect bonus.
+   This is a leaf: the engine sums it into the `end` event, and the card only draws the rows it is sent. */
+const VOYAGE_POINTS={crate:20,ovens:50,named:15,perfect:300,day:10,dayCap:5,coin:3,coinCap:10,trade:10,tradeCap:3};
+function voyageLoserCeiling(P,size){ return size*P.crate+P.ovens+size*P.named+P.dayCap*P.day+P.coinCap*P.coin+P.tradeCap*P.trade; }
+function voyageWinBonus(P,size){ return Math.max(0,2*voyageLoserCeiling(P,size)-(size*P.crate+P.ovens+size*P.named)); }
+/* c: {won, crates (recipe crates held), ovensDay, named (bake-off crates named right), tries (attempts, 0 unless
+   solved), ahead (days ahead of the navigator), coins, trades}. Returns the rows in the order the card pays them. */
+function voyageScoreRows(c,P,size){
+  const ahead=Math.min(P.dayCap,Math.max(0,c.ahead||0)), coins=Math.min(P.coinCap,c.coins||0), trades=Math.min(P.tradeCap,c.trades||0);
+  const lit=c.ovensDay!=null;
+  const perfect=!c.won?0:c.tries===1?P.perfect:c.tries===2?Math.round(P.perfect/2):0;
+  return [
+    {key:"crates", count:c.crates||0, each:P.crate, pts:(c.crates||0)*P.crate},
+    {key:"ovens",  day:lit?c.ovensDay:null, pts:lit?P.ovens:0},
+    {key:"named",  count:c.named||0, each:P.named, pts:(c.named||0)*P.named},
+    {key:"perfect",tries:c.won?(c.tries||0):0, pts:perfect},
+    {key:"won",    pts:c.won?voyageWinBonus(P,size):0},
+    {key:"ahead",  count:ahead, each:P.day, pts:ahead*P.day},
+    {key:"coins",  count:coins, held:c.coins||0, each:P.coin, pts:coins*P.coin},
+    {key:"trades", count:trades, each:P.trade, pts:trades*P.trade},
+  ];
+}
+/* CLOSENESS ORDER — who came closest to winning (Wyatt, 2026-09-14): the winner; then baked first; then most
+   bake-off crates named right; then most recipe crates held; then nearest to Tortuga; then most doubloons.
+   Seat breaks a dead heat so every screen agrees. With nobody crowned, everyone is ranked by the same order. */
+function voyageCloseness(a,b){
+  return (b.won-a.won)||(b.baked-a.baked)||(b.named-a.named)||(b.crates-a.crates)||(a.squares-b.squares)||(b.coins-a.coins)||(a.seat-b.seat);
+}
+
+export { mulberry32, ING_ALL, ING_EMOJI, ASSET_BASE, ALARM_IMG, ANCHOR_IMG, BATTLE_IMG, BLOCKED_SLASH_IMG, BOARD_IMG, BOAT_IMG, CAKE_SLICE_IMG, CANCEL_X_IMG, CANDY_CRAB_IMG, CHECKMARK_IMG, CLOCK_IMG, CLOSE_X_IMG, COINS_FLYING_IMG, COIN_IMG, COIN_SPIN_IMG, COMPASS_DIAL_IMG, COMPASS_NEEDLE_IMG, CRATE_OVERBOARD_IMG, CROISSANT_IMG, CROWN_IMG, CUPCAKE_IMG, CURRENT_SWIRL_ICON_IMG, DAGGER_IMG, DEVICE_IMG, DICE_IMG, DOCK_IMG, DODGE_SWOOSH_IMG, DONUT_IMG, DOOR_IMG, EMOJI_IMG, ENVELOPE_IMG, EYES_IMG, FINISH_FLAG_IMG, FISHING_ROD_IMG, FISH_IMG, FLAME_IMG, FLEE_BOOT_IMG, FLIP_HEADS_IMG, FLIP_SOCKET_IMG, FLIP_TAILS_IMG, GEAR_IMG, GLOBE_IMG, HANDSHAKE_IMG, HORN_IMG, HOURGLASS_IMG, IMPACT_BURST_IMG, ING_HOLE_IMG, ING_IMG, ISLAND_SHAPE_IMG, ISLAND_SILHOUETTE_IMG, KEY_IMG, MAGNIFYING_GLASS_IMG, MAP_IMG, PARROT_IMG, PAUSE_IMG, PAUSE_SYMBOL_IMG, PIRATE_CHEF_IMG, PIRATE_FLAG_IMG, PLAY_ARROW_IMG, PLAY_IMG, POCKET_COMPASS_IMG, PRINTER_IMG, REFUSED_IMG, REPAIR_TOOLS_IMG, REPLAY_IMG, RIBBON_IMG, ROBOT_IMG, SAILBOAT_IMG, SALUTE_CAPTAIN_IMG, SCROLL_IMG, SHIELD_IMG, SKULL_IMG, SNAIL_IMG, SPARKLES_IMG, SPEECH_BUBBLE_IMG, SPOILS_POUCH_IMG, SPYGLASS_IMG, STOOL_IMG, SOUND_OFF_IMG, SOUND_ON_IMG, STOPWATCH_IMG, STORM_CLOUD_IMG, STORYBOOK_IMG, SUGARFISH_IMG, TARGET_IMG, TRADE_SWIRL_IMG, WARNING_IMG, WAVE_IMG, WIND_ARROW_IMG, WIND_GUST_IMG, EMOJIFY_RE, emojify, TET, ING_NAME, ING_PLAIN, DOCK_PLACE, DOCK_FLAVOR, dockPlace, dockFlavor, dockFlavorIcon, iname, ilabel, ingImg, ilabelImg, iconImg, DIRS, DIRNAME, PERP, STORM_DIAG, OPPOSITE, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, devHost, BAKEOFF_ENABLED, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, rulesFacts, bakeoffEnabled, OVENS_NOW, ovensNowEnabled, BAKE2_NOW, bake2Enabled, ENDCARD_NOW, endCardEnabled, SEA_CREATURES, NAMES, DEFAULT_NAMES, unusedDefaultName, seatHeldName, withoutSeat, applyNameClaim, buildRoster, COLORS, HEXCOL, man, subjectOf, VOYAGE_POINTS, voyageLoserCeiling, voyageWinBonus, voyageScoreRows, voyageCloseness };

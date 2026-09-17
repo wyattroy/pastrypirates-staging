@@ -5,7 +5,7 @@
 // Imports from `../shared/index.js`; must never be imported BY
 // `src/shared/` (shared is a leaf, engine depends on it, never the reverse).
 
-import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, bake2Enabled, endCardEnabled, man, ilabelImg } from "../shared/index.js";
+import { mulberry32, ING_ALL, TET, DIRS, OPPOSITE, PERP, SAIL_RANGE, SAIL_RANGE_UPWIND, STORM_PUSH, SEA_CREATURES, BAKE_SWAPS, BAKE_ATTENTION, BAKE_REWATCH_COST, BAKEOFF_ENABLED, bakeoffEnabled, ovensNowEnabled, bake2Enabled, endCardEnabled, man, ilabelImg, VOYAGE_POINTS, voyageScoreRows, voyageCloseness } from "../shared/index.js";
 import { recipeSteps } from "../shared/recipe-steps.js";
 import { newBake, scrambleBench, shuffleSlots, scoreAttempt, applyResult, botGuess, unsolvedCount } from "./bakeoff.js";
 
@@ -284,7 +284,12 @@ class Game{
         // ovensDay: the round a captain LIT the ovens (arrived home), null until they do.
         // Read only by bakeRank's tiebreak (Wyatt's ruling, 2026-09-03T21:30:35Z) — never emitted
         // into the event stream and consumes no r(), so the determinism corpus is untouched.
-        baking:false,bake:null,bakedToday:false,ovensDay:null};
+        baking:false,bake:null,bakedToday:false,ovensDay:null,
+        // THE VOYAGE SCORE's two facts that nothing else kept (docs/VICTORY-CARD-PRD.md §3): trades this captain
+        // struck (the table's count is game.trades), and navDay — the day the bots' own route planner said this
+        // captain's recipe should have them home, worked out when the recipe was picked. Neither is emitted
+        // until the `end` event, and neither consumes r().
+        trades:0,navDay:null};
     });
     // ships start at Isle of Tortuga's four docks (N/S/E/W of the island)
     const dirsArr=Object.values(DIRS);
@@ -340,6 +345,11 @@ class Game{
      Nothing about who is host, who is guest, or who is a bot appears here. */
   setRecipe(p,recipe){
     p.recipe=recipe;
+    /* THE NAVIGATOR — the day this recipe "should" have its captain home, by the bots' own contested route
+       planner (tour3), asked once at the pick while every ship still sits at Tortuga. The score pays for each
+       day a captain lights the ovens ahead of it. The planner is RNG-free (it already runs inside every bot
+       turn); a planner that cannot answer leaves navDay null and the row simply pays nothing. */
+    try{ const t=this.turnsToWin3(p,this.raceContext3(p)); p.navDay=Number.isFinite(t)?this.round+Math.ceil(t):null; }catch(e){ p.navDay=null; }
     this.ev({t:"recipeSet",p:p.idx,recipe});
   }
   /* ⭐ SAILING ORDER IS AN ENGINE FACT ON THE ONE PIPE — Wyatt, 2026-09-09: "I hate the idea of
@@ -1317,6 +1327,7 @@ class Game{
     q.gaveAway[offer.want]=this.round;
     if(offer.giveIng){if(!p.gaveAway)p.gaveAway={};p.gaveAway[offer.giveIng]=this.round;}
     this.trades++;
+    p.trades=(p.trades||0)+1;q.trades=(q.trades||0)+1;   // both captains struck it — the score's "Good Friendly Pirate" row
     // v2 rule 4e: no harbor-tax refund. A trade is just the exchange.
     // The whole table watched who wanted what — that is public evidence, and it is how bots
     // learn each other's recipes without ever being shown one.
@@ -3317,16 +3328,65 @@ class Game{
   eligibleFinishers(){
     return this.finishOrder.filter(i=>!this.needs(this.players[i]).length);
   }
-  resolveEnd(){
+  /* ⭐ HOW THE WINNER IS CROWNED — ONE PLACE. Two engine steps, because the live voyage speaks between them:
+       crownWinner() — who may be crowned (a full recipe), the winner, and when several captains finished,
+                       the shared bakery ({t:"collab"}, ranked by bakeRank). Returns true when it recorded one,
+                       so the live voyage can narrate it before the voyage ends.
+       declareEnd()  — the voyage is over ({t:"end"}); returns the winner.
+     resolveEnd() is the headless driver: both, back to back.
+     ⚠ SAME NAMES AND CONTRACT as architecture item 2 on origin/sep16-architecture-cleanup (adb237dd), on purpose:
+     the victory card (docs/VICTORY-CARD-PRD.md) needed the end in the engine before that branch reached dev, and
+     Mac: Dev asked that the two converge so whichever merges second rebases as a near-no-op. Nobody finished →
+     winner null, as the live game always did. */
+  crownWinner(){
     this.finishOrder=this.eligibleFinishers();
-    if(!this.finishOrder.length){this.ev({t:"end",winner:null});return null;}
-    if(this.finishOrder.length===1){this.winner=this.finishOrder[0];this.ev({t:"end",winner:this.winner});return this.winner;}
+    this.winner=null;
+    if(!this.finishOrder.length)return false;
+    if(this.finishOrder.length===1){this.winner=this.finishOrder[0];return false;}
     const ranked=this.finishOrder.slice().sort((a,b)=>this.bakeRank(a,b));
     this.winner=ranked[0];
     this.ev({t:"collab",finishers:ranked.slice(),winner:this.winner,
       crates:ranked.map(i=>this.players[i].ing.length),coins:ranked.map(i=>this.players[i].coins)});
-    this.ev({t:"end",winner:this.winner});
+    return true;
+  }
+  /* The `end` event carries THE WHOLE RESULT every screen draws the victory card from — each captain's score
+     rows and the closeness order — so a guest never reads the result from anywhere else (architecture item 5:
+     "number routes 2→1"). Built here, once, from the engine's own state. */
+  declareEnd(){
+    this.ev({t:"end",winner:this.winner,voyage:this.voyageSummary()});
     return this.winner;
+  }
+  resolveEnd(){
+    this.crownWinner();
+    return this.declareEnd();
+  }
+  /* What the victory card needs to know about every captain, and nothing it could not show: the crown, the
+     podium (closeness), "so close" (the captain's own recipe, drawn only on that captain's screen — or on a
+     shared pass-and-play screen, where the voyage is over and the recipe is no secret: Wyatt, 2026-09-16),
+     the awards (flips/heads) and the treasure tally (rows). */
+  voyageSummary(){
+    const P=VOYAGE_POINTS, size=this.cfg.recipeSize||5;
+    const captains=this.players.map(p=>{
+      const bake=p.bake, solved=!!(bake&&bake.solved);
+      const c={seat:p.idx, won:p.idx===this.winner?1:0, baked:(p.baking||p.done)?1:0,
+        crates:Math.max(0,size-this.needs(p).length),
+        named:bake&&bake.locked?bake.locked.filter(Boolean).length:0,
+        tries:solved?(bake.attempts||0):0,
+        ovensDay:p.ovensDay, navDay:p.navDay,
+        ahead:(p.ovensDay!=null&&p.navDay!=null)?Math.max(0,p.navDay-p.ovensDay):0,
+        coins:p.coins, trades:p.trades||0, squares:man(p.pos,this.home),
+        flips:p.flips, heads:p.heads, recipe:p.recipe.slice(),
+        // the bake in its own step order, and WHICH crates were named right. bake.locked is indexed by BENCH SEAT
+        // (bake.slots — the shuffled arrangement the captain faced), not by recipe step, so the named crates are the ones
+        // sitting in locked seats. Wy-Blade's crew runs caught both wrong readings: "the first n of the recipe", then
+        // locked[i] read against the recipe order.
+        bakeOrder:bake&&Array.isArray(bake.order)?bake.order.slice():null,
+        namedCrates:bake&&Array.isArray(bake.slots)&&Array.isArray(bake.locked)?bake.slots.filter((x,i)=>bake.locked[i]):null};
+      c.rows=voyageScoreRows(c,P,size);
+      c.score=c.rows.reduce((s,r)=>s+r.pts,0);
+      return c;
+    });
+    return {size, points:{...P}, order:captains.slice().sort(voyageCloseness).map(c=>c.seat), captains};
   }
 }
 

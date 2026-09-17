@@ -311,6 +311,8 @@ event cannot make two screens disagree.
 |---|---|---|
 | The guest is behind the host | **Expected, and perfect simultaneity is explicitly NOT the goal.** The network guarantees a lag; chasing literal sameness leads to lockstep and stalls. The invariant is **same sequence, never a different script — possibly a moment apart** | his ARCH ruling, 2026-08-30, `.planning/CTO-LEDGER.md` |
 | Solo runs faster than a crew game | Fast-forward is a **playback rate**, a property of the performer, not a solo feature. Every measured site is a hold or a tick — a duration, never content | ledger, 2026-08-30; `src/ui/flow.js:80`, `:1184`, `src/ui/util.js:1049`, `:1117`, `src/ui/stage.js:1388` |
+| On a shared pass-and-play screen, the victory card's "so close" page shows a LOSING captain's full recipe | **Deliberate.** The voyage is over, so the recipe is no longer a secret. Wyatt, 2026-09-16: *"it is fine to show a losing captain's recipe on the shared screen because the gaem is already over, silly!"* The rule "your recipe is yours" governs a voyage in progress. On separate devices "so close" still appears only on that captain's own screen. | `.claude/memory/DECISIONS.md` 2026-09-16; `src/ui/victory.js` pageClose |
+| "New best voyage!" appears on one screen and not another at the same end | **Deliberate.** Each player's own best, on their own device, until there are accounts. Wyatt, 2026-09-16: *"show each player's own best, on their own device."* | `.claude/memory/DECISIONS.md` 2026-09-16; `src/ui/victory.js` pageTally |
 
 ## 4. Bots and humans
 
