@@ -151,7 +151,16 @@ export const BEAT_KINDS = Object.freeze(["walkRoute"]);
    which is the exact back door CEO review 31 named. */
 export function present(event, snapshot) {   // eslint-disable-line no-unused-vars
   if (!event || typeof event !== "object") return null;
-  if (event.t !== "sail") return null;
+  /* ⭐ ANY EVENT THAT CARRIES A ROUTE WALKS IT — NEVER ONE EVENT NAME. Wyatt, 2026-09-16: "fleeing does not follow actual sailable
+     squares, it cuts across islands. this is a REGRESSION. what caused it, find and fix!" d62da9f5 (2026-08-30) made a flee walk by
+     deleting animateSailRoute's `t!=="sail"` test ("ANY EVENT CARRYING A BAKED ROUTE, not one event name"), measured on both tiers.
+     106d164f moved that decision in here eight hours later and put the same test back on this line, so a flee — whose route reaches
+     every screen on the event — returned `null`, walked nothing, and the redraw slid the boat straight across the islands. The route
+     IS the test: Game.bakeDraw only bakes one for a move that lands on its own pos. A kind with no route is still "not converted"
+     (null), except a sail, which has always meant "draws nothing" ([]). scripts/qa/storyboard_sail_equivalence_check.mjs now walks
+     a flee, so the event-name test cannot come back without that gate going red. */
+  const moving = event.draw && event.draw.route !== undefined;
+  if (event.t !== "sail" && !moving) return null;
 
   /* THE ROUTE TEST IS THE EVENT'S OWN, NOT A SECOND OPINION. animateSailRoute has always ridden
      "any event carrying a baked route", because Game.bakeDraw only produces draw.route for a move

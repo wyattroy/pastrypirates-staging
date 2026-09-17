@@ -629,10 +629,9 @@ export async function playBakeoffLive(spec,io){
   // ---- phase 3: the swaps, one at a time ----
   await runSwaps();
 
-  /* A SWISH AS THE CRATES ARE SHUFFLED — Wyatt, 2026-09-15: "we want a swish sound as the crates are shuffled." The paper swish he
-     picked for the recipe cards, one per crossing, and never twice inside SWISH_GAP_MS so a fast shuffle is a sweep and not a hiss. */
-  const SWISH_GAP_MS=110; let lastSwish=-1e9;
-  const swish=()=>{const n=performance.now();if(n-lastSwish<SWISH_GAP_MS)return;lastSwish=n;playCardSwish();};
+  /* A SWISH AS THE CRATES ARE SHUFFLED — Wyatt, 2026-09-15: "we want a swish sound as the crates are shuffled." One per crossing; how
+     close two may come is audio.js's to decide (playCardSwish). This spot once held its own copy of that clock, declared BELOW the
+     `await runSwaps()` above, and the shuffle threw before its first crate moved (2026-09-16). */
   async function runSwaps(){
   /* READ IT HERE, once, at the moment the crates are about to move — every phase that can reflow
      the panel has already run by now. This is the whole of W3-2's fix. */
@@ -640,7 +639,7 @@ export async function playBakeoffLive(spec,io){
   for(const [a,b] of swaps){
     const A=bowls[a],B=bowls[b];
     if(!A||!B)continue;
-    swish();
+    playCardSwish();
     if(reduced){
       A.classList.add("flash");B.classList.add("flash");
       await sleep(340);

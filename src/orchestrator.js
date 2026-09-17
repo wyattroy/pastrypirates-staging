@@ -104,7 +104,7 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, payInto, coinsLeave, crateFlightFrom, crateFlightTo, tradeSwapFrom, tradeSwapTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
+  setFlipActive, setFlipCoin, flipSpinLeftMs, FLIP_LAND_HOLD_MS, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobShip, sailSetsOff, sailArrives, payInto, payOut, crateFlightFrom, crateFlightTo, holdMovesFrom, holdMovesTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, victoryConfetti, clearChatBubbles,
   showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
   battleSnapshot, renderBattleFromSnap,
@@ -1954,7 +1954,7 @@ export async function consumeEvent(e){
   /* his game feel audit: treasure bursts into the coin count on heads, and a bought crate flies from its island into the
      hold (board.js). The crate's island rect is read BEFORE render() greys it, the hold's new chip AFTER render() draws it. */
   const buyFlight=(e.t==="dock"&&e.got==="bought"&&!e.black&&!appState.replaying)?crateFlightFrom(e):null;
-  const swapFlight=(e.t==="trade"&&!appState.replaying)?tradeSwapFrom(e):null;   // …and a trade's two crates swap in arcs
+  const swapFlight=!appState.replaying?holdMovesFrom(e):null;   // …and a crate changing holds — a trade's two, a fight's plunder — flies hold to hold
   /* EVERY COIN EARNED FLIES TO THE PURSE, THE MOMENT IT IS EARNED — Wyatt, 2026-09-14: "if you earn 3 coins, only 3 coins should fly
      to the hold ... every coin you earn should fly over -- including from working the docks ... the coins should enter your hold
      the moment you earn them". It hung off the `dock` summary, heads only, six coins whatever was earned. It now rides the record of
@@ -1972,7 +1972,7 @@ export async function consumeEvent(e){
   const spent=(e.t==="dock"&&e.price>0)?e.price:(e.t==="rewatch"&&e.paid>0)?e.paid
     :((e.t==="refire"||e.t==="powder")&&e.cost>0)?e.cost:0;
   const spender=(e.t==="refire"||e.t==="powder")?e.a:e.p;
-  if(!appState.replaying&&spent>0&&spender!=null)coinsLeave(spender,spent);
+  if(spent>0&&spender!=null)payOut(spender,spent);   // the one spending door (board.js): each coin seen leaving takes itself off the number
   /* ⭐ EVERY EARNING THROUGH THE ONE DOOR (board.js payInto) — a dock's treasure, a won call's bounty, a muse coin, a trade's sale — BEFORE
      render(), so each purse is drawn without the coins still on their way to it, and each coin's landing is the one arrival event that
      puts it on the number and chinks. Wyatt, 2026-09-16, of the muse coin: "This should be done architecutrally with an event fired by
@@ -1984,7 +1984,7 @@ export async function consumeEvent(e){
   const paidFlight=(e.t==="trade"&&e.paid>0)?payInto(e.b,e.paid,{from:e.a}):null;
   render();
   if(buyFlight)crateFlightTo(buyFlight,e.p);
-  if(swapFlight)tradeSwapTo(swapFlight);
+  if(swapFlight)holdMovesTo(swapFlight);
   if(earnedFlight)await earnedFlight;
   if(paidFlight)await paidFlight;
   /* …AND THE ARRIVAL'S DIP AND SPLASH RING, ONCE IT HAS STOPPED. After render(), not inside the wait above: a hop too short

@@ -75,7 +75,7 @@ try {
     for (let i = 0; i < 90 && !zoomed; i++){ const w = await C.ev(`+document.getElementById('board').getAttribute('viewBox').split(' ')[2]`); if (w && w < 560) zoomed = w; else await sleep(700); }
     const seat = await C.ev(`(()=>{try{const a=__pp_app_state_debug(); return (a.curSeat!=null?a.curSeat:(a.game&&a.game.turnOrder?a.game.turnOrder[0]:1));}catch(e){return 1}})()`);
     await C.ev(`(async()=>{const m=await import('/src/ui/dockcoin.js'); m.flipDockCoin(${Number(seat)||0},true); return 1;})()`); await sleep(420);
-    const off = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('#dockCoinHost .dcoin'); const g=document.getElementById('boardShips').children[${Number(seat)||0}];
+    const off = JSON.parse(await C.ev(`JSON.stringify((()=>{const c=document.querySelector('.dcoin'); const g=document.getElementById('boardShips').children[${Number(seat)||0}];
       if(!c||!g) return null; const cr=c.getBoundingClientRect(), gr=g.getBoundingClientRect(), vb=document.getElementById('board').getAttribute('viewBox').split(' ').map(Number);
       const wrap=document.getElementById('boardwrap').getBoundingClientRect();
       return {dx:Math.round((cr.left+cr.width/2)-(gr.left+gr.width/2)), vbW:Math.round(vb[2]), wrapW:Math.round(wrap.width), pageW:innerWidth};})())`) || "null");

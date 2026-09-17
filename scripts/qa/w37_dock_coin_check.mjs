@@ -80,7 +80,7 @@ try{
        Sampled in the page on every frame for the length of the flip: how high the toss has the
        coin, frame by frame. Its PEAKS are counted below. */
     window.__toss = [];
-    (function sample(t0){ const tick=()=>{ const el=document.querySelector('#dockCoinHost .dcoinToss');
+    (function sample(t0){ const tick=()=>{ const el=document.querySelector('.dcoinToss');
         if(el){ const m=new DOMMatrixReadOnly(getComputedStyle(el).transform); window.__toss.push(+m.m42.toFixed(2)); }
         if(performance.now()-t0 < 790) requestAnimationFrame(tick); };
       requestAnimationFrame(tick); })(performance.now());
@@ -89,7 +89,7 @@ try{
        coin's 800ms hold and it reported the face as "gone". 1150ms is mid-hold: landed at 795,
        held until 1595. */
     window.__landedArt = '';
-    setTimeout(()=>{ const s=document.querySelector('#dockCoinHost .dcoinSpin');
+    setTimeout(()=>{ const s=document.querySelector('.dcoinSpin');
       window.__landedArt = s ? (getComputedStyle(s).backgroundImage||'').split('/').pop().split('"')[0] : 'gone'; }, 1150);
     window.__dc.flipDockCoin(1, true).then(()=>{ window.__dcDone = performance.now() - window.__dcT0; })
       .catch(e=>{ window.__dcErr = String((e&&e.stack)||e); });
@@ -99,7 +99,7 @@ try{
   await lift();
 
   const mid = JSON.parse(await C.ev(`JSON.stringify((()=>{
-    const c=document.querySelector('#dockCoinHost .dcoin'); if(!c) return null;
+    const c=document.querySelector('.dcoin'); if(!c) return null;
     const r=c.getBoundingClientRect();
     /* ⚠ WHERE THE COIN IS DRAWN IS NOT WHERE .dcoin IS. .dcoin is the anchor pinned to the hull's
        top edge; the 11px rise and the 21px toss are transforms on the CHILD, so .dcoin's own rect
@@ -162,9 +162,9 @@ try{
     const full = async () => decodePng(Buffer.from(
       (await C.send('Page.captureScreenshot',{format:'png'})).result?.data || "", 'base64'));
     const frames = []; for (let i=0;i<3;i++){ frames.push(await full()); await sleep(55); }
-    await C.ev(`(()=>{const c=document.querySelector('#dockCoinHost .dcoin'); if(c)c.style.visibility='hidden';})()`);
+    await C.ev(`(()=>{const c=document.querySelector('.dcoin'); if(c)c.style.visibility='hidden';})()`);
     const without = await full();
-    await C.ev(`(()=>{const c=document.querySelector('#dockCoinHost .dcoin'); if(c)c.style.removeProperty('visibility');})()`);
+    await C.ev(`(()=>{const c=document.querySelector('.dcoin'); if(c)c.style.removeProperty('visibility');})()`);
     const box = mid.spinRect;
     const diffs = frames.map(f => boxDiff(f, without, Math.round((box.x-6)*D), Math.round((box.y-6)*D),
                                           Math.round((box.w+12)*D), Math.round((box.h+12)*D)));
@@ -219,7 +219,7 @@ try{
 
   /* it fades over 140ms and then takes itself off the board; give that its time before asking */
   await sleep(600);
-  const gone = await C.ev(`!document.querySelector('#dockCoinHost .dcoin')`);
+  const gone = await C.ev(`!document.querySelector('.dcoin')`);
   gone ? pass("and it cleared itself off the board afterwards")
        : fail("the coin is still on the board after the flip finished");
 } catch(e){ console.log("PROBE FAILED: "+(e&&e.message||e)); bad++; } finally { await killAll(); }

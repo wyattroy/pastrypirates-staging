@@ -1,5 +1,10 @@
 #!/usr/bin/env node
-/* ONE WAY A PURSE'S NUMBER GOES UP: A COIN ARRIVING.
+/* ONE WAY A PURSE'S NUMBER GOES UP: A COIN ARRIVING — AND ONE WAY IT GOES DOWN: A COIN LEAVING.
+   (Extended 2026-09-16, build .6. Wyatt: "there's a strange clicking sound that happens far to quickly -- i it's when someone buys
+   something. is it the sound of money leaving? if so, we need to tune this so the sound and coins both leave more spaced apart." The
+   number rolled down on its own 40ms clock while the coins drawn leaving went SPEND_GAP_MS apart. Rules 4-6 below hold the mirror door:
+   every spending through payOut (or payInto from a payer's seat), each coin seen leaving is ONE event, coinLeft, which lowers the number
+   and clicks, and the purse's own drawing never rolls it.)
    Wyatt, 2026-09-16: "every coin that reaches a purse, from any source (dock, muse, won call, trade), arrives through ONE arrival event.
    That one event takes the coin off 'on the way', adds it to the number, and plays the chink. Nothing else raises the number or plays the
    chink." And the gate he asked for, rule for rule:
@@ -47,18 +52,18 @@ function rules(files) {
   const touchers = [...board.matchAll(/(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/g)]
     .map(m => m[1]).filter(name => /\.coinN/.test(body(board, `function ${name}(`)));
   const elsewhere = others.filter(([, s]) => /coinN/.test(s)).map(([f]) => f);
-  rule(elsewhere.length === 0 && touchers.length === 2 && touchers.includes("coinArrived") && touchers.includes("showSeatCoins"),
-    "only two functions ever touch a purse's number: the arrival event and the purse's own drawing",
-    `a purse's number is touched by ${[...touchers, ...elsewhere].join(", ") || "nothing"} — only coinArrived and showSeatCoins may`);
+  rule(elsewhere.length === 0 && touchers.length === 3 && ["coinArrived", "coinLeft", "showSeatCoins"].every(t => touchers.includes(t)),
+    "only three functions ever touch a purse's number: the arrival event, the departure event and the purse's own drawing",
+    `a purse's number is touched by ${[...touchers, ...elsewhere].join(", ") || "nothing"} — only coinArrived, coinLeft and showSeatCoins may`);
   const show = body(board, "export function showSeatCoins(");
   const guard = show.search(/if\s*\(\s*show\s*>\s*from\s*\)\s*return\s*;/);
   const before = guard < 0 ? show : show.slice(0, guard), after = guard < 0 ? "" : show.slice(guard);
   const setsBefore = [...before.matchAll(/n\.textContent\s*=\s*([^;]+);/g)].map(m => m[1].trim());
   const replayOrFresh = /if\s*\(\s*!Number\.isFinite\(from\)\s*\|\|\s*appState\.replaying\s*\)\s*\{\s*n\.textContent\s*=\s*show/.test(before);
   const setsAfter = [...after.matchAll(/n\.textContent\s*=\s*([^;]+);/g)].map(m => m[1].replace(/\s/g, ""));
-  const downOnly = setsAfter.every(v => v === "show" || v === "target" || v === "cur-1") && !/cur\s*\+/.test(after) && /cur\s*<=\s*target/.test(after);
+  const downOnly = setsAfter.length === 1 && setsAfter[0] === "show" && !/setTimeout|playCoinTick|cur\s*-\s*1/.test(show);
   rule(guard >= 0 && setsBefore.length === 1 && replayOrFresh && downOnly,
-    "the purse's own drawing sets a replayed or freshly drawn number, never raises one, and only ticks down for a price",
+    "the purse's own drawing sets a replayed, fresh or unannounced number — it never raises one and never rolls one down on a clock",
     guard < 0 ? "showSeatCoins has no `if(show>from)return;` — it can raise the number without a coin arriving"
               : `showSeatCoins moves the number some other way (before the guard: ${JSON.stringify(setsBefore)}, after it: ${JSON.stringify(setsAfter)})`);
   const pay = body(board, "export function payInto(");
@@ -84,10 +89,34 @@ function rules(files) {
   rule(flightCalls === 0 && !exported,
     "nothing flies coins except through the door: the two flights are private and called only by payInto",
     `coins are flown directly ${flightCalls} time(s)${exported ? ", and a flight is exported" : ""} — a way into a purse that skips the door`);
-  const legacy = Object.entries(files).filter(([, s]) => /\b(holdCoinRoll|treasureBurst|coinsAcross)\s*\(/.test(code(s))).map(([f]) => f);
+  const legacy = Object.entries(files).filter(([, s]) => /\b(holdCoinRoll|treasureBurst|coinsAcross)\s*\(|coinRolls|COIN_ROLL_/.test(code(s))).map(([f]) => f);
   rule(legacy.length === 0,
-    "no count-hold remains anywhere, and neither of the old self-timed flights (treasureBurst, coinsAcross)",
-    `a count-hold or an old flight is still called in ${legacy.join(", ")}`);
+    "no count-hold or count-roll remains anywhere, and neither of the old self-timed flights (treasureBurst, coinsAcross)",
+    `a count-hold, a count-roll or an old flight is still in ${legacy.join(", ")}`);
+
+  // 4. THE CLICK, ONCE: a coin going out of a purse sounds only in the departure event
+  const left = body(board, "export function coinLeft(");
+  // the End of Voyage card's stats roll-up (endCardArrives) clicks too (docs/AUDIO.md: abacus-click) — it counts totals, not a purse, so it is not a coin leaving
+  const tickSites = (board.replace(body(board, "function endCardArrives("), "").match(/playCoinTick\(\s*\)/g) || []).length;
+  rule(tickSites === 1 && /playCoinTick\(\s*\)/.test(left),
+    "a coin leaving clicks in exactly one place: the departure event (coinLeft)",
+    `the board plays the coin click in ${tickSites} place(s)${/playCoinTick\(\s*\)/.test(left) ? "" : ", and not in coinLeft"} — a click that is not a coin leaving`);
+
+  // 5. "LEAVING" RISES ONLY WHEN SPENDING IS ANNOUNCED, AND FALLS ONLY AS A COIN GOES
+  const dep = body(board, "function departures(");
+  const lvWrites = (board.match(/LEAVING\[[^\]]+\]\s*=/g) || []).length;
+  rule(lvWrites === 2 && /LEAVING\[seat\]\s*=\s*\(LEAVING\[seat\]\|\|0\)\s*\+\s*coins/.test(dep) && /Math\.max\(0,\(LEAVING\[seat\]\|\|0\)-count\)/.test(left)
+       && /\+\s*\(LEAVING\[seat\]\s*\|\|\s*0\)/.test(board),
+    "coins are announced leaving only when a spending is announced (departures), come off only as each one goes (coinLeft), and the number counts them",
+    `"leaving" is written ${lvWrites} time(s) — it must rise only in departures and fall only in coinLeft, and purseShows must add it back`);
+
+  // 6. EVERY SPENDING THROUGH THE ONE DOOR
+  const payOutBody = body(board, "export function payOut(");
+  const leaveCalls = (board.match(/\bcoinsLeave\(/g) || []).length - 1 + others.reduce((k, [, s]) => k + (s.match(/\bcoinsLeave\(/g) || []).length, 0);
+  rule(/payOut\(\s*spender\s*,\s*spent\s*\)/.test(consume) && /departures\(\s*seat\s*,\s*coins\s*\)/.test(payOutBody) && /departures\(\s*from\s*,\s*coins\s*\)/.test(pay)
+       && leaveCalls === 1 && /coinsLeave\(/.test(payOutBody) && !/export\s+(async\s+)?function\s+coinsLeave\b/.test(board),
+    "the one event consumer spends through the spending door (payOut), a trade's payer through payInto, and nothing else drops coins out of a purse",
+    "a spending skips payOut, a trade's payer loses no coins as they fly, or coins are dropped out of a purse directly");
   return out;
 }
 
@@ -99,12 +128,15 @@ for (const r of real) console.log(`  ${r.ok ? "PASS" : "FAIL"}  ${r.text}`);
 const broken = (file, from, to) => { const f = { ...files }; if (!f[file].includes(from)) return null; f[file] = f[file].replace(from, to); return f; };
 const board = files["src/ui/board.js"], orch = files["src/orchestrator.js"];
 const MUTANTS = [
-  ["a second chink, played from the purse's drawing", broken("src/ui/board.js", "    playCoinTick();", "    playCoinTick();playCoinChink();"), 0],
+  ["a second chink, played from the departure event", broken("src/ui/board.js", "  playCoinTick();", "  playCoinTick();playCoinChink();"), 0],
   ["the purse's drawing allowed to raise the number", broken("src/ui/board.js", "  if(show>from)return;\n", "\n"), 2],
   ["a muse coin flown straight from the consumer", broken("src/orchestrator.js", "payInto(e.p,e.coins,{after:", "flyFromBoat(e.p,e.coins,{after:"), 4],
   ["a flight exported and called from elsewhere", broken("src/ui/board.js", "async function flyAcross(", "export async function flyAcross("), 5],
   ["\"on the way\" lowered somewhere other than the arrival event", broken("src/ui/board.js", "export function payInto(", "function leak(s){ON_THE_WAY[s]=0;}\nexport function payInto("), 3],
   ["a count-hold put back", broken("src/ui/board.js", "export function payInto(", "function holdCoinRoll(){}\nholdCoinRoll(0,1);\nexport function payInto("), 6],
+  ["the purse's drawing clicking a coin down again", broken("src/ui/board.js", "  n.textContent=show;\n  pulseEl(el);\n}", "  n.textContent=show;\n  pulseEl(el);playCoinTick();\n}"), 7],
+  ["\"leaving\" cleared somewhere other than a departure", broken("src/ui/board.js", "export function payOut(", "function leak2(s){LEAVING[s]=0;}\nexport function payOut("), 8],
+  ["a purchase dropping its coins without the spending door", broken("src/orchestrator.js", "payOut(spender,spent)", "payInto(spender,spent)"), 9],
 ];
 let proofOk = true;
 for (const [what, mutant, idx] of MUTANTS) {

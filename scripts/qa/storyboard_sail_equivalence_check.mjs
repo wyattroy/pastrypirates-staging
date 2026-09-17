@@ -56,6 +56,10 @@ const CASES = [
   ["a long route",                         { t: "sail", p: 3, draw: { route: sq(12) } }],
   ["seat 0, which must not be read as falsy", { t: "sail", p: 0, draw: { route: sq(5) } }],
   ["a seat that is null",                  { t: "sail", p: null, draw: { route: sq(4) } }],
+  /* A FLEE CARRIES ITS ROUTE AND MUST WALK IT (Wyatt, 2026-09-16: "fleeing does not follow actual sailable squares, it cuts across
+     islands"). 106d164f put an event-name test back in present() and these three would have said nothing. */
+  ["a flee around an island (MUST walk)",  { t: "battleflee", p: 2, draw: { route: sq(5) } }],
+  ["a one-square flee (a hop, no walk)",   { t: "battleflee", p: 2, draw: { route: sq(2) } }],
 ];
 
 let agreed = 0, walked = 0;

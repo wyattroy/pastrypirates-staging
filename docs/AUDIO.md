@@ -368,7 +368,7 @@ heard it, so every one plays at `SFX_VOLUME` 1.
 | Stem | Moment | His pick, and his note |
 |---|---|---|
 | `card-swish` | the recipe cards fly in (stage.js, off the entrance's `ready`) | Paper swish — *"remove the "boop boop" at the end -- just use the swish at the beginning."* |
-| `abacus-click` | a coin count rolls (board.js showSeatCoins), the End of Voyage stats roll up, and each bake-off guess | Abacus click; the stats take *"The coin tick"*; the guesses too (2026-09-14). `SFX_VOLUME` 3: at 1 it was the quietest stem and he could not hear it |
+| `abacus-click` | each coin seen leaving a purse (board.js coinLeft, one click per coin, SPEND_GAP_MS apart), the End of Voyage stats roll up, and each bake-off guess | Abacus click; the stats take *"The coin tick"*; the guesses too (2026-09-14). `SFX_VOLUME` 3: at 1 it was the quietest stem and he could not hear it |
 | `crate-marimba` | each bake-off lid lands (bakeoff.js dropLid) — 8 slots of 600ms, like the cork pop | Marimba — *"make them lower pitched so they sound more like big crates"* (two octaves down, C3 to A3) |
 | `crate-chime` / `crate-squawk` | a right / wrong crate on the reveal | Chime & thud, then (2026-09-14) *"I want the "wrong" sound to be a squawk during the bakeoff"* — the page's own squawk, his pick over re-fetching the macaw he chose on 2026-08-19 |
 | `award-whoosh` | each award card deals in | Soft whoosh |

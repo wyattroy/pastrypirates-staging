@@ -33,7 +33,7 @@ function rules(files) {
     "both fights — the engine's and the one a player watches — pay their powder through it",
     "a fight pays its powder without payPowder");
   const consume = body(orch, "export async function consumeEvent(e){");
-  rule(/"powder"/.test(consume) && /coinsLeave\(/.test(consume),
+  rule(/"powder"/.test(consume) && /payOut\(/.test(consume),
     "the one event consumer shows powder leaving the purse from the `powder` event",
     "consumeEvent does not read the `powder` event — powder coins never visibly leave");
   return out;

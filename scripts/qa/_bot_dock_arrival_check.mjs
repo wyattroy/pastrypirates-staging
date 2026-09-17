@@ -18,7 +18,7 @@ const WATCH = `(()=>{ if(window.__bda) return 'already';
   const S=window.__bda={coins:[],live:new Map()};
   const ship=i=>{const h=document.getElementById('boardShips');return h&&h.children[i]?h.children[i].style.transform:'';};
   const tick=()=>{ const now=performance.now();
-    document.querySelectorAll('#dockCoinHost .dcoin').forEach(c=>{ if(!S.live.has(c)){ const i=+c.dataset.seat; S.live.set(c,{seat:i,t0:now,start:ship(i),moves:0,lastMoveMs:0,prev:ship(i)}); } });
+    document.querySelectorAll('.dcoin').forEach(c=>{ if(!S.live.has(c)){ const i=+c.dataset.seat; S.live.set(c,{seat:i,t0:now,start:ship(i),moves:0,lastMoveMs:0,prev:ship(i)}); } });
     for(const [c,L] of S.live){ const now2=ship(L.seat); if(now2!==L.prev){L.moves++;L.lastMoveMs=Math.round(now-L.t0);L.prev=now2;}
       if(!c.isConnected){ S.coins.push({seat:L.seat,moves:L.moves,lastMoveMs:L.lastMoveMs,lifeMs:Math.round(now-L.t0)}); S.live.delete(c); } }
     requestAnimationFrame(tick); };

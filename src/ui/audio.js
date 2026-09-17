@@ -372,9 +372,9 @@ const EVENT_SOUND = {
   // v2.1: the ovens going cold rides the battle sound of the raid that caused it — it is the
   // consequence of that same broadside, one beat later, not a second event to be scored.
   unfinish: null,
-  // v2.1 bake-off: EXPLICIT silence, not an omission (D-06 — the two are different things here).
-  // Whether a successful bake earns its own cue is a design call for Wyatt, not a side effect.
-  ovens: null, bake: null,
+  // v2.1 bake-off: a successful bake stays EXPLICIT silence (D-06). Firing up the ovens is the cannon — Wyatt, 2026-09-16: "use the
+  // cannon sound when someone fires up the bakery". On every screen, like every sound in this map.
+  ovens: CANNON_SOUND, bake: null,
 };
 
 // PURE — no ctx, no DOM, no side effect, safe to call under plain Node. Returns null, or an
@@ -929,19 +929,27 @@ function playPop(step) {
    Refused, on purpose: a sting under HEADS/TAILS ("the coin already has a landing sound baked in"), and the first-home fanfare,
    which is Luis's to make (SOUND-BRIEF.csv). */
 const MARIMBA_SLOT_S = 0.6, MARIMBA_LEAD_S = 0.04, MARIMBA_SLOTS = 8;
-function playCardSwish() { play("card-swish"); }
-/* A COUNT CAN ROLL FASTER THAN A CLICK IS LONG. A big purchase steps the coin count every 12ms, and two captains' counts can roll at
-   once, so a click closer than TICK_GAP_MS to the last one is skipped: the count still visibly ticks, the sound stays a tick
-   rather than a buzz. The gap sits just under the roll's own slowest step (board.js COIN_ROLL_STEP_MS, 40ms), so an ordinary
-   purchase keeps a click for every coin. */
-const TICK_GAP_MS = 35;
-let lastTickAt = -1e9;
-function playCoinTick() {
+/* ⭐ HOW CLOSE THE SAME SOUND MAY PLAY TO ITSELF — DECIDED HERE, AND ONLY HERE. Two copies of this rule existed: the coin tick's, here,
+   and the crate shuffle's swish, written inside the bake-off (bakeoff.js, 2026-09-15). The bake-off's copy was declared a few lines
+   BELOW the shuffle that called it, so the shuffle threw before its first crate moved — Wyatt, 2026-09-16: "during the bakeoff ... the
+   crates are never swapped around, they're just static and then they come down multiple times" (each watcher rebuilt its bench, dropped
+   the lids again, and threw again). A sound that must not stack names its gap here; nothing outside this file keeps a clock for a sound.
+   scripts/qa/sound_spacing_one_place_check.mjs holds it. */
+const SOUND_LAST_AT = new Map();
+function playSpaced(name, gapMs) {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (now - lastTickAt < TICK_GAP_MS) return;
-  lastTickAt = now;
-  play("abacus-click");
+  if (now - (SOUND_LAST_AT.has(name) ? SOUND_LAST_AT.get(name) : -1e9) < gapMs) return;
+  SOUND_LAST_AT.set(name, now);
+  play(name);
 }
+/* A swish per crossing of the shuffle, never two inside SWISH_GAP_MS, so a fast shuffle is a sweep and not a hiss (his 2026-09-15 ask:
+   "we want a swish sound as the crates are shuffled"). The recipe cards use the same swish. */
+const SWISH_GAP_MS = 110;
+function playCardSwish() { playSpaced("card-swish", SWISH_GAP_MS); }
+/* A coin leaving a purse clicks — one click per coin SEEN leaving (board.js coinLeft), SPEND_GAP_MS apart. Two captains can pay at once,
+   so a click closer than TICK_GAP_MS to the last is dropped rather than stacked into a buzz. */
+const TICK_GAP_MS = 35;
+function playCoinTick() { playSpaced("abacus-click", TICK_GAP_MS); }
 /* ⭐ THE CHINK A COIN MAKES LANDING IN THE PURSE — Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound -- we want
    a coin 'chink' sound whenever a coin goes into the purse." sfx/coin-chink.mp3 is ONE FILE OF THREE SLOTS — the three on his Game Feel
    Tuner, rendered from that page's own recipe (.planning/research/audio-sourcing/render_coin_chink.mjs). 2026-09-16 he picked: "the
@@ -951,9 +959,15 @@ function playCoinTick() {
    (scratch chink_clip.mjs, 2026-09-16): one chink peaks at 0.41 of full scale; three at his 325ms spacing, 0.41; a 20-coin haul at its
    tightest 84ms, 0.41; even 40ms apart, 0.42 — each has decayed to a whisper before the next begins. Two on the same instant, 0.81;
    only THREE on the same instant would clip (1.22), and no path does that: a haul's coins are at least 84ms apart, and at most two
-   purses fill at once (two side-bet winners in a four-seat game). So every chink plays. */
-const CHINK_SLOT_S = 0.35, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
-const CHINK_PICK = 1;          // 0 = A (short and bright), 1 = B (fatter, lower) — his pick, 2 = C (two-stage, a coin settling)
+   purses fill at once (two side-bet winners in a four-seat game). So every chink plays.
+   RE-MEASURED FOR SILVER, 2026-09-16 (scratch chink_clip_silver.mjs, the rendered file at this gain): one chink 0.38; three at his 470ms,
+   five at 400ms, twenty at 84ms and even at 40ms, all 0.38; two on the same instant 0.75; three on the same instant 1.13 — the same
+   picture as B: only a path that lands three coins on one instant would clip, and none does. */
+/* ROUND 2, 2026-09-16: "I also don't love the coin chink sound." Three coins built like real ones went on the tuner — a struck disc
+   ringing at several pitches at once — and he picked: "the chink I pick: A". The file now holds those three, in longer slots (Silver
+   rings for 0.45s). */
+const CHINK_SLOT_S = 0.5, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
+const CHINK_PICK = 0;          // 0 = A, Silver — his pick · 1 = B, Into the purse · 2 = C, On the pile
 function playCoinChink() {
   const s = Math.max(0, Math.min(CHINK_SLOTS - 1, CHINK_PICK));
   play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S });

@@ -49,10 +49,10 @@ const WATCH = `(()=>{
        wall clock the two windows share */
     const fc=document.getElementById('flipCoinWrap'); const spinning=!!(fc&&fc.classList.contains('spin'));
     if(spinning&&!S.wasSpin){ S.spins.push({t:Date.now(),seat:a&&a.mySeat}); } S.wasSpin=spinning;
-    document.querySelectorAll('#dockCoinHost .dcoin').forEach(c=>{ if(!S.coinSeen.has(c)){ S.coinSeen.add(c); S.coins.push({t:Date.now(),seat:+c.dataset.seat}); } });
+    document.querySelectorAll('.dcoin').forEach(c=>{ if(!S.coinSeen.has(c)){ S.coinSeen.add(c); S.coins.push({t:Date.now(),seat:+c.dataset.seat}); } });
     for(const L of S.live){
       if(L.kind==='turn'&&vb()!==L.vb0)L.moved=true;
-      if(L.kind==='dock'&&document.querySelector('#dockCoinHost .dcoin'))L.coin=true;
+      if(L.kind==='dock'&&document.querySelector('.dcoin'))L.coin=true;
     }
     S.live=S.live.filter(L=>{
       const age=now-L.t0;

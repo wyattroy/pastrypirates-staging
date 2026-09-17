@@ -34,7 +34,8 @@
    cannot composite an SVG transform animation at all (index.html's #sailHost note carries the
    measurement, 62 layouts/sec as SVG against zero as HTML), and this one spins and bobs for a
    second and a half at a time. */
-import { boardCell, boardShipEls, FLIP_SPIN_MS, FLIP_LAND_HOLD_MS } from "./board.js";
+import { boardCell, boardShipEls, FLIP_SPIN_MS, FLIP_LAND_HOLD_MS, fixedPointOfBoard } from "./board.js";
+import { fixedRect } from "./util.js";
 /* THE SAME TWO CALLS THE BIG COIN MAKES, so "in time with the sound" is one fact, not two that
    have to be kept in step: start re-fires the sample for as long as the coin turns, and stop only
    cancels the RE-FIRE — the sample already playing runs on, which is what lets the landing blip at
@@ -43,8 +44,8 @@ import { startFlipSpinSound, stopFlipSpinSound } from "./audio.js";
 import { COIN_SPIN_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG } from "../shared/index.js";
 const $ = id => document.getElementById(id);   // the same one-liner every module in this folder keeps
 
-/* HIS NUMBERS, ONCE, BY NAME. They are screen pixels at 1x zoom — the camera's own transform is
-   what turns them into "grows with the camera", so nothing here has to know the zoom. */
+/* HIS NUMBERS, ONCE, BY NAME. They are screen pixels at 1x zoom, and the coin grows with the camera — but by being DRAWN that much
+   bigger (coinSpot), never by being drawn at 16px and stretched. See flipDockCoin. */
 export const DC_SIZE_PX     = 16;    // the coin, at 1x
 export const DC_ABOVE_PX    = 11;    // above the boat's top edge
 export const DC_RISE_MS     = 40;    // arrives by rising off the boat
@@ -69,8 +70,30 @@ function boatPoint(seat){
 }
 
 export function clearDockCoins(){
-  const host = $("dockCoinHost");
-  if (host) host.innerHTML = "";
+  document.querySelectorAll(".dcoin").forEach(el => el.remove());
+}
+/* ⭐ SIZED, NOT SCALED, AND PLACED BY THE ONE CONVERTER. Wyatt, 2026-09-16: "the tiny coin that is flipped by bot captains is really
+   pixellated -- why?" and "during battles, the coins are off to the side, misaligned with the boats."
+   WHY PIXELLATED: the coin was a 16px box with a glow, inside the board's camera layer, which the director zooms by scaling the whole
+   layer (up to 2.2x in a fight, 4x on a sail). A small filtered, spinning thing is painted at its own 16px and then stretched — the
+   big flip coin had exactly this in August (W5-1, 732b0048: "rasterised for a 76px box and then blown up 2.2x"), and the rule it
+   earned is "sized, not scaled".
+   WHY OFF TO THE SIDE: a fight's coin was drawn in a fixed layer so it could turn in front of the fight's words (2026-09-15), with
+   its own copy of the board-to-page arithmetic that left out the page's own offset — on a desktop, the centred column's margin.
+   So both answers are the same change: every small coin is drawn on the page itself, above a bubble, at the size the camera would
+   show it (DC_SIZE_PX times the board's zoom, read off the board as drawn), at the point board.js's one converter gives — and it
+   keeps asking, every frame it is up, so a camera that moves while it spins takes the coin with it. The toss, rise and landing are
+   written as shares of the coin's own size (index.html .dcoin*), so they grow with it. */
+function coinSpot(seat){
+  const pt = boatPoint(seat), cell = boardCell(), ships = $("boardShips") || $("board"), wrap = $("boardwrap");
+  if (!pt || !cell || !ships || !wrap) return null;
+  const top = fixedPointOfBoard(ships, pt[0], pt[1] - cell / 2), right = fixedPointOfBoard(ships, pt[0] + cell, pt[1] - cell / 2);
+  const w = fixedRect(wrap);
+  if (!top || !right || !(w.width > 0)) return null;
+  const zoom = ((right[0] - top[0]) / cell) / (w.width / 640);    // how much bigger the board is drawn than at 1x
+  // a coin whose boat is out of the camera's frame is not drawn over the captains box or the page around the board
+  const onBoard = top[0] >= w.left && top[0] <= w.right && top[1] >= w.top && top[1] <= w.bottom;
+  return { x: top[0], y: top[1], size: DC_SIZE_PX * zoom, zoom, onBoard };
 }
 
 /* Draw one, spin it, land it on the face the ENGINE already recorded, hold it, fade it.
@@ -80,40 +103,30 @@ export function clearDockCoins(){
    replay-aware one, so a reload fast-forwards straight through a coin instead of sitting out two
    real seconds per dock for every dock of the voyage. A bare setTimeout here would have quietly
    made a reloaded game crawl — the same trap flipSpinLeftMs's own note describes. */
-/* `opts.front` — THE COIN TURNS IN FRONT OF THE FIGHT'S WORDS. Wyatt, 2026-09-15, on the battle: "the first narration box is showed
+/* `opts.front` — (HISTORY: every small coin is drawn in front now, see coinSpot; the argument is still passed.) THE COIN TURNS IN FRONT OF THE FIGHT'S WORDS. Wyatt, 2026-09-15, on the battle: "the first narration box is showed
    in white, not dark blue -- so it covers up the attacker's coin flip! ... 2. the coin should flip in front of them." The board's own
    coin layer sits under the narration layer (#pp4Fx is fixed at the page level; the board cannot reach above it), so for a BATTLE flip
    the coin is drawn in that same fixed layer instead, one step above a bubble, at the boat's screen point. The camera holds on the two
    ships for the whole fight, so a point taken once stays true; an ordinary dock flip is unchanged and stays on the board. */
-export async function flipDockCoin(seat, heads, sleepFn, opts){
+export async function flipDockCoin(seat, heads, sleepFn, opts){   // eslint-disable-line no-unused-vars — `opts` is kept for callers
   const sleep = sleepFn || plainSleep;
-  const front = !!(opts && opts.front);
-  const host = front ? ($("pp4Fx") || $("dockCoinHost")) : $("dockCoinHost");
-  const pt = boatPoint(seat);
-  const cell = boardCell();
-  /* NO BOAT, NO HOST, NO COIN — and the caller still gets its wait, so the game's pacing is the
+  const spot = coinSpot(seat);
+  /* NO BOAT, NO COIN — and the caller still gets its wait, so the game's pacing is the
      same whether the coin could be drawn or not. A flip that silently took less time than every
      other flip is exactly the fault item 18 was raised about. */
-  if (!host || !pt || !cell) { await sleep(FLIP_SPIN_MS + FLIP_LAND_HOLD_MS); return; }
+  if (!spot) { await sleep(FLIP_SPIN_MS + FLIP_LAND_HOLD_MS); return; }
 
-  const CQ = v => (v / 640 * 100) + "cqw";
   const el = document.createElement("div");
   el.className = "dcoin";
   el.dataset.seat = String(seat);   // which captain this coin belongs to — read by the arrival probe, harmless to the look
-  if (front){
-    /* the same point, in the page's own pixels: the board's matrix turns a board coordinate into a screen one, exactly as the
-       treasure coins do when they fly between the board and the captains box. */
-    const ships = $("boardShips"), ctm = ships && ships.getScreenCTM && ships.getScreenCTM();
-    if (ctm && ships.createSVGPoint){
-      const p = ships.createSVGPoint(); p.x = pt[0]; p.y = pt[1] - cell / 2;
-      const s = p.matrixTransform(ctm);
-      el.style.position = "fixed"; el.style.zIndex = "27";   // a bubble is 26
-      el.style.left = s.x + "px"; el.style.top = s.y + "px";
-    } else { el.style.left = CQ(pt[0]); el.style.top = CQ(pt[1] - cell / 2); }
-  } else {
-    el.style.left = CQ(pt[0]);
-    el.style.top  = CQ(pt[1] - cell / 2);          // the boat's TOP edge; the rise happens from there
-  }
+  const place = s => {               // the boat's TOP edge, at the camera's size; the rise happens from there
+    el.style.left = s.x + "px"; el.style.top = s.y + "px";
+    el.style.width = el.style.height = s.size.toFixed(2) + "px";
+    el.style.visibility = s.onBoard ? "" : "hidden";
+  };
+  place(spot);
+  const follow = () => { if (!el.isConnected) return; const s = coinSpot(seat); if (s) place(s); requestAnimationFrame(follow); };
+  requestAnimationFrame(follow);
   /* ⚠ ONE ELEMENT WITH A BACKGROUND, WHICH IS EXACTLY WHAT THE BIG COIN DOES — and the first
      version of this did something cleverer and rendered NOTHING. It stacked the two faces back to
      back on a `transform-style: preserve-3d` card with `backface-visibility: hidden`, which measured
@@ -125,7 +138,9 @@ export async function flipDockCoin(seat, heads, sleepFn, opts){
   el.innerHTML = '<div class="dcoinRise"><div class="dcoinToss"><div class="dcoinSpin"></div></div></div>';
   const spinEl = el.querySelector(".dcoinSpin");
   spinEl.style.backgroundImage = `url(${COIN_SPIN_IMG})`;
-  host.appendChild(el);
+  // his glow and shadow, at the size the coin is drawn (a blur is in pixels, so it grows with the coin rather than being stretched)
+  spinEl.style.filter = `drop-shadow(0 0 ${(DC_GLOW_PX * spot.zoom).toFixed(1)}px rgba(255,228,150,.85)) drop-shadow(0 ${(2 * spot.zoom).toFixed(1)}px ${(2 * spot.zoom).toFixed(1)}px rgba(0,0,0,${DC_SHADOW}))`;
+  document.body.appendChild(el);
   startFlipSpinSound();
 
   await sleep(FLIP_SPIN_MS);
