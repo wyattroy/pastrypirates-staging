@@ -18,12 +18,24 @@
  *       for a one-shot, `AMBIENCE_FILES`/`MUSIC_FILE` for the bed and the song, which set their
  *       own gains and never read `SFX_VOLUME`. A file no table names is a file whose loudness
  *       nobody chose.
+ *   (c) `EVENT_SOUND` names no stem that has no file in `sfx/` — the mirror of DEFECT-1. There the
+ *       file existed and nothing could reach it; here a cue is reachable and its file is absent, so
+ *       the moment is silent in a way that reads like a decision and is not one.
+ *   (d) No gain in `SFX_VOLUME` puts its stem's true peak above `SFX_PEAK_CEILING_DBFS`. Added with
+ *       the 2026-09-18 levelling pass, which raises five stems by 9-12 dB — this is the rule that
+ *       makes a raise safe to commit. The peaks are measured and live in `SFX_TRUE_PEAK_DBFS` in
+ *       the file under test, so a re-exported file changes ONE number and no copy drifts. It earned
+ *       its keep on its first run, catching `card-swish` at 2.82 where the file allows 2.8184 — a
+ *       rounding-up that breached the ceiling by 0.003 dB and would never have been noticed.
  *
  *       RULE (b) USED TO SAY THE OPPOSITE OF THE TRUTH — "every stem has a value other than the
  *       untouched default 1, and docs/AUDIO.md DEFECT-3 carries the measured replacement for
  *       each". DEFECT-3's table holds SIX DIFFERENT stems and no value for any of the nine it
- *       accused; the nine sit at 1 by Wyatt's own ruling (q7, 2026-09-06). Repaired on `dev` in
- *       commit bc6c25cb — that repair is Mac: Dev's, brought here and wired into the chain.
+ *       accused; the nine sat at 1 by Wyatt's own ruling (q7, 2026-09-06). Repaired on `dev` in
+ *       commit bc6c25cb — that repair is Mac: Dev's, brought here and wired into the chain. (The
+ *       ruling has since been carried out: he put the last five in scope on 2026-09-18 and the
+ *       levelling landed. See the longer note beside rule (b)'s code for why no rule here judges a
+ *       gain BY ITS VALUE — a gain is his ear's business, and a gate cannot hear.)
  *
  *       THE FILTER, DECLARED (this gate drops samples, so it says how many and why, every run):
  *       the ambience and music stems are excluded from the SFX_VOLUME half, and the pass line
@@ -32,15 +44,21 @@
  *       reported as undeclared rather than quietly skipped. The error runs TOWARD the alarm: a
  *       rotted anchor makes this gate shout, never go quiet.
  *
- * RED-PROOFED, not merely written: run against the pre-fix commit's copy of this file
- * (`git show 95ca2d7:src/ui/audio.js`) before this gate existed, it exits 1 on BOTH assertions —
- * `anchorHold` mapped twice, and all six `SFX_VOLUME` entries still `1`. See
- * `.planning/phases/02.2-a-captain-who-cannot-take-their-turn/02.2-01-SUMMARY.md` for the transcript
- * of that run. A check that cannot fail is not protection (CLAUDE.md rule 6).
+ *       DELIBERATELY NOT FAILED: an `EVENT_SOUND` key naming an event nothing emits. Seven exist
+ *       (measured 2026-09-18, 200 seeded voyages plus a grep of every emitter in `src/`) and they
+ *       cost nothing at runtime. Failing them would be a gate deciding on its own to delete four
+ *       records of intent, against the standing "the default is KEEP". Reported in docs/AUDIO.md
+ *       §1c for a person to rule on. See the note above rule (c)'s code.
+ *
+ * RED-PROOFED IN THIS FILE, every run. The header used to cite a one-off run against an old commit
+ * (`git show 95ca2d7:src/ui/audio.js`), which is evidence nobody re-checks. Now the gate builds a
+ * MUTANT of the real source for each of its five rules, runs itself against it, and fails if the
+ * mutant passes or fails on the wrong rule — so a rule that stops being able to go red is itself
+ * caught. A case that cannot fail is not evidence and does not count (CLAUDE.md rule 6).
  *
  * Plain Node, no test library, no browser globals touched — same shape as every other `scripts/*`
- * gate. Optional first CLI arg overrides the file path (used only for the red-proof run above; the
- * real gate always reads the live file with no arguments).
+ * gate. Optional first CLI arg overrides the file path; the red-proof children carry one, which is
+ * also what stops the self-test recursing. The real gate reads the live file with no arguments.
  */
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -134,17 +152,21 @@ if (volStart === -1) {
     names.push(stem);
     if (Number(value) === 1) untouched.push(stem);
   }
-  /* ⛔ A GAIN OF 1 IS NOT AN OVERSIGHT HERE — IT IS HIS RULING, AND THIS CHECK USED TO CONDEMN IT.
-     Wyatt, 2026-09-06 (q7, DECISIONS.md): "level everything together, once, after all files are in."
-     Nine stems sit at 1 deliberately, and five of them are at 1 for a STRONGER reason than waiting:
-     the cork pop and the four "Sounds of the Voyage" picks were rendered from their own tuner pages
-     AT THE LEVEL HE AUDITIONED, so 1 plays them exactly as he dialled them. Normalising those to a
-     target would undo his own ear — measured 2026-09-18, it would raise them 3.1x to 4.0x.
-     The old rule said "docs/AUDIO.md DEFECT-3 carries the measured replacement for each", which was
-     FALSE TWICE: DEFECT-3's table holds six different stems and no value for any of these nine. A
-     check that is wrong about its own evidence is how a settled ruling gets overturned by a session
-     doing what it was told. What is actually worth guarding is that every stem is DECLARED — an
-     absent key and a key at 1 behave identically at runtime, and only one of them looks decided. */
+  /* ⛔ A GAIN IS NEVER CONDEMNED BY ITS VALUE HERE, and the history is worth keeping because this
+     check twice reached for a rule of that shape and was twice wrong.
+     Attempt 1 said "every stem must differ from the untouched default 1, and docs/AUDIO.md DEFECT-3
+     carries the measured replacement for each" — FALSE TWICE: DEFECT-3's table holds six different
+     stems and no value for any of the nine it accused, and those nine sat at 1 by Wyatt's own q7
+     ruling (2026-09-06, "level everything together, once, after all files are in").
+     Attempt 2 would have been "a gain of 1 is his q7 ruling, leave it alone" — which went stale in
+     twelve days: on 2026-09-18 he put the last five in scope himself ("It should relevel them too;
+     I haven't heard them properly") and the levelling pass landed, so only four stems are at 1 now
+     and every one of them for its own stated reason.
+     THE LESSON, and why the rule below is about DECLARATION rather than value: a gain is a matter
+     of his ear, and a gate cannot hear. What a gate CAN prove is that every stem is declared (an
+     absent key and a key at 1 behave identically at runtime, and only one of them looks decided),
+     that every declared gain keeps its file under the peak ceiling, and that no cue names a file
+     that is not there. Those are rules (b), (d) and (c). */
   const spec = existsSync(SFX_DIR)
     ? readdirSync(SFX_DIR).filter(f => f.endsWith(".mp3")).map(f => f.replace(/\.mp3$/, ""))
     : [];
@@ -159,6 +181,88 @@ if (volStart === -1) {
   tally = { files: spec.length, inVolume: count, atOne: untouched.length, skipped: skipped.length };
 }
 
+/* ---- (c) EVENT_SOUND names no stem that is not in sfx/ ----
+   A cue pointing at a file that is not there is silence that looks like a decision — the same
+   family of fault as DEFECT-1, where a stem that existed could never be reached. This is the
+   mirror: a reachable cue whose file does not exist. Only NAMED stems are checked; `null` is
+   explicit silence and is the file's own convention for a moment that should make no sound.
+
+   DEAD KEYS ARE DELIBERATELY NOT FAILED HERE, and the reason is evidence, not leniency. Measured
+   2026-09-18 over 200 seeded voyages plus a grep of every emitter in src/: seven EVENT_SOUND keys
+   name an event nothing emits — `fish`, `anchor`, `shipwrecked`, `dodge` (which name real stems)
+   and `moored`, `idle`, `bakeoff` (explicit silence). They cost nothing at runtime: an event that
+   never fires never reaches the lookup. Failing them would be a gate deciding, on its own, to
+   delete four records of intent — and the standing ruling is that the default is KEEP. They are
+   reported in docs/AUDIO.md §1c instead, where a person can rule on them. */
+const evSoundStems = [];
+{
+  const s0 = src.indexOf("const EVENT_SOUND = {");
+  if (s0 !== -1) {
+    const open = src.indexOf("{", s0);
+    let depth = 0, end = -1;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end !== -1) {
+      const body = stripComments(src.slice(open + 1, end));
+      for (const m of body.matchAll(/[A-Za-z_$][A-Za-z0-9_$]*\s*:\s*["']([A-Za-z0-9_-]+)["']/g))
+        evSoundStems.push(m[1]);
+    }
+  }
+}
+if (existsSync(SFX_DIR)) {
+  const onDisk = new Set(readdirSync(SFX_DIR).filter(f => f.endsWith(".mp3")).map(f => f.replace(/\.mp3$/, "")));
+  const ghosts = [...new Set(evSoundStems)].filter(n => !onDisk.has(n));
+  if (ghosts.length)
+    failures.push(`EVENT_SOUND names ${ghosts.length} stem(s) with no file in sfx/: ${ghosts.join(", ")} — the cue fires and nothing is heard, which reads as a decision and is not one`);
+}
+
+/* ---- (d) no gain pushes a stem's true peak above the ceiling ----
+   The mix (2026-09-18) raises five stems by 9-12 dB, so this is the rule that makes those safe to
+   commit: gain x file-peak must stay under SFX_PEAK_CEILING_DBFS. The peaks are MEASURED and live
+   in SFX_TRUE_PEAK_DBFS in the file under test, so there is no second copy to keep in step and a
+   re-exported file changes one number.
+   THE ONE EXCEPTION IS NAMED, NOT HIDDEN: `battle-swords` measures +0.2 dBFS in the file itself,
+   above the ceiling before any gain is applied. Luis checked it on 2026-09-18 and found it fine,
+   and Wyatt relayed that ruling, so it is a judged exception rather than an outstanding fault. The
+   gate still checks that its GAIN does not make it worse than the file already is. */
+{
+  const peaks = {};
+  const p0 = src.indexOf("const SFX_TRUE_PEAK_DBFS = {");
+  if (p0 === -1) {
+    failures.push("could not find `const SFX_TRUE_PEAK_DBFS = {` — the measured true peaks are this rule's only evidence; re-anchor it rather than typing peaks in here");
+  } else {
+    const open = src.indexOf("{", p0), close = src.indexOf("}", open);
+    for (const m of stripComments(src.slice(open + 1, close)).matchAll(/["']([A-Za-z0-9_-]+)["']\s*:\s*(-?[0-9.]+)/g))
+      peaks[m[1]] = Number(m[2]);
+  }
+  const ceilM = src.match(/const SFX_PEAK_CEILING_DBFS\s*=\s*(-?[0-9.]+)/);
+  const ceiling = ceilM ? Number(ceilM[1]) : null;
+  if (ceiling == null) failures.push("could not find `const SFX_PEAK_CEILING_DBFS = …` — the ceiling must be read from the file, never typed in the gate");
+
+  const volStart2 = src.indexOf("const SFX_VOLUME = {");
+  if (volStart2 !== -1 && ceiling != null) {
+    const open = src.indexOf("{", volStart2), close = src.indexOf("}", open);
+    const body = stripComments(src.slice(open + 1, close));
+    const undeclared = [], over = [];
+    for (const m of body.matchAll(/["']?([A-Za-z0-9_-]+)["']?\s*:\s*([0-9.]+)/g)) {
+      const stem = m[1], gain = Number(m[2]);
+      if (!(stem in peaks)) { undeclared.push(stem); continue; }
+      const filePeak = peaks[stem];
+      const played = filePeak + 20 * Math.log10(gain);
+      // A file already over the ceiling may not be pushed FURTHER by its gain (gain <= 1); every
+      // other stem must land under the ceiling outright.
+      const ok = filePeak > ceiling ? gain <= 1 : played <= ceiling + 1e-9;
+      if (!ok) over.push(`${stem} (gain ${gain} x file peak ${filePeak} dBFS = ${played.toFixed(1)} dBFS)`);
+    }
+    if (undeclared.length)
+      failures.push(`SFX_TRUE_PEAK_DBFS has no measured peak for ${undeclared.length} stem(s) in SFX_VOLUME: ${undeclared.join(", ")} — a gain whose peak nobody measured cannot be checked against the ceiling`);
+    if (over.length)
+      failures.push(`${over.length} gain(s) put a stem's true peak above the ${ceiling} dBFS ceiling: ${over.join("; ")} — turn the gain down or re-export the file quieter`);
+  }
+}
+
 if (failures.length) {
   console.error(`audio_map_check: ${failures.length} problem(s) in ${TARGET}\n`);
   for (const f of failures) console.error("  - " + f);
@@ -167,6 +271,68 @@ if (failures.length) {
 /* THE FILTER SAYS ITS OWN SIZE, on every run, zeroes included — a silent skip of 0 and a silent
    skip of 12 read identically and the difference is the whole result. */
 if (tally) {
-  console.log(`audio_map_check: ${tally.files} file(s) in sfx/ — ${tally.inVolume} declared in SFX_VOLUME (${tally.atOne} of them at gain 1, his q7 ruling, not an oversight); ${tally.skipped} skipped as the ambience bed / the song, which carry their own gains (AMBIENCE_FILES, MUSIC_FILE).`);
+  console.log(`audio_map_check: ${tally.files} file(s) in sfx/ — ${tally.inVolume} declared in SFX_VOLUME (${tally.atOne} of them at gain 1, each for its own stated reason after the q7 levelling pass of 2026-09-18); ${tally.skipped} skipped as the ambience bed / the song, which carry their own gains (AMBIENCE_FILES, MUSIC_FILE).`);
 }
-console.log(`audio_map_check: OK — no duplicate EVENT_SOUND key, every stem in sfx/ is declared (a gain of 1 is a decision here, not an oversight — q7) (${TARGET})`);
+console.log(`audio_map_check: OK — no duplicate EVENT_SOUND key; every stem in sfx/ is declared; EVENT_SOUND names no missing file; no gain breaches the peak ceiling (${TARGET})`);
+
+/* ================= RED-PROOF — the gate proves its own rules can fail =================
+   A case that cannot go red is decoration, and it lends its green to the cases beside it. So each
+   rule below is run against a MUTANT of the real source, built in memory, and must be caught. The
+   mutants are deliberately the smallest plausible mistakes, not absurd ones — each is a thing a
+   session could really do while editing the mix.
+
+   Only the real run (no path argument) red-proofs; the child runs carry a path, which is also what
+   stops this recursing. */
+if (!process.argv[2]) {
+  const { writeFileSync, mkdtempSync } = await import("node:fs");
+  const { spawnSync } = await import("node:child_process");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "audiomap-redproof-"));
+  /* THE MUTATIONS MATCH WHATEVER THE VALUE IS, never a literal like `"drumroll": 1.51`. Written
+     with the numbers in them first, they went blind the same day — the mix was re-dialled, the
+     mutations matched nothing, and two rules silently stopped being evidence. The gate caught its
+     OWN decoration (the "changed NOTHING" arm below is what fired), which is the whole reason that
+     arm exists: a mutation that does not mutate reads exactly like a rule that cannot fail. */
+  const mutants = [
+    ["(a) a duplicate EVENT_SOUND key",
+      s => s.replace(/(\n\s*pass: "fishing",)/, '$1\n  pass: "storm",'),
+      /mapped 2 times/],
+    ["(b) a stem in sfx/ that SFX_VOLUME does not declare",
+      s => s.replace(/\n\s*"drumroll":\s*[0-9.]+,/, "\n"),
+      /does not mention 1 stem/],
+    ["(c) EVENT_SOUND naming a file that is not in sfx/",
+      s => s.replace(/sail: "ship-move"/, 'sail: "ship-move-LOUD"'),
+      /no file in sfx\//],
+    ["(d) a gain that pushes a true peak over the ceiling",
+      s => s.replace(/"cork-pop":\s*[0-9.]+,/, '"cork-pop": 9,'),
+      /above the -1 dBFS ceiling/],
+    /* Scoped to the PEAKS table by slicing rather than by a clever regex: `"cork-pop": …` appears
+       in both tables, and a pattern that tried to tell them apart by the sign of the number would
+       go blind the day a gain went negative or a peak went positive (battle-swords already has). */
+    ["(d) a stem with a gain but no measured peak to check it against",
+      s => {
+        const i = s.indexOf("const SFX_TRUE_PEAK_DBFS = {");
+        if (i === -1) return s;
+        const j = s.indexOf("}", i);
+        return s.slice(0, i) + s.slice(i, j).replace(/"cork-pop":\s*-?[0-9.]+,\s*/, "") + s.slice(j);
+      },
+      /no measured peak/],
+  ];
+  const bad = [];
+  for (const [what, mutate, expect] of mutants) {
+    const mutated = mutate(src);
+    if (mutated === src) { bad.push(`${what}: the mutation changed NOTHING — this case cannot fail and is not evidence`); continue; }
+    const f = join(dir, "audio.js");
+    writeFileSync(f, mutated, "utf8");
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), f], { encoding: "utf8" });
+    const out = (r.stdout || "") + (r.stderr || "");
+    if (r.status === 0) bad.push(`${what}: the mutant PASSED — the rule cannot fail`);
+    else if (!expect.test(out)) bad.push(`${what}: the mutant failed, but on the wrong rule (wanted ${expect}) — got: ${out.trim().split("\n").slice(0, 3).join(" | ")}`);
+  }
+  if (bad.length) {
+    console.error(`audio_map_check RED-PROOF FAILED — ${bad.length} rule(s) cannot catch what they claim to:\n`);
+    for (const b of bad) console.error("  - " + b);
+    process.exit(1);
+  }
+  console.log(`audio_map_check: red-proofed — all ${mutants.length} rules go red on a mutant of the real file (duplicate key, undeclared stem, missing file, over-ceiling gain, unmeasured peak).`);
+}

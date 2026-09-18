@@ -139,25 +139,58 @@ strays.length
         `The seam is the SCREEN being up, never a game tier — a host path and a guest path is drift.`)
   : ok("no file outside src/ui/lobby.js starts or stops the bed");
 
-/* 6 — his tuned numbers survive as named constants a human can find and change. */
+/* 6 — his tuned numbers survive as named constants a human can find and change.
+
+   ⭐ THE THREE BED LEVELS MOVED ON 2026-09-18 and this list moved with them, in the same commit.
+   He re-dialled the bed in the Sea Bed Tuner alongside the SFX levelling pass and RAISED all three,
+   while cutting almost every effect a player hears often — the sea comes up and the game's chatter
+   comes down. The rates were NOT re-dialled and did not move.
+
+   THE SUPERSEDED VALUES ARE KEPT HERE AS THE RECORD, never deleted: a superseded ruling is still a
+   ruling, and the failure this guards against is somebody restoring an older number from an older
+   page believing it is the live decision.
+       2026-09-07 (superseded): sea 0.596 · gull 0.168 · creak 1.122
+       2026-09-18 (live):       sea 0.695 · gull 0.335 · creak 1.585 */
 const wants = [
-  ["AMBIENCE_SEA", 0.596], ["AMBIENCE_GULL", 0.168], ["AMBIENCE_CREAK", 1.122],
+  ["AMBIENCE_SEA", 0.695], ["AMBIENCE_GULL", 0.335], ["AMBIENCE_CREAK", 1.585],
   /* ⭐ REVERSED BY HIS EARS, 2026-09-07 playtest sound sheet item 3: "Creaks should be every 8
      seconds; gulls every 14 seconds." That overrides the 10/13 he dialled in the tuner the same
      day — the tuner was a slider, the playtest was a game. The later ruling wins, and the older
-     pair is written here rather than deleted so nobody restores it from the tuner artifact. */
+     pair is written here rather than deleted so nobody restores it from the tuner artifact.
+     UNCHANGED by the 2026-09-18 re-dial: he moved the levels, not the rhythm. */
   ["AMBIENCE_GULL_MEAN_SEC", 14], ["AMBIENCE_CREAK_MEAN_SEC", 8],
   ["AMBIENCE_SPREAD", 0.7], ["AMBIENCE_LIVELINESS", 0.35],
 ];
-const wrong = wants.filter(([k, v]) => {
-  const m = audio.match(new RegExp(`const\\s+${k}\\s*=\\s*([0-9.]+)`));
-  return !m || Number(m[1]) !== v;
-});
+const readConst = (src, k) => {
+  const m = src.match(new RegExp(`const\\s+${k}\\s*=\\s*([0-9.]+)`));
+  return m ? Number(m[1]) : null;
+};
+const wrong = wants.filter(([k, v]) => readConst(audio, k) !== v);
 wrong.length
   ? bad(`${wrong.length} of Wyatt's tuned value(s) are missing or changed: ` +
         `${wrong.map(([k, v]) => `${k} should be ${v}`).join("; ")}. He dialled these by hand in the ` +
-        `Sea Bed Tuner on 2026-09-07; they are his ruling, not a default to be improved on.`)
+        `Sea Bed Tuner (levels re-dialled 2026-09-18, rates 2026-09-07); they are his ruling, not a ` +
+        `default to be improved on.`)
   : ok(`all ${wants.length} of his tuned values are present, unchanged`);
+
+/* RED-PROOF for rule 6, in this file rather than in a transcript nobody re-reads. Each of his
+   values is nudged in a copy of the source held in memory, and the rule must catch every one — so
+   a rule that stops being able to go red (a renamed constant, a regex that no longer matches) is
+   itself caught, instead of quietly passing forever. Rule 6 is exactly the shape that rots: it
+   pins numbers, and numbers get re-dialled. */
+{
+  const blind = [];
+  for (const [k, v] of wants) {
+    const live = new RegExp(`const\\s+${k}\\s*=\\s*${String(v).replace(".", "\\.")}`);
+    if (!live.test(audio)) { blind.push(`${k}: the red-proof cannot even find its own anchor in audio.js`); continue; }
+    const mutated = audio.replace(live, `const ${k} = ${v + 0.111}`);
+    if (mutated === audio) { blind.push(`${k}: the mutation changed NOTHING — this case cannot fail`); continue; }
+    if (readConst(mutated, k) === v) blind.push(`${k}: the mutant still reads as his value — the rule would not catch a drift here`);
+  }
+  blind.length
+    ? bad(`rule 6 cannot catch a drift in ${blind.length} of his value(s): ${blind.join("; ")}`)
+    : ok(`rule 6 is red-proofed — all ${wants.length} of his values go red when nudged in a mutant of audio.js`);
+}
 
 /* ================= THE THREE-WAY SOUND SWITCH, and the music it gates ================= */
 /* Wyatt, 2026-09-07: "Make sure The audio/mute switch is 3-way— sound+music, sound, mute— repeat

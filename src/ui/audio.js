@@ -33,60 +33,169 @@ const SFX_DIR = "sfx/";
 // The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
 // runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
 const SFX_FILES = ["abacus-click", "award-whoosh", "coin-chink", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-squawk", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
-// Per-stem relative gain — CONTEXT.md "Claude's Discretion": the single tuning point for loudness
-// normalising, so a by-ear browser pass adjusts one number per sound without restructuring
-// anything else. Every stem defaults to 1 (no normalising applied yet).
-// DEFECT-3 (docs/AUDIO.md §1): every value was still 1, so the six stems had never been levelled
-// against each other — a 15.6 dB spread, measured EBU R128. The sword clash was about six times
-// louder than a crate being loaded, and the two extremes sat in the worst possible places: the
-// LOUDEST file is what fires when you run out of time, and the QUIETEST is the victory sound.
-// These are the doc's measured figures, not guesses. Integrated / true peak / gain:
-//   battle-swords   -16.3 LUFS / +0.2 dBFS (clipped IN THE FILE) -> 0.46
-//   fishing         -21.2      / -4.3                            -> 0.81
-//   storm           -21.7      / -1.5                            -> 0.86
-//   coin-flip       -26.8      / -4.3                            -> 1.45  (near the ceiling)
-//   ship-move       -27.7      / -11.3                           -> 1.72
-//   store-ingredient -31.9     / -12.4                           -> 2.79
-// Gains above 1 are safe here BECAUSE the true peaks are so far down: the largest boost, 2.79x on
-// store-ingredient (+8.9 dB against a -12.4 dBFS peak), still lands near -3.5 dBFS.
-// STILL OUTSTANDING and NOT fixed by a gain: battle-swords is clipped inside the file itself
-// (+0.2 dBFS). Turning it down fixes the balance, never the distortion — that needs a fresh export.
+/* ================= THE MIX — his q7 levelling pass, 2026-09-18 ================= */
+/* Per-stem relative gain: the single tuning point for loudness, so a by-ear pass adjusts one
+   number per sound without restructuring anything else.
+
+   ⭐ THIS IS THE ONE LEVELLING PASS HE ORDERED. Wyatt's q7 ruling (2026-09-06) was "level
+   everything together, once, after all files are in", and on 2026-09-18 he put the last five in
+   scope himself: "It should relevel them too; I haven't heard them properly." So every stem below
+   is levelled here, including the cork pop and the four "Sounds of the Voyage" picks that used to
+   sit at 1 because they were rendered at the level he auditioned on a tuner page. THAT HISTORY IS
+   STILL TRUE and is kept beside each one — hearing a sound alone on a tuner page is not hearing it
+   in a game under an ocean bed, a fiddle and eight other effects, and that gap is what he is
+   naming. What changed is the conclusion, not the measurement.
+
+   ⛔ WHY LOUDNESS ALONE WAS THE WRONG YARDSTICK, and this is the whole lesson of the pass.
+   The six stems below were levelled in 2026-08 by EBU R128 integrated loudness, every one brought
+   to the same -23 LUFS. That matches how loud a sound is WHEN IT PLAYS and is blind to HOW OFTEN
+   IT PLAYS — so the sounds a player hears fifty times a voyage were boosted to match sounds heard
+   once. He found all three of the worst offenders by ear before anyone measured it:
+     "the coin flips are too loud, the sailing sound is too loud" (coin-flip 1.45, ship-move 1.72)
+     "Muse sound is also too loud by a lot"                        (fishing, ALREADY CUT to 0.81)
+   The muse is the proof: R128 had already turned it DOWN and he still called it much too loud.
+
+   ⭐⭐ EVERY NUMBER BELOW IS HIS, SET BY EAR IN THE TUNER ON 2026-09-18. They are a ruling, not a
+   default for somebody to improve on. A measured proposal was built first (the frequency-weighted
+   line is recorded below, because its METHOD is the thing worth keeping) and he then overrode it
+   with his own ear, which is what his ear is for. Where they differ, HIS NUMBER WINS — and the two
+   biggest disagreements are written down beside their stems so nobody "corrects" them back.
+
+   THE CONDITIONS HE TUNED UNDER, and they matter: **the ambience bed was OFF, the music was ON,
+   master at 0.80.** So the balance between the EFFECTS and the SEA has not yet been heard as a
+   whole — and in the same breath he RAISED the bed (AMBIENCE_SEA/GULL/CREAK below). Nothing here is
+   adjusted for that; it is written down so he can judge it in the game, which is the only place it
+   can be judged.
+
+   THE SHAPE OF WHAT HE DID — he arrived by ear at exactly the axis the first pass lacked. He RAISED
+   THE BED AND LOWERED ALMOST EVERYTHING HEARD OFTEN: sailing 1.72 -> 0.57, the muse 0.81 -> 0.38,
+   the flip 1.45 -> 0.57, the turn bell 1 -> 0.63, a crate 2.79 -> 1.82, the coin tick 3 -> 1. The
+   rare ceremony sounds went UP: crate-squawk 2.10, crate-marimba 1.94, card-swish 1.76, cork-pop
+   1.73, award-whoosh 1.48, drumroll 1.41.
+
+   THE METHOD THAT PREDICTED IT, kept because it was right about the shape and is the yardstick for
+   the next stem that arrives (docs/AUDIO.md §1c has the full two-axis table):
+       target loudness = -16.9 dB - 1.71 dB x log2(plays per voyage)
+   -16.9 is where `battle-won` sits: the loudest once-a-voyage moment, never complained about.
+   1.71 dB per doubling was the smallest slope that cut all three of his complaints by 5 dB.
+   HOW OFTEN EACH IS HEARD IS COUNTED, NEVER GUESSED — 200 seeded voyages, the shipping bot brain,
+   the bake-off ruleset, every play derived from the engine's own event stream. The headline: a
+   player hears `sail` 58 times a voyage and `pass` (the Muse) 32 — 92% and 50% of all turns.
+
+   THE CEILING IS -1 dBFS TRUE PEAK, and every gain below is checked against the file's own measured
+   peak by scripts/audio_map_check.js, which reads SFX_TRUE_PEAK_DBFS. A gain that would breach it
+   cannot be committed. MEASURED AGAINST HIS NUMBERS, 2026-09-18: nothing clips. The six gains above
+   1 land at crate-squawk -12.6, crate-marimba -9.1, store-ingredient -7.2, card-swish -5.1,
+   award-whoosh -9.4, cork-pop -2.6 dBFS, and drumroll at -7.0. The closest to the ceiling is the
+   cork pop, with 1.6 dB to spare.
+
+   MEASURED FIGURES — a measurement is not a setting, so the old ones stand and the new sit beside
+   them. Max momentary loudness (EBU R128) is the yardstick, because it reads a 120ms click and an
+   8s storm on one scale, and because a sliced file (cork-pop, crate-marimba) is played ONE SLOT at
+   a time and max-momentary measures the slot rather than the average over all nineteen.
+   Kept from the 2026-08 pass (integrated / true peak / the gain it produced):
+     battle-swords -16.3 LUFS / +0.2 dBFS -> 0.46   fishing  -21.2 / -4.3  -> 0.81
+     storm         -21.7      / -1.5      -> 0.86   coin-flip -26.8 / -4.3 -> 1.45
+     ship-move     -27.7      / -11.3     -> 1.72   store-ingredient -31.9 / -12.4 -> 2.79
+
+   ⚠ THE SWORD CLASH IS NOT A DEFECT, AND THIS NOTE USED TO SAY IT WAS. `battle-swords` measures
+   +0.2 dBFS true peak — that figure is real and stays. The VERDICT attached to it ("clipped in the
+   file, needs a fresh export") is WITHDRAWN: Luis checked the file on 2026-09-18 and found it fine,
+   and Wyatt relayed it — "luis checked the sword clash and found it fine; fix your notes it is not
+   a problem." So the -1 dBFS ceiling stands for every stem levelled here, and this one file is a
+   known, judged exception rather than an outstanding fault. Nothing downstream should carry it as
+   open work. */
+/* EVERY VALUE IS HIS, tuned by ear 2026-09-18. The comment on each stem says WHERE IT ACTUALLY
+   PLAYS — swept from every call site in src/, not from EVENT_SOUND alone, because eight of these
+   eighteen are played directly from code and never touch that map. He asked for exactly this
+   ("You mislabeled some of the sounds from where they actually appear I think" — he was right). */
 const SFX_VOLUME = {
+  /* ---- the ones he named as too loud, and the rest of the often-heard ---- */
+  /* MUSE — EVENT_SOUND.pass. Heard on HALF of all turns (31.9 a voyage). "Too loud by a lot", his
+     strongest wording, and he is righter than the stem alone explains: THE MUSE IS TWO SOUNDS, this
+     one and the muse coin's chink on the same beat. Measured together at the old gains they peaked
+     at -1.2 dBFS, a whisker off full scale; at his new pair they peak at -14.3. */
+  "fishing": 0.38,
+  /* THE COIN FLIP — playFlip()/startFlipSpinSound(), from the tapped coin (board.js setFlipCoin
+     "spin") and the small coin over a flipping boat (dockcoin.js). 32 a voyage, and that is a
+     FLOOR: the spin sound REPLAYS this stem every 965ms (its own buffer length) for as long as a
+     coin is still spinning, so a slow wire means more. */
+  "coin-flip": 0.57,
+  // SAILING — EVENT_SOUND.sail. The most-heard cue in the game: 58 a voyage, on 92% of all turns.
+  "ship-move": 0.57,
+  /* YOUR TURN — EVENT_SOUND.turn, and the ONE sound only its own seat hears
+     (LOCAL_ONLY_SOUND_EVENTS), so ~16 a voyage rather than 63. It is a SIGNAL TO ACT, not a report
+     of something that happened, which is why it can afford to sit above the reports around it. */
+  "bells": 0.63,
+  // A COIN INTO A PURSE — playCoinChink(), board.js coinArrived, the one door every earning passes
+  // through. 84 a voyage: the single most frequent sound in the game.
+  "coin-chink": 0.66,
+  /* A CRATE — two moments, one stem: bought or traded at a dock (EVENT_SOUND.dock/trade) and the
+     "woomp" as a crate's bounce BEGINS in the hold (playCrateLand, board.js, his 2026-09-18 ask).
+     ⭐ THIS, not `crate-chime`, is the sound of a crate landing in the hold. */
+  "store-ingredient": 1.82,
+  /* THE COIN TICK — playCoinTick(): a coin LEAVING a purse (board.js coinLeft), each bake-off
+     guess, and the End of Voyage stats rolling up. 79 a voyage.
+     ⚠ HE CUT THIS FROM 3 TO 1 — a 9.5 dB drop, the largest single move in his pass, and it REVERSES
+     his own 2026-09-14 ask ("The ticking sound isn't happening as it should… i don't hear it")
+     which is why the 3 was there. Both are his. Recorded rather than reconciled so nobody restores
+     the 3 from the older note believing it is the live decision. Worth knowing when he judges it:
+     the file is the quietest in the game by 5 dB (max momentary -40.2), and he tuned with the
+     ambience bed OFF, so this is the stem most likely to go missing again once the sea is back. */
+  "abacus-click": 1.00,
+
+  /* ---- the ceremony sounds: rare, and he raised almost all of them ---- */
+  /* THE CORK POP — playPop(), popin.js: a crate ARRIVING in a hold at the round's pop-in (one file
+     of 19 slots, a semitone up per pop), and buying a crate at a dock (soundForEvent dock+bought).
+     It sat at 1 because his 55% was baked into the file from the pop-in tuner. Still true; no
+     longer the conclusion — he had not heard it in the game, where it was 12 dB under the mix. */
+  "cork-pop": 1.73,
+  /* THE PAPER SWISH — playCardSwish(): the recipe cards flying in (stage.js entrance), the
+     crow's-nest prompt releasing, and the End of Voyage cards dealing and paging. */
+  "card-swish": 1.76,
+  /* ⭐ NOT A CRATE LANDING IN A HOLD — he flagged the label and he was right. playCrateVerdict(true)
+     is a VERDICT CHIME: a crate you got RIGHT on the bake-off reveal (bakeoff.js), the "BAKED!" wax
+     seal stamping down, and the "best" pill stamping in at the End of Voyage. The label was wrong;
+     the wiring is correct and was not touched. */
+  "crate-chime": 1.00,
+  /* THE MARIMBA — playLidNote(k), 8 slots of 600ms, a step up the scale per lid: each bake-off lid
+     landing (bakeoff.js dropLid), the victory letters, and the End of Voyage dock line. */
+  "crate-marimba": 1.94,
+  // A WRONG CRATE on the bake-off reveal — playCrateVerdict(false). His squawk, picked 2026-09-14.
+  "crate-squawk": 2.10,
+  // EACH AWARD CARD dealing in at the End of Voyage — playAwardWhoosh(), victory.js.
+  "award-whoosh": 1.48,
+  // THE END OF VOYAGE ROLL, before the winner is revealed — playDrumroll(), victory.js.
+  "drumroll": 1.41,
+
+  /* ---- unchanged at his hand ---- */
+  /* THE CLASH — EVENT_SOUND.engage (a fight being CALLED, on every screen) and battleflee.
+     ⚠ NOT A DEFECT, and this note used to say it was: see the withdrawn +0.2 dBFS verdict above. */
   "battle-swords": 0.46,
-  "coin-flip": 1.45,
-  "fishing": 0.81,
-  "ship-move": 1.72,
-  "store-ingredient": 2.79,
-  "storm": 0.86,
-  /* T-073 — DELIBERATELY UNLEVELLED AT 1, and written down rather than omitted.
-     Wyatt's q7 ruling, 2026-09-06: "level everything together, once", AFTER every file is in —
-     partial levelling now would be redone anyway once the ambience bed and the rest are in the
-     mix. An ABSENT key and a key at 1 behave identically at runtime; the difference is that an
-     absent key looks like an oversight and this looks like the decision it is. The levelling pass
-     replaces these two numbers along with all six above. */
-  "battle-won": 1,
-  "bells": 1,
-  "cannon": 1,
-  "drumroll": 1,
-  /* THE CORK POP — also 1, and for a stronger reason than q7: his 55% is already IN the file. It was rendered from the
-     pop-in tuner's own recipe at the volume he dialled, so at 1 it plays exactly as loud as the tuner played it. */
-  "cork-pop": 1,
-  /* THE SOUNDS OF THE VOYAGE HE PICKED (2026-09-14) — 1 for the cork pop's reason: each was rendered from the "Sounds of the
-     Voyage" page's own recipe at the level he auditioned it (every candidate levelled to one loudness, times the page's 70%). */
-  /* THE COIN CLICK AT 3 — Wyatt, 2026-09-14: "The ticking sound isn't happening as it should (or i don't hear it, but i hear
-     every other sound)." It was the quietest stem in the game by far: -38 dB mean against store-ingredient's -31 at a volume of
-     2.79. Three times louder puts it level with the cork pop, which he hears. */
-  "abacus-click": 3,
-  /* THE CHINK SITS AT THE TICK'S LEVEL, on purpose. Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound
-     -- we want a coin 'chink' sound whenever a coin goes into the purse." It replaces the tick in the purse, so it must
-     arrive at the same loudness or the swap reads as a volume change. Measured: the tick renders at 0.084 peak and is
-     lifted x3 here (0.25); chink A renders at 0.175, so x1.45 lands on the same 0.25. (His pick became B on 2026-09-16, a touch fuller: 0.41 of full scale at this gain, measured — left at the same volume setting; if B sits too loud against the other sounds in play, this one number is what moves.) */
-  "coin-chink": 1.45,
-  "award-whoosh": 1,
-  "card-swish": 1,
-  "crate-chime": 1,
-  "crate-marimba": 1,
-  "crate-squawk": 2,   // rendered level peaks -19 dB, under the thud it replaces (-12); doubled so a wrong crate lands as firmly
+  // THE CANNON — EVENT_SOUND.shotLands (a shot getting through) and EVENT_SOUND.ovens (firing up
+  // the bakery). Its -2.0 dBFS transient is the tightest headroom in the table.
+  "cannon": 1.00,
+  // THE STORM — scattered thunder, once when a storm arrives then ~20s apart, on its own quiet bus.
+  "storm": 0.57,
+  // VICTORY — WIN_SOUND, playWinScreen(), victory.js. Heard once.
+  "battle-won": 1.00,
+};
+
+/* MEASURED TRUE PEAK of each stem's own file, dBFS — the ceiling check's evidence, and the reason
+   it is a table rather than a number typed beside each gain. scripts/audio_map_check.js computes
+   `peak + 20*log10(gain)` for every stem and fails if any lands above SFX_PEAK_CEILING_DBFS, so a
+   future gain cannot quietly push a sound into distortion. Re-measure with
+   `ffmpeg -i sfx/<stem>.mp3 -af ebur128=peak=true -f null -` and change the number here; nothing
+   else knows these figures, so there is no second place to keep in step.
+   `battle-swords` at +0.2 is above the ceiling IN THE FILE and is the one judged exception — Luis
+   checked it 2026-09-18 and found it fine (see the note above). The gate names it as such rather
+   than pretending the measurement is different. */
+const SFX_PEAK_CEILING_DBFS = -1;
+const SFX_TRUE_PEAK_DBFS = {
+  "abacus-click": -12.6, "award-whoosh": -12.8, "battle-swords": 0.2, "battle-won": -8.0,
+  "bells": -10.1, "cannon": -2.0, "card-swish": -10.0, "coin-chink": -11.7, "coin-flip": -4.3,
+  "cork-pop": -7.4, "crate-chime": -19.0, "crate-marimba": -14.9, "crate-squawk": -19.0,
+  "drumroll": -10.0, "fishing": -4.3, "ship-move": -11.3, "store-ingredient": -12.4, "storm": -1.5,
 };
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
@@ -136,14 +245,30 @@ const AMBIENCE_FILES = [
   "creak-1", "creak-2", "creak-3", "creak-4", "creak-5", "creak-6",
 ];
 
-/* ⭐ HIS NUMBERS. Wyatt dialled these by hand in the Sea Bed Tuner on 2026-09-07 and pasted the
-   block out of it — https://claude.ai/code/artifact/4623cd73-2340-4611-832f-522ebbf33442 — with
-   "THIS IS AWESOME BUILD IT NOW". They are a ruling, not a default for somebody to improve on.
-   The dB he actually saw on the slider sits beside each one, so the two can never disagree about
-   what he chose. scripts/qa/ambience_one_seam_check.mjs fails if any of them drifts. */
-const AMBIENCE_SEA = 0.596;              // -4.5 dB — the bed everything else sits on
-const AMBIENCE_GULL = 0.168;             // -15.5 dB — well down; raw, the gulls land 12 dB ABOVE the sea
-const AMBIENCE_CREAK = 1.122;            // +1.0 dB — raw, the creaks sit 6 dB UNDER it
+/* ⭐ HIS NUMBERS, and they are a ruling rather than a default for somebody to improve on. Wyatt
+   dialled the bed by hand in the Sea Bed Tuner —
+   https://claude.ai/code/artifact/4623cd73-2340-4611-832f-522ebbf33442 — first on 2026-09-07
+   ("THIS IS AWESOME BUILD IT NOW") and again on 2026-09-18 alongside the SFX levelling pass.
+   scripts/qa/ambience_one_seam_check.mjs fails if any of them drifts.
+
+   ⭐ 2026-09-18 — HE RAISED ALL THREE, and the direction is the point: in the same pass he cut
+   almost every effect a player hears often (see SFX_VOLUME above). The sea comes UP and the game's
+   chatter comes DOWN, which is a different mix, not a louder one.
+
+   THE SUPERSEDED RULING IS KEPT, not reconciled away — a superseded ruling is still a record, and
+   nobody should restore an older value from an older page believing it is the live decision:
+       2026-09-07: sea 0.596 (-4.5 dB) · gull 0.168 (-15.5 dB) · creak 1.122 (+1.0 dB)
+   The rates did NOT move and were not re-dialled: creaks every 8s, gulls every 14s, his 2026-09-07
+   playtest ruling, still live below.
+
+   ⚠ THE CONDITION HE SET THE EFFECTS UNDER, because it bears on this block: he tuned the eighteen
+   SFX gains with THE BED OFF and the music on, master 0.80 — so the bed he raised here was not
+   audible while he was placing the effects against each other. The balance between the SEA and the
+   EFFECTS has therefore not yet been heard as a whole. Nothing here is adjusted for that; it is
+   written down so it can be judged in the game, which is the only place it can be judged. */
+const AMBIENCE_SEA = 0.695;              // -3.2 dB — the bed everything else sits on (was 0.596)
+const AMBIENCE_GULL = 0.335;             // -9.5 dB — raw, the gulls land 12 dB ABOVE the sea (was 0.168)
+const AMBIENCE_CREAK = 1.585;            // +4.0 dB — raw, the creaks sit 6 dB UNDER it (was 1.122)
 /* ⭐ HIS EARS, 2026-09-07 playtest (sound sheet item 3), and they REVERSE the pair he dialled in
    the tuner an hour earlier: "Creaks should be every 8 seconds; gulls every 14 seconds." The hull
    is now the near sound and the birds the far one, which is what a deck actually sounds like.
@@ -1544,7 +1669,7 @@ function playCannon() {
 }
 
 export {
-  SFX_DIR, SFX_FILES, SFX_VOLUME, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
+  SFX_DIR, SFX_FILES, SFX_VOLUME, SFX_TRUE_PEAK_DBFS, SFX_PEAK_CEILING_DBFS, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
   kickAudioSession,
   recoverAudio,
   /* wakeCtx is exported for ONE caller: the gesture listener in src/orchestrator.js. Safari only

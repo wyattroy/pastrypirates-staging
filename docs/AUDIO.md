@@ -104,7 +104,234 @@ was abandoned deliberately when v2 rewrote the event set, and these are **hand-t
 the game outgrew** (CLAUDE.md §5: *never hand-type a number that can be counted*). The 9-versus-25
 gap on the narration side suggests the second, but suggests is not measured.
 
-### THE NINE AT 1 — MEASURED 2026-09-18, DELIBERATELY NOT APPLIED
+## 1c. THE LEVELLING PASS — DONE, 2026-09-18. This is his q7 pass, not an interim tweak.
+
+**Read this before changing any number in `SFX_VOLUME`.** The section below it ("THE NINE AT 1")
+and DEFECT-3 below that are now HISTORY: their measurements stand, their conclusions are spent.
+
+### What he said
+
+> "Sfx leveling adjustment: the coin flips are too loud, the sailing sound is too loud; please do
+> another mixing pass" — then, minutes later, **"Muse sound is also too loud by a lot."**
+
+And, when asked whether the five stems that sat at 1 because he had auditioned them on a tuner page
+should be left alone: **"It should relevel them too; I haven't heard them properly."** That ruling
+is what makes this the **q7 pass** — "level everything together, once, after all files are in" —
+rather than an adjustment to two sounds. Every stem is in it. (The first-home fanfare is still with
+Luis; it will be levelled onto the line below when it lands, which is one number, not a re-pass.)
+
+### Why his complaint was predictable, and why loudness alone was the wrong yardstick
+
+The six stems were levelled in 2026-08 by **EBU R128 integrated loudness**, every one brought to
+the same −23 LUFS. That measures how loud a sound is **when it plays** and is blind to **how often
+it plays** — so the sounds a player hears fifty times a voyage were boosted to match sounds heard
+once a voyage. All three he named are among the four most-heard cues in the game.
+
+**The muse is the proof.** R128 had already turned `fishing` **down** to 0.81 and he still called it
+much too loud — *by a lot*, his strongest wording. A yardstick that cuts a sound and leaves it the
+loudest complaint in the game is measuring the wrong thing.
+
+### ⭐⭐ THE LEVELS ARE HIS, SET BY EAR IN THE TUNER — 2026-09-18
+
+**A measured proposal was built first and he overrode it with his own ear, which is what his ear is
+for.** The method below is kept because it was right about the *shape* and is the yardstick for the
+next stem that arrives; **where the two differ, his number wins.**
+
+**He tuned with the ambience bed OFF, the music ON, master at 0.80.** Write that down every time
+these numbers are quoted: the bed he raised in the same pass was **not audible** while he was
+placing the effects against each other, so **the balance between the sea and the effects has not yet
+been heard as a whole.** Nothing was adjusted for it — it is a thing to judge in the game.
+
+| | he raised the bed | he lowered almost everything heard often |
+|---|---|---|
+| sea | 0.596 → **0.695** | sailing 1.72 → **0.57** |
+| gulls | 0.168 → **0.335** | the muse 0.81 → **0.38** |
+| creaks | 1.122 → **1.585** | the flip 1.45 → **0.57** |
+| rates | **unchanged** (creaks 8s, gulls 14s) | the turn bell 1 → **0.63** · a crate 2.79 → **1.82** |
+| music | **unchanged** at 0.141 | the coin tick 3 → **1.00** |
+
+…while the rare ceremony sounds went **up**: crate-squawk 2.10, crate-marimba 1.94, card-swish 1.76,
+cork-pop 1.73, award-whoosh 1.48, drumroll 1.41.
+
+**That is exactly the frequency axis the first pass lacked, arrived at by ear.** The sea comes up and
+the game's chatter comes down — a different mix, not a quieter one.
+
+**Checked against the ceiling, and nothing clips.** Every gain above 1, with its resulting true peak:
+crate-squawk −12.6 · crate-marimba −9.1 · store-ingredient −7.2 · card-swish −5.1 · award-whoosh −9.4
+· drumroll −7.0 · **cork-pop −2.6**, the closest, with 1.6 dB to spare.
+
+⚠ **One of his numbers reverses an earlier one of his.** `abacus-click` goes **3 → 1.00**, a 9.5 dB
+drop and the largest single move in the pass — and the 3 was there because *he* asked for it on
+2026-09-14 (*"The ticking sound isn't happening as it should… i don't hear it"*). Both are his;
+recorded rather than reconciled. Worth knowing when he judges it: that file is the quietest in the
+game by 5 dB (max momentary −40.2), and **he tuned with the bed off**, so it is the stem most likely
+to go missing again once the sea is back.
+
+### The method it was checked against — the line, fitted to his three complaints
+
+```
+target loudness = −16.9 dB − 1.71 dB × log2(plays per voyage)
+```
+
+- **−16.9** is where `battle-won` sits today: the loudest once-a-voyage moment, never complained
+  about. So the hero beats do not move, and everything else is placed relative to them.
+- **1.71 dB per doubling** is the **smallest** slope that brings all three of his complaints down by
+  at least 5 dB — the point where a change stops being arguable and is simply audible. It is fitted
+  to his ear, not chosen for tidiness.
+- **Ceiling −1 dBFS true peak**, enforced by `scripts/audio_map_check.js` rule (d) against the
+  measured peaks in `SFX_TRUE_PEAK_DBFS`.
+
+**Max momentary loudness** is the loudness column, not integrated: it reads a 120 ms click and an
+8 s storm on one scale (§5 trap 4 — integrated reads anything under 400 ms as silence), and a
+sliced file is played **one slot at a time**, so max-momentary measures the slot rather than the
+average over all nineteen pops. Validated: padding a clip with silence leaves its max-momentary
+unchanged (`card-swish` reads −31.2 either way), so the padded figure for `abacus-click` is comparable.
+
+### The two-axis table — measured both ways, 2026-09-18
+
+Plays per voyage are **counted, not guessed**: 200 seeded voyages, the shipping bot brain, the
+bake-off ruleset, every play derived from the engine's own event stream through `soundForEvent()`.
+Mean voyage: 16.3 rounds, 63.3 turns, 311.7 events.
+
+**"Gain →" is HIS number.** The measured proposal is in the last column for comparison only — it is
+not what shipped, and it is kept because the *method* is the yardstick for the next stem.
+
+| Stem | Plays / voyage | File max-M | As heard before | **His gain** | Move | New peak | *(measured proposal)* |
+|---|---|---|---|---|---|---|---|
+| `coin-chink` | **84.3** | −26.9 | −23.7 | 1.45 → **0.66** | −6.8 dB | −15.3 | *0.9* |
+| `abacus-click` | **78.7** | −40.2 | −30.7 | 3 → **1.00** | **−9.5 dB** | −12.6 | *3 (held)* |
+| `ship-move` | **58.4** | −25.6 | −20.9 | 1.72 → **0.57** | **−9.6 dB** | −16.2 | *0.86* |
+| `coin-flip` | **32.2** ⌊floor⌋ | −20.4 | −17.2 | 1.45 → **0.57** | **−8.1 dB** | −9.2 | *0.56* |
+| `fishing` (Muse) | **31.9** | −18.6 | −20.4 | 0.81 → **0.38** | **−6.6 dB** | −12.7 | *0.45* |
+| `store-ingredient` | **27.9** | −31.9 | −23.0 | 2.79 → **1.82** | −3.7 dB | −7.2 | *2.18* |
+| `cork-pop` | **17.0** | −28.6 | −28.6 | 1 → **1.73** | +4.8 dB | **−2.6** | *1.72* |
+| `bells` | **15.8** *(your seat only)* | −17.6 | −17.6 | 1 → **0.63** | −4.0 dB | −14.1 | *0.49* |
+| `battle-swords` | 5.4 | −14.9 | −21.6 | 0.46 → **0.46** | 0 | −6.5 | *0.46* |
+| `award-whoosh` | 5 | −32.6 | −32.6 | 1 → **1.48** | +3.4 dB | −9.4 | *3.86* |
+| `crate-marimba` | 4.7 | −32.7 | −32.7 | 1 → **1.94** | +5.8 dB | −9.1 | *3.97* |
+| `cannon` | 4.4 | −21.5 | −21.5 | 1 → **1.00** | 0 | −2.0 | *1 (held)* |
+| `storm` | 3.3 | −17.9 | −19.2 | 0.86 → **0.57** | −3.6 dB | −6.4 | *0.86 (held)* |
+| `card-swish` | 3 | −31.2 | −31.2 | 1 → **1.76** | +4.9 dB | −5.1 | *2.81 (clamped)* |
+| `crate-chime` | 2.8 | −30.7 | −30.7 | 1 → **1.00** | 0 | −19.0 | *3.66* |
+| `crate-squawk` | 1.9 | −35.1 | −29.1 | 2 → **2.10** | +0.4 dB | −12.6 | *6.77* |
+| `battle-won` | 1 | −16.9 | −16.9 | 1 → **1.00** | 0 | −8.0 | *1* |
+| `drumroll` | 1 | −20.5 | −20.5 | 1 → **1.41** | +3.0 dB | −7.0 | *1.51* |
+
+**Where he and the measurement agreed closely:** the flip (0.57 vs 0.56), the cork pop (1.73 vs
+1.72), the drumroll (1.41 vs 1.51), the muse and the sail (both cut hard, he cut harder). **Where
+they parted:** he kept the four ceremony sounds far lower than the line wanted (award-whoosh 1.48 vs
+3.86, crate-marimba 1.94 vs 3.97, crate-chime 1.00 vs 3.66, crate-squawk 2.10 vs 6.77) — the line
+was placing them against once-a-voyage hero beats and his ear says they are decoration, not beats.
+And he cut the coin tick that the line held.
+
+**The two numbers that explain his ear:** `sail` fires on **92% of all turns** (58.4 a voyage) and
+`pass` — the Muse — on **50% of them** (31.9). The flip's 32.2 is a **floor**, because
+`startFlipSpinSound()` replays the stem every 965 ms (its own buffer length) for as long as a coin
+is still spinning, so a slow wire means more.
+
+### "By a lot" is the PILE, not only the stem — measured
+
+**The Muse is two sounds.** The `pass` event plays `fishing`, and it carries `coins: passCoin`, so
+the muse coin flies to the purse and **chinks** on the same beat. Measured together:
+
+| | `fishing` | `coin-chink` | the moment |
+|---|---|---|---|
+| **before** | −6.1 dBFS | −8.5 dBFS | **−1.2 dBFS** — a whisker off full scale |
+| **after** | −11.2 dBFS | −12.6 dBFS | **−5.9 dBFS** |
+
+So the moment drops **4.7 dB** on top of the stem's own **5.1 dB**. That is why this one earned his
+strongest wording, and why cutting `fishing` alone would have under-delivered.
+
+### ⭐ WHERE EACH STEM ACTUALLY PLAYS — the corrected labels
+
+He flagged this and he was right: *"You mislabeled some of the sounds from where they actually
+appear I think."* **Eight of the eighteen never touch `EVENT_SOUND` at all** — they are played
+directly from code, so a label derived from that map alone is a guess. Swept from **every call site
+in `src/`**, 2026-09-18:
+
+| Stem | Where it actually plays |
+|---|---|
+| `ship-move` | A captain **choosing to sail** (`EVENT_SOUND.sail`). Never the storm moving you — he removed that. |
+| `fishing` | **The Muse** (`EVENT_SOUND.pass`) — the radial builds Muse as `value: "pass"`. Also the anchor family by name, but `fish`/`anchor` are dead keys. |
+| `coin-flip` | **A coin spinning** — the tapped coin on the board, and the small coin over a flipping boat. It **repeats** every 965 ms while the coin is still spinning. |
+| `bells` | **Your turn**, and only on **your own screen** — the one seat-gated sound in the game. |
+| `coin-chink` | **A coin going INTO a purse** — one door for every earning (a dock's treasure, a won call's bounty, a muse coin, a trade's sale). |
+| `abacus-click` | **A coin going OUT of a purse**, plus each bake-off guess and the End of Voyage stats rolling up. |
+| `store-ingredient` | **A crate landing in the hold** (the "woomp" as its bounce begins), and a crate taken at a dock or in a trade. |
+| `cork-pop` | **A crate arriving at the round's pop-in** (19 slots, a semitone up per pop), and **buying** a crate at a dock. |
+| `card-swish` | **The recipe cards flying in**, the crow's-nest prompt releasing, and the End of Voyage cards dealing and paging. |
+| **`crate-chime`** | ⚠ **NOT a crate landing in the hold.** A crate you got **RIGHT on the bake-off reveal**, plus the "BAKED!" wax seal and the "best" pill stamping down at the End of Voyage. |
+| `crate-squawk` | A crate you got **WRONG** on the bake-off reveal. |
+| `crate-marimba` | **Each bake-off lid landing** (8 slots, a step up the scale), the victory letters, the End of Voyage dock line. |
+| `award-whoosh` | **Each award card dealing in** at the End of Voyage. |
+| `drumroll` | The End of Voyage roll, **before the winner is revealed**. |
+| `battle-won` | **The win screen.** Heard once. |
+| `battle-swords` | **A fight being CALLED** (`engage`), and fleeing one. Not the fight resolving. |
+| `cannon` | **A shot landing**, and **firing up the bakery** (`ovens`). |
+| `storm` | **Scattered thunder** — once as a storm arrives, then ~20 s apart, on its own quieter bus. |
+
+#### His `crate-chime` question, answered
+
+> *"crate-chime: This is not the sound of a crate landing in the hold."*
+
+**The label was wrong; the wiring is right — and they needed different answers, which is why it was
+worth checking rather than assuming.** `crate-chime` is played by `playCrateVerdict(true)` in three
+places, none of them a hold: the bake-off reveal, the "BAKED!" seal, and the "best" pill. **The
+sound of a crate landing in the hold is `store-ingredient`** — his own 2026-09-18 ask, *the old
+crate "woomp" as the bounce BEGINS*. **Nothing was re-wired.** The stem's *name* is what invites the
+confusion; renaming a shipped file is a bigger change than this pass, and is not worth doing quietly.
+
+### What the measured method predicted, and how his ear ruled
+
+The predictions are kept because they are the honest test of the method — and two of the three held:
+
+1. **`bells` (your turn) — the line wanted −6.2 dB and called it the riskiest number in the table**,
+   because it is the one cue that is a **signal to act** rather than a report, and the only sound
+   just its own seat hears. **He cut it 4.0 dB** — the same direction, less far. His ear and the
+   line agree that the bell was too loud and disagree by 2 dB about how much. **If a turn ever goes
+   unnoticed, this is still the first number to put back.**
+2. **`coin-chink` — predicted −4.1 dB, he cut −6.8 dB.** The most frequent sound in the game.
+3. **`store-ingredient` — predicted −2.1 dB, he cut −3.7 dB.**
+4. **The ceremony sounds: the line was WRONG and his ear corrected it.** The line wanted them up
+   9–12 dB (placing them against once-a-voyage hero beats); he put them up **0.4–5.8 dB**. The line
+   had no way to know that a bake-off chime is *decoration* rather than a beat — it treated "rare"
+   as "important", and those are different things. **That is the method's real limitation, found by
+   his ear in one pass, and it is the reason the line is a starting point and not an answer.**
+
+### The dead `EVENT_SOUND` keys — verified, reported, NOT changed
+
+A CEO review flagged `fish` and `shipwrecked` as matching no emitted event. **Confirmed, and there
+are seven, not two.** Measured 2026-09-18 two ways — 200 seeded voyages (every event kind the engine
+produced) and a grep of every emitter in `src/`:
+
+| Key | Maps to | Emitters in `src/` |
+|---|---|---|
+| `fish` | `fishing` | 0 |
+| `anchor` | `fishing` | 0 |
+| `shipwrecked` | `storm` | 0 |
+| `dodge` | `battle-swords` | 0 |
+| `moored`, `idle`, `bakeoff` | `null` (explicit silence) | 0 |
+
+**Not changed, and that is a decision.** They cost nothing at runtime — an event that never fires
+never reaches the lookup — and the standing ruling is that **the default is KEEP**: they are records
+of intent, and deleting them is a person's call, not a gate's. `audio_map_check.js` says so in its
+own header rather than failing on them.
+
+⚠ **One is worth a human eye: `shipwrecked: "storm"`.** If that event ever came back, it would put
+the 8-second storm bed on the **master** bus at full level — which is DEFECT-2 below, exactly. The
+comment beside `anchorHold` already warns about this shape. Worth deleting or re-pointing the day
+anyone touches it.
+
+---
+
+### THE NINE AT 1 — MEASURED 2026-09-18, SUPERSEDED THE SAME DAY (kept: the measurements are still good)
+
+> **⚠ THE CONCLUSION BELOW IS SPENT — see §1c above.** This section said "⛔ DO NOT APPLY THAT LAST
+> COLUMN WHOLESALE — it would undo his own ear on five of the nine". **He overruled it himself on
+> 2026-09-18**: *"It should relevel them too; I haven't heard them properly."* Auditioning a sound
+> alone on a tuner page is not hearing it in a game, and that gap is what he was naming. **The
+> measurements below stand; the instruction not to move them does not.** Left rather than deleted,
+> because the *reason* those five were at 1 is still true and still worth knowing.
 
 **Read this before "fixing" the nine gains of 1 in `SFX_VOLUME`.** A gate condemned them on
 2026-09-18 with the message *"docs/AUDIO.md DEFECT-3 carries the measured replacement for each"* —
@@ -150,7 +377,7 @@ not the nine gains.
 
 | Stem | Integrated | True peak | Suggested `SFX_VOLUME` |
 |---|---|---|---|
-| `battle-swords` | **−16.3 LUFS** | **+0.2 dBFS — clipped** | 0.46 |
+| `battle-swords` | **−16.3 LUFS** | **+0.2 dBFS** *(see the withdrawal below)* | 0.46 |
 | `fishing` | −21.2 | −4.3 | 0.81 |
 | `storm` | −21.7 | −1.5 | 0.86 |
 | `coin-flip` | −26.8 | −4.3 | 1.45 *(near the ceiling)* |
@@ -168,8 +395,23 @@ two extremes sit in the worst possible places:
   placeholder, so it stopped carrying the word. `store-ingredient` still plays a crate being
   loaded, which is what it is for.
 
-Turning `battle-swords` down fixes the balance but **not** the clipping, which is baked into the
-file. That one needs a fresh export regardless.
+~~Turning `battle-swords` down fixes the balance but **not** the clipping, which is baked into the
+file. That one needs a fresh export regardless.~~
+
+> ### ⚠ THE SWORD CLASH IS NOT A DEFECT — the verdict is WITHDRAWN, 2026-09-18
+>
+> **The measurement stands: `battle-swords` is +0.2 dBFS true peak.** That number was measured
+> correctly and is confirmed by a fresh run on 2026-09-18. What was never more than an *inference*
+> from it — "clipped, distorted, needs a fresh export" — **is withdrawn.** Luis checked the file and
+> found it fine, and Wyatt relayed it: *"luis checked the sword clash and found it fine; fix your
+> notes it is not a problem."*
+>
+> **A peak reading is not a verdict on how a file sounds**, and this is the whole lesson: three
+> sessions carried "needs a re-export" as outstanding work on the strength of one number, none of
+> them able to hear the file, while the one person who could hear it had not been asked. The −1 dBFS
+> ceiling still stands for every stem levelled in §1c above; this one file is a **known, judged
+> exception**, and `scripts/audio_map_check.js` rule (d) names it as such rather than pretending the
+> measurement is different. **Nothing downstream should carry this as open work.**
 
 ### Also: three moments are silent by accident, not by decision
 
