@@ -280,7 +280,7 @@ export const WORDS = {
   "trade.walkAway": "🚫 Walk away",
   "trade.refuses": "{q} {q:refuses|refuse} outright",
   "trade.declines": "{q} {q:declines|decline}",
-  "trade.allDeclined": "No captain will part with {want} for {p:that|that offer of yers}.",
+  "trade.allDeclined": "{p} {p:offers|offer} {offer} for {want}. No captain will part with it.",
   "trade.answers": "Fer yer {want} the table answers:<br>{lines}<br>Take a deal, or walk away?",
   "trade.walksAway": "{p} {p:walks|walk} away from the table.",
   "trade.declined": "{q} {q:declines|decline} {p's} offer!",

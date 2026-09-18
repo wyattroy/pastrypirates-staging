@@ -612,7 +612,13 @@ const EVENT_NARRATION={
   parley:(e,at,cellPx,viewerSeat)=>{
     const id={silence:"trade.silence",declined:"trade.allDeclined",walkaway:"trade.walksAway",fellThrough:"trade.declined"}[e.why];
     if(!id)return null;   // a parley recorded before it carried a reason (an old save's replay) says nothing, as it did
-    return {cls:"trade",txt:say(id,{p:seat(e.a),q:e.b==null?null:seat(e.b),want:ilabelImg(e.want)},viewerSeat)};
+    /* `offer` is passed because trade.allDeclined now NAMES THE HAIL, not just its outcome. Wyatt,
+       2026-09-18, watching Flaky Jack: "the narration just said 'no one will part with Wheat for
+       that' — but i got none of the context of him hailing the table. I should!" He was right and it
+       was the odd one out: silence, walksAway and declined all name the hailer; this one named
+       nobody and said "that" about an offer the watcher had never been shown. The event has carried
+       `offer` since resolveHail was written (engine/index.js) — only the sentence threw it away. */
+    return {cls:"trade",txt:say(id,{p:seat(e.a),q:e.b==null?null:seat(e.b),want:ilabelImg(e.want),offer:e.offer},viewerSeat)};
   },
   // v2 rule 5: a call is free and pays a flat bounty. Nothing is ever lost on a wrong one, so
   // there is no "backed the wrong ship (−N🌕)" form any more.
