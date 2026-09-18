@@ -405,6 +405,117 @@ out.** The honest check was comparing the highlight rect's centre against where 
 
 The general form: **verify against an independent path, never against the suspect itself.**
 
+### ONE CONSUMER IS NOT ONE PATH — look where the fact is PRODUCED, not only where it is read
+
+**2026-09-17, and it reached staging.** Wyatt reported coins leaving his purse when he *passed* at a
+dock. The dock event carried only `price`, and the screen was reading `price` as a spend. The fix
+looked textbook: the engine's dock event gained a `paid` field, and the one event consumer's spend
+line changed from `e.price` to `e.paid`.
+
+Asked whether a bot's purse could stand in for his, the session read `consumeEvent`, found **one**
+spend line with no human-vs-bot branch anywhere on it, and said so:
+
+```js
+const spent   = (e.t==="dock" && e.paid>0) ? e.paid : …   // one line
+const spender = (e.t==="refire"||e.t==="powder") ? e.a : e.p;
+if (spent>0 && spender!=null) payOut(spender, spent);      // one door
+```
+
+Every word of that was true. **It was also worthless, because a dock event has two producers:**
+
+| | |
+|---|---|
+| `src/engine/index.js:1173` | a **bot's** dock — got the new `paid` field |
+| `src/ui/flow.js:2023` | a **human's** dock — did not |
+
+So on a human's *purchase*, `e.paid` was `undefined`, `spent` fell to 0, `payOut` was never called,
+and the coins stopped being drawn leaving — **the opposite of the reported fault, on the commonest
+action in the game.** The number still landed correctly, set silently a moment later by
+`showSeatCoins`, so nothing looked wrong unless you were watching for flights. His *pass* was clean
+on that build, but by accident: with no `paid` field at all, `e.paid>0` is false either way.
+
+Measured on a phone, his own seat, same gesture, the two builds differing only in the commit:
+
+| | before | after |
+|---|---|---|
+| the event | `paid=undefined` | `paid=3` |
+| his purse | 5→6→7→8 then **5 in one step** | 3→4→5→6 then 5→4→3 |
+| coins drawn leaving | **0** | 13 |
+
+**IT HAS NOW HAPPENED FOUR TIMES IN ONE DAY, WHICH IS WHY THIS ENTRY IS NOT A STORY.** Every one is
+the same shape — the thing that broke sat upstream of what anyone was watching:
+
+| | what was watched, and was right | what was wrong, upstream of it |
+|---|---|---|
+| the dock spend | `consumeEvent` — one spend line, no seat branch | `ui/flow.js` emitting a dock event without `paid` |
+| rule 10 of the coin gate | the consumer reads `paid`, not `price` | the two emitters had diverged |
+| "a bot's dock pays through payDock", "a human's too" | the ENGINE's purse, which never diverged | what the event told the SCREEN |
+| item 48's camera wait | the camera arriving before the boat moves | `render()` at a `turn` drawing a `sail` that landed DURING the wait, snapping the hull to its destination instead of walking it |
+
+The fourth was never seen by anyone: it was found by **reading what `render()` does at a `turn`
+before trusting a reorder**, which is the habit this entry is asking for.
+
+**AND THE REASON THAT FOURTH ONE ACTUALLY GOT FOUND, which is the difference between a habit and a
+slogan.** The other three each needed a *measurement* — a phone run, a gate, a probe. The fourth
+needed **one read of what `render()` does at a `turn`**, about two minutes. An entry that asks for
+diligence gets filed under "be thorough" and skipped; an entry that asks for something cheap gets
+done. So when you reach for this rule, reach for the cheap end of it first: **read the producer**,
+which is free, before you build an instrument to watch the consumer, which is not. Wy-Blade's
+observation, 2026-09-18, and it is why this entry is worth its length.
+
+**The rule: when you change what an event MEANS, grep for every place that emits it before you
+change the place that reads it.** `grep -n 't:"<name>"' src/` costs two seconds. "There is one
+consumer" is a fact about the consumer and says nothing about how many things speak into it.
+
+The gate that guards it is rule 11 of `scripts/qa/coin_arrival_one_event_check.mjs`: every emitter
+of a dock event must carry the same field set, failing in **both** directions. The existing rule 10
+stayed green throughout, because it reads the consumer and the consumer was right — the divergence
+was upstream of everything that was looking. **That is the argument for convergence over gates:** a
+splint holds two things in step, and the repair is having one of them (backlog item 49).
+
+### A PROBE THAT PRINTS ONLY WHAT IT SET OUT TO MEASURE CAN ONLY CONFIRM
+
+The same episode, and it is the half worth copying. The fault above was found because the probe
+printed the dock event's **raw fields** beside the purse trace — wanted for the report, not for the
+check — and `paid=undefined` was sitting in that line. Nothing downstream can tell `undefined` from
+`0`: both make `e.paid>0` false, so the purse trace it set out to measure was **green**.
+
+In the measurer's own words: *"I did not catch this by being careful, I caught it by being LUCKY in
+what I chose to print. If I had printed only what I set out to measure — did the purse move — every
+number would have been green and I would have sent you a clean bill."*
+
+**So print the raw inputs of the thing you are judging, not only your verdict on it.** The extra
+columns cost nothing and they are where the surprises live. And when a value comes back `undefined`
+where the code should produce `0`, that is never cosmetic — it means a producer you have not read.
+
+### A NUMBER THAT COMES OUT THE SAME ON BOTH SIDES OF THE CHANGE IS NOT MEASURING THE CHANGE
+
+**2026-09-18, and it is the sharpest thing anyone said all night.** Item 48 (hold the camera before
+the board is drawn) made an existing top-bar disagreement much more frequent: four times a voyage
+became **every watched turn, 0.6–0.7 s typical, 3.3 s worst.** The measurer reported it with the
+reassurance that had cleared the original: *"Still 0 tappable in all 13."*
+
+Two faults, and the second is the general one.
+
+**The specific fault: a safety test was used to answer a correctness question.** Wyatt's cover-up
+rule is about ACCESS — something drawn *over* a control a player wants to reach; `0 tappable` is
+exactly its test. A top bar naming the wrong captain is not access, it is **misinformation**. Nothing
+was covered; something was wrong. Reaching for the nearest ruling because its test is already
+implemented is how a rule gets applied outside the thing it was written about. **Check what the rule
+is about, not whether its test happens to pass.**
+
+**The general fault, in the measurer's own words when it took the correction:**
+
+> *"A measurement that returns the same value on both sides of the change I am judging is not
+> measuring the change. I had it in my hand and read it as reassurance."*
+
+`0 tappable` before, `0 tappable` after. That invariance is not evidence the change is harmless — it
+is evidence the instrument is blind to it, and the two are indistinguishable from inside the number.
+**So before quoting a figure in defence of a change, ask what it read on the other side.** If it is
+the same figure, it is not defending anything, and you are one step from shipping a regression with
+a green number beside it. (The other entries in this section are about probes that can only confirm;
+this one is about a probe that cannot *discriminate* — the weaker and commoner failure.)
+
 ### A CHECK BUILT ON YOUR OWN ARITHMETIC IS THE SUSPECT, NOT THE WITNESS
 
 2026-08-14, and the reason it earns its own entry beside the probe-inversion lesson below is the

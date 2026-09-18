@@ -19,7 +19,7 @@ act on right now is a script and a green gate."*
 |---|---|
 | `scripts/build-site.mjs` | assembles the publish set: **221 game files, 7.3 MB**, out of 3,355 tracked files |
 | `scripts/qa/site_build_check.mjs` | gate 142 of 142. Proves every live URL survives, that `classic/`'s 24 files carry through, that `CNAME` never ships, and that a production build is **byte-identical** to the repo |
-| `wrangler.toml` | the build contract, in the repo rather than only in a dashboard |
+| ~~`wrangler.toml`~~ | **deleted 2026-09-15** — one file could not describe two projects; the build contract now lives in [`GIT-AND-DEPLOY.md`](GIT-AND-DEPLOY.md) §5 |
 | the five staging tells | stamp `-staging@<sha>`, `[STAGING]` tab title, `Disallow: /`, no sitemap, `X-Robots-Tag: noindex` — all verified on a real branch build, and absent from production builds |
 
 ---
@@ -37,7 +37,7 @@ act on right now is a script and a green gate."*
 | Build command | `node scripts/build-site.mjs` |
 | Build output directory | `_site` |
 
-> ⚠ **The build command is the one thing a diff cannot show you.** `wrangler.toml` cannot set it for
+> ⚠ **The build command is the one thing a diff cannot show you.** No file in the repo can set it for
 > a Pages project. If a deploy ever publishes the wrong files, check this field first.
 
 ## STEP 2 — create the `staging` branch *(either of us: 1 minute)*

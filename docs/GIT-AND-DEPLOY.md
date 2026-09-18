@@ -284,6 +284,41 @@ never name the production host, and must not be missing.
 
 DNS lives at **Squarespace**: `CNAME` · host `staging` · value `wyattroy.github.io`.
 
+### Cloudflare Pages — the build contract, and why there is no `wrangler.toml`
+
+*(Added 2026-09-15 by the cutover's pre-flight commit, [`PRD-CLOUDFLARE-CUTOVER.md`](PRD-CLOUDFLARE-CUTOVER.md)
+P2. Until that cutover finishes, GitHub Pages still serves both addresses and the subsection above
+is still true.)*
+
+**Settings that live only in a dashboard are settings nobody can review, diff or explain six weeks
+later**, so the contract is written down here. Two Pages projects, one repository:
+
+| Cloudflare Pages project | production branch | serves |
+|---|---|---|
+| `pastrypirates` | `main` | `playpastrypirates.com`, `www.playpastrypirates.com` |
+| `pastrypirates-staging` | **`dev`** | `staging.playpastrypirates.com` |
+
+Both: framework preset **None**, build command `node scripts/build-site.mjs`, output directory
+`_site`, preview branches **None**. Node's version comes from `.nvmrc`, as a bare number — Cloudflare's
+v3 build image rejects codenames like `lts/hydrogen` and does not read `package.json`'s `engines`.
+
+- **The build command is the one field a diff cannot show you.** No file in this repo can set it for
+  a Pages project. If a deploy ever publishes the wrong files, check that field first.
+- **Custom domains live in Cloudflare's dashboard**, so no file here can claim a hostname. **Do not
+  delete `CNAME` until production has left GitHub Pages** — while the apex still resolves to Pages,
+  that file is what holds the domain. `build-site.mjs` already keeps it out of the publish set.
+
+**`wrangler.toml` was written to be this record, and was deleted because it could not be one:**
+1. **It had opted in.** It set `pages_build_output_dir`, and once that key is present Cloudflare says
+   the same fields can no longer be edited in the dashboard — one file at the root governing BOTH
+   projects' output while naming only one of them.
+2. **One file cannot describe two projects.** `[env.<x>]` sections in a Pages `wrangler.toml` target
+   the same project, not a second one.
+3. **The build command is not a Pages key at all**, so its headline value was never available.
+
+*(It also named `staging` as the staging project's production branch. Wyatt ruled that branch is
+`dev`.)*
+
 ### ⚠ EVERY MERGE THAT TOUCHES A LISTED PAGE NEEDS THE SITEMAP COMMAND AFTERWARDS
 
 `scripts/qa/sitemap_lastmod_check.mjs` reads dates from **`git log`, not from disk** — so it cannot

@@ -72,6 +72,9 @@ const MUST_HAVE = [
   "favicon.ico", "favicon.png", "og-image.jpg", "robots.txt", "sitemap.xml",
   "src/main.js", "src/ui/stage.js", "src/engine/index.js", "src/shared/host.js",
   "classic/index.html",
+  /* NOT live today — the one exception to the sentence above. Without it Cloudflare answers every
+     unknown address with the whole game and a 200 (PRD-CLOUDFLARE-CUTOVER P1). */
+  "404.html",
 ];
 
 /* Never publishable. CNAME leads this list for the same reason it led deploy-staging.sh's:
@@ -83,6 +86,7 @@ const MUST_NOT_HAVE = [
   "CNAME", ".planning", ".claude", ".claude-team", "art-review", "notes", "scratchpad",
   "scripts", "docs", "node_modules", "physical-board", "package.json", "package-lock.json",
   ".git", ".gitignore", "cocoa_pirates_sim.py",
+  ".nvmrc",   // Cloudflare's build image reads it from the repo; a player never needs it (PRD P3)
 ];
 
 const fails = [];
@@ -214,6 +218,65 @@ if (files.length) {
       differs.slice(0, 5).join(", ") + (differs.length > 5 ? ", …" : ""));
   } else {
     notes.push(`byte-identical to the repo: ${compared} of ${compared} game files`);
+  }
+}
+
+/* ---- 7. the cache rules reach the addresses Cloudflare actually serves ------------------- */
+/* PRD-CLOUDFLARE-CUTOVER P5. Cloudflare Pages redirects `/about.html` to `/about` and
+   `/classic/index.html` to `/classic/` (its "Serving Pages" doc), so the page a player receives
+   lives at an EXTENSION-LESS address — which matches neither `/` (exact) nor `/*.html`. And
+   `/src/*` is anchored at the root, so `/classic/src/`, v1's modules, matched no rule either. What
+   those rules exist to prevent is a stale module against fresh HTML: a broken game, no error.
+   DERIVED HERE, FROM THE FILES IN THE BUILD, and not imported from build-site.mjs — a derivation
+   the gate shared with the thing it checks could not catch a mistake in that derivation.
+   Two of Cloudflare's own `_headers` limits are checked too: at most 100 rules, and no address
+   written twice (Cloudflare JOINS repeated header values with a comma rather than picking one). */
+if (files.length) {
+  const hdrFile = join(SITE, "_headers");
+  if (!existsSync(hdrFile)) {
+    fails.push("_headers is missing from the build — Cloudflare would apply no cache rule to anything");
+  } else {
+    const rules = new Map();
+    const repeated = [];
+    let current = null;
+    for (const line of readFileSync(hdrFile, "utf8").split("\n")) {
+      if (!line.trim() || line.trim().startsWith("#")) continue;
+      if (!/^\s/.test(line)) {
+        current = line.trim();
+        if (rules.has(current)) repeated.push(current); else rules.set(current, []);
+      } else if (current) {
+        rules.get(current).push(line.trim());
+      }
+    }
+    const REVALIDATE = /^cache-control:\s*public,\s*max-age=0,\s*must-revalidate$/i;
+    const needRevalidate = new Map();   // address pattern -> the published file that puts it there
+    for (const f of files.map(rel)) {
+      if (f.endsWith(".html")) {
+        needRevalidate.set("/" + f.replace(/(^|\/)index\.html$/, "$1").replace(/\.html$/, ""), f);
+      }
+      const segs = f.split("/");
+      const at = segs.indexOf("src");
+      if (at > -1 && at < segs.length - 1) {
+        const dir = "/" + segs.slice(0, at + 1).join("/") + "/*";
+        if (!needRevalidate.has(dir)) needRevalidate.set(dir, `${segs.slice(0, at + 1).join("/")}/ modules`);
+      }
+    }
+    const missed = [];
+    for (const [pattern, why] of needRevalidate) {
+      const cc = (rules.get(pattern) || []).filter((h) => /^cache-control:/i.test(h));
+      if (cc.length !== 1 || !REVALIDATE.test(cc[0])) missed.push(`${pattern} (${why})`);
+    }
+    if (missed.length) {
+      fails.push(`${missed.length} address(es) Cloudflare serves get no must-revalidate rule in _headers — ` +
+        "a stale module against fresh HTML is a broken game with no error message: " + missed.join(", "));
+    } else {
+      notes.push(`_headers: must-revalidate reaches all ${needRevalidate.size} page and module addresses ` +
+        `(${[...needRevalidate.keys()].join(" ")})`);
+    }
+    if (repeated.length) {
+      fails.push(`_headers writes the same address twice (${repeated.join(", ")}) — Cloudflare joins the values with a comma`);
+    }
+    if (rules.size > 100) fails.push(`_headers has ${rules.size} rules — Cloudflare Pages allows 100`);
   }
 }
 

@@ -123,6 +123,13 @@ removed · `X-Robots-Tag: noindex`. A production build has none of them. Both ha
 
 ## 5. Pre-flight — everything that must land before Wyatt touches Cloudflare
 
+> **Landed 2026-09-15 on branch `sep14-cloudflare-preflight`: P1, P2, P3 and P5.** P4 was not taken.
+> Two things in this document were out of date when measured: the publish set is now **257 files,
+> 12.0 MB** (the game grew), not 225 / 7.5 MB — so §8's good build-log line reads `257 files, 12.0 MB`;
+> and P5's *"no `Cache-Control` at all"* is not what Cloudflare does — its Serving Pages doc gives an
+> unmatched asset `public, max-age=0, must-revalidate` by default. P5 made that rule explicit rather
+> than closing a live gap.
+
 ### P0 — TURN OFF DNSSEC AT SQUARESPACE, **A DAY BEFORE ANYTHING ELSE** (blocking, his, 5 minutes)
 
 **This is the finding that reshapes the schedule, and the first draft of this document did not

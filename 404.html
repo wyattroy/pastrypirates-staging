@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lost at sea — Pastry Pirates</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Cloudflare Pages serves this file, as a 404, for any address it cannot find, at ANY depth.
+     Without it, Pages assumes a single-page app and answers every unknown address with the whole
+     game and a 200 (docs/PRD-CLOUDFLARE-CUTOVER.md, P1).
+     So every link here is ROOT-ABSOLUTE (a relative one breaks one folder down), there is no
+     picture (the asset gate resolves page links on disk and cannot follow a leading slash), and no
+     script: nothing to load, nothing to fail. The noindex above is not optional — see P1. -->
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+  /* Own stylesheet, copied by value like about.html and privacy.html (D-07): the pregame card's
+     cream and teal over the game's deep-sea ground. */
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: #123d45; color: #1f4249;
+    font-family: 'Avenir Next', Avenir, 'Segoe UI', 'Trebuchet MS', sans-serif; }
+  .lost { background: linear-gradient(175deg, #ffffff, #fff6c0 250%); border: 3px solid #29a3b2;
+    border-radius: 20px; box-shadow: 0 20px 50px rgba(10,35,40,.5), 0 0 0 6px rgba(253,182,61,.18);
+    max-width: 420px; width: 100%; padding: 28px 24px; text-align: center; }
+  h1 { font-size: 22px; line-height: 1.25; margin: 0 0 18px; }
+  .home { display: inline-block; font-size: 14px; font-weight: 700; padding: 14px 28px;
+    border-radius: 12px; border: 1.5px solid #e89827; background: #fdf3e3; color: #8a5a12;
+    text-decoration: none; }
+  .home:hover { background: #fae7cb; }
+</style>
+</head>
+<body>
+<main class="lost">
+  <h1>That page be lost at sea.</h1>
+  <a class="home" href="/">Sail back to port</a>
+</main>
+</body>
+</html>

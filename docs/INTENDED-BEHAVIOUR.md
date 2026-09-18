@@ -130,6 +130,30 @@ second for it nor move the screen to reach it. Words covered for a moment, or a 
 **For a sea trial's vision judge:** a screenshot showing two things overlapping is not by itself a finding. The finding must
 say how long it lasts, or that the player cannot clear it.
 
+### The top bar can name a different captain from the board for under two seconds, mid-hand-over (2026-09-18)
+
+**What it looks like:** on a watching phone, the highlighted boat in the top bar, the ring on the board and the captains
+row briefly disagree about whose turn it is — or the top bar lights *nobody* while the other two agree.
+
+**Why it is not a fault, measured rather than argued.** A whole driven crew voyage on a 375x812 guest, sampled every
+100 ms: **1638 samples with all three surfaces naming a captain, 33 of them disagreeing, in four runs** — 0.4 s, 0.9 s,
+1.9 s and 0.1 s — plus one run of **2.1 s where the top bar lit nobody at all**, which is an absence and counted
+separately. In every run the ring and the row agreed with each other and the top bar led; the newest event on that
+screen was a `turn`, i.e. the hand-over. And the number that decides it under his rule:
+
+> **0 of 1638 samples had anything tappable. Not one, in any disagreeing run.**
+
+It is the hand-over settling, it is finite and short, and there is nothing a player could act on while it lasts. That is
+his 2026-09-17 rule applied exactly. `whose_turn_shown_once_check` gets no new failing case.
+
+**⚠ AND THE LIMIT OF THAT ARGUMENT, so nobody reaches for it wrongly.** His cover-up rule is about ACCESS — something
+drawn over a control a player wants. This is about a surface saying the wrong NAME, which is misinformation, not
+blockage, and "nothing was tappable" is not by itself a defence of it. What makes this one fine is that it is *short*
+and it is the hand-over. **If a build ever makes it longer or make it happen on every turn, it stops being this entry
+and becomes a question for Wyatt** — frame it to him as "the top bar names the wrong captain for two-thirds of a second
+on every turn you watch", never as a sample count, and let him judge it as a designer. It is not ours to wave through
+on the tappable number alone.
+
 ### The greyed, red-backed ingredient chips are what a captain STILL NEEDS. They are not the hold.
 
 **What it looks like:** the two human captains' ingredients disagree between screens — the host sees

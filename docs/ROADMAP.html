@@ -99,7 +99,7 @@
 <main class="page">
   <header>
     <h1>Pastry Pirates Roadmap</h1>
-    <p class="meta">17 September 2026 · launch 1 October · his cut line: polish can slip, the Cloudflare move and working analytics cannot</p>
+    <p class="meta">Updated 18 September 2026 · launch 1 October · his cut line: polish can slip, the Cloudflare move cannot · today’s build is live to players</p>
   </header>
 
   <nav aria-label="Sections">
@@ -118,7 +118,7 @@
         <tr><td><strong>The tutorial</strong></td><td><span class="tag t-done">Built</span></td><td>The parrot tutorial ships in <code>src/ui/pilot.js</code>, from your eight rulings on 2 September.</td></tr>
         <tr><td><strong>Search</strong></td><td><span class="tag t-part">Half done</span></td><td>The code half is built and gated: robots file, sitemap, and a crawl-intent check that fails the build. The half that matters isn’t started: the brand collision hasn’t been re-measured since 26 August, and there’s no Search Console tag in the page.</td></tr>
         <tr><td><strong>Firebase safety</strong></td><td><span class="tag t-no">Open</span></td><td>The budget alert and the scoped database rules were both recorded as not done on 6 September, and the game writes without signing in. On your pay-as-you-go plan, abuse is a bill, not an outage.</td></tr>
-        <tr><td><strong>The live game vs. the work</strong></td><td><span class="tag t-done">Closing tonight</span></td><td><strong>Your verdict already happened — today.</strong> You played staging .17.5, marked all 18 items “looks right”, gave five problems and said: <em>“do these changes, get them verified, then ship to main.”</em> All five are built. Unless the test re-run finds something real, production goes from 2026.09.13.5 to <strong>2026.09.17.6 tonight</strong>. Dev will confirm when it’s serving.</td></tr>
+        <tr><td><strong>The live game vs. the work</strong></td><td><span class="tag t-done">Shipped 18 Sep</span></td><td><strong>Shipped at 00:18 this morning.</strong> 171 commits reached players in one go: the victory card, the voyage score, the first eighteen cleanup items and your five playtest fixes. I checked it myself — the live page was rewritten at 00:18 and <code>main</code> carries that merge. The gap between what’s built and what’s played is now zero.</td></tr>
         <tr><td><strong>Solo and crew polish</strong></td><td><span class="tag t-cut">Cuttable — your call</span></td><td>Your cut line today: polish slips before the date does.</td></tr>
       </tbody>
     </table></div>
@@ -164,7 +164,7 @@
       <div class="goal"><div><b>You can see how it’s going</b>The counting already works. What’s missing is a page you can tap that shows visits, voyages started and voyages finished.<small>Done when: you open one link on your phone and read today’s numbers without asking me. By 22 Sep.</small></div></div>
       <div class="goal"><div><b>The code stops being copyable</b>The repository goes private, and the staging build survives it.<small>Done when: the project reads private and a no-op push still publishes staging. By 25 Sep.</small></div></div>
       <div class="goal"><div><b>A bill can’t run away</b>The Firebase budget alert set, and the database rules scoped.<small>Done when: an alert exists, and an unauthenticated write to a room is refused. By 26 Sep.</small></div></div>
-      <div class="goal"><div><b>What players get is what we’ve built</b>Two batches, not one. The first is tonight’s: everything since 13 September, on your verdict today. The second is the “every fact decided in one place” cleanup, about 18 of 45 items done, which needs its own staging round and its own verdict.<small>Done when: production reads 2026.09.17.6 tonight, and the second batch has your yes before 30 Sep.</small></div></div>
+      <div class="goal"><div><b>What players get is what we’ve built</b>Two batches, not one. The first is tonight’s: everything since 13 September, on your verdict today. The second is the “every fact decided in one place” cleanup, about 18 of 45 items done, which needs its own staging round and its own verdict.<small><strong>First batch done, 18 Sep 00:18.</strong> The second needs your yes before 30 Sep, and isn’t a launch blocker.</small></div></div>
       <div class="goal"><div><b>Someone can find it</b>Search Console connected, sitemap complete, and one sentence saying which search we promise to win.<small>Done when: the site is confirmed listed, and the promise is written down. By 30 Sep.</small></div></div>
     </div>
     <div class="note"><label for="n-goals">Your notes: The six goals</label><textarea id="n-goals" data-note="goals" data-label="The six goals" rows="2"></textarea></div>
@@ -185,7 +185,7 @@
       <div class="day his"><b>Thu 25</b><span class="who">You · 10 minutes</span><p>Clear the custom domain in the old host’s settings first, then make the repository private, then push anything to <code>dev</code> and watch staging still build. Delete the old staging repository once it does.</p></div>
       <div class="day his"><b>Fri 26</b><span class="who">You · 10 minutes</span><p>Set the Firebase budget alert. Ten minutes, and it is the difference between a surprise and a bill.</p></div>
       <div class="day mine"><b>Fri 26</b><span class="who">Me</span><p>Scope the database rules so a stranger can’t write into your rooms, and put them in the repo where they can be reviewed.</p></div>
-      <div class="day mine"><b>Sat 27 – Sun 28</b><span class="who">Me</span><p>Whole voyages to the end card, in all three modes, on the final build, both crew windows compared at your phone size — this time on the Cloudflare-served live domain, which is the thing no earlier test covers. Only real faults get fixed; polish waits.</p></div>
+      <div class="day mine"><b>Sat 27 – Sun 28</b><span class="who">Me</span><p>Whole voyages to the end card, in all three modes, on the Cloudflare-served live domain, both crew windows compared at your phone size — the thing no automatic check covers. Also a second pass over the database rules with a real crew game, because that is where a silent break would hide. Only real faults get fixed; polish waits.</p></div>
       <div class="day his"><b>Mon 29</b><span class="who">You · 20 minutes</span><p><strong>The second batch, not the first.</strong> Tonight’s build already carries everything you approved today. This slot is for Wy-Blade’s “every fact decided in one place” cleanup — about 18 of 45 items done — which gets its own staging round and its own verdict. If it isn’t ready, it waits; it is not a launch blocker.</p></div>
       <div class="day mine"><b>Tue 30</b><span class="who">Me</span><p>Search Console connected, sitemap completed, share pictures checked. Freeze: nothing else changes before launch.</p></div>
       <div class="day his"><b>Thu 1 Oct</b><span class="who">Launch</span><p>Post it. Then watch three numbers all week: voyages finished, captains who come back, and the Firebase bill.</p></div>
@@ -329,12 +329,22 @@
   <section id="risks" aria-labelledby="risks-h">
     <h2 id="risks-h">What could stop 1 October</h2>
     <ol>
+      <li><strong>The three jobs nothing automatic can check.</strong> This is the sharpest thing anyone said today, and it came from Dev. Overnight, a fix it made for one of your bugs quietly broke a purchase’s coins on staging — <strong>every automated check stayed green the whole hour</strong>, and it was caught only because Wy-Blade ran a phone pose nobody had asked for. The lesson for this plan: <strong>the polish you agreed to cut is the part that has automatic coverage. The cutover, the database rules and the private repository have none.</strong> All three are done by hand, once, on the live domain — and unlike a bad merge, none can be undone by reverting anything. So every spare hour between now and the 26th goes to checking those three, not to the game.</li>
       <li><strong>The domain.</strong> Moving nameservers with the lock still live takes the site down for real players. Handled by doing your five-minute job a day early, and by not touching the live domain until staging has proved itself.</li>
       <li><strong>The bill.</strong> The database answers strangers today, and you’re on a pay-as-you-go plan. Traffic you’re hoping for is also the traffic that bills you. The alert and the scoped rules both land before launch.</li>
       <li><strong>161 commits arriving at once.</strong> Everything since 13 September reaches players in a single merge, so the whole-game check runs on the final build, not on pieces.</li>
       <li><strong>Polish appetite.</strong> The known-bugs list is long and none of it is game-stopping. Your cut line is what protects the date; I’ll hold it unless you say otherwise.</li>
       <li><strong>Nobody comes.</strong> A launch post is one day of attention. The share card and the Daily Recipe are what make day eight look like day one, which is why they lead the after-launch work.</li>
     </ol>
+    <h3>How each unprotected job gets checked, and undone</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Job</th><th>Checked by hand</th><th>If it goes wrong</th></tr></thead>
+      <tbody>
+        <tr><td><strong>The Cloudflare move</strong></td><td>A whole voyage on the live domain, and a crew game across two windows with one at your phone size — after the move, not before. Plus the pages that aren’t the game: About, Rules, Privacy, the not-found page.</td><td>Nameservers point back. Slow, because the internet remembers the old answer for a while, so the old host stays alive and untouched for a week.</td></tr>
+        <tr><td><strong>The database rules</strong></td><td>Two proofs, not one: a stranger’s write is refused, <em>and</em> a real crew game still plays start to finish. Rules that are too tight break multiplayer silently, which no test here would catch.</td><td>Rules revert in seconds from the Firebase console — but only if the old ones were saved first, so that’s step one.</td></tr>
+        <tr><td><strong>The private repository</strong></td><td>Push anything to <code>dev</code> and watch staging still publish. Nothing anywhere promises a build survives a repository going private, so it gets proved rather than assumed.</td><td>Make it public again. Do this <em>after</em> the domain has settled, never on the same day.</td></tr>
+      </tbody>
+    </table></div>
     <div class="note"><label for="n-risks">Your notes: Risks</label><textarea id="n-risks" data-note="risks" data-label="Risks" rows="2"></textarea></div>
   </section>
 
