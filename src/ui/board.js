@@ -2161,11 +2161,21 @@ function departures(seat,coins){
    position between two things drawn in different places — the board and the captains box — so both ends are measured as
    drawn and brought into the one fixed space (fixedOrigin, util.js) before a single number is taken between them. */
 /* ⭐ HIS NUMBERS, 2026-09-16, off the Game Feel Tuner. Each carries the value it replaced. */
-const TREASURE_MS=630, TREASURE_GAP_MS=282, TREASURE_MAX=20, CRATE_FLY_MS=1330;   // was 1400 · 700 · 20 · 1240, then 1200 · 325 · 20 · 1360, then 470 — his 2026-09-18 "decrease the timing gap between collected coins by 40% so they go into your purse quicker" (470 × 0.6)
-/* THE STAGGER IS CAPPED, SO THE GAP IS NOT A PRICE LIST: a haul too big to space at the full gap within TREASURE_STAGGER_MS tightens
-   up on its own, so eight coins never make the game wait six seconds for its own purse. */
-const TREASURE_STAGGER_MS=1600;
-const coinGap=n=>n>1?Math.min(TREASURE_GAP_MS,TREASURE_STAGGER_MS/(n-1)):0;
+const TREASURE_MS=630, TREASURE_GAP_MS=300, TREASURE_MAX=20, CRATE_FLY_MS=1330;   // was 1400 · 700 · 20 · 1240, then 1200 · 325 · 20 · 1360, then 470, then 282 — his 2026-09-18 "decrease the timing gap between collected coins by 40% so they go into your purse quicker" (470 × 0.6); 282 became 300 the same day, by the ruling below
+/* ⭐ THE GAP BETWEEN ARRIVING COINS IS ONE CONSTANT, WHATEVER THE HAUL — Wyatt, 2026-09-18: "'the stagger between coins is derived
+   from how many are arriving' is not how I want it designed -- I want all coins to arrive at the purse after a consistent time from
+   each other. Eg 500ms", and then, told what it would cost: "Try 300ms then -- even with a 12 coin haul (rare) it's over in under 4s."
+   WHAT IT REPLACED, AND WHY IT WAS WRONG: a cap. The gap used to be `n>1?Math.min(TREASURE_GAP_MS,1600/(n-1)):0`, so the MORE coins a
+   captain earned the FASTER each one arrived — measured on this board at animation-frame rate, two coins landed 283ms apart and twelve
+   landed 145ms apart, and every big payday was squeezed into the same ~1.6s. A haul's size is not a reason for a coin to fly quicker.
+   ⚠ NO SECOND KNOB. This one number is the gap for EVERY coin going into a purse: a dock's treasure, a won call's bounty and a muse
+   coin lifting off a boat (flyFromBoat), and a trade's sale crossing from the payer's purse (flyAcross). "Make it quicker for X" is
+   answered by moving THIS number, never by a smaller one beside it for X — a per-source gap is two places deciding one fact, which is
+   the shape this ruling just removed. scripts/qa/coin_gap_one_constant_check.mjs holds both halves.
+   WHAT MOVES WITH IT: a haul of n coins takes TREASURE_MS+(n-1)×this to finish and the one event consumer AWAITS it, so this is also
+   how long a big payday holds the turn — 3.3s at twelve coins, 4.8s at the rare seventeen. Over 80 seeded voyages 98.3% of the moments
+   that grant coins grant exactly ONE, where a gap between coins does not arise at all; the rest are 7 (0.9%), 10, 12 and rare 15s and
+   17s. So this is visible only on a big haul, and that is the point of it. */
 /* A coin: how high its arc climbs above the higher end (a share of the coin's size), how high it hops back up off the purse, how flat
    it squashes as it hits. A crate: how far its path bulges from a straight line (a share of the larger of 1.4 crates and a third of
    the distance down — the measure the swap has always bowed by), its hop off the chip, its squash. */
@@ -2259,7 +2269,7 @@ async function flyFromBoat(seat,coins,land){
   let to=null;
   if(icon&&capShowing()){const r=icon.getBoundingClientRect(),o=fixedOrigin();if(r.width>1)to=[r.left+r.width/2-o.x,r.top+r.height/2-o.y];}
   if(!to)return;                                    // no purse on screen to land in: payInto lands them at once
-  const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42),gap=coinGap(n);
+  const ctm=ships.getScreenCTM(),size=Math.max(12,cell*(ctm?ctm.a:1)*0.42);
   const share=Math.floor(coins/n),extra=coins-share*n,end=[to[0]-from[0],to[1]-from[1]];
   const anims=[];
   for(let k=0;k<n;k++){
@@ -2269,7 +2279,7 @@ async function flyFromBoat(seat,coins,land){
     document.body.appendChild(im);
     const side=(k-(n-1)/2)*size*0.55,lift=size*COIN_ARC*(1+((k*37)%5)*0.06);   // a little spread and variety, so a haul is not one line
     const a=im.animate(arcFrames(end[0],end[1],{lift,side:side*.5,from,half:size*.85,at:(t,u)=>({scale:bez(t,u,.4,1.7,.55).toFixed(3),opacity:Math.min(1,t/.08).toFixed(3)})}),
-      {duration:TREASURE_MS,delay:k*gap,easing:"linear",fill:"both",id:"treasure"});
+      {duration:TREASURE_MS,delay:k*TREASURE_GAP_MS,easing:"linear",fill:"both",id:"treasure"});
     a.oncancel=()=>im.remove();
     a.onfinish=()=>{
       land(k===n-1?share+extra:share);              // THE coin is in: the one arrival event, the number and the chink
@@ -2279,7 +2289,7 @@ async function flyFromBoat(seat,coins,land){
     };
     anims.push(a);
   }
-  const flight=TREASURE_MS+(n-1)*gap;
+  const flight=TREASURE_MS+(n-1)*TREASURE_GAP_MS;
   // the wait is the flights themselves, capped so a stalled page never holds the game (payInto lands whatever did not)
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
@@ -2396,7 +2406,7 @@ async function flyAcross(fromSeat,toSeat,coins,land,leave){
   const at=s=>{const icon=($("coins"+s)||{querySelector:()=>null}).querySelector("img");if(!icon)return null;
     const r=icon.getBoundingClientRect(),o=fixedOrigin();return r.width>1?{x:r.left+r.width/2-o.x,y:r.top+r.height/2-o.y,w:r.width}:null;};
   const from=at(fromSeat),to=at(toSeat);if(!from||!to)return;
-  const n=Math.max(1,Math.min(TREASURE_MAX,coins)),size=Math.max(12,from.w*1.15),gap=coinGap(n);
+  const n=Math.max(1,Math.min(TREASURE_MAX,coins)),size=Math.max(12,from.w*1.15);
   const share=Math.floor(coins/n),extra=coins-share*n;
   const anims=[];
   const dx=to.x-from.x,dy=to.y-from.y,bow=Math.max(size*2,Math.abs(dy)*0.3);
@@ -2406,7 +2416,7 @@ async function flyAcross(fromSeat,toSeat,coins,land,leave){
     Object.assign(im.style,{left:(from.x-size/2)+"px",top:(from.y-size/2)+"px",width:size+"px",height:size+"px"});
     document.body.appendChild(im);
     const a=im.animate(arcFrames(dx,dy,{side:bow,from:[from.x,from.y],half:size*.75,at:(t,u)=>({scale:bez(t,u,.6,1.5,.7).toFixed(3),opacity:Math.min(1,t/.08).toFixed(3)})}),
-      {duration:ACROSS_MS,delay:k*gap,easing:"linear",fill:"both",id:"coins-across"});
+      {duration:ACROSS_MS,delay:k*TREASURE_GAP_MS,easing:"linear",fill:"both",id:"coins-across"});
     a.oncancel=()=>im.remove();
     a.onfinish=()=>{
       land(k===n-1?share+extra:share);              // the same one arrival event a dock's coins use
@@ -2415,7 +2425,7 @@ async function flyAcross(fromSeat,toSeat,coins,land,leave){
     };
     anims.push(a);
   }
-  const flight=ACROSS_MS+(n-1)*gap;
+  const flight=ACROSS_MS+(n-1)*TREASURE_GAP_MS;
   await Promise.race([Promise.all(anims.map(a=>a.finished.catch(()=>{}))),new Promise(r=>setTimeout(r,flight+1500))]);
 }
 /* Measured BEFORE render() greys the crate (its island rect), handed to crateFlightTo AFTER render() has drawn the new chip. */
