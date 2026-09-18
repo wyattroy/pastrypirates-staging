@@ -49,6 +49,13 @@ const CAM_FIT_PAD = Number(extractConst(SRC, "CAM_FIT_PAD"));
 if (!(CAM_FIT_PAD > 0)) throw new Error("CAM_FIT_PAD did not extract to a positive number");
 const PHONE_MAX_W = Number(extractConst(SRC, "PHONE_MAX_W"));
 if (!(PHONE_MAX_W > 0)) throw new Error("PHONE_MAX_W did not extract to a positive number");
+/* camTo's glide length. It was a bare literal inside camTo until 2026-09-18 and this harness therefore
+   never had to know about it; naming it CAM_GLIDE_MS (stage.js, so Wyatt can tune the camera's travel in
+   one place) turned the extracted camTo into a function with a free variable, and this gate threw
+   ReferenceError before it could test anything. Extracted the same way as the two above, so a future
+   rename breaks with the message "const CAM_GLIDE_MS not found in stage.js" instead of a bare throw. */
+const CAM_GLIDE_MS = Number(extractConst(SRC, "CAM_GLIDE_MS"));
+if (!(CAM_GLIDE_MS > 0)) throw new Error("CAM_GLIDE_MS did not extract to a positive number");
 
 /* Sandbox: a fresh S/$/wake/cellPx for every call, matching the real module's own shapes
    (S.cam per :93, $ per :25, cellPx per :115) but never touching the real appState/DOM — the
@@ -62,10 +69,10 @@ function run(cells, maxZoom, reservePx, { grid = 15, boardBandStrip = 390 } = {}
   const cellPx = () => 640 / grid;
   const boardBand = () => ({ top: 0, bottom: boardBandStrip, left: 8, right: 640 });
   const factory = new Function(
-    "S", "$", "wake", "cellPx", "boardBand", "CAM_FIT_PAD", "PHONE_MAX_W",
+    "S", "$", "wake", "cellPx", "boardBand", "CAM_FIT_PAD", "PHONE_MAX_W", "CAM_GLIDE_MS",
     `${zoomCapSrc}\n${camToSrc}\n${camFitCellsSrc}\nreturn camFitCells;`
   );
-  const camFitCells = factory(S, $, wake, cellPx, boardBand, CAM_FIT_PAD, PHONE_MAX_W);
+  const camFitCells = factory(S, $, wake, cellPx, boardBand, CAM_FIT_PAD, PHONE_MAX_W, CAM_GLIDE_MS);
   camFitCells(cells, maxZoom, reservePx);
   return S.cam;   // .tx/.ty/.tw are the TARGET camFitCells actually committed via camTo()
 }

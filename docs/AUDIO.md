@@ -104,6 +104,45 @@ was abandoned deliberately when v2 rewrote the event set, and these are **hand-t
 the game outgrew** (CLAUDE.md §5: *never hand-type a number that can be counted*). The 9-versus-25
 gap on the narration side suggests the second, but suggests is not measured.
 
+### THE NINE AT 1 — MEASURED 2026-09-18, DELIBERATELY NOT APPLIED
+
+**Read this before "fixing" the nine gains of 1 in `SFX_VOLUME`.** A gate condemned them on
+2026-09-18 with the message *"docs/AUDIO.md DEFECT-3 carries the measured replacement for each"* —
+**false twice.** DEFECT-3's table below holds six *different* stems and no value for any of these
+nine. The gate has been repaired; this section is the evidence it should have pointed at.
+
+**They are at 1 because of his ruling** (`q7`, 2026-09-06, DECISIONS.md): *"level everything
+together, once, after all files are in."*
+
+Measured the same way as DEFECT-3's six (EBU R128, `ffmpeg … ebur128=peak=true`):
+
+| Stem | Integrated | True peak | Gain to reach −21 LUFS |
+|---|---|---|---|
+| `battle-won` | −19.7 | −8.0 | 0.86 |
+| `bells` | −21.4 | −10.1 | 1.05 |
+| `drumroll` | −22.6 | −10.0 | 1.20 |
+| `cannon` | −23.9 | **−2.0** | 1.40 |
+| `cork-pop` | −30.9 | −7.4 | 3.13 |
+| `card-swish` | −31.2 | −10.0 | 3.24 |
+| `crate-chime` | −32.4 | −19.0 | 3.72 |
+| `award-whoosh` | −32.6 | −12.8 | 3.80 |
+| `crate-marimba` | −33.1 | −14.9 | 4.00 |
+
+**⛔ DO NOT APPLY THAT LAST COLUMN WHOLESALE — it would undo his own ear on five of the nine.**
+The cork pop and the four "Sounds of the Voyage" picks were rendered from their own tuner pages
+**at the level he auditioned them**, so a gain of 1 plays them exactly as he dialled them. The
+quietness in those five rows is his choice, measured back out of the file. Normalising them would
+raise them 3.1x to 4.0x.
+
+The rows where a levelling pass has something real to decide are the other four — and `cannon` is
+the interesting one: quiet body (−23.9) with a **−2.0 dBFS peak**, i.e. a sharp transient over a
+thin sound, which is a shaping question and not a gain question.
+
+**The trigger for his pass is "after all files are in".** As of 2026-09-18 every stem is in sfx/
+(31 files, ocean bed and music included) **except the first-home fanfare, which is with Luis.** So
+the pass he ordered is one file away, not overdue — and that one file is the thing to ask him about,
+not the nine gains.
+
 ### DEFECT-3 — The six stems were never levelled against each other
 
 `SFX_VOLUME` exists as the one intended tuning point and **every value is still `1`**. Measured

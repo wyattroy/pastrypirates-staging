@@ -488,6 +488,28 @@ number would have been green and I would have sent you a clean bill."*
 columns cost nothing and they are where the surprises live. And when a value comes back `undefined`
 where the code should produce `0`, that is never cosmetic — it means a producer you have not read.
 
+**THE SAME RULE FOR WHAT A PROBE THROWS AWAY — and this is the half that hides a bias rather than a
+bug.** 2026-09-18: a crew probe was suspected of filtering its frames in a way that would have
+invalidated the camera measurement on Wyatt's sheet. It does filter, two ways. **It was answerable in
+thirty seconds only because the analyser PRINTS ITS EXCLUSIONS instead of swallowing them** — the one
+excluded turn in the whole set was already sitting in its own output, named:
+
+```
+ev 88  bot seat 3  666 ms  16 ms  -650 ms  <-- MOVE STARTED BEFORE THE CAMERA ARRIVED
+                                               [already in flight at the ask — excluded]
+```
+
+A probe that quietly drops rows is indistinguishable from one that has nothing to drop. **Print the
+count you excluded and why, on every run, including the runs where it is zero** — a silent zero and a
+silent hundred look identical, which is the whole failure.
+
+**AND THE STRONGEST WAY TO DEFEND A FILTER, which is not "it is correct".** Both of that probe's
+filters bias **against** the conclusion being drawn: the burst rule can only turn a real glide into
+"arrived at 0 ms", shrinking the measured fault, and the excluded turn was a −650 ms case, which made
+the BEFORE look better than it was. So the reported −600 ms understates. **When you cannot prove a
+filter is right, show which way it is wrong** — a filter whose error runs toward your own claim needs
+proof, and one whose error runs against it needs only to be named.
+
 ### A NUMBER THAT COMES OUT THE SAME ON BOTH SIDES OF THE CHANGE IS NOT MEASURING THE CHANGE
 
 **2026-09-18, and it is the sharpest thing anyone said all night.** Item 48 (hold the camera before

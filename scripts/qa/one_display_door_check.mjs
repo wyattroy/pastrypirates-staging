@@ -60,12 +60,15 @@ if (/flipDockCoin\s*\(/.test(body) && /decisionIsLocal\s*\(\s*e\.p\s*\)/.test(bo
   pass("the one consumer draws the dock coin, gated on this screen's locality (decisionIsLocal)");
 else fail("consumeEvent does not draw the dock coin for non-local docks — bots and remote humans would dock unseen on some screen");
 
-/* 2. THE TURN FRAME: decided by the one consumer from the turn event; never by the engine machine's pick */
-if (/e\.t\s*===\s*"turn"[^;]*sailCells\s*\(\s*e\.p\s*\)/.test(body))
-  pass("the one consumer frames each captain's turn from the turn event, on every device");
-else fail("consumeEvent does not frame the turn — the sail frame lives somewhere only one machine runs");
+/* 2. THE TURN FRAME: decided by the one consumer from the turn event AND this screen's locality; never
+   by the engine machine's pick. The locality half is architecture item 46 — Wyatt, 2026-09-17: "we cannot
+   see other players sail squares (bots or humans) so ALL other players turns should be zoomed in on their
+   boat for maximum immersion." A door that frames a turn without asking who is being asked cannot obey that. */
+if (/e\.t\s*===\s*"turn"[^;]*turnFrame\s*\(\s*e\.p\s*,[^;]*decisionIsLocal\s*\(\s*e\.p\s*\)/.test(body))
+  pass("the one consumer frames each captain's turn from the turn event and this screen's locality, on every device");
+else fail("consumeEvent does not frame the turn from the event plus decisionIsLocal — either the frame lives somewhere only one machine runs, or a watching screen is framed by the same rule as the chooser");
 const pick = fnBody(flow, "pickCell") || "";
-if (/sailCells\s*\(/.test(pick))
+if (/turnFrame\s*\(|sailCells\s*\(/.test(pick))
   fail("pickCell() calls the camera — pickCell runs on the engine's machine only, so a guest's camera would never frame this");
 else pass("pickCell() makes no camera call of its own");
 

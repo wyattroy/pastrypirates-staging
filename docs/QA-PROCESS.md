@@ -259,6 +259,69 @@ is suspect until it has run on both — a literal space in a `--format=` string,
 is not better quoting. It is not using a shell:** pass git an argument array and there is nothing to
 quote and no platform to get it wrong on.
 
+### 2c. ⛔ A RED GATE NOBODY RUNS ACCUSES THE CODE OF ITS OWN BUGS — and it goes for his RULINGS first
+
+**2026-09-18. 301 check-shaped files in this repo; `npm test` called 164.** Of the uncalled ones
+that are real gates, 16 were red. Four looked like defects in the game. **Three of the four were the
+alarm, not the fire — and each one had condemned a decision Wyatt had already made:**
+
+| the red | what it accused | what was actually true |
+|---|---|---|
+| `w7c_window_artifact_check` | a frame filter at `w7b_frames.mjs:66` invalidating every crew measurement | **that file does not exist on any reachable branch.** A tombstone for a harness the cutover deleted |
+| `audio_map_check` | nine sounds left "at the untouched default gain of 1", saying *"docs/AUDIO.md DEFECT-3 carries the measured replacement for each"* | DEFECT-3's table holds **six different stems** and no value for any of the nine. The nine are `q7`, his ruling: *"level everything together, once, after all files are in"* |
+| `t142_captains_under_modal_check` | the CAPTAINS bar failing to come back after a modal — at both sizes, apparently live for players | the probe's own staging wait never picked a recipe, so **his empty-box rule** (2026-09-09) still had `#pp4Cap` inline-hidden. It condemned a rule it had triggered itself; its own log printed `visible=false` before it measured anything |
+
+**THE ONE MOVE THAT CAUGHT ALL THREE, and it is cheaper than reproducing the defect: CHECK THAT THE
+RED'S STATED EVIDENCE EXISTS.** Each named something specific — a file, a document section, a
+precondition. One `find`, one `grep` of the doc, one read of the probe's own staging. None took two
+minutes, and each turned a "player-visible defect" into "the gate is stale".
+
+**Why it goes for rulings specifically, which is the part worth understanding.** A deliberate
+decision is exactly what looks like a bug from outside: a gain of `1`, an element hidden on purpose,
+a file deliberately deleted. Code that is *merely* correct rarely trips a stale gate; code that is
+correct **because someone chose it** trips one every time, because the choice is invisible to a rule
+written before it. So a red that condemns something deliberate is not stronger evidence than usual —
+**it is weaker.**
+
+`.claude/CLAUDE.md` already says *"when a check condemns something known to work, suspect the check
+first."* This is the operational form of it, plus the reason it happens, plus the fact that an
+**unwatched** red has never once had to defend its claim — nobody has read it since the day it was
+written, and the thing it points at may have been deleted in between.
+
+**And the corollary, learned the same night:** a red gate that is not in `npm test` is not a safety
+net, it is an unreviewed accusation. Either wire it in (after checking its evidence) or retire it to
+`gate_archive/` with the diagnosis in its header. Leaving it red and uncalled is the state that
+produced all three of these.
+
+### 2d. ⛔ WORSE THAN A STALE GATE: ONE IN THE CHAIN, GREEN, WHOSE **REASONING** IS WRONG
+
+**2026-09-18, item 25 — and this one held a real bug in place, in writing, for three weeks.**
+
+The engine decides a fight's wind once, in `beginBattle`, and records it on `engage`. Three other
+places re-derived it. The worst, `renderBattle`, preferred a field `o.dw` — **and nothing in `src/`
+has ever set `o.dw`**, so its fallback fired on every screen, every fight, always. *A renderer
+preferring a field nobody writes: the fallback looked like a safety net and was the whole bug.*
+
+**`flip_ceremony_parity_check` did not miss it. It REQUIRED it** — it asserted both recomputations,
+on the reasoning *"one source, so they cannot disagree"*. That sentence is **true of a pure function
+and false of two screens reading two different boards.** Measured: on a healthy connection they
+agree and the margin is ~4.0–4.3 s, bounded by nothing in the code; drop the guest's signal for
+3.9 s and 4 of 8 fights disagreed — host *"⬇ FIRES DOWNWIND — WINS TIES"* against guest
+*"CROSSWIND · ties collide"*, with the flip stage saying a third thing. Three readings on one table.
+
+**§2c above is about gates citing evidence that does not exist. This is the mirror image: the
+evidence was fine and the REASONING was wrong.** Both are green, and green is all anyone looks at.
+
+**So the check on a gate is two questions, not one:**
+1. **Does its evidence exist?** (§2c — a `find`, a `grep` of the cited doc, a read of its staging.)
+2. **Is its premise true of THIS system?** A rule that holds for one pure function does not hold for
+   two screens, two processes or two clocks. **Anywhere the answer is "they read the same source",
+   ask *at the same instant?* — if not, the gate is enforcing an assumption the game does not make.**
+
+A gate that asserts a bug is the most expensive kind, because it converts "nobody noticed" into
+"somebody checked". Four gates were rewritten in this sweep and none was weakened; this was the only
+one whose premise, rather than its anchor, was wrong.
+
 ## 3. THE FOUR STEPS (unchanged — see the top of this file)
 
 Show it broken → change it → show that SAME check passes → sweep.

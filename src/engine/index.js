@@ -791,12 +791,14 @@ class Game{
   sailStates(p,opts){return this.sailSearch(p,opts).out;}
   /* WHERE A CAPTAIN MAY SAIL THIS TURN — every square a ship may legally finish a move on, the trade winds' rim included (a captain
      may deliberately ride the current). THE ONE ANSWER, asked by everything that shows it: the gold squares the captain choosing is
-     given (ui/flow.js reachable), the squares every OTHER screen's camera frames for that captain's turn (ui/stage.js camFitSail),
-     and where a fleeing ship may go (fleeSquares — his ruling: a flee is an ordinary sail).
-     ARCHITECTURE ITEM 18, 2026-09-17: the watching screens' frame asked reachableFrom — this search WITHOUT the rim — under a
+     given (ui/flow.js reachable), the camera frame on the screen being ASKED, before its own squares are drawn (ui/stage.js
+     camFrameTurn), and where a fleeing ship may go (fleeSquares — his ruling: a flee is an ordinary sail).
+     ARCHITECTURE ITEM 18, 2026-09-17: that camera frame asked reachableFrom — this search WITHOUT the rim — under a
      comment saying the two "agree by construction". Measured on 40 seeded boards: from 3,430 of 4,432 legal sea squares the
-     chooser's gold squares included rim squares the watchers' frame left out (18,267 squares), and on 3,296 of them the framed
-     rectangle itself was smaller. scripts/qa/sail_frame_same_squares_check.mjs holds it to one. (A BOT's ordinary-move list is
+     chooser's gold squares included rim squares the frame left out (18,267 squares), and on 3,296 of them the framed
+     rectangle itself was smaller. scripts/qa/sail_frame_same_squares_check.mjs holds it to one.
+     ARCHITECTURE ITEM 46, the same day: a WATCHING screen no longer asks this at all — Wyatt ruled that another captain's turn is
+     framed on their BOAT, because the gold squares are drawn only on the chooser's own screen (scripts/qa/watching_camera_one_rule_check.mjs). (A BOT's ordinary-move list is
      still reachableFrom, with its rides weighed as the head of the current — how a bot chooses, not where it may go. Where any ship
      actually goes, and the squares it crosses on the way, is sailTo below: item 7.) */
   sailChoices(p){return [...this.sailStates(p,{throughRim:true}).keys()].map(k=>k.split(",").map(Number));}

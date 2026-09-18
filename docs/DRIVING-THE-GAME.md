@@ -144,6 +144,27 @@ each card once leaves the picker standing and the whole intro stalls behind it �
 card renders with dock highlights the other client does not have, which reads exactly like a
 host/guest divergence and is not one.** One was nearly filed as a defect on 2026-08-20.
 
+## 3e. ⛔ `appState.evConsumed` IS NOT "THE GUEST HAS CAUGHT UP" — it is the wire, not the screen
+
+**2026-09-18, and it nearly invalidated a measurement of a real defect.** On a guest, `watchEvents`
+sets `evConsumed` when an event **ARRIVES**. The board mirror happens later, inside the queued
+`consumeEvent`. So between those two moments the counter says "drained" while the board is still
+showing the previous state — and a probe that waits on it has measured the network and called it the
+picture.
+
+Item 25's first metric did exactly that and reported *"the guest has caught up"* over a stale board.
+**It was caught only because the same probe was also sampling the DOM directly** — which is the
+general rule, not a lucky detail:
+
+> **Wait on the thing you are making a claim about.** A claim about what a player SEES is settled by
+> the DOM — the rendered text, the element's own box — never by a counter that merely promises the
+> screen will follow. The counter is a fine trigger for "something arrived"; it is not evidence of
+> "something is drawn".
+
+`eventDrawn` is the one that means drawn (`.claude/CLAUDE.md`: anything that speaks about an event
+waits for the one consumer to finish drawing it). If a probe of yours reads `evConsumed` as "drawn",
+it is measuring the wire.
+
 ## 4. The turn loop — and the two things that stall every naive driver
 
 ### 4a. THE FLIP COIN IS ITS OWN BUTTON

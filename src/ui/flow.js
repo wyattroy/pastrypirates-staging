@@ -321,9 +321,9 @@ export async function flipFor(player,why){
 // shared assets/ and sfx/ at the repo root — the classic game at /classic reaches them as ../assets and ../sfx.
 export function reachable(player){
   /* v2 rule 1: the gold squares a captain choosing where to sail is shown. Not computed here — Game.sailChoices is where a captain
-     may sail this turn (the trade winds' rim included), and it is the SAME function every other screen's camera frames that turn
-     from (ui/stage.js camFitSail), so the squares one screen offers and the squares another frames cannot differ (architecture
-     item 18, 2026-09-17; scripts/qa/sail_frame_same_squares_check.mjs). */
+     may sail this turn (the trade winds' rim included), and it is the SAME function this screen's own camera frames the turn from
+     before these squares exist (ui/stage.js camFrameTurn), so the squares offered and the frame around them cannot differ
+     (architecture item 18, 2026-09-17; scripts/qa/sail_frame_same_squares_check.mjs). */
   return appState.game.sailChoices(player);
 }
 // D-25/D-35 (Wyatt-approved 2026-07-29): the one sail-prompt message, shared by BOTH transports —
@@ -585,7 +585,7 @@ export function sailHighlightRect(c,cellPx,svg){
      diagonal stripe pattern that had nothing to do with the boat — the "horribly jagged" half of his 2026-09-16 note (index.html). */
   d.style.animationDelay="var(--sailPopDelay, 0ms), var(--sailPopDelay, 0ms)";
   // THE GRID COORDINATES, CARRIED. Two readers used to recover these by inverting the maths above
-  // (camFitSail and the trade-wind preview, both in src/ui/stage.js) — a second copy of this
+  // (camFrameTurn and the trade-wind preview, both in src/ui/stage.js) — a second copy of this
   // function's arithmetic that had to be kept in step with it by hand. They read these instead.
   d.dataset.gx=c[0]; d.dataset.gy=c[1];
   // playtest 20 (Mando): a square in the trade-wind rim does not park you there — the current
@@ -783,7 +783,10 @@ export function renderPickPrompt(spec,answer){
   pilotSee("sail.pick");
   $("apStay").onclick=()=>done(null);
   /* THE CAMERA REQUEST RIDES WITH THE SQUARES — rule 23's converge move, and the missing half of a
-     guest's sail prompt. camFitSail() had exactly ONE caller: pickCell(), which runs on the machine
+     guest's sail prompt. THE SCREEN DRAWING THE SQUARES IS THE SCREEN BEING ASKED, which is why this
+     call passes local:true (architecture item 46): the one turn-frame door frames a sail window here
+     and that captain's boat on every other screen.
+     camFitSail() (camFrameTurn now) had exactly ONE caller: pickCell(), which runs on the machine
      running the ENGINE. In a crew game that is the HOST — so a guest drew its squares and nobody
      ever asked the director to frame them; its camera sat wherever the last narration's camToSeat()
      glide (640/1.9 — the 336.84-unit window in every probe trace) had parked it, and whichever
@@ -791,9 +794,9 @@ export function renderPickPrompt(spec,answer){
      ZTNK): square (3,8) at x=-23 on a 390px guest, centre outside, elementFromPoint = nothing.
      Whoever DRAWS the squares asks for the frame — one renderer, both tiers, so the request cannot
      fork again. spec.pos is the authoritative boat square (the stay-square rule above) — never this
-     client's own players[].pos. After panel(), so camFitSail's reserve measures the real pill; a
+     client's own players[].pos. After panel(), so camFrameTurn's reserve measures the real pill; a
      zero-delay beat, because unlike pickCell's call the squares here are already in the DOM. */
-  if(window.__pp4)setTimeout(()=>window.__pp4.sailCells(null,spec.pos),0);
+  if(window.__pp4)setTimeout(()=>window.__pp4.turnFrame(seat,spec.pos,true),0);
   return teardown;
 }
 export function pickCell(player,cells){
@@ -812,11 +815,12 @@ export function pickCell(player,cells){
   // /4 stage: frame the whole sail window once the highlight cells exist (they are drawn just
   // after this call returns its promise — a beat later is soon enough for a lerping camera).
   // player.idx, NOT the viewer: on a spectating host this used to frame the HOST's own ship at the
-  // start of every guest's turn (Wyatt, 2026-08-20). See camFitSail() in ui/stage.js.
+  // start of every guest's turn (Wyatt, 2026-08-20). See camFrameTurn() in ui/stage.js.
   // SINCE 2026-09-01 the client that DRAWS the squares frames them from renderPickPrompt itself
   // (which is what fixed the guest, who never reached this line — pickCell runs on the engine's
   // machine). This call remains for the client that does NOT run that renderer: the spectator,
-  // whose empty cell list collapses the same camFitSail to "frame the asked captain's ship".
+  // whose empty cell list collapsed the same fit to "frame the asked captain's ship" — and which asks for
+  // that ship by name now, one rule for every watching screen (architecture item 46).
   /* (The host used to frame this captain's sail window from right here — the engine machine only, so a
      guest's camera never framed anybody's sail but its own. The frame is decided by the one event
      consumer on the `turn` event now, on every device; see consumeEvent, 2026-09-13 note 6.) */

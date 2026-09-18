@@ -26,12 +26,13 @@
  * gate. Optional first CLI arg overrides the file path (used only for the red-proof run above; the
  * real gate always reads the live file with no arguments).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TARGET = process.argv[2] || join(__dirname, "..", "src", "ui", "audio.js");
+const SFX_DIR = join(__dirname, "..", "sfx");
 const src = readFileSync(TARGET, "utf8");
 
 const failures = [];
@@ -85,15 +86,33 @@ if (volStart === -1) {
   const entryRe = /["']?([A-Za-z0-9_-]+)["']?\s*:\s*([0-9.]+)/g;
   let m, count = 0;
   const untouched = [];
+  const names = [];
   while ((m = entryRe.exec(body))) {
     count++;
     const [, stem, value] = m;
+    names.push(stem);
     if (Number(value) === 1) untouched.push(stem);
   }
+  /* ⛔ A GAIN OF 1 IS NOT AN OVERSIGHT HERE — IT IS HIS RULING, AND THIS CHECK USED TO CONDEMN IT.
+     Wyatt, 2026-09-06 (q7, DECISIONS.md): "level everything together, once, after all files are in."
+     Nine stems sit at 1 deliberately, and five of them are at 1 for a STRONGER reason than waiting:
+     the cork pop and the four "Sounds of the Voyage" picks were rendered from their own tuner pages
+     AT THE LEVEL HE AUDITIONED, so 1 plays them exactly as he dialled them. Normalising those to a
+     target would undo his own ear — measured 2026-09-18, it would raise them 3.1x to 4.0x.
+     The old rule said "docs/AUDIO.md DEFECT-3 carries the measured replacement for each", which was
+     FALSE TWICE: DEFECT-3's table holds six different stems and no value for any of these nine. A
+     check that is wrong about its own evidence is how a settled ruling gets overturned by a session
+     doing what it was told. What is actually worth guarding is that every stem is DECLARED — an
+     absent key and a key at 1 behave identically at runtime, and only one of them looks decided. */
+  const spec = existsSync(SFX_DIR)
+    ? readdirSync(SFX_DIR).filter(f => f.endsWith(".mp3")).map(f => f.replace(/\.mp3$/, ""))
+    : [];
+  const declared = new Set(names);
+  const missing = spec.filter(n => !declared.has(n) && !/^(gull|creak)-\d+$|^ocean-loop$|^music-/.test(n));
   if (count === 0) {
     failures.push("SFX_VOLUME has no numeric entries at all — is the table empty?");
-  } else if (untouched.length) {
-    failures.push(`SFX_VOLUME still has ${untouched.length} stem(s) at the untouched default gain of 1: ${untouched.join(", ")} — docs/AUDIO.md DEFECT-3 carries the measured replacement for each`);
+  } else if (missing.length) {
+    failures.push(`SFX_VOLUME does not mention ${missing.length} stem(s) that exist in sfx/: ${missing.join(", ")} — an absent key and a key at 1 sound identical, so declare it at 1 with the reason, the way the nine q7 stems are`);
   }
 }
 
@@ -102,4 +121,4 @@ if (failures.length) {
   for (const f of failures) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`audio_map_check: OK — no duplicate EVENT_SOUND key, no SFX_VOLUME stem left at the untouched default (${TARGET})`);
+console.log(`audio_map_check: OK — no duplicate EVENT_SOUND key, every stem in sfx/ is declared in SFX_VOLUME (a gain of 1 is a decision here, not an oversight — q7) (${TARGET})`);

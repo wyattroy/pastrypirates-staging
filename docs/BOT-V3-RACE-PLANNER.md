@@ -62,6 +62,10 @@ the *score*, never the state.
 
 ## What was tried and rejected by the gate
 
+*(⛔ `scripts/bot_ladder3.js` imports `../3/` and has not run since that tree was deleted — this is a
+RECORD of what was measured in its day, not an instruction. Today's instrument is
+`scripts/bot_ladder4.js`. Noted 2026-09-18; the numbers below stand, the command does not.)*
+
 Per the brief's §5 discipline — every layer ran `scripts/bot_ladder3.js` (red-proofed both ways:
 identical brains +0.0 on every row; a lobotomised brain −66.0 WORSE) before it stayed:
 

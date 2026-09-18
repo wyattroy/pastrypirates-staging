@@ -146,7 +146,20 @@ A pirate discounts the cost of a fight. It never takes a fight that lengthens it
 
 ### 9. Prove it against the previous bot, not against a proxy
 
-`scripts/bot_ladder.js` runs both brains at one table on the same seeds and asks only who wins.
+⛔ **`scripts/bot_ladder.js` HAS NOT RUN SINCE THE CUTOVER — USE `scripts/bot_ladder4.js`.** It
+imports `../v2bakeoff/`, a tree deleted on 2026-08-26, so it throws on load. It is not the only one:
+`bot_matrix.js`, `battle_two_shots.js`, `bakeoff_endgame_test.js` and `bakeoff_baseline.js` import
+the same dead tree, and `bot_ladder3.js` imports `../3/`. **Six of the seven balance instruments in
+this repo cannot load, and this paragraph went on naming one of them for three weeks** (found
+2026-09-18 by Wy-Blade, while every one of them sat unrun and unnoticed). `bot_ladder4.js` is the
+only one that reads the live engine.
+
+**And it measures differently, which changes how you use this section.** There is no SEAT axis any
+more — `/4` ships one bot brain, so seating two planners against each other measures a game nobody
+plays. It has a TIME axis instead: run the identical command on the same seeds either side of your
+change and diff the two records.
+
+~~`scripts/bot_ladder.js` runs both brains at one table on the same seeds and asks only who wins.~~
 
 **Read it as a detector, not a designer.** It can tell you a change is worse; it cannot tell you why,
 and it will not hand you the objective. That is what principle 0 is for.

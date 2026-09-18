@@ -1827,10 +1827,40 @@ export async function consumeEvent(e){
      camera director does not seem to be zooming in and out dynamically or correctly -- were these
      changes somehow made only to the host?" They were: the sail-window frame lived in pickCell(), which
      runs only on the machine running the engine. The turn event reaches every device through this
-     consumer and the engine can say where ANY captain may sail (sailChoices, read by camFitSail — the same call as the chooser's gold squares, architecture item 18), so
-     the frame is decided here, once, from the event. A captain's own sail prompt still refines it with
-     the pill's room (renderPickPrompt) — the same function, asked again with more to go on. */
-  if(e.t==="turn"&&!appState.replaying&&window.__pp4&&window.__pp4.sailCells)window.__pp4.sailCells(e.p);
+     consumer, so the frame is decided here, once, from the event.
+     ⭐⭐ AND FROM THIS SCREEN'S LOCALITY — architecture item 46, Wyatt's ruling of 2026-09-17: "we cannot
+     see other players sail squares (bots or humans) so ALL other players turns should be zoomed in on
+     their boat for maximum immersion." The two inputs this door is built on, again: the engine's event
+     and whether the choice is being made HERE. A watching screen frames that captain's boat, bot or
+     human alike; the screen being asked frames its own sail window (Game.sailChoices — the same call as
+     its gold squares, architecture item 18) and refines it a moment later with the pill's room
+     (renderPickPrompt), which is the same function asked again with more to go on.
+     ⭐⭐⭐ AND NOTHING OF THAT TURN IS DRAWN UNTIL THE CAMERA HAS GOT THERE — architecture item 48,
+     Wyatt's playtest ask of 2026-09-17: "the camera should center a bot before they begin to move."
+     The frame was only ASKED for; the glide is 650ms and the `sail` event was drawn the moment this
+     line returned, so on a guest phone in a real crew room the hull began moving 31-92ms after the
+     ask on 9 of 9 watched bot turns and the camera did not arrive until 653-666ms. The WAIT is the
+     door's own answer (ui/stage.js camFrameTurn returns stageSettled() on a watching screen, nothing
+     on the screen being asked), so there is no second rule here beside the frame — this line simply
+     waits for what it asked for. Awaiting here holds BOTH tiers: the host's turn loop waits on this
+     drain, and the guest's wire is one promise chain, so the next event cannot be drawn in front of
+     the camera on either. scripts/qa/camera_settles_before_the_move_check.mjs. */
+  /* ⚠ ASKED FOR HERE, WAITED FOR AFTER render() — AND THE TWO HALVES ARE NOT INTERCHANGEABLE.
+     The ASK must stand here, at the top of the turn, because the glide is 650ms and every one of
+     them is paid out of the turn; asking after the board is drawn would simply move the whole cost
+     later. The WAIT must stand after render(), and that was MEASURED, not reasoned: with the await
+     on this line the ring and the captains row reached the new captain a whole camera-settle after
+     the top bar did, so the three surfaces that say whose turn it is disagreed for 0.6-0.7s on
+     EVERY watched turn (13 runs a voyage, longest 3.3s, against 4 runs and 1.9s before this item).
+     render() is what moves the ring and the row, and at a `turn` event it moves no boat — the
+     positions are the ones the previous event already drew — so drawing the board first cannot
+     start the move this item exists to hold back.
+     ⭐ AND IT CLOSES A SECOND HAZARD, on a guest. render() draws events[appState.evIdx], the
+     PLAYHEAD, which a guest's wire advances the moment an event ARRIVES (watchEvents) — so a render
+     that happens after a 650ms wait can be drawing the SAIL that landed during it, and snap the hull
+     to its destination instead of walking it. Drawing before the wait means the playhead is still
+     this turn. */
+  const turnFramed=(e.t==="turn"&&!appState.replaying&&window.__pp4&&window.__pp4.turnFrame)?window.__pp4.turnFrame(e.p,null,decisionIsLocal(e.p)):null;
   if(!appState.replaying)bobTheTurn();   // his game feel audit, then 2026-09-14: the boat whose turn it is bobs for the whole turn, on every screen — read from the one helper, so a baking captain's boat bobs too (board.js; architecture item 3)
   if(e.t==="end")stopTurnBob();                         // …and nothing bobs once the voyage is over
   $("scrub").max=Math.max(0,appState.game.events.length-1);
@@ -1887,6 +1917,15 @@ export async function consumeEvent(e){
   if(e.t==="pass"&&e.coins>0)payInto(e.p,e.coins,{after:new Promise(r=>afterLine(e,r))});
   const paidFlight=(e.t==="trade"&&e.paid>0)?payInto(e.b,e.paid,{from:e.a}):null;
   render();
+  /* ⭐ AND HERE IS WHERE THE TURN'S FRAME IS WAITED FOR — architecture item 48. The board has just
+     named the new captain (ring, captains row, row order) in the same frame the top bar does, and
+     NOW nothing more of this turn is drawn until the camera has reached them. The wait is the door's
+     own answer (ui/stage.js camFrameTurn hands back stageSettled() on a watching screen and nothing
+     on the screen being asked), so this line decides no rule — it only decides WHEN in this
+     consumer's own drawing order the answer is honoured. See the note at the ask, above, for the
+     measurement that put it on this side of render().
+     scripts/qa/camera_settles_before_the_move_check.mjs holds the wait AND this order. */
+  if(turnFramed)await turnFramed;
   if(buyFlight)crateFlightTo(buyFlight,e.p);
   if(swapFlight)holdMovesTo(swapFlight);
   if(earnedFlight)await earnedFlight;
