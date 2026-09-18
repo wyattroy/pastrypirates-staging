@@ -17,8 +17,16 @@
 // the shelves as rivals' predicted buys will have left them.
 //
 //   node scripts/bot_matrix3.js [seed] [turnIndex|rich]
+//
+// RE-POINTED at the live engine 2026-09-18, and it is now THE explainer, not a sibling. It had
+// imported `../3/src/engine/index.js`, a tree deleted at the cutover, so it threw on load. Its
+// elder sibling `scripts/bot_matrix.js` was retired in the same commit: that one printed the
+// one-ply exact planner's columns (turnsToWin), and both the planner and that method are gone from
+// this engine — `planTurn()` dispatches unconditionally to `planTurnV3`, the race planner whose
+// rows this file already reads. So the tool that survived is the one whose arithmetic matches the
+// brain that ships. The `3` in the name is now only history; renaming it is a separate change.
 
-import { Game, roundCfg } from "../3/src/engine/index.js";
+import { Game, roundCfg } from "../src/engine/index.js";
 
 const SEED = +(process.argv[2] || 7919);
 const ARG = process.argv[3] || "rich";

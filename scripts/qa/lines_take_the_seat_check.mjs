@@ -43,7 +43,7 @@ const WORDS_FILE = "src/shared/words.js";
    Keyed by line, then by placeholder: a line may put a question TO one captain by name and still tell ABOUT another ({p}), and only the
    named placeholder is excused. Each reason was re-verified against the code on 2026-09-17 (architecture item 43). */
 const NAME_LABELS = {
-  "battle.fire": { name: "put TO the attacker as their own flip prompt — battleAsk sends it to the asked seat alone; every other screen gets battle.waitFor / battle.waitDefend" },
+  "battle.fire": { name: "put TO the attacker as their own flip prompt — battleAsk sends it to the asked seat alone, and since architecture item 8 (2026-09-17) broadcasts nothing to the others: the fight's own words (battle.loads, battle.showsTails) say whose coin it is" },
   "battle.fleeAsk": { name: "put TO the defender by name — ask() sends it to the asked seat alone; every other screen gets wait.deciding" },
   "battle.refireAsk": { name: "put TO the attacker by name (ask(), as above)" },
   "battle.plunder": { name: "put TO the winner by name (ask(), as above)" },

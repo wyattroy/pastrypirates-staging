@@ -19,7 +19,7 @@
 // rule has held since.
 
 import { appState } from "../state/index.js";
-import { ING_IMG, iconImg, CUPCAKE_IMG, COIN_IMG } from "../shared/index.js";
+import { ING_IMG, iconImg, CUPCAKE_IMG, COIN_IMG, BAKE_REWATCH_COST } from "../shared/index.js";
 import { recipeTitle, escHtml } from "./recipe.js";
 import { recipeSteps } from "../shared/recipe-steps.js";
 import { panel, setNeedsAction, GHOST_FADE_MS } from "./panel.js";
@@ -283,7 +283,7 @@ function shellHTML(bake,slots,hint,btnLabel,btnEnabled,watching){
     ${benchHTML(bake,slots)}
     <div class="bkoHint" id="bkoHint">${hint}</div>
     ${watching?"":`<div class="bkoBtns">
-      <button class="apBtn bkoWatch" id="bkoWatch" type="button" hidden>${say("bake.watchAgain",{icon:iconImg(COIN_IMG)})}</button>
+      <button class="apBtn bkoWatch" id="bkoWatch" type="button" hidden>${say("bake.watchAgain",{icon:iconImg(COIN_IMG),n:BAKE_REWATCH_COST})}</button>
       <button class="apBtn bkoGo" id="bkoGo" type="button"${btnEnabled?"":" disabled"}>${btnLabel}</button>
     </div>`}
   </div>`;
@@ -407,7 +407,12 @@ export function retireBakeCard(){
      spec.swaps    the engine's own swap list, animated rather than re-derived (see shuffleSlots)
      spec.locked   per BENCH POSITION, solved on an earlier attempt and never moved again
      spec.attempts how many attempts have already been spent (0 shows the story card)
-     spec.cost     the price of one re-watch, so the button can say it without importing a constant
+
+   (`spec.cost` and `spec.coins` STOOD HERE — architecture item 17, 2026-09-18. They were the price of a
+   look and the purse to take it out of, sent over the wire so a remote captain's browser could run its
+   own little till beside the engine's. The till is gone: the button's label asks the ONE price directly
+   (BAKE_REWATCH_COST, the same number the rules page prints), and whether another look is affordable is
+   asked of the ONE place that decides it, Game.canRewatch, about the purse every screen is drawing.)
 
    THE ANSWER IS NOT IN THE SPEC, and that is deliberate rather than incidental. The engine's
    post-shuffle `bake.slots` never appears here: everything this function needs about which steps
@@ -421,10 +426,14 @@ export function retireBakeCard(){
    ONE CLIENT AND ANOTHER (04-01 Task 3, MP-05). `io` is either a BAKER's or a WATCHER's:
 
      BAKER    { onRewatch, onBench }
-              onRewatch(n) spends the coins and returns whether it bought anything, with
-              onRewatch.canAfford() greying the button; onBench(patch) publishes the DISCRETE
-              MOMENTS only the baker can know — Ready pressed, each pick landing and un-landing, a
-              paid replay restarting.
+              onRewatch(n) says whether this captain may have another look, and
+              onRewatch.canAfford() greys the button; both answer from the ONE rule (Game.canRewatch).
+              On the captain's OWN engine it also charges for the look there and then; on a captain
+              baking in another browser the charge happens where their bench moment lands (the host's
+              chargeRewatches), off the epoch `bench({phase:"shuffle"})` stamps below — so either way
+              the purse falls through the engine's own `rewatch` event, on every screen at once.
+              onBench(patch) publishes the DISCRETE MOMENTS only the baker can know — Ready pressed,
+              each pick landing and un-landing, a paid replay restarting.
               THERE IS NO `onArm` ANY MORE (04-01 Task 4, MP-13). It existed for one purpose — to
               start the shot clock at the moment the bench became answerable rather than burning
               4.5s of a 30s window on animation — and the bake has no shot clock now. Removing a
@@ -802,7 +811,10 @@ export async function playBakeoffLive(spec,io){
 
        The coin is spent through the engine (onRewatch), not deducted here, because coins are game
        state that the end-of-voyage ranking reads. If the purse is empty the engine buys nothing and
-       returns 0, and no animation runs — so the button can never hand out a free look. */
+       returns 0, and no animation runs — so the button can never hand out a free look.
+       AND THE PUBLISH BELOW IS HOW A CAPTAIN IN ANOTHER BROWSER PAYS (architecture item 17): the bumped
+       `epoch` riding on `bench({phase:"shuffle"})` is their purchase, and the host charges it when that
+       moment lands. So this must stay the ONE thing a bought look does — bump the epoch and publish. */
     let replaying=false;
     const paintButtons=()=>{
       if(!watch)return;
@@ -811,7 +823,7 @@ export async function playBakeoffLive(spec,io){
     };
     if(watch)watch.onclick=async()=>{
       if(replaying)return;
-      if(!(onRewatch&&onRewatch(1)))return;   // engine says no coins — nothing spent, nothing shown
+      if(!(onRewatch&&onRewatch(1)))return;   // the one rule says the purse is empty — nothing bought, nothing shown
       rewatches++;
       replaying=true;
       // A PAID REPLAY RESTARTS THE SHUFFLE FOR EVERYONE. `epoch` is what tells a watcher this is a

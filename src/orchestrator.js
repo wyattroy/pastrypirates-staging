@@ -104,9 +104,12 @@ import {
   bakeoffPrompt, bakeoffReveal, playBakeoffLive, retireBakeCard,
   benchChoreoMs, BENCH_STUDY_MS, BENCH_BEAT_MS, // A-2: the choreography's own timings, answered by the file that runs them
   appendChatLine, showChatBubble,
-  setFlipActive, armFlipTap, landFlipCoin, boardCell, boardShipEls, drawBoard, render, resetBoardLog, bobTheTurn, sailSetsOff, sailArrives, payInto, payOut, crateFlightFrom, crateFlightTo, holdMovesFrom, holdMovesTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
+  setFlipActive, armFlipTap, landFlipCoin, boardCell, boardShipEls, drawBoard, render, bobTheTurn, sailSetsOff, sailArrives, payInto, payOut, crateFlightFrom, crateFlightTo, holdMovesFrom, holdMovesTo, rideStreaks, firstHomeConfetti, shotLands, loserKnocked, stopTurnBob,
   seedIdleGameState, syncBoardSizing, watchMutePlacement, clearChatBubbles,
-  showSeatCoins, // MP-06: the ONE purse renderer, shared with render() (04-01 Task 2)
+  /* (`showSeatCoins` STOOD HERE — architecture item 17, 2026-09-18. It was imported for ONE caller,
+     the guest bake branch's till, which wrote a re-watch's lower number onto the captains row before
+     the host had charged anybody. A purse is drawn by render() now and only by render(), from the
+     state the engine put on the event — this file no longer moves a number on a row at all.) */
   battleSnapshot, renderBattleFromSnap,
   collectSideBets, settleSideBets, netIntroBarrier, showAhoyIntro, showTurnOrderIntro,
   pickCell, localAsk, pilotGate, armStormGate, pilotOpeningFork, takeTurn, runStormLive, renderPickPrompt, renderAskPrompt, clearSailWindow, draftDispatch, wireRestoreFail,
@@ -121,14 +124,14 @@ import {
   openNameModal, // NAME-02: the room screen's "Change yer name" reuses the one naming modal
   setNameWarning, nameTakenMsg, // item 16/D-19: the inline "that name's taken" line and its words
   SESSION_SCHEMA_V, SOLO_SCHEMA_V,
-  encodeDec, decodeDec, saveSoloState, clearSoloState, fixEv, syncLogLines, spawnPops, apBtnStyle,
+  encodeDec, decodeDec, saveSoloState, clearSoloState, fixEv, spawnPops, apBtnStyle,
   // (optionButtonsHTML/backButtonHTML no longer imported here — the guest's hand-rolled draft
   //  renderer was the last caller, and it now goes through localAsk like every other tier.
   //  prompt_one_renderer_check.mjs holds that.)
   sliderWrapHTML, wireSlider,        // 05-01 Task 3 (MP-08): the ONE coin slider, shared with localAsk
   pn, pname, updateRecipeBanner, describe, seatLocal,
   decisionIsLocal, resolveOpt, raiseLocalPrompt, stepDelay, ask, pickNarrVariant,
-  expectEventDrawing, finishEventDrawing, eventDrawn, afterLine, flipDockCoin, flipFor,
+  expectEventDrawing, finishEventDrawing, eventDrawn, afterLine, lineWritten, flipDockCoin, flipFor,
   sleepMs, BOARD_LAST_LOOK_MS,
   mountKofi, openKofi, // KOFI-01: the embedded Ko-Fi panel and its modal opener
   coinShortfall, // G6: the shared coin re-validation, reached through the barrel (module_graph_check tiering)
@@ -310,9 +313,17 @@ export function renderBattle(o){
      finished string with its own span — kept it. The hit line is a result like those two now, so the one renderer wraps all three. */
   if(txt&&typeof o.result==="object"&&o.result.cls)txt=`<span class="${o.result.cls}">${txt}</span>`;
   if(first){
-    const dw=o.dw!==undefined?o.dw:(appState.game&&appState.game.downwindSide?appState.game.downwindSide(o.att,o.def):null);
+    /* ⭐ THE WIND THIS SHOT WAS FIRED IN COMES WITH THE FIGHT, NOT OFF THIS SCREEN'S BOARD — architecture item 25, 2026-09-18.
+       `o.dw` is the engine's own reading, taken ONCE in Game.beginBattle and carried on every publish (asyncBattleRun's `base`) and
+       across the wire (flow.js battleSnapshot). This line used to fall back to `appState.game.downwindSide(o.att,o.def)` — a second
+       reading of the fact, taken from whatever the screen drawing it happened to have on its board. MEASURED in a two-window crew
+       room: a guest whose signal dropped for four seconds drew "CROSSWIND · ties collide" 4.9 s into a fight the host was calling
+       "⬇ HOSTCAP FIRES DOWNWIND — WINS TIES", because its ships had not been mirrored yet; its own flip stage then said "HostCap is
+       firin' downwind" six seconds later. Three readings of one fact, two of them wrong on the same phone.
+       A screen that was not told does not guess: no `dw` on the publish means a crosswind, which is what the engine's own null means,
+       and Firebase deletes a null field — so absent and null are the same answer here, on purpose. */
     // @copy misc.battlecard.windtag — APPROVED as written, Wyatt 2026-08-15 (said with the fight's first line now, not pinned in a box)
-    const wind=dw==null?say("battle.crosswindTag",{}):say("battle.downwindTag",{name:pname(dw==="a"?o.att.idx:o.def.idx).toUpperCase()});
+    const wind=o.dw==null?say("battle.crosswindTag",{}):say("battle.downwindTag",{name:pname(o.dw==="a"?o.att.idx:o.def.idx).toUpperCase()});
     txt=`${txt||""}<br>${wind}`;
   }
   if(txt&&window.__pp4&&window.__pp4.flash)window.__pp4.flash(txt,undefined,undefined,undefined,{cls:"btl"});   // not awaited: the fight keeps its own pace; `btl` is the dark blue skin (index.html)
@@ -464,23 +475,56 @@ export function applyBenchSnap(snap){
    `panel("")` is guarded on our own content so this can never blank a panel that has already moved
    on to something else — the bake-off bench takes the same precaution. */
 export function applyBattleSnap(snap){
-  if(!snap){
-    appState.spectatingBattle=false;
-    return;
-  }
+  /* RETIRE: a cleared battle node draws nothing here, and never did — the fight's own words leave on their own timer. (It cleared
+     `spectatingBattle`, and the branch below set it. Architecture item 8 deleted that flag with watchNarr's filter, its last reader.) */
+  if(!snap)return;
   /* (the guest's clash stood here — played on the first battle snapshot this screen heard, which comes after the opening line and every
-     crow's-nest call. Architecture item 4: the clash is the engine's `engage` event, sounded by the one event consumer on every screen.) */
-  appState.spectatingBattle=true;
-  if(!appState.inBattlePrompt)renderBattleFromSnap(snap);
+     crow's-nest call. Architecture item 4: the clash is the engine's `engage` event, sounded by the one event consumer on every screen.)
+     A FIGHT'S WORDS ARE DRAWN WHATEVER THIS SCREEN IS DOING, ITS OWN FIGHT PROMPT INCLUDED — architecture item 8, 2026-09-17. This was
+     `if(!appState.inBattlePrompt)renderBattleFromSnap(snap)`, the battle box's guard; the host's battlePublish never had one. */
+  renderBattleFromSnap(snap);
 }
 
+/* ⭐ A REMOTE CAPTAIN'S LOOK IS PAID FOR AT THE TAP — architecture item 17, 2026-09-18.
+   THE ONE PLACE A RE-WATCH'S COINS EVER LEAVE A PURSE is the engine's `rewatch` event, drawn by the one
+   event consumer through the one spending door (payOut). A captain baking on their own device has no
+   engine, so this is how their tap reaches one: `epoch` — the number of looks they have bought — is
+   already stamped on every bench moment they publish (playBakeoffLive bumps it and publishes the
+   restarted shuffle in the same breath), so the purchase is ALREADY on the wire and already arriving
+   here. This only has to notice it and charge for it, once, in the engine.
+   It used to be charged in a lump when the whole bake came home, which is why a watching captain saw
+   nothing for seventeen seconds and then a coin — the measurement is in watchPrompt's bake branch.
+   ONLY THE HOST, AND NEVER FOR A SCREEN THAT CHARGES ITSELF: a captain whose decision is local has
+   already paid at the tap (flow.js onRewatch), and a bot never buys a look, so its epoch never moves.
+   THE LEDGER IS PER BENCH, and it is closed two ways so neither has to be relied on alone: the verdict
+   ends a bake, and an epoch lower than what has been paid for is a new bench whatever came before it.
+   `bakeRewatch` is asked for the WHOLE gap, so a bench moment that never arrives (one publish swallowed,
+   or a second look bought before the first was heard) is caught by the next one rather than lost. */
+let _rewatchPaid={seat:null,n:0};
+function chargeRewatches(snap){
+  if(!appState.isHost||appState.replaying||!snap)return;
+  const seat=snap.seat;
+  if(seat==null||decisionIsLocal(seat))return;
+  // the verdict is the last moment of a bake, so the ledger closes with it — the captain's NEXT bench
+  // starts its epoch at 0 again and must be able to buy from a clean slate
+  if(snap.phase==="reveal"){ if(_rewatchPaid.seat===seat)_rewatchPaid={seat:null,n:0}; return; }
+  const epoch=snap.epoch||0;
+  if(_rewatchPaid.seat!==seat||epoch<_rewatchPaid.n)_rewatchPaid={seat,n:0};   // a fresh bench for this captain
+  const want=epoch-_rewatchPaid.n;
+  if(want<=0)return;
+  const player=((appState.game&&appState.game.players)||[])[seat];
+  if(!player)return;
+  _rewatchPaid={seat,n:epoch};        // what they ASKED for; the engine alone says what their purse could stand
+  if(appState.game.bakeRewatch(player,want)>0)liveRender();   // the drain that draws the event, exactly as the local tap's does
+}
 export function watchBattle(){
   netWatchBattle(appState.db,appState.room,s=>{
     const v=s.val();
     /* THE BAKE COMES FIRST AND RETURNS. A bench snapshot carries `bake` and has no attIdx/defIdx,
-       so renderBattleFromSnap would bail on it anyway — but reaching that line at all would set
-       spectatingBattle and silence narration for the rest of the voyage. */
-    if(v&&v.bake){applyBenchSnap(v.bake);return;}
+       so renderBattleFromSnap bails on it anyway — and this door is the bench's, not the fight's.
+       (It used to matter far more: reaching that line at all set spectatingBattle, which silenced
+       narration for the rest of the voyage. That flag is gone — architecture item 8.) */
+    if(v&&v.bake){chargeRewatches(v.bake);applyBenchSnap(v.bake);return;}
     if(!v)applyBenchSnap(null);                 // the node cleared: any watcher session ends
     /* THE BATTLE PATH STAYS GUEST-ONLY, AND THAT IS A DECLARED GAP, NOT AN OVERSIGHT.
        watchBattle is now attached by EVERY client (see beginGame) because a bench is published by
@@ -512,25 +556,17 @@ export function battleAsk(player,o,msg,opts,colors){
   }
   const askSeat=player.idx;   // who is being ASKED — never whose turn it is (architecture item 3: the top bar stays on the attacker)
   const isFlip=opts.length===1&&!!opts[0].flip;
-  // spectators (and, crucially, the OTHER combatant) get a battle-aware nudge that names who's
-  // attacking whom instead of a bare "…is deciding" — so when a bot attacks a human on the bot's
-  // turn, the table can see it's the human's defend flip and nudge them (see #11).
-  const spect=(o&&o.att&&o.def)
-    ?(askSeat===o.def.idx?sayAll("battle.waitDefend",{a:seat(o.att.idx),d:seat(o.def.idx)})
-      :sayAll("battle.waitFor",{a:seat(o.att.idx),d:seat(o.def.idx),who:seat(askSeat)}))
-    :sayAll("wait.deciding",{p:seat(askSeat)});
-  // D-10 DELIVERY (F7): the spectator line is the neutral broadcast, the asked seat's own prompt is
-  // that seat's variant, and each client selects for itself through the mechanism that already ships.
-  //
-  // THIS IS A NEW FINDING, NOT A REVERSAL. D-35's sweep listed this site as "the correct
-  // actor/spectator split (D-10), not a transport fork", and it was right about the question it
-  // asked: does guest-side code AUTHOR its own text? It does not. This gate asks a different
-  // question — does the broadcast REACH the right viewer? — which that sweep never examined. One
-  // message cannot express a per-viewer difference, however correctly it was authored.
-  /* THE CAPTAIN ABOUT TO FLIP GETS NO BOX. Wyatt, 2026-09-15: "There is still a narration box that appears for a moment before the
-     flippenator appears. we can get rid of that." The flip stage rises with these same words as its own title, so on that one screen
-     the line is dropped (stageFlash ignores an empty line); every other seat still gets the spectator line it always got. */
-  netBroadcast(spect.html,[...spect.variants.filter(v=>v.seat!==askSeat),{seat:askSeat,html:isFlip?"":msg}]);
+  /* ⭐ NOBODY IS TOLD THE FIGHT IS WAITING FOR A COIN — architecture item 8, Wyatt's ruling relayed 2026-09-17, his own option (a):
+     "drop the fight's two waiting lines everywhere … 'loads the cannon…' and 'shows TAILS — X must answer…' already say whose coin it is."
+     WHAT STOOD HERE: a broadcast of `battle.waitDefend` ("⚔️ {a} attacks {d}! Waiting for {d} to defend…") to every screen but the
+     defender's, or `battle.waitFor` ("⚔️ {a} attacks {d} — waiting for {who}…") to every screen but the asked captain's. THE HOST NEVER
+     DREW EITHER — netBroadcast draws nothing locally (see its own comment) — so on a solo device the words did not exist, and in a crew
+     room they existed only on the screens that were not deciding. MEASURED in the two-window crew fight behind this item: the guest's
+     own watchNarr filter then dropped them too, so in a crew fight they reached NO screen at all; with that filter gone but these lines
+     still here they landed on the watching phone and cut "HostCap loads the cannon…" from 4,537 ms of reading time to 769 ms.
+     Both words are deleted from src/shared/words.js in the same commit. scripts/qa/fight_lines_not_filtered_check.mjs holds it.
+     (`msg` is still this seat's own question, put to it by the prompt itself below — never broadcast. THE CAPTAIN ABOUT TO FLIP GETS NO
+     BOX either way, Wyatt 2026-09-15: "There is still a narration box that appears for a moment before the flippenator appears.") */
   let idxP;
   if(decisionIsLocal(askSeat)){
     battlePublish(o);   // the table's copy of the fight (no box any more — see renderBattle)
@@ -612,12 +648,30 @@ async function asyncBattleRun(att,def){
      it announces, the order the host has always had (architecture item 4). */
   await liveRender();
   const need=1;
-  // D-08/D-25: the opening names both combatants, each reading it addressed to themselves.
-  // his pass, 2026-09-13: "Crustbeard attacks Davy Scones!" — words.js writes each fighter's "ye" version
-  const opening=sayAll("battle.opening",{a:seat(att.idx),d:seat(def.idx)});
+  /* ⭐ THE OPENING BEAT SAYS THE CANNON, NOT THE DECISION — Wyatt, 2026-09-18:
+       "'wyargh -- ye attack flaky jack' is a useless narration -- you're the one who just decided
+        to attack. instead, show the narration that comes immediately after it there but is
+        immediately covered up by the flippenator -- it says something about loading a cannon but i
+        can never read it in time. and yes, this should happen for all players, of all types."
+
+     He is describing a beat spent on a fact the reader already owns. "Ye attack Flaky Jack" is the
+     button they just pressed; "{a} loads the cannon…" is the only new thing in the sequence, and it
+     was being published to the battle card 40 lines below and then buried by the flip stage within
+     half a beat — the one line worth reading, in the one slot nobody can read.
+
+     So the LINES swap slots, not the timings: `battle.loads` takes the readable beat (the same
+     max(900, stepDelay()) the opening had), and the card below still publishes it, so the words on
+     the card and the words in the box agree rather than one replacing the other.
+
+     "ALL PLAYERS, OF ALL TYPES" is why this is sayAll and not say: it composes every seat's reading
+     of the same line, so the attacker sees "ye load the cannon…" and everyone else sees the captain
+     named — one line, every screen, the same beat. D-08/D-25's rule, applied to the new line.
+     (`battle.opening` stays in words.js: it is still what a battle CARD's header says, and deleting
+     a line because one caller stopped using it is how a phrase gets rewritten from scratch later.) */
+  const opening=sayAll("battle.loads",{a:seat(att.idx)});
   // @copy adhoc.battle.opening
   await flash(opening.html,Math.max(900,stepDelay()),undefined,opening.variants);
-  const bets=await collectSideBets(att,def);
+  const bets=await collectSideBets(att,def,F.downwind);   // the engine's reading of the wind, handed over — a bot caller must not take its own
   let a=0,d=0;
   const hA=att.strategy==="human",hD=def.strategy==="human";
   let round=0;
@@ -630,7 +684,11 @@ async function asyncBattleRun(att,def){
      because there is one flip, not because two copies agree. */
   const beat=Math.max(300,Math.min(900,bd*0.9));  // suspense pause before the defender answers
   const hold=Math.max(500,Math.min(1500,bd*1.1)); // pause to read the round result
-  const base=o=>Object.assign({att,def,a,d,round,need},o);
+  /* `dw` IS THE ENGINE'S READING OF THE WIND, ON EVERY PUBLISH — architecture item 25. beginBattle took it once (Game.downwindSide,
+     positions never change mid-fight) and it rides here so the fight's own words carry it: renderBattle says it, battleSnapshot puts
+     it on the wire, and no screen re-reads it off the board it is drawing. Null in a crosswind, which is also what its absence means
+     after Firebase has dropped the field. */
+  const base=o=>Object.assign({att,def,a,d,round,need,dw:F.downwind},o);
   /* THE FIGHT'S FLIPS, THROUGH THE ONE TOSS — architecture item 6, 2026-09-17. Two routines stood here, hFlip for a captain and
      bFlip for a bot, each painting the spin, sleeping, broadcasting the face on the `flip` wire node, holding and clearing on its own —
      the D-49 and T-34 fixes had to be applied to both, and every watching screen heard the spin sound twice (measured: a bot's flip on a
@@ -740,8 +798,9 @@ async function asyncBattleRun(att,def){
   // made the host's teardown and a watcher's two separate pieces of code — the condition rule 23
   // exists to forbid. Both now leave by this door.
   applyBattleSnap(null);
-  // battle's over — clear the broadcast scoreboard so every client's watchNarr can take the panel
-  // back for the result narration (and so spectatingBattle resets). (#9)
+  // battle's over — clear the broadcast scoreboard, which is how every other screen hears it. No screen waits for this to draw a
+  // narration line any more: a line is drawn when it arrives, fight or no fight (architecture item 8; it used to reset spectatingBattle,
+  // which is what let watchNarr "take the panel back for the result narration" — #9, 2026-07-20).
   if(appState.isHost&&appState.db&&appState.room&&!appState.replaying)netRemoveBattle(appState.db,appState.room,netFail("battle clear"));
   /* ⭐ HOW THE FIGHT ENDED IS SAID ONCE, BY THE FIGHT, FROM THE EVENT ITS ENDING RECORDED — before the calls settle, however it ended
      (architecture item 9, 2026-09-17): a won fight ("Crustbeard wins and takes Cacao Pods."), a stand-off, or a flight ("Davy Scones
@@ -983,7 +1042,10 @@ function flashCaptainsBox(){
 
    The per-attempt sequence lives in Game.bakeAttempt and NOWHERE ELSE — this driver supplies only
    which promise to await, never what to compute. That is what keeps the live and headless loops
-   from drifting, and scripts/bakeoff_parity_test.js asserts it rather than trusting the comment.  [UNGATED-IN-4: bakeoff_parity_test.js reads the root tree, not this one] */
+   from drifting, and scripts/bakeoff_parity_test.js asserts it rather than trusting the comment.
+   THE DEBT IS PAID (architecture item 54, 2026-09-18): that gate used to import a tree deleted at the
+   cutover and was in nobody's chain, so this sentence carried an UNGATED-IN-4 marker. It reads THIS
+   engine now, it is in `npm test`, and it pins its copy of this loop to the real thing below. */
 async function runLiveDayBakeoff(order){
   const g=appState.game;
   for(const i of order){
@@ -1029,21 +1091,24 @@ async function bakeTurnLive(player){
   let dec;
   if(human)dec=await bakeoffPrompt(player,setup,fallback);
   else{ if(perform)await botBakePerform(player,setup,fallback); dec={g:fallback,w:0}; }
-  /* WHERE A RE-WATCH IS ACTUALLY PAID FOR — three cases, one debit site, and the engine is the
-     only thing that ever moves a coin.
-       LOCAL, LIVE      already charged, one click at a time, by flow.js's onRewatch — so the purse
-                        on screen falls as you spend.
-       REPLAY           the prompt early-returns without ever running the UI, so nothing has been
-                        charged and the whole count settles here in one go.
-       REMOTE, LIVE     (04-01 Task 2, MP-06) the buyer has no engine to debit. Their own screen
-                        dropped the number optimistically the moment they bought; the COUNT rode
-                        home in the single reply, and this is where it becomes real. Same site,
-                        same call, same one-entry decision log — the host stays authoritative and
-                        the settled purse is what the end-of-voyage ranking reads.
-     bakeRewatch DRAWS NO RANDOM NUMBERS (see its note in the engine), so adding the remote case
-     cannot fork the seeded stream; it emits a `rewatch` event, exactly as the other two do, which
-     is also what reconciles the buyer's optimistic figure back to the settled one. */
-  if(dec.w&&(appState.replaying||!decisionIsLocal(player.idx)))g.bakeRewatch(player,dec.w);
+  /* WHERE A RE-WATCH IS PAID FOR — every look, live, at the tap that bought it, and THE PURSE ON EVERY
+     SCREEN FALLS THERE (architecture item 17, 2026-09-18).
+       LOCAL, LIVE      flow.js's onRewatch, one tap at a time.
+       REMOTE, LIVE     chargeRewatches, off the bench moment that tap publishes — one tap at a time,
+                        on this host's engine, so the `rewatch` event is drawn while the shuffle is
+                        replaying rather than a quarter of a minute later.
+       REPLAY           and this line, which is the ONLY case left here: the prompt early-returns
+                        without ever running the UI, so nothing has been charged and the whole count
+                        settles in one go from the log's own record of it.
+     `dec.w` IS STILL LOGGED FOR EVERY BAKE, live or not — that is what this line reads back on a
+     resume, and a log that recorded the guess but not the looks would rebuild a captain with the
+     wrong purse.
+     THE REMOTE CASE USED TO BE HERE TOO, charging the lot when the bake came home: `dec.w &&
+     (appState.replaying || !decisionIsLocal(player.idx))`. Leaving it beside the per-tap charge would
+     charge a remote captain twice, which is exactly what "make the count ONE" means here.
+     bakeRewatch DRAWS NO RANDOM NUMBERS (see its note in the engine), so no case of it can fork the
+     seeded stream. */
+  if(dec.w&&appState.replaying)g.bakeRewatch(player,dec.w);
   const out=g.bakeResolve(player,dec.g);
   // A-2: the verdict reveals for EVERY performed bake, not only a human's — the crates a bot's
   // watchers just studied come off the same way, through the same one publish.
@@ -1473,6 +1538,22 @@ export function pushEvents(){
      one thing that must never happen twice. */
   if(!appState.isHost)return;
   if(!appState.db||!appState.room)return;
+  /* ⭐ A SCREEN REBUILDING ITS OWN HISTORY HAS TOLD THE CREW NOTHING NEW — architecture item 47,
+     2026-09-18. THE RULE LIVES HERE, ON THE PUBLISHER, for the same reason the host guard above
+     does: it protects every caller instead of asking each one to remember.
+     WHAT IT COST BEFORE, measured in two windows (host 1200x950 + guest 375x812, room YGMF): a host
+     that reloaded on day 2 of a 36-record voyage put ALL THIRTY-SIX RECORDS BACK ON THE WIRE, every
+     serial from n0 to n35 a second time, every copy byte-identical to the original. The guest's own
+     feed went from 35 records to 72 for a 36-event voyage; its captain's log grew from 8 rows to 18
+     as the whole voyage was told again — Day 1's wind, the beluga, the docks, the trade — and three
+     coins flew across the board a second time. The engine came out right (both screens ended on the
+     same four squares and the same four purses); the crew were simply told the voyage twice.
+     WHY IT ESCAPED: liveRender (src/ui/panel.js) does carry this test, but publishNow (src/ui/flow.js)
+     — the other publish path, added by W9 so an animating call site can hand the table its event
+     early — does not, and it is called from a dozen places in the replay's own fast-forward. With
+     the frontier still at 0 (beginGame's reset, see below) the first of those calls flushed the
+     entire rebuilt history. This predates architecture item 10; it is not a regression from it. */
+  if(appState.replaying)return;
   while(appState.evPushed<appState.game.events.length){
     /* Q-18 — THE SERIAL IS STAMPED ON THE WIRE COPY, NEVER ON THE ENGINE'S OWN EVENT. Adding a
        field inside Game.ev would change what the engine emits into the event stream, which
@@ -1725,7 +1806,14 @@ export async function consumeEvent(e){
        pace. A guest simply reads it while it waits for the crew. */
     stowedGate=pilotGate("recipe.stowed",t=>t.replace("{name}",pn(e.p))).catch(()=>{});
   }
-  syncLogLines();
+  /* (`syncLogLines()` STOOD HERE and was the first step of this consumer — architecture item 50,
+     2026-09-18. The captain's log is not a REACTION to an event, it is the voyage's written record,
+     and a record that only ever holds the events this screen watched go by cannot survive a reload:
+     a host rebuilds its history with `replaying` true, the drain refuses it, and the host opened its
+     own log on an empty card (measured, both runs: 10 rows -> 0, 8 -> 0, still 0 with nobody
+     playing). It is read from `game.events` where the log is DRAWN now — src/ui/util.js
+     syncLogLines, called by renderLog — so this consumer still fills it, through its own render()
+     step below, and every screen is right for the same reason whatever rebuilt its history. */
   /* AUDIO-01/D-07: the per-event sound moment, every tier — and THE ONE PLACE the whole game turns
      an event into a sound, host and guest alike. That is why the seat answer is computed HERE and
      handed down: both clients run this same line and each answers for ITSELF, so the your-turn bell
@@ -1787,7 +1875,10 @@ export async function consumeEvent(e){
      Now two engine facts and this one door: `engage` (Game.beginBattle) holds, `disengage` (Game.endBattle, once the calls are settled)
      lets go; the clash is `engage`'s own sound on the line below. The hold is armed BEFORE the sound, as the host always did it.
      scripts/qa/fight_on_screen_one_door_check.mjs holds it. */
-  if(e.t==="engage"&&window.__pp4&&window.__pp4.battle)window.__pp4.battle(e.a,e.d);
+  /* …AND IT CARRIES THE WIND THE FIGHT WAS CALLED IN (architecture item 25, 2026-09-18): the flip stage's stakes line used to ask
+     appState.game.downwindSide for the two ships it frames — a second reading of a fact the engine had already taken and put on this
+     very event. The one door hands it over with the pair, so the stage names the captain the engine named, on every screen. */
+  if(e.t==="engage"&&window.__pp4&&window.__pp4.battle)window.__pp4.battle(e.a,e.d,e.downwind==null?null:e.downwind);
   if(e.t==="disengage"&&window.__pp4&&window.__pp4.battleEnd)window.__pp4.battleEnd();
   playForEvent(e, decisionIsLocal(e.p));
   /* ⭐ THE TINY DOCK COIN IS DRAWN HERE, FOR EVERY CAPTAIN WHOSE CHOICE WAS NOT MADE ON THIS SCREEN —
@@ -2007,12 +2098,13 @@ export function watchPrompt(){
          (Wyatt's Glass report, 13:08Z). The bake-bench guard above is untouched: squares are
          never a bench. One broom, shared with the renderer — see clearSailWindow() in ui/flow.js. */
       clearSailWindow();
-      setFlipActive(null);appState.inBattlePrompt=false;return;}
+      setFlipActive(null);return;}
     if(prompt.kind==="ask"){
       if(prompt.battle){
         /* THIS SEAT'S BATTLE DECISION, WITH NO BOX (2026-09-14): the camera holds the fight, a flip is the flip stage, and a choice is
-           the ordinary prompt — exactly what the host's own captain gets in battleAsk. */
-        appState.inBattlePrompt=true;
+           the ordinary prompt — exactly what the host's own captain gets in battleAsk. (It used to raise `inBattlePrompt`, which
+           dropped every line this screen was handed while it was up; architecture item 8 deleted the flag — a line is drawn when it
+           arrives.) */
         renderBattleFromSnap(prompt.battle);   // the fight's words; a line already said is not said again (the camera is held by the fight's engage event)
         if(prompt.flip){
           setNeedsAction(true);
@@ -2024,7 +2116,6 @@ export function watchPrompt(){
         }
         return;
       }
-      appState.inBattlePrompt=false;
       /* FORK 2 CONVERGED (W1, 2026-08-28). Everything that stood here — the guest's own flip
          branch (whose early return meant a guest NEVER saw the other options on a flip-bearing
          prompt), its own back-button build, its own panel() markup, its own slider build and its
@@ -2053,7 +2144,6 @@ export function watchPrompt(){
       renderAskPrompt({msg:prompt.msg,opts,colors:prompt.colors||null,sub:prompt.sub||null,slider:sl,battle:false},
         v=>sendResponse(prompt.id,v,true));
         }else if(prompt.kind==="pick"){
-      appState.inBattlePrompt=false;
       setFlipActive(null);
       // THE TRACER (02.15-02 Task 3, D-25/PAR-14): names the ONE converged renderer DIRECTLY —
       // this is what makes the pick channel's orchestration parity gate (assertion 6,
@@ -2091,7 +2181,6 @@ export function watchPrompt(){
          SEE the convergence — a wrapper would satisfy the eye and nothing else. playBakeoffLive is
          handed the same spec bakeoffPrompt built, so the shuffle a remote captain watches is the
          same arcs, the same 1000ms swaps and the same 700ms settles, drawn by the same code. */
-      appState.inBattlePrompt=false;
       setFlipActive(null);
       /* ONE PROMPT, ONE CHOREOGRAPHY. This callback fires on every write to the prompt node and
          also on re-attach, and a bake is a two-minute interaction rather than a re-render — a
@@ -2099,24 +2188,32 @@ export function watchPrompt(){
          watchBattle uses for spectatingBattle: read before you assign. */
       if(_liveBakePromptId===prompt.id)return;
       _liveBakePromptId=prompt.id;
-      /* MP-06, THE REMOTE PURSE. The engine is the only thing that moves a real coin and it lives
-         on the host, so what happens here is DISPLAY: the buyer's own purse drops the moment they
-         buy, the count rides home in the single reply, and the host charges it authoritatively
-         through Game.bakeRewatch — after which the ordinary `rewatch` event reconciles this screen
-         with the settled number.
-         THE ALTERNATIVE, RECORDED RATHER THAN TAKEN (D-56): a live spend channel would show the
-         true number instantly, at the price of a round-trip in the middle of a prompt and a second
-         way for a purse to be wrong. If the optimistic figure is ever seen to disagree with the
-         settled one, report the number — do not paper over it. */
-      const cost=prompt.cost||1;
-      let purse=(prompt.coins==null?0:prompt.coins);
-      const spend=(n)=>{
-        const want=cost*(n||0);
-        if(want<=0||purse<want)return false;
-        purse-=want;showSeatCoins(prompt.seat,purse);
-        return true;
-      };
-      spend.canAfford=()=>purse>=cost;
+      /* ⭐ MP-06, THE REMOTE PURSE — REBUILT BY ARCHITECTURE ITEM 17, 2026-09-18, and here is what it
+         used to do and what it cost. This branch kept a till of its own: it carried the price over the
+         wire (`prompt.cost||1`), ran its own purse down (`purse-=want`) and wrote the lower number
+         straight onto the captains row (`showSeatCoins`) — while the host charged nothing until the
+         whole bake was over. MEASURED, one crew room, two phones, one paid look each:
+             HOST bakes   — host's screen: purse 3→2 with a coin of theirs in flight within 45ms of
+                            the tap (19 samples); guest's screen: the same drop, the same coin, at 86ms.
+             GUEST bakes  — guest's own screen: purse 5→4 SILENTLY at the tap, no coin ever drawn
+                            leaving; host's screen: still 5 for 17.4 SECONDS (435 samples, nothing in
+                            flight), then 5→4 with the coin at 17.5s, when the bake ended. And the coin
+                            that finally flew on the buyer's own screen came out of a number that had
+                            already moved, so it left nothing behind it.
+         One purchase, two pictures, seventeen seconds apart. The `spend` closure was the second place
+         a purse dropped for a re-watch, and `prompt.cost||1` the second place a look had a price.
+         NOW: this screen decides nothing about money. The tap publishes the bench's new epoch (the
+         count of looks bought, which playBakeoffLive already stamps on every publish), the HOST reads
+         it off that publish and charges Game.bakeRewatch there, once per look — and the `rewatch`
+         event draws the coins leaving on every screen through the one spending door, the buyer's own
+         included. The round trip D-56 was cited to decline is the one the bench was already making.
+         WHAT IS LEFT HERE IS A QUESTION, NOT A TILL: may this captain buy another look? It is asked of
+         the ONE place that decides it (Game.canRewatch) about the purse this screen is already drawing
+         — a guest's players[] is the authority's own numbers, mirrored by consumeEvent off every
+         event's `state`, so the button greys itself the moment the charge lands. */
+      const baker=()=>((appState.game&&appState.game.players)||[])[prompt.seat];
+      const mayWatch=(n)=>(n||0)>0&&appState.game.canRewatch(baker());
+      mayWatch.canAfford=()=>appState.game.canRewatch(baker());
       /* THE SPEC IS THE OBJECT THAT CAME OVER THE WIRE, held once and handed both to the
          choreography and to the publisher — so a remote captain's bench and the bench every other
          captain watches are built from literally the same fields. */
@@ -2126,7 +2223,7 @@ export function watchPrompt(){
       // local screen would have titled the card "{Captain}'s Bake-Off" while a remote captain's
       // still read "The Bake-Off". A title is not load-bearing; the divergence would have been.
       const wireSpec={order:prompt.order||[],before:prompt.before||[],swaps:prompt.swaps||[],
-                      locked:prompt.locked||[],attempts:prompt.attempts||0,cost,baker:prompt.baker,
+                      locked:prompt.locked||[],attempts:prompt.attempts||0,baker:prompt.baker,
                       /* the same field the local branch reads — the parity gate above exists to
                          catch precisely this kind of one-sided omission, and `baker` was the last
                          one it caught. */
@@ -2145,7 +2242,7 @@ export function watchPrompt(){
          CANCELLING IS NOT OPTIONAL — see the writer's own note. It is cancelled on the answer path
          AND on the error path below, which are the only two ways out of this branch. */
       netForfeitOnDisconnect(appState.db,appState.room,prompt.id);
-      playBakeoffLive(wireSpec,{onRewatch:spend,onBench:(patch)=>benchPublish(wireSpec,seat,patch)})
+      playBakeoffLive(wireSpec,{onRewatch:mayWatch,onBench:(patch)=>benchPublish(wireSpec,seat,patch)})
         // The SAME SHAPE playBakeoffLive resolves for a local captain — {guess,rewatches} — so the
         // host's tail in bakeoffPrompt never has to know which tier answered. `null` (the bench
         // failed to render) travels as no `choice` at all, which remotePrompt already resolves to
@@ -2192,10 +2289,14 @@ let _liveBakePromptId=null;
 const NARR_EVENT_GRACE_MS=450, NARR_EVENT_POLL_MS=30;
 export function watchNarr(){
   netWatchNarr(appState.db,appState.room,s=>{const v=s.val();
-    // while a battle scoreboard is showing here (as spectator or active combatant), keep it up —
-    // the per-flip "X flips HEADS" broadcasts are already reflected in the scoreboard coins, and
-    // letting them overwrite the panel made the battle box flicker away between flips (#9)
-    if(v&&!appState.spectatingBattle&&!appState.inBattlePrompt)
+    /* ⭐ A LINE IS DRAWN WHEN IT ARRIVES, FIGHT OR NO FIGHT — architecture item 8, 2026-09-17. This dropped EVERY line handed to this
+       screen while a fight's snapshot was live or this screen's own fight prompt was up: `&&!appState.spectatingBattle&&!appState.inBattlePrompt`,
+       written 2026-07-20 (2793771d, playtest item #9) so the per-flip lines "would not overwrite the panel" and make "the battle box
+       flicker away between flips". THE BATTLE BOX WAS DELETED ON 2026-09-14 (1c87b27a) and the reason with it; the host's own flash
+       never filtered anything, so the two screens disagreed by construction — rule 23.
+       MEASURED in a two-window crew fight before this change: the watching phone was handed six narration lines during two fights and
+       drew none of them, the host's "…is deciding…" for a fire-again and for a flee among them. */
+    if(v)
       {
         /* THE HOST'S DECISION WINS OVER THE SNIFF. -1 means "the host deliberately gave this line no
            subject" (a fight, a table-wide report) and must NOT fall through to the colour sniff,
@@ -2221,7 +2322,9 @@ export function watchNarr(){
         const applySubject=()=>{
           if(!window.__pp4)return;
           const ev=evAt(v.evN);
-          if(ev){window.__pp4.subject=subjectOf(ev);window.__pp4.subjectSet=true;window.__pp4.evType=ev.t;return;}
+          // (…;window.__pp4.evType=ev.t stood on this line — deleted with its only reader, stage.js's
+          //  dead storm camFull(), by architecture item 24, 2026-09-18.)
+          if(ev){window.__pp4.subject=subjectOf(ev);window.__pp4.subjectSet=true;return;}
           if(v.subj!=null){window.__pp4.subject=(v.subj===-1?null:v.subj);window.__pp4.subjectSet=true;}};
         /* ONE SLOT, ONE LIVE LINE. `narr` is written with .set(), so only the newest sentence is
            real — but each arriving line now runs its own timer, and a held line firing after a
@@ -2244,7 +2347,13 @@ export function watchNarr(){
            only once this device's own consumer has finished drawing that event — so a guest cannot read
            "HEADS!" over a coin still in the air. Capped inside eventDrawn, and the generation guard still
            drops a line a newer one has overtaken. */
-        const drawIt=()=>{const ev=evAt(v.evN);return Promise.resolve(ev?eventDrawn(ev):null).then(()=>{if(appState.narrGen!==myGen)return;applySubject();return flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined);}).catch(()=>{});};
+        /* ⭐ AND THIS SCREEN SAYS THE LINE WAS WRITTEN, THE SAME WAY THE HOST'S NARRATOR DOES — util.js lineWritten,
+           the one place that turns written words into the release of anything waiting on them (a muse coin's flight).
+           It sits INSIDE the draw, beside flash and after both guards, because that is the instant the words start
+           being written on THIS screen: before eventDrawn a dock's line has not begun, and a line a newer one has
+           overtaken is never written at all. Without this call the guest had no answer but afterLine's 8-second cap —
+           measured, five muse coins out of five, a whole turn late (the note at lineWritten has the numbers). */
+        const drawIt=()=>{const ev=evAt(v.evN);return Promise.resolve(ev?eventDrawn(ev):null).then(()=>{if(appState.narrGen!==myGen)return;applySubject();lineWritten(v.html,ev);return flash(v.html,undefined,undefined,v.variants,v.wait?{wait:true}:undefined);}).catch(()=>{});};
         if(v.evN!=null&&v.evN>=0&&(appState.evSeen==null||appState.evSeen<v.evN)){
           const until=Date.now()+NARR_EVENT_GRACE_MS;
           const tick=()=>{
@@ -2734,10 +2843,22 @@ export function beginGame(cfg,seed){
   // rebuilt from scratch on a resume, where the base must come from the SAVE, not from storage.
   appState.game.seaSeat=appState.mySeat;
   appState.game.seaBase=(appState.soloMeta&&appState.soloMeta.seaBase)||0;
-  appState.live=true;appState.liveDone=false;appState.evIdx=0;appState.evPushed=0;appState.evConsumed=0;appState.evSeen=null;appState.narrGen=0;appState.narrEvIdx=null;appState.appliedMeta=false;
-  // fresh start resets the decision log; a reload-replay keeps the log loaded by resumeHostGame
-  if(!appState.replaying){appState.dlog=[];appState.dlogIdx=0;appState.dlogN=0;}
-  appState.logLines=[];resetBoardLog(-2);$("log").innerHTML=""; // notes/edits 11-03: logRenderedTo now lives in src/ui/board.js
+  appState.live=true;appState.liveDone=false;appState.evIdx=0;appState.evConsumed=0;appState.evSeen=null;appState.narrGen=0;appState.narrEvIdx=null;appState.appliedMeta=false;
+  /* fresh start resets the decision log; a reload-replay keeps the log loaded by resumeHostGame
+     ⭐ AND THE CREW'S FRONTIER MOVED IN HERE — architecture item 47. `evPushed` was the one number
+     on the line above that describes the CREW'S FEED rather than this screen's own engine, and it
+     sat on the unconditional reset: a resumed host announced "the crew have seen nothing" before it
+     had rebuilt a single event, which is the zero the whole voyage then went back out from.
+     A rebuilt engine starts at zero; the crew's feed does not. resumeHostGame has already said how
+     many records that feed holds by the time this runs, so on a resume this leaves it alone. */
+  if(!appState.replaying){appState.dlog=[];appState.dlogIdx=0;appState.dlogN=0;appState.evPushed=0;}
+  /* (`appState.logLines=[];resetBoardLog(-2);$("log").innerHTML="";` STOOD HERE — architecture item 50,
+     2026-09-18. Three resets of the captain's log, on the one line a RESUMING host runs too, and all
+     three were describing a state the page already started in: beginGame cannot run twice
+     (`if(appState.gameStarted)return;` above, and every Play again goes through leaveGame's
+     location.reload), so the log, the box and the paint cursor are always untouched when it runs.
+     What the log holds is decided in src/ui/util.js syncLogLines, which knows which voyage it is
+     describing; renderLog drops the box's rows on the same answer. No caller has to remember. */
   $("chatLog").innerHTML="";clearChatBubbles();
   $("chatPanel").style.display=(appState.db&&appState.room)?"":"none"; // no chat in solo/pass-and-play — no one else to talk to
   drawBoard();buildPlayerRows();
@@ -3007,7 +3128,18 @@ export async function resumeHostGame(r){
   appState.dlog=Object.keys(draw).map(Number).sort((a,b)=>a-b).map(k=>decodeDec(draw[k]));
   appState.dlogIdx=0;appState.dlogN=0;
   let evval={};try{evval=(await netReadEv(appState.db,appState.room)).val()||{};}catch(e){appState.resumeReadFailed=true;netFail("resume events")(e);}
+  /* ⭐ WHICH RECORDS THE CREW HAS ALREADY SEEN — architecture item 47, 2026-09-18. THIS IS THE ONE
+     MOMENT ANY SCREEN LEARNS IT: the feed's own length, read straight off `rooms/<room>/ev`, which
+     is the list the crew's watchEvents has been fed record by record. So the frontier is set HERE,
+     beside the number it comes from, and before the replay begins — not afterwards in endReplay,
+     which is one step too late for the publishes the replay itself makes (see pushEvents).
+     TWO USES, ONE READ: `resumeEvLen` is also the yardstick replayShortfall measures the rebuild
+     against ("did we actually get back?", src/ui/util.js), which is a different question and keeps
+     its own name. (wireRestoreFail answers a third one — what a player who chose to carry on from a
+     knowingly-incomplete voyage is numbering from — and deliberately uses the REBUILT length; BUG-04,
+     `5e29eab9`. It is not a copy of this and is left exactly as it was.) */
   appState.resumeEvLen=evval?Object.keys(evval).length:0;
+  appState.evPushed=appState.resumeEvLen;
   showGameView();
   // @copy prompt.net.reconnecting
   panel(`<div class="apMsg">${say("resume.reconnecting",{})}</div>`);

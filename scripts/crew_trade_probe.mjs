@@ -403,11 +403,12 @@ function longestDecidingSpan(samples) {
 async function finish(code) {
   try { await H.ev(PROMPT_OFF); } catch {}
   for (const C of [H, ...Gs]) { try { await C.ev(RECORDER_OFF); } catch {} try { await C.ev(RESPONDER_OFF); } catch {} }
-  try { await H.ev(`(async()=>{const st=__pp_app_state_debug();if(st.db&&st.room)await st.db.ref('rooms/'+st.room).remove();return 1})()`); } catch {}
+  /* The room delete moved into mp_rig's killAll() on 2026-09-17 — it ran here only on the two paths
+     that reach finish(), and not on a Ctrl-C or a watchdog. One deleter, on every way out. */
   out.finishedAt = new Date().toISOString();
   fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(out, null, 2));
   log(`\nwrote ${path.join(OUT, "result.json")}`);
-  try { killAll(); } catch {}
+  try { await killAll(); } catch {}
   process.exit(code);
 }
 
@@ -590,5 +591,5 @@ try {
 } catch (e) {
   log("\nTHREW: " + ((e && (e.stack || e.message)) || e));
   out.threw = String((e && (e.stack || e.message)) || e);
-  try { await finish(1); } catch { try { killAll(); } catch {} process.exit(1); }
+  try { await finish(1); } catch { try { await killAll(); } catch {} process.exit(1); }
 }

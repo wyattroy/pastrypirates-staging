@@ -107,14 +107,17 @@ async function rules(files) {
   const consume = fn(orch, "consumeEvent");
   const holds = all.reduce((n, [, s]) => n + count(s, /__pp4\s*\.\s*battle\s*\(/g), 0);
   const lets = all.reduce((n, [, s]) => n + count(s, /\.\s*battleEnd\s*\(/g), 0);
-  const holdAt = consume.search(/e\.t\s*===\s*"engage"[^;\n]*__pp4\s*\.\s*battle\s*\(\s*e\.a\s*,\s*e\.d\s*\)/);
+  /* RE-ANCHORED BY ARCHITECTURE ITEM 25 (2026-09-18): the hold carries the fight's WIND as well as its two ships, and the stage's slot
+     is [attacker, defender, wind]. Both spellings are asserted here rather than loosened, because the wind's one reading now travels
+     through this same door — a hold that drops it sends the flip ceremony back to working the wind out from its own board. */
+  const holdAt = consume.search(/e\.t\s*===\s*"engage"[^;\n]*__pp4\s*\.\s*battle\s*\(\s*e\.a\s*,\s*e\.d\s*,[^;\n]*e\.downwind/);
   const letAt = consume.search(/e\.t\s*===\s*"disengage"[^;\n]*__pp4\s*\.\s*battleEnd\s*\(\s*\)/);
   const soundAt = consume.search(/\bplayForEvent\s*\(/);
   const writes = count(stage, /\bS\.battle\s*=(?!=)/g);
-  const bridge = /\bbattle\s*:\s*\([^)]*\)\s*=>\s*\{[^}]*S\.battle\s*=\s*\[\s*a\s*,\s*d\s*\][^}]*\}\s*,\s*battleEnd\s*:\s*\(\s*\)\s*=>\s*\{\s*S\.battle\s*=\s*null\s*;?\s*\}/.test(stage);
+  const bridge = /\bbattle\s*:\s*\([^)]*\)\s*=>\s*\{[^}]*S\.battle\s*=\s*\[\s*a\s*,\s*d\s*,[^\]]*\][^}]*\}\s*,\s*battleEnd\s*:\s*\(\s*\)\s*=>\s*\{\s*S\.battle\s*=\s*null\s*;?\s*\}/.test(stage);
   rule(holds === 1 && lets === 1 && holdAt >= 0 && letAt >= 0 && soundAt > holdAt && writes === 2 && bridge,
-    "the fight camera has one door: consumeEvent holds both ships on `engage` (before the event's sound) and lets go on `disengage`, on every screen; nothing else holds or lets go, and only the stage bridge writes the hold",
-    `the fight camera is held from ${holds} place(s) and let go from ${lets} in src${holdAt < 0 ? " — consumeEvent does not hold on engage (e.a, e.d)" : ""}${letAt < 0 ? " — consumeEvent does not let go on disengage" : ""}${holdAt >= 0 && soundAt <= holdAt ? " — the hold is armed after the event's sound" : ""}${writes !== 2 || !bridge ? ` — stage.js writes S.battle ${writes} time(s), not only in the bridge` : ""}`);
+    "the fight camera has one door: consumeEvent holds both ships AND the fight's wind on `engage` (before the event's sound) and lets go on `disengage`, on every screen; nothing else holds or lets go, and only the stage bridge writes the hold",
+    `the fight camera is held from ${holds} place(s) and let go from ${lets} in src${holdAt < 0 ? " — consumeEvent does not hold on engage (e.a, e.d, e.downwind)" : ""}${letAt < 0 ? " — consumeEvent does not let go on disengage" : ""}${holdAt >= 0 && soundAt <= holdAt ? " — the hold is armed after the event's sound" : ""}${writes !== 2 || !bridge ? ` — stage.js writes S.battle ${writes} time(s), not only in the bridge, or the slot no longer carries the wind` : ""}`);
 
   // 3. BOTH FIGHTS CALL THE FIGHT BEFORE THEIR OPENING LINE, AND END IT
   const begin = method(eng, "beginBattle"), end = method(eng, "endBattle"), headless = method(eng, "battle");
@@ -123,7 +126,13 @@ async function rules(files) {
   const ended = /this\.ev\(\{\s*t\s*:\s*"disengage"\s*,\s*a\s*:\s*att\.idx\s*,\s*d\s*:\s*def\.idx/.test(end);
   const headlessEnds = /\bfinally\s*\{\s*this\.endBattle\(\s*att\s*,\s*def\s*\)/.test(headless);
   const run = fn(orch, "asyncBattleRun"), wrap = fn(orch, "asyncBattle");
-  const bAt = run.search(/\.beginBattle\(\s*att\s*,\s*def\s*\)/), drainAt = run.search(/await\s+liveRender\(\s*\)/), openAt = run.search(/"battle\.opening"/);
+  const bAt = run.search(/\.beginBattle\(\s*att\s*,\s*def\s*\)/), drainAt = run.search(/await\s+liveRender\(\s*\)/), openAt = run.search(/await\s+flash\(\s*opening\.html/);
+  /* ⚠ ANCHORED ON THE BEAT, NOT ON THE LINE'S NAME. This read `/"battle\.opening"/` until
+     2026-09-18, when Wyatt had the opening beat say "{a} loads the cannon…" instead — the ORDER
+     this rule exists to guard (begin -> drain -> speak) was untouched and the gate still went red,
+     because it was looking for a string rather than for the thing the string was in. Same fault as
+     the parity gate that anchored on local variable names. What is load-bearing is that the fight
+     SPEAKS after the drain; which words it speaks is his. */
   const refusedFirst = wrap.search(/if\s*\(\s*!\s*appState\.game\.canAttack\(\s*att\s*,\s*def\s*\)\s*\)\s*return\s+null/), tryAt = wrap.search(/\btry\s*\{\s*return\s+await\s+asyncBattleRun\(\s*att\s*,\s*def\s*\)/);
   const wrapEnds = /\bfinally\s*\{\s*appState\.game\.endBattle\(\s*att\s*,\s*def\s*\)\s*;\s*liveRender\(\s*\)/.test(wrap);
   const order = bAt >= 0 && drainAt > bAt && openAt > drainAt && refusedFirst >= 0 && tryAt > refusedFirst && wrapEnds;

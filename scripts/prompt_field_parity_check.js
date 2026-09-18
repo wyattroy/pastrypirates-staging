@@ -62,6 +62,17 @@
  * there): this file's own header quotes `seats:` and `p.seats` verbatim, and a check that cannot
  * tell prose from code makes writing the explanation an offence. Drill 1g pins that.
  *
+ * ============================================================================
+ * IT IS IN `npm test` NOW — architecture item 52, 2026-09-18
+ * ============================================================================
+ * It was not, and that is the whole story of how it came to be red for weeks with nobody counting
+ * the cost. Its anchors were typed against local variable names (`seat`, `p`) that were renamed
+ * underneath it; all three field assertions reported "re-anchor this gate"; part (B) condemned the
+ * very convergence FORK 2 had achieved; and the only place any of that was written down was a
+ * comment in orchestrator.js saying "the gate named the field, the tier and the consequence, and
+ * nobody read it." A gate outside the chain is a gate nobody reads. Both this and its `--drill`
+ * are chain entries from today, so the anchors AND the red-proof rot loudly or not at all.
+ *
  * Run:  node scripts/prompt_field_parity_check.js
  *       node scripts/prompt_field_parity_check.js --drill     (prove it CAN fail)
  */
@@ -155,6 +166,34 @@ function matchBracket(src, openIdx) {
   return -1;
 }
 
+/* ============================================================================================
+ * THE READER'S OWN NAME FOR THE PAYLOAD IS DISCOVERED, NEVER TYPED — architecture item 52, 2026-09-18
+ * ============================================================================================
+ * This gate sat RED and UNRUN for weeks, and not one word of what it says was wrong. It was typed
+ * against three LOCAL VARIABLE NAMES that then changed underneath it: `ask()` renamed its wire
+ * argument `seat` -> `askSeat`, and `watchPrompt()` renamed its snapshot `p` -> `prompt`. Every
+ * anchor missed, all three assertions reported "re-anchor this gate", and nothing in `npm test`
+ * ever said so, because the gate was not in the chain.
+ *
+ * A local variable name is not part of the contract. The DISCRIMINANT is — `kind:"ask"`,
+ * `kind:"pick"`, `kind:"bake"` are the wire's own words, they are what the guest branches on, and
+ * they cannot be renamed without changing the wire on both sides at once. So the branch is found
+ * by its discriminant and the variable name is taken FROM THE MATCH. Rename the argument again and
+ * this gate follows; delete the branch and it still goes loud, which is what drills 1c/2d/4c pin.
+ */
+function branchOf(wp, kind) {
+  const m = new RegExp(`\\bif\\(\\s*([A-Za-z_$][\\w$]*)\\.kind\\s*===\\s*"${kind}"\\s*\\)`).exec(wp);
+  if (!m) return null;
+  const open = wp.indexOf("{", m.index + m[0].length - 1);
+  if (open < 0) return { v: m[1], at: m.index, open: -1, close: -1 };
+  return { v: m[1], at: m.index, open, close: matchBracket(wp, open) };
+}
+
+/* Every `<v>.<field>` read in a region, where `<v>` is the name branchOf() just discovered. */
+function readsOf(src, v) {
+  return new Set([...src.matchAll(new RegExp(`\\b${v}\\.([A-Za-z_$][\\w$]*)`, "g"))].map((m) => m[1]));
+}
+
 /* Slice a named top-level function: from its header to the next top-level `export ` (column 0), or
  * end of file. Located by CONTENT, never by line number, so a line shift makes this go loud rather
  * than silently reading the wrong region. */
@@ -206,58 +245,87 @@ export function checkPromptFieldParity(root) {
   const askFn = sliceFn(util, "export function ask(");
   if (!askFn) { fail(res, `PARITY-FIELD: ask() was not located in ${UTIL_REL} — if it was renamed, re-anchor this gate; do NOT delete the assertion.`); return res; }
 
-  const callI = askFn.indexOf("onRemotePrompt(seat,{");
-  if (callI < 0) { fail(res, `PARITY-FIELD: ask() in ${UTIL_REL} no longer flattens a prompt onto the wire via onRemotePrompt(seat,{...}) — there is no payload to compare, so this gate cannot pass. Re-anchor it rather than deleting it.`); return res; }
-  const open = askFn.indexOf("{", callI + "onRemotePrompt(seat".length);
+  // The first argument's NAME is the caller's business (it has been `seat` and is `askSeat`); that
+  // ask() hands a flat object literal to onRemotePrompt is the contract.
+  const callM = /\bonRemotePrompt\(\s*[A-Za-z_$][\w$]*\s*,\s*\{/.exec(askFn);
+  if (!callM) { fail(res, `PARITY-FIELD: ask() in ${UTIL_REL} no longer flattens a prompt onto the wire via onRemotePrompt(<seat>,{...}) — there is no payload to compare, so this gate cannot pass. Re-anchor it rather than deleting it.`); return res; }
+  const open = callM.index + callM[0].length - 1;
   const close = matchBracket(askFn, open);
   if (close < 0) { fail(res, `PARITY-FIELD: ask()'s remote payload literal in ${UTIL_REL} does not close — this gate could not read it.`); return res; }
   const hostFields = new Set(payloadKeys(askFn.slice(open, close + 1)));
 
   const wp = sliceFn(orch, "export function watchPrompt(");
   if (!wp) { fail(res, `PARITY-FIELD: watchPrompt() was not located in ${ORCH_REL} — if it was renamed, re-anchor this gate; do NOT delete the assertion.`); return res; }
-  const branchI = wp.indexOf('if(p.kind==="ask")');
-  if (branchI < 0) { fail(res, `PARITY-FIELD: watchPrompt() in ${ORCH_REL} has no kind==="ask" branch — the guest is not rendering ask prompts at all, or this gate is reading the wrong region. Either way it must FAIL rather than pass over an absent branch.`); return res; }
-  const bOpen = wp.indexOf("{", branchI + 'if(p.kind==="ask")'.length - 1);
-  const bClose = matchBracket(wp, bOpen);
-  if (bClose < 0) { fail(res, `PARITY-FIELD: watchPrompt()'s ask branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
-  const branch = wp.slice(branchI, bClose + 1);
-  const guestFields = new Set([...branch.matchAll(/\bp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const br = branchOf(wp, "ask");
+  if (!br) { fail(res, `PARITY-FIELD: watchPrompt() in ${ORCH_REL} has no kind==="ask" branch — the guest is not rendering ask prompts at all, or this gate is reading the wrong region. Either way it must FAIL rather than pass over an absent branch.`); return res; }
+  if (br.close < 0) { fail(res, `PARITY-FIELD: watchPrompt()'s ask branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
+  const P = br.v;
+  const branch = wp.slice(br.at, br.close + 1);
+  const guestFields = readsOf(branch, P);
 
   if (hostFields.size < MIN_FIELDS) fail(res, `PARITY-FIELD-VACUITY: only ${hostFields.size} field(s) read out of ask()'s payload in ${UTIL_REL} (expected at least ${MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
-  if (guestFields.size < MIN_FIELDS) fail(res, `PARITY-FIELD-VACUITY: only ${guestFields.size} p.<field> read(s) found in watchPrompt's ask branch in ${ORCH_REL} (expected at least ${MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
+  if (guestFields.size < MIN_FIELDS) fail(res, `PARITY-FIELD-VACUITY: only ${guestFields.size} ${P}.<field> read(s) found in watchPrompt's ask branch in ${ORCH_REL} (expected at least ${MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
 
   for (const f of [...hostFields].sort()) {
     if (guestFields.has(f) || f in HOST_ONLY_OK) continue;
-    fail(res, `PARITY-FIELD: ask() (${UTIL_REL}) SENDS "${f}" and watchPrompt's ask branch (${ORCH_REL}) never reads p.${f} — the host renders this prompt with that field and the guest renders it without. That is how disabled, why, back, flipIdx, stage, shorts and seats each shipped broken. Read it on the guest, or stop sending it.`);
+    fail(res, `PARITY-FIELD: ask() (${UTIL_REL}) SENDS "${f}" and watchPrompt's ask branch (${ORCH_REL}) never reads ${P}.${f} — the host renders this prompt with that field and the guest renders it without. That is how disabled, why, back, flipIdx, stage, shorts and seats each shipped broken. Read it on the guest, or stop sending it.`);
   }
   for (const f of [...guestFields].sort()) {
     if (hostFields.has(f) || f in GUEST_ONLY_OK) continue;
-    fail(res, `PARITY-FIELD: watchPrompt's ask branch (${ORCH_REL}) reads p.${f} and ask() (${UTIL_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back for every prompt. Send it, or stop reading it.`);
+    fail(res, `PARITY-FIELD: watchPrompt's ask branch (${ORCH_REL}) reads ${P}.${f} and ask() (${UTIL_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back for every prompt. Send it, or stop reading it.`);
   }
 
-  /* ---- (B) the builder ---- */
-  const defs = (util.match(/export function optionButtonsHTML\(/g) || []).length;
+  /* ---- (B) ONE renderer, so the markup cannot drift the way the fields did ----
+     RE-ANCHORED, architecture item 52 (2026-09-18), and it asks MORE than it used to rather than
+     less. This part used to read "localAsk, watchPrompt and watchDraftPrompt each call
+     optionButtonsHTML" — a comparison of three callers all using a shared BUILDER. FORK 2's
+     convergence (W1, 2026-08-28) went further than that and left ONE RENDERER, renderAskPrompt
+     (src/ui/flow.js): it is now the only thing in the tree that calls optionButtonsHTML at all, and
+     the three channels reach the row by naming IT. So the old three-caller test had become
+     unsatisfiable-by-construction — it condemned the very convergence it was written to protect,
+     which is why a green day never came to tell anyone. Replaced with a COUNT, exactly the idiom
+     assertion 2 part (C) was re-anchored to: one definition of optionButtonsHTML, one definition of
+     renderAskPrompt, renderAskPrompt builds the row through optionButtonsHTML, optionButtonsHTML is
+     CALLED from exactly one place, and each of the three channels names the one renderer (the draft
+     channel through localAsk, which is required to name it directly). A second hand-built row makes
+     the count go UP and this go red — drills 1e, 1f, 1h, 1i. */
+  const defs = (util.match(/export function optionButtonsHTML\s*\(/g) || []).length;
   if (defs !== 1) {
     fail(res, `PARITY-BUILDER: ${defs} definition(s) of optionButtonsHTML in ${UTIL_REL}, expected exactly 1. Two definitions is two chances to disagree about what an option button is — the state 02.1-03 collapsed into one.`);
   }
-  const callers = [
-    [FLOW_REL, "export function localAsk(", "the host's own-seat renderer"],
-    [ORCH_REL, "export function watchPrompt(", "the guest's remote-seat renderer"],
-    [ORCH_REL, "export function watchDraftPrompt(", "the recipe-draft channel"],
-  ];
-  for (const [rel, header, what] of callers) {
-    const src = rel === FLOW_REL ? flow : orch;
-    const body = sliceFn(src, header);
-    if (!body) { fail(res, `PARITY-BUILDER: ${header.replace("export function ", "").replace("(", "()")} was not located in ${rel} — re-anchor this gate rather than deleting the assertion.`); continue; }
-    if (!/optionButtonsHTML\(/.test(body)) {
-      fail(res, `PARITY-BUILDER: ${header.replace("export function ", "").replace("(", "()")} (${rel}, ${what}) does not call optionButtonsHTML() — it is building its own button markup again. Reading every field off the wire does not help if the row is then hand-assembled a second time; that is exactly the drift this phase removed.`);
-    }
-  }
+  const rapDefs = (flow.match(/export function renderAskPrompt\s*\(/g) || []).length;
+  if (rapDefs !== 1) fail(res, `PARITY-BUILDER: expected exactly 1 definition of renderAskPrompt() in ${FLOW_REL}, found ${rapDefs} — the ONE ask renderer either does not exist or has been duplicated, and both reopen the two-renderers fault FORK 2 closed.`);
+
+  const rapBody = sliceFn(flow, "export function renderAskPrompt(");
+  if (!rapBody) fail(res, `PARITY-BUILDER: renderAskPrompt() was not located in ${FLOW_REL} — re-anchor this gate rather than deleting the assertion.`);
+  else if (!/optionButtonsHTML\s*\(/.test(rapBody)) fail(res, `PARITY-BUILDER: renderAskPrompt() in ${FLOW_REL} does not build its row through optionButtonsHTML() — it is hand-writing the option row again, which is the second copy this assertion exists to stop.`);
+
+  // The one-caller count, across all three files this channel lives in. Total mentions minus the
+  // definition is the number of CALL SITES: exactly 1 (renderAskPrompt), or a second orchestration
+  // is hand-assembling the row again and the count alone proves it.
+  const obhMentions = (util.match(/optionButtonsHTML\s*\(/g) || []).length
+                    + (flow.match(/optionButtonsHTML\s*\(/g) || []).length
+                    + (orch.match(/optionButtonsHTML\s*\(/g) || []).length;
+  const obhCallSites = obhMentions - defs;
+  if (obhCallSites !== 1) fail(res, `PARITY-BUILDER: optionButtonsHTML( is called from ${obhCallSites} place(s) across ${UTIL_REL}, ${FLOW_REL} and ${ORCH_REL}, expected exactly 1 (renderAskPrompt). With one converged renderer there is nothing left to keep in step if a second caller reappears.`);
+
+  /* Each channel must REACH the one renderer. localAsk and the guest's ask branch name it
+     directly; watchDraftPrompt names localAsk — "the very same localAsk() the host calls"
+     (orchestrator.js's own words), which is the convergence, not a detour around it. */
+  const laBody = sliceFn(flow, "export function localAsk(");
+  if (!laBody) fail(res, `PARITY-BUILDER: localAsk() was not located in ${FLOW_REL} — re-anchor this gate rather than deleting the assertion.`);
+  else if (!/renderAskPrompt\s*\(/.test(laBody)) fail(res, `PARITY-BUILDER: localAsk() (${FLOW_REL}, the host's own-seat channel) does not name renderAskPrompt() — the local tier is drawing its own prompt again, which is the fork FORK 2 collapsed.`);
+
+  if (!/renderAskPrompt\s*\(/.test(branch)) fail(res, `PARITY-BUILDER: watchPrompt's ask branch (${ORCH_REL}, the guest's remote-seat channel) does not name renderAskPrompt() — a guest-only row builder is exactly the state seven fields drifted in.`);
+
+  const wdBody = sliceFn(orch, "export function watchDraftPrompt(");
+  if (!wdBody) fail(res, `PARITY-BUILDER: watchDraftPrompt() was not located in ${ORCH_REL} — re-anchor this gate rather than deleting the assertion.`);
+  else if (!/renderAskPrompt\s*\(|localAsk\s*\(/.test(wdBody)) fail(res, `PARITY-BUILDER: watchDraftPrompt() (${ORCH_REL}, the recipe-draft channel) reaches neither renderAskPrompt() nor localAsk() — the draft channel is building its own row again.`);
 
   note(res, `wire fields — host sends ${hostFields.size}: ${[...hostFields].sort().join(", ")}`);
   note(res, `wire fields — guest reads ${guestFields.size}: ${[...guestFields].sort().join(", ")}`);
   note(res, `guest-only by design (allow-listed): ${Object.keys(GUEST_ONLY_OK).join(", ")}`);
-  note(res, `optionButtonsHTML definitions: ${defs}; callers required: localAsk, watchPrompt, watchDraftPrompt`);
+  note(res, `ONE renderer: renderAskPrompt x${rapDefs}; optionButtonsHTML x${defs} defined, called from ${obhCallSites} place(s); channels reaching it: localAsk, watchPrompt's ask branch, watchDraftPrompt`);
   return res;
 }
 
@@ -282,6 +350,20 @@ const PICK_GUEST_ONLY_OK = {
   seat:   "stamped by remotePrompt() alongside id, and read by watchPrompt BEFORE the pick branch to decide whose prompt this is",
   kind:   "the discriminant itself — read to choose this branch, never a field the renderer draws",
 };
+/* ONE HOST-ONLY FIELD ON THIS CHANNEL, argued here before it was added below (architecture item 52,
+ * 2026-09-18) — the same discipline the ask channel's empty HOST_ONLY_OK states.
+ *
+ * `seat` rides on the sail payload because the LOCAL tier needs it: in pass-and-play the device
+ * renders whichever captain's turn it is, so renderPickPrompt composes its line for `spec.seat`
+ * rather than for whoever owns the device. Over the WIRE that question is already settled before
+ * the branch is reached — watchPrompt returns early unless `<payload>.seat === appState.mySeat`, so
+ * a pick prompt is only ever drawn by the captain it belongs to, and renderPickPrompt's own
+ * fallback (`appState.mySeat`) is the same number by construction. Not a field the guest silently
+ * loses; a field the guest cannot disagree about. If that early return ever stops being the rule,
+ * this entry stops being true and must go. */
+const PICK_HOST_ONLY_OK = {
+  seat: "the pick branch only ever renders THIS device's own prompt (watchPrompt returns early unless payload.seat===appState.mySeat), and renderPickPrompt falls back to appState.mySeat — the same seat. It is on the wire for the LOCAL pass-and-play tier, where the device is not the captain.",
+};
 export function checkSailFieldParity(root) {
   const res = mk('assertion 2 — sail wire-field parity (pickCell\'s kind:"pick" payload vs watchPrompt\'s pick branch)');
   const flowRaw = read(root, FLOW_REL);
@@ -300,23 +382,22 @@ export function checkSailFieldParity(root) {
   /* ---- (B) the guest ---- */
   const wp = sliceFn(orch, "export function watchPrompt(");
   if (!wp) { fail(res, `PARITY-SAIL: watchPrompt() was not located in ${ORCH_REL} — if it was renamed, re-anchor this gate; do NOT delete the assertion.`); return res; }
-  const bI = wp.indexOf('if(p.kind==="pick")');
-  if (bI < 0) { fail(res, `PARITY-SAIL: watchPrompt() in ${ORCH_REL} has no kind==="pick" branch — a guest cannot be shown a sail window at all, or this gate is reading the wrong region. Either way it must FAIL rather than pass over an absent branch.`); return res; }
-  const bOpen = wp.indexOf("{", bI + 'if(p.kind==="pick")'.length - 1);
-  const bClose = matchBracket(wp, bOpen);
-  if (bClose < 0) { fail(res, `PARITY-SAIL: watchPrompt()'s pick branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
-  const guestFields = new Set([...wp.slice(bI, bClose + 1).matchAll(/\bp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const br = branchOf(wp, "pick");
+  if (!br) { fail(res, `PARITY-SAIL: watchPrompt() in ${ORCH_REL} has no kind==="pick" branch — a guest cannot be shown a sail window at all, or this gate is reading the wrong region. Either way it must FAIL rather than pass over an absent branch.`); return res; }
+  if (br.close < 0) { fail(res, `PARITY-SAIL: watchPrompt()'s pick branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
+  const P = br.v;
+  const guestFields = readsOf(wp.slice(br.at, br.close + 1), P);
 
   if (hostFields.size < PICK_MIN_FIELDS) fail(res, `PARITY-SAIL-VACUITY: only ${hostFields.size} field(s) read out of the kind:"pick" payload in ${FLOW_REL} (expected at least ${PICK_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
-  if (guestFields.size < PICK_MIN_FIELDS) fail(res, `PARITY-SAIL-VACUITY: only ${guestFields.size} p.<field> read(s) found in watchPrompt's pick branch in ${ORCH_REL} (expected at least ${PICK_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
+  if (guestFields.size < PICK_MIN_FIELDS) fail(res, `PARITY-SAIL-VACUITY: only ${guestFields.size} ${P}.<field> read(s) found in watchPrompt's pick branch in ${ORCH_REL} (expected at least ${PICK_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
 
   for (const f of [...hostFields].sort()) {
-    if (f === "kind" || guestFields.has(f)) continue;
-    fail(res, `PARITY-SAIL: pickCell() (${FLOW_REL}) SENDS "${f}" on the sail payload and watchPrompt's pick branch (${ORCH_REL}) never reads p.${f} — the captain on this device sees that field and a remote captain does not. That is exactly how the self-check's shout stayed host-only. Read it on the guest, or stop sending it.`);
+    if (f === "kind" || guestFields.has(f) || f in PICK_HOST_ONLY_OK) continue;
+    fail(res, `PARITY-SAIL: pickCell() (${FLOW_REL}) SENDS "${f}" on the sail payload and watchPrompt's pick branch (${ORCH_REL}) never reads ${P}.${f} — the captain on this device sees that field and a remote captain does not. That is exactly how the self-check's shout stayed host-only. Read it on the guest, or stop sending it.`);
   }
   for (const f of [...guestFields].sort()) {
     if (hostFields.has(f) || f in PICK_GUEST_ONLY_OK) continue;
-    fail(res, `PARITY-SAIL: watchPrompt's pick branch (${ORCH_REL}) reads p.${f} and pickCell() (${FLOW_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back on every sail prompt. Send it, or stop reading it.`);
+    fail(res, `PARITY-SAIL: watchPrompt's pick branch (${ORCH_REL}) reads ${P}.${f} and pickCell() (${FLOW_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back on every sail prompt. Send it, or stop reading it.`);
   }
 
   /* ---- (C) ONE renderer, so the markup cannot drift the way the fields did ----
@@ -374,14 +455,17 @@ const BAKE_MIN_FIELDS = 4;
 const BAKEOFF_REL = "src/ui/bakeoff.js";   // where the ONE choreography lives
 const BAKE_GUEST_ONLY_OK = {
   id:     "stamped by remotePrompt() (orchestrator.js), not by bakeoffPrompt() — the round-trip's own identifier",
-  seat:   "stamped by remotePrompt() alongside id; the bake branch also uses it to name whose purse to redraw (MP-06)",
+  seat:   "stamped by remotePrompt() alongside id; the bake branch also uses it to name whose bench it publishes, and whose purse the one re-watch rule is asked about (architecture item 17)",
   kind:   "the discriminant itself — read to choose this branch, never a field the renderer draws",
 };
 // Sent for the HOST's own bookkeeping and deliberately not read back off the wire by the sender's
 // own branch. Each needs a reason, exactly like the ask channel's allow-list.
-const BAKE_HOST_ONLY_OK = {
-  coins:  "READ on the guest as p.coins for the optimistic purse (MP-06). Listed here only because a future host-side field would need a reason, not an omission.",
-};
+/* EMPTY, AND THAT IS THE POINT — architecture item 17, 2026-09-18. Its one entry was `coins`, the
+   baker's purse, sent so the guest branch could run an optimistic till of its own (`cost` rode beside
+   it on the payload for the same reason). Both are off the wire: a re-watch's price and whether a purse
+   can stand one are decided in ONE place (Game.rewatchCost / Game.canRewatch), asked about the purse
+   every screen is already drawing. A new host-only field still needs a reason here, not an omission. */
+const BAKE_HOST_ONLY_OK = {};
 export function checkBakeFieldParity(root) {
   const res = mk('assertion 4 — bake wire-field parity (bakeoffPrompt\'s kind:"bake" payload vs watchPrompt\'s bake branch)');
   const flowRaw = read(root, FLOW_REL);
@@ -400,25 +484,22 @@ export function checkBakeFieldParity(root) {
   /* ---- (B) the guest ---- */
   const wp = sliceFn(orch, "export function watchPrompt(");
   if (!wp) { fail(res, `PARITY-BAKE: watchPrompt() was not located in ${ORCH_REL} — if it was renamed, re-anchor this gate; do NOT delete the assertion.`); return res; }
-  const gI = wp.indexOf('if(p.kind==="bake")');
-  const gI2 = gI < 0 ? wp.indexOf('else if(p.kind==="bake")') : gI;
-  const at = gI2 < 0 ? wp.indexOf('p.kind==="bake"') : gI2;
-  if (at < 0) { fail(res, `PARITY-BAKE: watchPrompt() in ${ORCH_REL} has no kind==="bake" branch — a remote captain cannot be shown their own bench at all. It must FAIL rather than pass over an absent branch.`); return res; }
-  const gOpen = wp.indexOf("{", at + 'p.kind==="bake"'.length);
-  const gClose = matchBracket(wp, gOpen);
-  if (gClose < 0) { fail(res, `PARITY-BAKE: watchPrompt()'s bake branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
-  const guestFields = new Set([...wp.slice(at, gClose + 1).matchAll(/\bp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const br = branchOf(wp, "bake");
+  if (!br) { fail(res, `PARITY-BAKE: watchPrompt() in ${ORCH_REL} has no kind==="bake" branch — a remote captain cannot be shown their own bench at all. It must FAIL rather than pass over an absent branch.`); return res; }
+  if (br.close < 0) { fail(res, `PARITY-BAKE: watchPrompt()'s bake branch in ${ORCH_REL} does not close — this gate could not read it.`); return res; }
+  const P = br.v, at = br.at, gClose = br.close;
+  const guestFields = readsOf(wp.slice(at, gClose + 1), P);
 
   if (hostFields.size < BAKE_MIN_FIELDS) fail(res, `PARITY-BAKE-VACUITY: only ${hostFields.size} field(s) read out of the kind:"bake" payload in ${FLOW_REL} (expected at least ${BAKE_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
-  if (guestFields.size < BAKE_MIN_FIELDS) fail(res, `PARITY-BAKE-VACUITY: only ${guestFields.size} p.<field> read(s) found in watchPrompt's bake branch in ${ORCH_REL} (expected at least ${BAKE_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
+  if (guestFields.size < BAKE_MIN_FIELDS) fail(res, `PARITY-BAKE-VACUITY: only ${guestFields.size} ${P}.<field> read(s) found in watchPrompt's bake branch in ${ORCH_REL} (expected at least ${BAKE_MIN_FIELDS}) — this gate is reading almost nothing, so its PASS would mean nothing.`);
 
   for (const f of [...hostFields].sort()) {
     if (f === "kind" || guestFields.has(f) || f in BAKE_HOST_ONLY_OK) continue;
-    fail(res, `PARITY-BAKE: bakeoffPrompt() (${FLOW_REL}) SENDS "${f}" on the bake payload and watchPrompt's bake branch (${ORCH_REL}) never reads p.${f} — the captain on this device gets that fact about their bench and a remote captain does not. Drop "locked" and a captain's earned crates come back unlocked on their second attempt, silently. Read it on the guest, or stop sending it.`);
+    fail(res, `PARITY-BAKE: bakeoffPrompt() (${FLOW_REL}) SENDS "${f}" on the bake payload and watchPrompt's bake branch (${ORCH_REL}) never reads ${P}.${f} — the captain on this device gets that fact about their bench and a remote captain does not. Drop "locked" and a captain's earned crates come back unlocked on their second attempt, silently. Read it on the guest, or stop sending it.`);
   }
   for (const f of [...guestFields].sort()) {
     if (hostFields.has(f) || f in BAKE_GUEST_ONLY_OK) continue;
-    fail(res, `PARITY-BAKE: watchPrompt's bake branch (${ORCH_REL}) reads p.${f} and bakeoffPrompt() (${FLOW_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back on every remote bake. Send it, or stop reading it.`);
+    fail(res, `PARITY-BAKE: watchPrompt's bake branch (${ORCH_REL}) reads ${P}.${f} and bakeoffPrompt() (${FLOW_REL}) never sends "${f}" — the guest is reading a field that is never on the wire, so it silently falls back on every remote bake. Send it, or stop reading it.`);
   }
 
   /* ---- (C) ONE choreography, named DIRECTLY by both tiers ----
@@ -565,7 +646,7 @@ function drill() {
   };
 
   const SEND_SEATS = `seats:opts.map(o=>o&&o.seat!=null?o.seat:""),`;
-  const READ_SEATS = `const seats=p.seats||[];`;
+  const READ_SEATS = `seats=prompt.seats||[],`;
 
   // 1a — the host stops SENDING seats while the guest still reads it. This is the "added on one
   //      side only" half of the drift, in the direction a field is usually removed.
@@ -577,20 +658,20 @@ function drill() {
   //      direction all seven real drifts took, and the one a reviewer cannot see.
   reset();
   write(ORCH_REL, surgery(
-    surgery(realOrch, READ_SEATS, ``),
-    `seat:(seats[x.i]===""||seats[x.i]==null)?null:seats[x.i],`, ``));
-  expect("drill 1b (watchPrompt stops reading p.seats while ask() still sends it)", checkPromptFieldParity(tmpRoot), true, `SENDS "seats"`);
+    surgery(realOrch, READ_SEATS, `seats=[],`),
+    `seat:(seats[i]===""||seats[i]==null)?null:seats[i],`, ``));
+  expect("drill 1b (watchPrompt stops reading prompt.seats while ask() still sends it)", checkPromptFieldParity(tmpRoot), true, `SENDS "seats"`);
 
   // 1c — ANTI-VACUITY. The guest's ask branch is gone entirely. The gate must FAIL rather than
   //      pass because it found nothing to compare — the shape of vacuous check this project has
   //      caught more than once, most recently inside 02.1-02's own red run.
   reset();
-  write(ORCH_REL, surgery(realOrch, `if(p.kind==="ask"){`, `if(p.kind==="never-happens"){`));
+  write(ORCH_REL, surgery(realOrch, `if(prompt.kind==="ask"){`, `if(prompt.kind==="never-happens"){`));
   expect("drill 1c (anti-vacuity — no ask branch at all must FAIL, not silently pass)", checkPromptFieldParity(tmpRoot), true, "no kind===\"ask\" branch");
 
   // 1d — ANTI-VACUITY, the other side: ask() no longer flattens anything onto the wire.
   reset();
-  write(UTIL_REL, surgery(realUtil, `onRemotePrompt(seat,{kind:"ask"`, `onRemotePromptRENAMED(seat,{kind:"ask"`));
+  write(UTIL_REL, surgery(realUtil, `onRemotePrompt(askSeat,{kind:"ask"`, `onRemotePromptRENAMED(askSeat,{kind:"ask"`));
   expect("drill 1d (anti-vacuity — no remote payload at all must FAIL)", checkPromptFieldParity(tmpRoot), true, "no payload to compare");
 
   // 1e — the wire is perfect and the HOST re-inlines its own button row. Part (A) alone would
@@ -599,7 +680,7 @@ function drill() {
   write(FLOW_REL, surgery(realFlow,
     `optionButtonsHTML(rest.map(x=>({i:x.i,label:x.o.label,cls:x.o.cls,disabled:x.o.disabled,why:x.o.why,seat:x.o.seat,color:colors&&colors[x.i]})))`,
     "rest.map(x=>`<button class=\"apBtn\" data-i=\"${x.i}\">${x.o.label}</button>`).join(\"\")"));
-  expect("drill 1e (localAsk re-inlines its own button row — the wire is fine, the render forked)", checkPromptFieldParity(tmpRoot), true, "does not call optionButtonsHTML()");
+  expect("drill 1e (renderAskPrompt re-inlines its own button row — the wire is fine, the render forked)", checkPromptFieldParity(tmpRoot), true, "PARITY-BUILDER");
 
   // 1f — two definitions of the shared builder. One shared function does not help if there are two.
   reset();
@@ -613,6 +694,27 @@ function drill() {
   write(UTIL_REL, surgery(realUtil, SEND_SEATS, `/* the payload used to carry seats:opts.map(o=>o.seat) here */`));
   expect("drill 1g (a `seats:` named only in a COMMENT does not count as sent)", checkPromptFieldParity(tmpRoot), true, "never sends \"seats\"");
 
+  // 1h — A SECOND CALLER of optionButtonsHTML reappears: the wire is perfect, every field crosses,
+  //      and a second piece of code assembles the row anyway. The COUNT is what catches it — the
+  //      same idiom drill 2f uses for sailPanelHTML, and the reason part (B) is a count now.
+  //      (Architecture item 52, 2026-09-18.)
+  reset();
+  write(ORCH_REL, realOrch + `\nexport function ghostGuestRow(items){return optionButtonsHTML(items);}\n`);
+  expect("drill 1h (a SECOND caller of optionButtonsHTML reappears — the hand-built row, reborn)", checkPromptFieldParity(tmpRoot), true, "expected exactly 1 (renderAskPrompt)");
+
+  // 1i — the guest's ask branch stops naming the ONE renderer. Every field can be read off the
+  //      wire and handed to something else entirely; that is precisely the two-renderers state
+  //      FORK 2 collapsed, and the field comparison alone would sail past it.
+  reset();
+  // BOTH namings inside the branch go, the battle sub-branch's included — the ask branch draws two
+  // shapes of prompt and either one left naming the renderer is the convergence still standing.
+  write(ORCH_REL, surgery(
+    surgery(realOrch, `      renderAskPrompt({msg:prompt.msg,opts,colors:prompt.colors||null,sub:prompt.sub||null,slider:sl,battle:false},`,
+                      `      guestOwnRow({msg:prompt.msg,opts,colors:prompt.colors||null,sub:prompt.sub||null,slider:sl,battle:false},`),
+    `          renderAskPrompt({msg:prompt.msg,opts:(prompt.labels||[]).map((l,i)=>({label:l,value:i})),colors:prompt.colors||null,battle:true},`,
+    `          guestOwnRow({msg:prompt.msg,opts:(prompt.labels||[]).map((l,i)=>({label:l,value:i})),colors:prompt.colors||null,battle:true},`));
+  expect("drill 1i (the guest's ask branch stops naming renderAskPrompt)", checkPromptFieldParity(tmpRoot), true, "does not name renderAskPrompt()");
+
   /* ===== assertion 2's own red-proof — the SAIL channel =====
      Same discipline as 1a-1g: one synthetic violation at a time, and each must be caught BY NAME.
      A gate nobody has seen fail is a gate nobody has tested, and this one was written the same
@@ -622,30 +724,30 @@ function drill() {
   //      in this morning, expressed as a drill: the self-check's shout composed for a local captain
   //      and nothing on the wire for a remote one.
   reset();
-  write(FLOW_REL, surgery(realFlow, `,hint:bug||null}`, `}`));
-  expect("drill 2a (sail payload stops sending hint)", checkSailFieldParity(tmpRoot), true, "never sends");
+  write(FLOW_REL, surgery(realFlow, `,hint:null,pos:[`, `,pos:[`));
+  expect("drill 2a (sail payload stops sending hint)", checkSailFieldParity(tmpRoot), true, `never sends "hint"`);
 
   // 2b — the reverse: the guest stops READING it. Identical damage, opposite side, and the reason
   //      this assertion is symmetric rather than one-directional.
   reset();
-  write(ORCH_REL, surgery(realOrch, `renderPickPrompt({cells:p.cells||[],msg:p.msg,hint:p.hint||null},cell=>sendResponse(p.id,cell));`,
-                                    `renderPickPrompt({cells:p.cells||[],msg:p.msg},cell=>sendResponse(p.id,cell));`));
-  expect("drill 2b (guest's pick branch stops reading p.hint)", checkSailFieldParity(tmpRoot), true, "never reads p.hint");
+  write(ORCH_REL, surgery(realOrch, `renderPickPrompt({cells:prompt.cells||[],msg:prompt.msg,hint:prompt.hint||null,pos:prompt.pos||null},cell=>sendResponse(prompt.id,cell));`,
+                                    `renderPickPrompt({cells:prompt.cells||[],msg:prompt.msg,pos:prompt.pos||null},cell=>sendResponse(prompt.id,cell));`));
+  expect("drill 2b (guest's pick branch stops reading prompt.hint)", checkSailFieldParity(tmpRoot), true, "never reads prompt.hint");
 
   // 2c — RE-ANCHORED 02.15-02 Task 3 (THE TRACER): renderPickPrompt (the ONE converged renderer)
   //      hand-writes its own sail card instead of calling sailPanelHTML. The fields can all be
   //      present and correct and the card still not match what sailPanelHTML would have built,
   //      which is what .apSub was.
   reset();
-  write(FLOW_REL, surgery(realFlow, `  panel(sailPanelHTML(spec.msg||sailPickMsg(appState.mySeat),spec.hint),true);`,
-                                    `  panel(\`<div class="apMsg">\${spec.msg}</div>\`,true);`));
+  write(FLOW_REL, surgery(realFlow, `  panel(sailPanelHTML(msg,rung.sub||null),true);`,
+                                    `  panel(\`<div class="apMsg">\${msg}</div>\`,true);`));
   expect("drill 2c (renderPickPrompt hand-writes the sail card again)", checkSailFieldParity(tmpRoot), true, "PARITY-SAIL-BUILDER");
 
   // 2d — the branch this gate reads disappears entirely. It must go LOUD, not quiet: a gate that
   //      passes over an absent branch is the reassuring-green failure docs/HARD-WON-LESSONS.md §3
   //      is about.
   reset();
-  write(ORCH_REL, surgery(realOrch, `}else if(p.kind==="pick"){`, `}else if(p.kind==="nope"){`));
+  write(ORCH_REL, surgery(realOrch, `else if(prompt.kind==="pick"){`, `else if(prompt.kind==="nope"){`));
   expect("drill 2d (the guest's pick branch vanishes)", checkSailFieldParity(tmpRoot), true, "no kind===\"pick\" branch");
 
   // 2e — RE-ANCHORED (part C): renderPickPrompt vanishes entirely — anti-vacuity for the
@@ -678,8 +780,8 @@ function drill() {
   // 3b — localPickCell (the local response mechanism) reaches a writer instead. Different function,
   //      same disease: the LOCAL path is the one a solo/pass-and-play game's db===null cannot survive.
   reset();
-  write(FLOW_REL, surgery(realFlow, `const pre=ffEndNow();\n  if(pre)return pre.then(()=>localPickCell(p,spec));`,
-                                    `const pre=ffEndNow();\n  if(pre)return pre.then(()=>localPickCell(p,spec));\n  remotePrompt(p,spec);`));
+  write(FLOW_REL, surgery(realFlow, `const pre=ffEndNow();\n  if(pre)return pre.then(()=>localPickCell(player,spec));`,
+                                    `const pre=ffEndNow();\n  if(pre)return pre.then(()=>localPickCell(player,spec));\n  remotePrompt(player,spec);`));
   expect("drill 3b (localPickCell grows a call to remotePrompt)", checkSoloGuard(tmpRoot), true, "remotePrompt");
 
   // 3c — ANTI-VACUITY: both declared local-path functions vanish. The guard must FAIL rather than
@@ -688,7 +790,7 @@ function drill() {
   reset();
   write(FLOW_REL, surgery(
     surgery(realFlow, `export function renderPickPrompt(spec,answer){`, `export function renderPickPromptGONE(spec,answer){`),
-    `export function localPickCell(p,spec){`, `export function localPickCellGONE(p,spec){`));
+    `export function localPickCell(player,spec){`, `export function localPickCellGONE(player,spec){`));
   expect("drill 3c (anti-vacuity — both local-path functions renamed away must FAIL, not silently pass)", checkSoloGuard(tmpRoot), true, "PARITY-SOLOGUARD");
 
   /* ===== assertion 4's own red-proof — THE BAKE CHANNEL (04-01 Task 2) =====
@@ -700,19 +802,19 @@ function drill() {
   //      exists: `locked` is which crates the captain already won on an earlier attempt, and
   //      without it a remote captain's second attempt hands them back the whole bench.
   reset();
-  write(FLOW_REL, surgery(realFlow, `    locked:p.bake.locked.slice(),\n`, ``));
+  write(FLOW_REL, surgery(realFlow, `    locked:player.bake.locked.slice(),\n`, ``));
   expect("drill 4a (bake payload stops sending locked)", checkBakeFieldParity(tmpRoot), true, 'never sends "locked"');
 
   // 4b — the reverse: the guest stops READING `swaps`, so a remote captain's crates never move and
   //      the puzzle is trivially solvable. Same damage, opposite side.
   reset();
-  write(ORCH_REL, surgery(realOrch, `before:p.before||[],swaps:p.swaps||[],`, `before:p.before||[],swaps:[],`));
-  expect("drill 4b (guest's bake branch stops reading p.swaps)", checkBakeFieldParity(tmpRoot), true, "never reads p.swaps");
+  write(ORCH_REL, surgery(realOrch, `before:prompt.before||[],swaps:prompt.swaps||[],`, `before:prompt.before||[],swaps:[],`));
+  expect("drill 4b (guest's bake branch stops reading prompt.swaps)", checkBakeFieldParity(tmpRoot), true, "never reads prompt.swaps");
 
   // 4c — the branch vanishes entirely: back to the measured 2026-08-23 state where the HOST played
   //      the guest's bake on its own screen. It must go LOUD, not quiet.
   reset();
-  write(ORCH_REL, surgery(realOrch, `}else if(p.kind==="bake"){`, `}else if(p.kind==="nope"){`));
+  write(ORCH_REL, surgery(realOrch, `}else if(prompt.kind==="bake"){`, `}else if(prompt.kind==="nope"){`));
   expect("drill 4c (the guest's bake branch vanishes)", checkBakeFieldParity(tmpRoot), true, "no kind===\"bake\" branch");
 
   // 4d — the payload vanishes: the host stops offering a remote captain their own bench at all.
@@ -724,8 +826,8 @@ function drill() {
   //      this still reopens the two-directors fault, because a wrapper is exactly what stops the
   //      orchestration parity gate seeing a convergence. Part (C) is what catches it.
   reset();
-  write(ORCH_REL, surgery(realOrch, `playBakeoffLive(wireSpec,{onRewatch:spend,`,
-                                    `guestBenchWrapper(wireSpec,{onRewatch:spend,`));
+  write(ORCH_REL, surgery(realOrch, `playBakeoffLive(wireSpec,{onRewatch:mayWatch,`,
+                                    `guestBenchWrapper(wireSpec,{onRewatch:mayWatch,`));
   expect("drill 4e (a guest-only wrapper replaces the named choreography)", checkBakeFieldParity(tmpRoot), true, "PARITY-BAKE-BUILDER");
 
   // 4f — a SECOND playBakeoffLive appears. Every field can be correct on both sides and the two
@@ -746,7 +848,7 @@ function drill() {
   }
 
   fs.rmSync(tmpRoot, { recursive: true, force: true });
-  console.log(`\n${allOk ? "RED-PROOF DRILLED OK — 22 synthetic violations caught, real tree clean" : "DRILL FAILURE — the assertion did not fail against its own synthetic violation"}`);
+  console.log(`\n${allOk ? "RED-PROOF DRILLED OK — 24 synthetic violations caught, real tree clean" : "DRILL FAILURE — the assertion did not fail against its own synthetic violation"}`);
   process.exit(allOk ? 0 : 1);
 }
 

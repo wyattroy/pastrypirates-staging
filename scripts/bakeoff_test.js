@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 // scripts/bakeoff_test.js
 //
-// Property tests for the bake-off's pure core (v2/src/engine/bakeoff.js).
+// Property tests for the bake-off's pure core (src/engine/bakeoff.js).
+//
+// RE-POINTED AND WIRED IN, architecture item 52 (2026-09-18). It read `v2bakeoff/`, the prototype
+// tree deleted at the cutover (fb74eedc), so since that day every run died on the import — and it
+// was not in `npm test`, so the silence cost nothing and told nobody. The invariants below are the
+// bake-off the game actually ships; nothing else in the chain asserts them.
+//
+// RED-PROOFED 2026-09-18 against a mutant tree (a copy of src/ outside the repo, one fault at a
+// time): shuffleSlots stops honouring locks -> FAIL "a locked crate never moves in the scramble
+// — 2231 locked crates moved"; scoreAttempt marks step 1 wrong however it is answered -> FAIL
+// "a perfect guess always scores perfect" and "attention 1.0 solves every bake first try".
+// Unmutated control: exit 0.
 //
 // WHY PROPERTIES RATHER THAN EXAMPLES. Every failure mode this minigame has is SILENT. A shuffle
 // that moves a locked bowl, a score that marks a right answer wrong, a bot that is secretly
@@ -11,9 +22,9 @@
 //
 // Run: node scripts/bakeoff_test.js
 
-import { mulberry32 } from "../v2bakeoff/src/shared/index.js";
+import { mulberry32 } from "../src/shared/index.js";
 import { newBake, scrambleBench, shuffleSlots, scoreAttempt, applyResult, botGuess,
-         bowlForStep, lockedStep, unsolvedCount } from "../v2bakeoff/src/engine/bakeoff.js";
+         bowlForStep, lockedStep, unsolvedCount } from "../src/engine/bakeoff.js";
 
 const ING=["wheat","dairy","sugar","eggs","cocoa","spice","vanilla"];
 let failures=0;

@@ -20,14 +20,19 @@
  * "so the card and the ceremony can never disagree about who holds the wind."
  *
  * RE-ANCHORED 2026-09-14, when Wyatt had the battle box removed entirely ("THe battle box covered this up. I want the battle box
- * removed entirely."). There is no card and no badge any more. The ceremony now asks the ENGINE — appState.game.downwindSide for
- * the two captains the stage frames (S.battle) — and the fight's opening bubble (orchestrator.js renderBattle) asks the same
- * function, so the two cannot disagree (rule 23: one source).
+ * removed entirely."). There is no card and no badge any more.
+ * RE-ANCHORED AGAIN 2026-09-18 (architecture item 25). From 09-14 the ceremony asked the ENGINE for itself —
+ * appState.game.downwindSide(A, D) for the two captains the stage frames — and so did the fight's opening bubble. That is two
+ * readings of one fact, each taken off the board ITS OWN SCREEN happens to be holding, and a watching screen's board is behind its
+ * event queue: measured in a crew room, one fight, host "⬇ HOSTCAP FIRES DOWNWIND — WINS TIES" and guest "CROSSWIND · ties collide"
+ * 340 ms apart. Now Game.beginBattle takes the reading ONCE and records it on the fight's `engage` event; the one event consumer
+ * hands it to the stage with the pair (window.__pp4.battle(a, d, downwind) -> S.battle[2]) and the ceremony simply says it.
+ * So this pose no longer stubs the engine: it hands the stage the wind the way the event consumer does.
  *
  *   node scripts/qa/flip_ceremony_names_the_wind_check.mjs
  *
- * RED-PROOFED: --before makes the engine answer "no one holds the wind" for the posed fight, which is what the pre-fix ceremony
- * effectively heard on every downwind battle; the check must then report the crosswind sentence and exit 1.
+ * RED-PROOFED: --before hands the stage "no one holds the wind" for the posed fight, which is what a guest whose board was behind
+ * effectively drew on every downwind battle; the check must then report the crosswind sentence and exit 1.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -35,8 +40,8 @@ import { openChrome, freshProfileDir, sleep } from "../lib/cdp.mjs";
 import { openWebKit } from "../lib/wk.mjs";
 import { REPO, gameURL } from "../lib/chrome.mjs";
 
-/* --before  makes the engine's downwindSide answer null (crosswind) for the posed fight — the red-proof: the ceremony must then
-              say crosswind and this check must exit 1.
+/* --before  hands the stage null (crosswind) for the posed fight — the red-proof: the ceremony must then say crosswind and this
+              check must exit 1.
    --wk       the same seat on WebKit, which is the engine the fault was photographed on. */
 const BEFORE = process.argv.includes("--before");
 const WK = process.argv.includes("--wk");
@@ -51,17 +56,17 @@ const wait = async (m, expr, ms = 45000, step = 250) => {
   return false;
 };
 
-/* Pose a DOWNWIND battle ON THE BOARD — the stage framing captains 1 and 2, the engine saying captain 1 holds the wind — then raise
-   the ceremony exactly as the game does, through the same `window.__pp4.flip(el, onClick)` bridge the flippenator arms. */
+/* Pose a DOWNWIND battle ON THE BOARD — the stage framing captains 1 and 2, the fight saying captain 1 holds the wind — then raise
+   the ceremony exactly as the game does, through the same `window.__pp4.flip(el, onClick)` bridge the flippenator arms.
+   THE WIND IS HANDED OVER, NOT STUBBED (architecture item 25): __pp4.battle(a, d, downwind) is exactly the call the one event
+   consumer makes on the fight's `engage` event, so this pose exercises the shipped path rather than a monkey-patched engine. */
 const POSE_AND_ARM = (before) => `(async () => {
-  const { appState } = await import('/src/state/index.js');
   const { pname } = await import('/src/ui/util.js');
-  const g = appState.game;
-  g.downwindSide = ${before ? "() => null" : "(att, def) => (att === g.players[1] ? 'a' : 'd')"};
-  if (window.__pp4) { window.__pp4.flipMsg = null; window.__pp4.battle(1, 2); }
+  const dw = ${before ? "null" : "'a'"};
+  if (window.__pp4) { window.__pp4.flipMsg = null; window.__pp4.battle(1, 2, dw); }
   const armed = !!(window.__pp4 && window.__pp4.flip &&
                    window.__pp4.flip(document.getElementById('flipCoinWrap'), () => {}));
-  return { armed, holder: pname(1), dw: g.downwindSide(g.players[1], g.players[2]) };
+  return { armed, holder: pname(1), dw };
 })()`;
 
 const READ_STAKES = `(() => {
@@ -97,10 +102,10 @@ const READ_STAKES = `(() => {
     const shotName = `flip-ceremony-wind-${engine}-${BEFORE ? "before" : "after"}.png`;
     await m.shot(path.join(OUT, shotName));
 
-    console.log(`flip_ceremony_names_the_wind — the ceremony must name the captain the engine says holds the wind`);
-    console.log(`  ${engine} ${W}x${H} @${DSF} · ${BEFORE ? "BEFORE (engine forced to say crosswind — the red-proof)" : "AFTER (as shipped)"}`
+    console.log(`flip_ceremony_names_the_wind — the ceremony must name the captain the FIGHT says holds the wind`);
+    console.log(`  ${engine} ${W}x${H} @${DSF} · ${BEFORE ? "BEFORE (the stage handed a crosswind — the red-proof)" : "AFTER (as shipped)"}`
               + ` · picture: .planning/posed/${shotName}`);
-    console.log(`  the engine says       : ${posed && posed.dw === "a" ? JSON.stringify(posed.holder) + " holds the wind" : "no one holds the wind"}`);
+    console.log(`  the fight says        : ${posed && posed.dw === "a" ? JSON.stringify(posed.holder) + " holds the wind" : "no one holds the wind"}`);
     console.log(`  the ceremony says     : ${JSON.stringify(stakes.present ? stakes.text : "(no .pp4CerStakes)")}`);
 
     /* THE INSTRUMENT MUST REACH ITS SUBJECT BEFORE ITS VERDICT MEANS ANYTHING. A ceremony that was
@@ -113,9 +118,9 @@ const READ_STAKES = `(() => {
     else if (!/downwind/i.test(stakes.text))
       fail = `the ceremony says neither downwind nor crosswind: ${JSON.stringify(stakes.text)}`;
     else if (stakes.named !== posed.holder)
-      fail = `the ceremony names ${JSON.stringify(stakes.named)} but the engine gave the wind to ${JSON.stringify(posed.holder)}`;
+      fail = `the ceremony names ${JSON.stringify(stakes.named)} but the fight gave the wind to ${JSON.stringify(posed.holder)}`;
     else
-      console.log("  PASS  the ceremony names the downwind captain, and it is the one the engine names.");
+      console.log("  PASS  the ceremony names the downwind captain, and it is the one the fight was called in.");
   } finally {
     await m.close();
   }

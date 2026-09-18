@@ -188,12 +188,23 @@ function behaviourRules(G, utilSrc, engSrc) {
   const table = stripComments(utilSrc).match(REASON_IDS);
   const ids = {}; if (table) for (const m of table[1].matchAll(/(\w+)\s*:\s*"([\w.]+)"/g)) ids[m[1]] = m[2];
   const look = viewer => ({ me: i => i === viewer, name: i => `<b>Captain${i}</b>`, poss: i => `<b>Captain${i}'s</b>` });
+  /* ⚠ THE FIXTURE IS READ OFF THE ONE RENDERER, NEVER TYPED BESIDE IT. It used to hand the words three values
+     by name — and on 2026-09-18 the parley sentence gained a fourth (`offer`, when Wyatt asked for the line to
+     name the hail as well as its outcome, 537bfd35). The renderer passed it; this fixture did not; so the rule
+     went red saying the GAME could not render a line the game renders perfectly well. A fixture that knows less
+     than the call it stands in for is not evidence. So the key list comes out of util.js's parley entry itself,
+     and every key gets a stand-in — a new field in that sentence arrives here already covered. */
+  const parleyArgs = stripComments(utilSrc).match(/parley\s*:\s*\([^)]*\)\s*=>\s*\{[\s\S]*?say\(\s*id\s*,\s*\{([^}]*)\}/);
+  const parleyKeys = parleyArgs ? [...parleyArgs[1].matchAll(/(^|,)\s*(\w+)\s*:/g)].map(m => m[2]) : [];
+  const vals = { p: seat(0), q: seat(1), want: "«crate»" };
+  for (const k of parleyKeys) if (!(k in vals)) vals[k] = `«${k}»`;
   const bad = [];
+  if (parleyKeys.length < 4) bad.push(`the parley renderer's own argument list could not be read (${parleyKeys.join(", ") || "nothing"}) — this fixture cannot say what the game hands the words`);
   for (const why of reasons) {
     const id = ids[why], t = id && WORDS[id];
     if (!t) { bad.push(`${why}: no line`); continue; }
     for (const viewer of [9, 0]) {
-      const html = fill(t, { p: seat(0), q: seat(1), want: "«crate»" }, look(viewer));
+      const html = fill(t, vals, look(viewer));
       if (!html.trim() || /\{[A-Za-z0-9_]+/.test(html) || /\b(undefined|null|NaN)\b/.test(html)) bad.push(`${why} for ${viewer === 0 ? "the asker" : "another screen"}: "${html}"`);
     }
   }

@@ -1,6 +1,36 @@
 /* T-142 — DOES THE CAPTAINS PANEL READ THROUGH AN OPEN MODAL?
  *
- *   node scripts/qa/t142_captains_under_modal_check.mjs
+ *   node scripts/qa/gate_archive/t142_captains_under_modal_check.mjs
+ *
+ * ⛔ RETIRED TO THE ARCHIVE 2026-09-18 (architecture item 53), AND WHY — because it condemned
+ * something a player can watch working. Run on its own it reported, on all three seats, "the
+ * CAPTAINS bar did NOT come back after the modal closed (visibility=hidden, body.pp4ModalOpen=
+ * false)". It never came ON.
+ *
+ *   WHAT IT ANCHORED ON: the staging wait at line ~220 — body.pp4Stage plus more than one
+ *   `.player-row` inside #pp4Cap. That was a fair proxy for "the bar is painted" when this was
+ *   written. WHAT MOVED: Wyatt's empty-box rule, 2026-09-09 — "for this whole section of the
+ *   pre-game where the captain's box is empty, hide it ... make it appear after the recipe has
+ *   been selected." `capEmptyTick()` (src/ui/stage.js) now sets an INLINE `visibility:hidden` on
+ *   #pp4Cap until the recipe draft resolves. The bar has rows in it the whole time, so the wait
+ *   above still passes — on a screen where the bar is already dark for a reason the modal never
+ *   touched. Because the wait is checked BEFORE the loop advances, the probe stopped there every
+ *   run and never picked a recipe at all.
+ *
+ *   MEASURED, not reasoned (2026-09-18): posing this probe's own staging condition with NO modal
+ *   opened at any point gave computed AND inline visibility `hidden` at phone 390x664 and desktop
+ *   1440x900, `bodyModalOpen=false`, `openModals=[]`. And playing the same two seats the way a
+ *   player does — solo, take the name, CHOOSE A RECIPE, tap ☰ then "📜 Captain's log", close on the
+ *   ✕ — gave visible → hidden → visible, with the bar's box byte-identical across the cycle.
+ *   Pictures: .planning/architecture-cleanup-shots/item-53-*.
+ *
+ *   The staging wait below has been corrected in the same commit, so this stays a usable posing
+ *   instrument rather than a landmine. It is out of the chain for the reason
+ *   docs/DRIVING-THE-GAME.md §3d already gives — a probe that drives a browser through several
+ *   game starts does not belong in `npm test`; gate the pure logic instead. That gate is
+ *   `scripts/qa/captains_bar_darkens_one_place_check.mjs`, which holds the same ground
+ *   structurally: one rule darkens the bar, one place decides a modal is up, and the inline hand
+ *   that hides an empty box un-hides with "" so it can never out-rank the modal rule.
  *
  * WHY THIS IS A POSE AND NOT A RATE (rule 26). The claim is "five of the ten screens the trial's
  * eyes rejected are this one bug on tablet". A rate over a driven voyage cannot settle where a box
@@ -52,7 +82,7 @@
  *
  * NO GAME CODE IS TOUCHED BY THIS FILE. It is an instrument.
  */
-import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
+import { serve, launch, attach, killAll, sleep } from "../../mp_rig.mjs";   /* one level deeper since the archive move */
 import fs from "node:fs";
 import path from "node:path";
 
@@ -212,18 +242,24 @@ try {
     await C.waitFor(`(()=>{const m=document.getElementById('nameModalInput');return !!(m&&m.offsetParent)})()`, 15000, `${seat.tag} name`);
     await C.ev(`document.getElementById('btnNameConfirm').click();true`);
 
-    /* wait until the stage is up AND the captains bar has rows in it — an empty bar cannot show
-       through anything, so measuring one would be measuring nothing */
+    /* wait until the stage is up AND the captains bar is actually PAINTED — rows alone is not it.
+       ⚠ THE ROWS-ONLY VERSION OF THIS WAIT IS WHAT RETIRED THIS FILE (the header says how): the
+       bar carries its rows all through the recipe draft while capEmptyTick holds it at an inline
+       `visibility:hidden`, so "has rows" passed on a screen where the bar was already dark. An
+       empty bar cannot show through anything, and neither can a hidden one — measuring either is
+       measuring nothing. Reading COMPUTED visibility makes the loop keep advancing until the draft
+       resolves, which is the moment a player first sees the bar. */
     let staged = false;
     for (let i = 0; i < 40; i++) {
       staged = await C.ev(`(()=>{const c=document.getElementById('pp4Cap');
-        return !!(document.body.classList.contains('pp4Stage') && c && c.querySelectorAll('.player-row').length>1)})()`);
+        return !!(document.body.classList.contains('pp4Stage') && c && c.querySelectorAll('.player-row').length>1
+          && getComputedStyle(c).visibility==='visible')})()`);
       if (staged) break;
       await C.ev(ADVANCE); await sleep(800);
     }
     if (!staged) {
-      console.log(`  ${seat.tag}: never reached the stage with a populated CAPTAINS panel — NOT MEASURED`);
-      results[seat.tag] = { ok: false, why: "never reached a populated stage" };
+      console.log(`  ${seat.tag}: never reached the stage with a PAINTED CAPTAINS panel — NOT MEASURED`);
+      results[seat.tag] = { ok: false, why: "never reached a stage with a painted captains bar" };
       continue;
     }
     await sleep(600);

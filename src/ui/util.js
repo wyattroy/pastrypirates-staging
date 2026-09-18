@@ -894,17 +894,42 @@ export function pickNarrVariant(payload,seat){
 // whole (append-only) game.events history on every single new event. A long-running game racks up
 // thousands of events, and re-describing all of them on every tick made each new event O(n) —
 // O(n²) over a multi-hour session — which is exactly the kind of session that gets visibly
-// laggier the longer it runs. Safe because events are only ever pushed, never spliced/reordered;
-// any real reset reassigns logLines directly (see the two `logLines=[...]` resets) rather than
-// going through this path.
+// laggier the longer it runs. Safe because events are only ever pushed, never spliced/reordered.
 // D-24: the captain's log is a THIRD-PERSON stream — a neutral record of what happened, not a
 // retelling aimed at whoever happens to be sitting here. describe() would resolve viewerSeat to
 // the live appState.mySeat (via isLocalTo's null-fallback to seatLocal), so the log used to read
 // "Crustbeard — you pay 1<coin> and sail" for your own moves. Passing NEUTRAL_VIEWER explicitly
 // forces every builder's un-addressed branch, so every seat is named the same way. The message
 // box is unaffected — it keeps addressing you directly via its own per-seat variants.
+/* ⭐ WHAT THE CAPTAIN'S LOG HOLDS IS DECIDED HERE AND NOWHERE ELSE — architecture item 50, 2026-09-18.
+   MEASURED FIRST, two crew windows, both runs: a host that reloaded mid-voyage opened its own
+   captain's log on an EMPTY card. 10 rows -> 0 (run 1, 42 events) and 8 -> 0 (run 2, 33 events),
+   and the rows did not come back on their own — they were still 0 fifteen seconds later with
+   nobody playing. A guest that reloads keeps every row. That asymmetry named the cause:
+     · this function was called from ONE place, the event consumer, so the log held only the events
+       this screen WATCHED GO BY. A guest rebuilds its history by replaying the feed THROUGH the
+       consumer, so its log rebuilds with it. A host rebuilds by fast-forwarding its own engine with
+       `replaying` true, which liveRender refuses to drain — so no rebuilt event was ever described.
+     · and beginGame emptied `logLines` on that rebuild, exactly as it does on a fresh start.
+   The record of a voyage is not a REACTION to an event: it is a reading of `game.events`, which
+   every screen holds in full however it came by them. So it is derived here, from the game, and
+   the one function that DRAWS the log (renderLog, src/ui/board.js) calls it — the log is filled by
+   the act of showing it. The consumer still causes that, through its own render() step; the direct
+   call it used to make (src/orchestrator.js) is deleted, not duplicated.
+   ⚠ AND NOTHING OUTSIDE THIS FUNCTION MAY EMPTY `logLines`. It knows which voyage it is describing
+   and starts over when that changes — the same `!==appState.game` identity test the stowed-recipe
+   card uses — which is what let beginGame's `appState.logLines=[]` be deleted rather than left
+   standing as a second opinion. (playtest #12, 6012fe66, learned this shape the hard way: "a hide
+   that depends on having WITNESSED a moment cannot survive a reload; the moment has to be readable
+   from the game.")
+   Returns TRUE when it started a new voyage's log, so the renderer can drop what it painted for the
+   last one. */
+let loggedVoyage=null;
 export function syncLogLines(){
+  const fresh=loggedVoyage!==appState.game;
+  if(fresh){loggedVoyage=appState.game;appState.logLines.length=0;}
   for(let i=appState.logLines.length;i<appState.game.events.length;i++)appState.logLines.push(describeFor(appState.game.events[i],NEUTRAL_VIEWER));
+  return fresh;
 }
 
 /* ---------- playback ---------- */
@@ -1930,17 +1955,48 @@ export function eventDrawn(e,capMs=9000){
    decides "ye", and who chose the move never enters. narrateLastEvent() and narrateCurrent() are only WHICH event. */
 /* ⭐ A COIN THAT IS BEING EXPLAINED WAITS FOR THE WORDS. Wyatt, 2026-09-15: "I think the coin you get from musing should only fly into
    your purse AFTER the narration line has finished writing -- because it's explaining where the coin comes from." So the one consumer
-   hands the flight here instead of running it itself, and it is let go when the line has finished TYPING — 9ms a character, the
-   typewriter's own rate (stage.js typewriterReveal), not when the line's reading time is up. The 8-second fallback is the safety a
-   screen with narration switched off needs: a coin must never be lost because nobody spoke. */
+   hands the flight here instead of running it itself, and it is let go when the line has finished TYPING (lineWritten, below), not when
+   the line's reading time is up. */
 const AFTER_LINE = new Map();
-/* The longest a thing waiting on a narration line will wait — a screen with narration off never writes one. The purse holds its count
-   a little past this (orchestrator.js, the pass coin), so the two are one number. */
+/* THE DEADLINE, NOT THE ANSWER. The longest a thing waiting on a narration line will wait, for a screen that writes no line at all —
+   the narrator steps over an unanswered prompt, or the words have no entry for the event. (This used to say "the purse holds its count
+   a little past this, so the two are one number"; the hold it named was deleted when payInto became the one pay-in door, and nothing
+   in src/ has read this number since except the line below.)
+   ⚠ IF A SCREEN EVER WAITS THIS OUT FOR A LINE IT DID WRITE, THAT IS THE DEFECT — NOT THIS NUMBER. That is exactly what a guest did
+   with every muse coin until 2026-09-18 (see lineWritten). Raising or lowering this cannot fix such a thing; it can only change how
+   long the wrong answer takes to arrive. */
 export const AFTER_LINE_CAP_MS = 8000;
 export function afterLine(e, fn){
   if(!e || typeof fn !== "function") return;
   AFTER_LINE.set(e, fn);
   setTimeout(() => runAfterLine(e), AFTER_LINE_CAP_MS);
+}
+/* ⭐⭐ THE ONE PLACE THAT SAYS THE WORDS EXPLAINING A COIN HAVE BEEN WRITTEN — WHICHEVER SCREEN WROTE THEM.
+   Wyatt, 2026-09-18, of a crew game: "guest never saw coin go into their purse when musing ON THEIR TURN -- it was added to the
+   beginning of their following turn! ... those coins seem to be moving across the screen & making noise only on the start of that
+   player's next turn."
+   MEASURED BEFORE THE REPAIR — two real browsers in a real crew room (host 1200x950, guest iPhone-13-mini 375x812 dsf3, touch), five
+   muse coins and five dock hauls on each screen, every time taken from the DOM and from these doors and counted from the moment the
+   event arrived ON THAT SCREEN: a dock's coins landed at 663ms on BOTH screens, and the chink came with the landing on both. A muse
+   coin landed at 1665ms on the host — and at 8673ms on the guest, which is the cap above to the millisecond, with a whole new turn
+   begun in between, all five times.
+   THE CAUSE WAS THAT ONLY ONE OF THE TWO NARRATORS EVER SAID THE LINE WAS WRITTEN. narrateEvent (below) worked the typing time out
+   inline and let the coin go; watchNarr (src/orchestrator.js), the guest's narrator, drew the very same line and said nothing at all —
+   so on a guest the deadline WAS the behaviour. Rule 23's exact shape: two consumers of one fact and nothing making them agree.
+   So the fact is decided HERE, once, and both narrators call it with the line they are about to hand to flash().
+   IT IS THE NEUTRAL LINE THAT IS TIMED, DELIBERATELY, AND NOT THIS SCREEN'S OWN "ye" WORDING. Each screen picks a variant of the same
+   sentence (pickNarrVariant, inside flash), and the variants differ by a word — so timing the picked one would give every screen a
+   slightly different answer to a question the whole table is asking about one coin, and would make this door ask who is looking, which
+   is a mode fork in code that draws (scripts/mode_fork_check.js). The neutral line is what every variant was built from, so one
+   duration serves them all and the coin leaves every boat on the same beat. Host and guest parity is worth more than two characters.
+   The rate is the narration bubble's own, shared with the typewriter that types it (stage.js stageFlash), so the two cannot drift
+   apart; the settle is the beat the last character gets before the coin moves.
+   scripts/qa/line_written_one_place_check.mjs holds all of it. */
+export const BUBBLE_MS_PER_CHAR = 9, LINE_SETTLE_MS = 120;
+export function lineWritten(html, e){
+  if(!e || typeof e !== "object") return;
+  const chars = String(html == null ? "" : html).replace(/<[^>]*>/g, "").length;
+  setTimeout(() => runAfterLine(e), BUBBLE_MS_PER_CHAR * chars + LINE_SETTLE_MS);
 }
 function runAfterLine(e){
   const fn = AFTER_LINE.get(e);
@@ -2003,7 +2059,11 @@ export async function narrateEvent(e){
        re-anchored the very line this rule had just decided to centre. The flag says "an event was
        read and it yielded no subject", which the sniff must not override. */
     window.__pp4.subjectSet = true;
-    window.__pp4.evType=e.t;
+    /* (window.__pp4.evType=e.t stood here — deleted with its only reader by architecture item 24,
+       2026-09-18. It fed a storm camera cue in stage.js that could never fire, because this line is
+       reached only AFTER describeFor() has returned a line and there is no `storm` entry in
+       EVENT_NARRATION, so a storm event returns above. Four measured crew-room storms, host and guest,
+       never showed the whole-ocean viewBox that cue would have produced.) */
   }
   const variants=narrationVariants(e);
   // notes/edits #1 follow-up: this used to be netNarrate()+a flat 3000ms sleep, a leftover from
@@ -2012,8 +2072,9 @@ export async function narrateEvent(e){
   // could burn the ENTIRE 3s just typing itself in, leaving no time to actually read it before the
   // next event overwrote it. flash() awaits real reveal completion, then holds for length*80ms —
   // scaling with the text instead of a one-size-fits-all timer.
-  // the line is written after 9ms a character; anything waiting on the words (a muse coin) is let go then, not after the hold
-  setTimeout(() => runAfterLine(e), 9 * String(L.txt == null ? "" : L.txt).replace(/<[^>]*>/g, "").length + 120);
+  // anything waiting on the words (a muse coin) is let go when they are written, not after the hold — through the ONE door above, which
+  // the guest's narrator (src/orchestrator.js watchNarr) calls for the same line, so both screens let the same coin go at the same moment
+  lineWritten(L.txt,e);
   await netHandlers().onFlash(L.txt,undefined,undefined,variants);
   // THE BLACK MARKET'S ONE LESSON (Wyatt, 2026-08-12, "ceremony + marker"): the first time any
   // shelf on the board empties, a once-per-voyage centre-stage beat teaches that sold-out islands

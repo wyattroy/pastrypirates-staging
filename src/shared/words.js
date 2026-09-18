@@ -194,7 +194,8 @@ export const WORDS = {
   "wait.sailing": "{p} {p:is|are} choosing where to sail…",
   "wait.ovens": "{p} {p:steps|step} up to the ovens…",
   "wait.mateys": "⚓ Waiting for yer mateys…",
-  "battle.waiting": "⏳ Waiting for {who}…",
+  /* (the battle box's own "⏳ Waiting for {who}…" stood here. Nothing has said it since the box was deleted on 2026-09-15, 1c87b27a —
+     the same deletion that left the guest's two line filters with nothing to protect. Architecture item 8 takes all three.) */
 
   /* ── SAILING ───────────────────────────────────────────────────────────────────────────────────────── */
   "sail.tap": "tap to sail",
@@ -271,12 +272,29 @@ export const WORDS = {
   "trade.accepts": "{icon} {q} {q:accepts|accept}",
   "trade.wants": "💰 {q} {q:wants|want} {what}",
   "trade.wantsInstead": "💰 {q} {q:wants|want} {what} <i>instead</i>",
+  /* ⭐ THE ANSWER CIRCLES — the same deal the lines above name, short enough for a petal (architecture item 20b, 2026-09-18).
+     WYATT, ON HIS OWN PLAYTEST: "Fix this so it is intuitive -- i've also noticed the confusion when i play." The circle beside a
+     counter-offer read "Crustbeard" over "+12🌕" while the line beside it read "Crustbeard wants Fresh Milk + 12🌕" — and the 12 is
+     the WHOLE price, not twelve MORE. A leading + on a total is a lie a player pays for.
+     HIS WORDING, ANSWERED BY HIM HIMSELF AND FINAL (2026-09-18, item 20c): "Crustbeard 12🌕" — the circle names the CAPTAIN and
+     the PRICE and nothing else. No verb. (Item 20b worked from a relay of his ruling and put "wants" on it for one commit; he
+     struck the word out when the question reached him. Do not put it back — counter_price_one_wording_check.mjs rules 4 and 7
+     go red on any other word.) The amount is {what}, built by flow.js's dealBits, the one place a deal's crate and coin become
+     words, so the circle and the line beside it cannot name two prices.
+     THE KEY KEEPS ITS NAME: a "…Short" id here is the petal form of the LINE it is named after — trade.wantsShort is
+     trade.wants' petal, exactly as trade.takesShort is trade.takes' and carries no "takes" either.
+     THE PETAL IS A FLEX COLUMN (index.html "#pp4Prompt.radial .apBtn"), so every CHILD of the label is its own row —
+     measured, not assumed: a first cut of this line left the verb, the crate and the price as three separate children
+     and the disc grew from 105px to 122px to hold five rows, which on a 375x812 phone put the circle over the narration
+     box it agrees with. The ask is therefore ONE child: the captain on the first row, what they are askin' on the second,
+     wrapping inside itself the way any sentence does. */
+  "trade.takesShort": "{icon}<br>{q}",
+  "trade.wantsShort": "{q}<span>{what}</span>",
   "trade.offer": "offer",
   "trade.nothin": "nothin'",
   "trade.that": "that",
   "trade.notCarrying": "Ye're not carryin' {ing} any more.",
   "trade.tooDear": "That'd cost ye {n}🌕, and ye've only {coins}🌕 aboard.",
-  "trade.coinsShort": "+{n}🌕",
   "trade.walkAway": "🚫 Walk away",
   "trade.refuses": "{q} {q:refuses|refuse} outright",
   "trade.declines": "{q} {q:declines|decline}",
@@ -333,8 +351,9 @@ export const WORDS = {
   "battle.crosswindTag": "CROSSWIND · ties collide",
   "battle.downwindTag": "⬇ {name} FIRES DOWNWIND — WINS TIES",
   "battle.opening": "⚔️ {a} {a:attacks|attack} {d}!",
-  "battle.waitDefend": "⚔️ {a} {a:attacks|attack} {d}! Waiting for {d} to defend…",
-  "battle.waitFor": "⚔️ {a} {a:attacks|attack} {d} — waiting for {who}…",
+  /* (the fight's two waiting lines stood here — "⚔️ {a} attacks {d}! Waiting for {d} to defend…" and "⚔️ {a} attacks {d} — waiting for
+     {who}…". Wyatt, relayed 2026-09-17, architecture item 8: drop them everywhere. "battle.loads" and "battle.showsTails" below already
+     say whose coin the table is waiting on, and the host never drew either line at all.) */
   "battle.loads": "{a} {a:loads|load} the cannon…",
   "battle.fire": "⚔️ {name} (attacker) — fire!",
   "battle.defend": "⚔️ {a} {a:attacks|attack} ye — defend! FLIP",
@@ -417,7 +436,11 @@ export const WORDS = {
   "bake.titleMine": "{who}, Yer Bake-Off",
   "bake.watching": "{p} {p:is|are} at the ovens — watch the crates.",
   "bake.attempt": "attempt {n}",
-  "bake.watchAgain": "Watch again {icon}1",
+  // {n} is what a look costs, not a typed 1 — architecture item 17: the price is decided in one place
+  // (BAKE_REWATCH_COST, which the engine charges and the rules page prints), and this button says that
+  // very number. It read "Watch again {icon}1" until 2026-09-18, which would have gone on saying 1 the
+  // day the price moved.
+  "bake.watchAgain": "Watch again {icon}{n}",
   /* his words, 2026-08-08 and 2026-08-25 */
   "bake.introLead": "{icon} The ovens be roarin'! Yer ingredients be waitin'. Ye must bake yer recipe by addin' them in the <b>correct order</b>.",
   "bake.recipeName": "{name} Recipe",

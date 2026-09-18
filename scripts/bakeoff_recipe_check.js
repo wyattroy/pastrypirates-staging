@@ -1,7 +1,17 @@
 #!/usr/bin/env node
 // scripts/bakeoff_recipe_check.js
 //
-// Gates v2/src/shared/recipe-steps.js — the five-step order the bake-off tests you on.
+// Gates src/shared/recipe-steps.js — the five-step order the bake-off tests you on.
+//
+// RE-POINTED AND WIRED IN, architecture item 52 (2026-09-18). It read `v2bakeoff/`, the prototype
+// tree deleted at the cutover (fb74eedc), so since that day it could not start at all — and it was
+// not in `npm test`, so nothing said so. recipe-steps.js's own comment still calls these rules
+// "UNGATED-IN-4"; that sentence was true this morning and is not any more. Same rules, same file,
+// now aimed at the game Wyatt plays and run on every change.
+//
+// RED-PROOFED 2026-09-18 against a mutant tree (a copy of src/ outside the repo, one fault at a
+// time): a step order that is not a permutation of its own recipe -> FAIL "step order is not a
+// permutation"; a step line grown a digit -> FAIL "copy rules". Unmutated control: exit 0.
 //
 // WHY THIS EXISTS. Every failure in this table is invisible at runtime. An order that isn't a
 // permutation of its own recipe produces a bench the player cannot solve; a missing entry silently
@@ -11,9 +21,9 @@
 //
 // Run: node scripts/bakeoff_recipe_check.js
 
-import { RECIPE_STEPS, recipeSteps } from "../v2bakeoff/src/shared/recipe-steps.js";
-import { ING_ALL } from "../v2bakeoff/src/shared/index.js";
-import { RECIPE_BOOK } from "../v2bakeoff/src/ui/recipe.js";
+import { RECIPE_STEPS, recipeSteps } from "../src/shared/recipe-steps.js";
+import { ING_ALL } from "../src/shared/index.js";
+import { RECIPE_BOOK } from "../src/ui/recipe.js";
 
 let failures=0;
 const fail=(m)=>{failures++;console.log("FAIL "+m);};

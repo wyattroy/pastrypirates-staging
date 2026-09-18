@@ -118,6 +118,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readGates } from "./lib/gate_chain.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
@@ -156,10 +157,13 @@ for (const dir of [path.join(REPO_ROOT, "scripts"), path.join(FOUR, "scripts")])
 
 /* ================= Which gates cover 4/, read out of the test chain ================= */
 
-const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
-const chain = (pkg.scripts && pkg.scripts.test) || "";
+/* The gates, in order, out of scripts/gates.manifest.json — the one reader, scripts/lib/gate_chain.mjs.
+   This file is PARKED (`package.json` → `scripts["test:parked-citation"]`, premise retired by the
+   cutover; see .planning/BACKLOG.md) and is not in `npm test`. It is repointed anyway, because
+   architecture item 63 moved the list out of `scripts.test`, and a parked gate left reading a
+   one-entry chain would answer confidently and wrongly the day somebody un-parks it. */
 const coversFour = new Set(); // repo-relative script paths that read 4/ inside `npm test`
-for (const entry of chain.split("&&").map((x) => x.trim())) {
+for (const entry of readGates()) {
   const m = entry.match(/^node\s+(\S+)/);
   if (!m) continue;
   const script = m[1];

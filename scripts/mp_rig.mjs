@@ -18,7 +18,15 @@
  * (DRIVING-THE-GAME.md 1: Chrome caches ES modules per URL; 9: never verify against production).
  *
  * Everything is bounded. Nothing drives a voyage to its end (writeGameLog's entries are permanent
- * and unremovable by anyone, Wyatt included). Rooms are torn down by the caller.
+ * and unremovable by anyone, Wyatt included).
+ *
+ * ⭐ AND THE ROOM IS TORN DOWN BY THE RIG, NOT BY THE CALLER — 2026-09-17. It used to say "rooms are
+ * torn down by the caller" on this line, and the caller mostly did not: of the seventeen probes that
+ * host through makeHost(), FOUR deleted their room and thirteen never mentioned it. Cleaning up
+ * after one item's crew runs removed 186 rooms from the live database and only five belonged to
+ * that run. So makeHost now NOTES the room it made and killAll() deletes it — one place, on the
+ * path every probe already calls, and over REST rather than through a browser that is about to be
+ * SIGKILLed (scripts/lib/crew_room.mjs says why that matters).
  *
  * Exports: serve(), launch(), attach(), makeHost(), makeGuest(), driver(), ribbonReport(), killAll()
  */
@@ -30,6 +38,7 @@ import path from "node:path";
 export { REPO, CHROME, LINUX_ARGS } from "./lib/chrome.mjs";   // one resolver for every driver
 import { REPO, CHROME, LINUX_ARGS, gameURL, PYTHON, staticServerArgs } from "./lib/chrome.mjs";
 import { reapOnce as tidyOnce, humanBytes } from "./lib/stray_probes.mjs";
+import { noteRoom, dropNotedRooms } from "./lib/crew_room.mjs";   // one deleter, one definition
 // screenshots: $MP_RIG_SHOTS, else ./mp-rig-shots under the caller's cwd (was a dead scratchpad path)
 export const SHOTS = process.env.MP_RIG_SHOTS || path.join(process.cwd(), "mp-rig-shots");
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -110,16 +119,22 @@ export function launch(dbgPort, profile, { headless = true, url = "about:blank" 
 /* ⚠ AND ON EVERY WAY OUT, not only the happy one. `finally { killAll() }` at a probe's top level
    covers a thrown error; it does NOT cover an uncaught rejection, a Ctrl-C, or a SIGTERM. Those
    are separate doors out of a node process and each one used to leak a browser. (SIGKILL cannot be
-   caught by anyone — that case is what reapOnce() above exists for.) */
+   caught by anyone — that case is what reapOnce() above exists for, and the ROOM equivalent is
+   scripts/qa/crew_room_sweep.mjs.)
+
+   ⛔ THE SIGNAL DOORS AWAIT, THE `exit` DOOR CANNOT. Deleting a room is a network round trip, so
+   every handler that can hold the process open for one now does — and `process.exit` is called
+   AFTER it, never beside it. The `exit` handler is the one place that cannot await anything at
+   all: it gets the synchronous half only (the browsers), which is all it ever did. */
 let exitWired = false;
 function wireExit() {
   if (exitWired) return;
   exitWired = true;
-  const bye = () => { try { killAll(); } catch {} };
-  process.on("exit", bye);
-  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { bye(); process.exit(130); });
-  process.on("uncaughtException", (e) => { bye(); console.error(e); process.exit(1); });
-  process.on("unhandledRejection", (e) => { bye(); console.error(e); process.exit(1); });
+  process.on("exit", () => { try { killProcs(); } catch {} });
+  const bye = async () => { try { await killAll(); } catch {} };
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, async () => { await bye(); process.exit(130); });
+  process.on("uncaughtException", async (e) => { await bye(); console.error(e); process.exit(1); });
+  process.on("unhandledRejection", async (e) => { await bye(); console.error(e); process.exit(1); });
 }
 
 /* ⛔ SCOPED BY PROFILE DIRECTORY, NEVER BY PORT — Wyatt, 2026-09-10: "will finally { killAll() }
@@ -135,7 +150,7 @@ function wireExit() {
    one probe in one worktree, and it cannot be guessed into by another session even at the same pid
    modulo. So: kill the children we actually spawned, then sweep anything still holding OUR profile.
    Nothing here matches a port, and nothing here can reach another session's work. */
-export function killAll() {
+function killProcs() {
   for (const p of procs) { try { p.kill("SIGKILL"); } catch {} }
   for (const dir of profiles) {
     if (!dir) continue;
@@ -144,6 +159,18 @@ export function killAll() {
   /* The http server is a DIRECT CHILD and the loop above already SIGKILLed it. There is deliberately
      no pkill fallback for it: its command line carries nothing unique (cwd is not in argv), so any
      pattern broad enough to find it is broad enough to hit somebody else's server. */
+}
+
+/* ⚠ AWAIT IT. It is async since 2026-09-17 because the room delete is a network call, and a delete
+   that is not awaited is a room left standing — that is exactly how crew_bake_probe.mjs's teardown
+   was failing, from a synchronous eval, every run. Called without `await` the browsers still die
+   synchronously (killProcs runs first, on purpose), but the room may outlive the process.
+   BROWSERS FIRST, THEN THE ROOM: a host page that is still alive re-writes its seats, so deleting
+   the room under a live host is a delete the host can undo. */
+export async function killAll() {
+  killProcs();
+  const gone = await dropNotedRooms();
+  for (const r of gone) log(r.ok ? `  [rig] room ${r.code} deleted` : `  [rig] could not delete room ${r.code}: ${r.why}`);
 }
 
 export async function attach(dbgPort, { match = null } = {}) {
@@ -230,7 +257,9 @@ export async function makeHost(C, url, name = "Host") {
   const btnCreate = await C.ev(`(()=>{const b=document.getElementById('btnCreate');return !!(b&&b.offsetParent)})()`);
   if (btnCreate) { await C.ev(`document.getElementById('btnCreate').click();true`); await sleep(1200); }
   await C.waitFor(`/^[A-Z0-9]{4,6}$/.test((document.getElementById('roomCode')||{}).textContent||'')`, 30000, "host: room code");
-  return await C.ev(`document.getElementById('roomCode').textContent.trim()`);
+  /* NOTED THE MOMENT IT EXISTS, so killAll() can delete it however this probe ends — including the
+     ways that never reach the caller's next line. */
+  return noteRoom(await C.ev(`document.getElementById('roomCode').textContent.trim()`));
 }
 
 /* START THE VOYAGE — AND CLICK THROUGH THE CONFIRM, WHICH IS THE STEP THAT ATE FOUR ATTEMPTS.

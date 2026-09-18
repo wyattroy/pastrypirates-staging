@@ -1,132 +1,54 @@
 #!/usr/bin/env node
-// scripts/bot_ladder.js
+// scripts/bot_ladder.js — RETIRED 2026-09-18. This file is a headstone, not an instrument.
 //
-// PRINCIPLE 10, MADE MECHANICAL: prove a bot change against the previous bot, not against a proxy.
+// WHAT IT WAS. Principle 10 made mechanical: seat the new bot brain and the brain it replaces at
+// one table, on the same seeds, and ask only who wins. It earned its place — on 2026-08-09 a
+// whole-turn planner improved every behaviour proxy (trades 26 -> 140, shots with the wind 25.5% ->
+// 88.6%, blank turns 8.8% -> 6.8%) and was one command from shipping, and this ladder measured it
+// as a WORSE player in three of four configurations. Nothing in the behaviour statistics could
+// have said so.
 //
-// Why this exists. On 2026-08-09 a whole-turn planner was built to satisfy the first three bot
-// design principles (see the engine's AI header). Every behaviour proxy improved, some of them
-// dramatically:
+// WHY IT CANNOT BE RE-POINTED, which is the whole reason this is a headstone and not a one-line
+// import fix. A head-to-head needs TWO brains, so this file carried the incumbent inside it as
+// OLD_TURN, a verbatim copy stamped with the commit it was current in, and its own header laid
+// down the rule: *"the incumbent is always what is live, never what was live three changes ago."*
+// It called `chooseTarget` / `chooseAction` — the pre-planner brain. That brain is gone, and it was
+// not lost by accident:
 //
-//     trades struck            26  ->  140 per 300-game corpus
-//     shots fired with the wind  25.5% -> 88.6%
-//     turns ending blank          8.8% ->  6.8%
-//     dock-vs-fight               compared honestly for the first time
+//     Wyatt, 2026-08-18: "we should never use the old bot brain, it's done. Bot tuning should be
+//     done with the newest algorithm that is actually used in game."
 //
-// It was one command away from shipping. Then this ladder ran it against the bot it replaced and it
-// won BELOW its fair share in three of four configurations. It was a worse player that looked like a
-// better one, and nothing in the behaviour statistics could have told anyone that.
+// `src/engine/index.js` now holds exactly ONE whole-turn planner and `planTurn()` dispatches to it
+// unconditionally; the control arm and the four helpers only it called were deleted deliberately.
+// So there is no incumbent left to seat opposite. Re-stamping OLD_TURN to today's turn — the thing
+// this file's own header tells you to do — would put the same brain in both arms and read +0.0
+// forever. That is a control, not a measurement: a case that cannot fail.
 //
-// So: a bot change is not "better" because it fights more, trades more, dawdles less or reads more
-// cleverly. It is better if it WINS MORE against what it replaces, over the same seeds. That is the
-// only question this script asks.
+// WHAT TO USE INSTEAD — `node scripts/bot_ladder4.js [games] [seedMult] [--json]`.
+// It measures the same thing on a TIME axis rather than a seat axis: run the identical command on
+// the same seeds either side of your change and diff the two records. Every seat runs the shipping
+// brain in both runs, so whatever moved, the change moved. ~420 ms a game.
+// It ignores `--help` and starts a real ladder, so read its header rather than running it to ask.
 //
-// HOW IT WORKS. Both brains have to exist at once for a head-to-head, which means the old turn has
-// to be kept somewhere. It lives in this file, as OLD_TURN below, copied verbatim from the commit it
-// was current in and stamped with that commit. Game.takeTurn is then dispatched per seat, so the two
-// brains play the same board under the same seed with no other difference.
+// The measuring body, OLD_TURN included, is in git history at 394ff691 — `git show
+// 394ff691:scripts/bot_ladder.js`. Nothing was thrown away.
 //
-// KEEPING IT HONEST as the engine moves on:
-//   - when you change the bot, do NOT edit OLD_TURN. It is the incumbent, and the whole point is
-//     that it does not move while you measure against it.
-//   - when a change PASSES and ships, replace OLD_TURN with the newly-shipped turn and re-stamp the
-//     commit. The incumbent is always "what is live", never "what was live three changes ago".
-//   - if OLD_TURN ever calls something the engine has deleted, that is the signal to re-stamp, not
-//     to patch around it.
-//
-// READ THE SEAT ROWS WITH CARE. Seat effects in this game are large — the same brain measured 17.3%
-// in seat 0 and 27.8% in seat 1 against identical opposition. The 2v2 and 3v1 rows are the ones to
-// trust, because they average over seats; a single-seat row is a hint, not a verdict.
-//
-//   node scripts/bot_ladder.js [games]
+// WHY THE PATH SURVIVES AT ALL. `docs/BOT-DESIGN-PRINCIPLES.md` §9 — the doc `.claude/CLAUDE.md`
+// sends you to BEFORE you may touch a bot — names this path, and that doc belongs to another
+// session mid-rewrite. A doc that names a path and a path that answers when you follow it is the
+// deal; this file keeps that deal in one second instead of an ERR_MODULE_NOT_FOUND stack trace,
+// which is what it gave every session from 2026-08-26 until today.
 
-import { Game, roundCfg } from "../v2bakeoff/src/engine/index.js";
+console.error(`
+scripts/bot_ladder.js is RETIRED — it measured the new bot brain against the brain it replaced,
+and this engine no longer carries that second brain (Wyatt, 2026-08-18: "we should never use the
+old bot brain, it's done"). There is nothing left to seat opposite, so there is no ladder to run.
 
-const GAMES = +(process.argv[2] || 400);
-const STRATS = ["pirate", "trader", "balanced", "rusher"];
-const man = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+  Use instead:  node scripts/bot_ladder4.js [games] [seedMult] [--json]
+                the same question on a TIME axis — same seeds, same command, either side of your
+                change, then diff the two records. Read its header before you run it.
 
-const NEW_TURN = Game.prototype.takeTurn;
-
-// ---- THE INCUMBENT, as shipped at 706971a ("bots: take the weather gauge on the turn they fire").
-// Verbatim. Do not "improve" it; it is the thing being measured against.
-function OLD_TURN(g, p) {
-  g.ev({ t: "turn", p: p.idx });
-  const port0 = g.adjPort(p);
-  if (!port0) p.dockedNow.clear();
-  const target = g.chooseTarget(p);
-  const before = [...p.pos];
-  if (man(p.pos, target) > 0) {
-    const moved = g.stepToward(p, target);
-    if (moved) g.ev({ t: "sail", p: p.idx });
-    else if (g.boxedIn(p) && g.rimEscape(p)) { /* rim sweep records its own event */ }
-  }
-  if (p.pos[0] !== before[0] || p.pos[1] !== before[1]) p.justDocked = false;
-  if (!g.adjPort(p)) p.dockedNow.clear();
-  const a = g.chooseAction(p);
-  if (a.type === "attack") { g.battle(p, a.target); return; }
-  if (a.type === "trade" && g.tryTrade(p)) return;
-  if (a.type === "dock" && g.doDock(p, a.ing)) return;
-  const fb = g.adjPort(p);
-  if (fb && g.canDock(p, fb) && g.doDock(p, fb)) return;
-  g.ev({ t: "pass", p: p.idx, sea: g.nextSeaCreature(p) });
-}
-
-/* THE YARDSTICK IS A CONTROL RUN, NOT 25% A SEAT — and this was itself a bug, caught by red-proofing
-   the ladder against an unchanged engine. The four archetypes are NOT equally strong: with one brain
-   on the whole table, seat wins measured 59/79/88/74 over 300 games, i.e. 19.7% / 26.3% / 29.3% /
-   24.7%. Judging a one-seat arm against a flat 25% therefore credits seat 2 with +4 points and
-   penalises seat 0 by -5 before the brain does anything at all. Run with new === old the naive
-   version reported "+2.5 points, BETTER", which is exactly the false pass this file exists to stop.
-   So every configuration is compared against the SAME seats playing the incumbent brain. */
-function run(seatsUsingNew) {
-  Game.prototype.takeTurn = function (p, w, st) {
-    return seatsUsingNew.has(p.idx) ? NEW_TURN.call(this, p, w, st) : OLD_TURN(this, p);
-  };
-  const wins = STRATS.map(() => 0);
-  let rounds = 0, unfinished = 0;
-  for (let s = 1; s <= GAMES; s++) {
-    const g = new Game({ ...roundCfg(STRATS), bakeoff: true }, s * 7919, true);
-    const w = g.play();          // returns a SEAT INDEX; `w == null` is the only "nobody won"
-    rounds += g.round;
-    if (w == null) { unfinished++; continue; }
-    wins[w]++;
-  }
-  Game.prototype.takeTurn = NEW_TURN;
-  return { wins, rounds: rounds / GAMES, unfinished, played: wins.reduce((a, b) => a + b, 0) };
-}
-
-// control: nobody uses the new brain, so these are the seats' natural win shares
-const control = run(new Set());
-const share = (r, seats) => 100 * [...seats].reduce((a, i) => a + r.wins[i], 0) / (r.played || 1);
-
-function ladder(label, newSeats) {
-  const r = run(newSeats);
-  return {
-    label, rounds: r.rounds, unfinished: r.unfinished,
-    nw: [...newSeats].reduce((a, i) => a + r.wins[i], 0),
-    ow: r.played - [...newSeats].reduce((a, i) => a + r.wins[i], 0),
-    got: share(r, newSeats), fair: share(control, newSeats),
-  };
-}
-
-const rows = [
-  ladder("1 new vs 3 old (seat 0)", new Set([0])),
-  ladder("1 new vs 3 old (seat 1)", new Set([1])),
-  ladder("2 new vs 2 old", new Set([0, 2])),
-  ladder("3 new vs 1 old", new Set([0, 1, 2])),
-];
-
-console.log(`\n${GAMES} games per row, same seeds, 4-seat table`);
-console.log(`control (all seats on the incumbent): wins ${control.wins.join("/")}  rounds ${control.rounds.toFixed(1)}  unfinished ${control.unfinished}\n`);
-for (const r of rows)
-  console.log(`  ${r.label.padEnd(26)} new ${String(r.nw).padStart(4)}  old ${String(r.ow).padStart(4)}` +
-    `  won ${r.got.toFixed(1).padStart(5)}%  vs control ${r.fair.toFixed(1).padStart(5)}%` +
-    `  edge ${(r.got - r.fair >= 0 ? "+" : "") + (r.got - r.fair).toFixed(1)}  rounds ${r.rounds.toFixed(1)}`);
-
-// The verdict rests on the multi-seat rows, which average away the large seat effect.
-const judged = rows.slice(2);
-const edge = judged.reduce((a, r) => a + (r.got - r.fair), 0) / (judged.length || 1);
-console.log(`\nmean edge over fair share, 2v2 and 3v1: ${edge >= 0 ? "+" : ""}${edge.toFixed(1)} points`);
-console.log(edge > 1 ? "BETTER — the new brain out-wins the incumbent."
-  : edge < -1 ? "WORSE — do not ship, whatever the behaviour statistics say."
-    : "NO DIFFERENCE worth shipping — the change is cosmetic at the scoreboard.");
+  The old body: git show 394ff691:scripts/bot_ladder.js
+  The reasoning: the comment at the top of this file, and docs/BOT-DESIGN-PRINCIPLES.md §9.
+`);
+process.exit(1);

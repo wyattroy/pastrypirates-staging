@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { judgeModeFor } from "./lib/judge_mode.mjs";
 import { gameTreeHash } from "./lib/game_tree_hash.mjs";
 import { findCulprit, renderCulprit } from "./lib/npm_test_culprit.mjs";
+import { chainString } from "./lib/gate_chain.mjs";
 /* WHY EVERY CHILD BELOW CARRIES THIS. When this trial is started by start_trial_detached.mjs it
    has no console of its own, and on Windows a console-less parent makes Windows hand each console
    child a BRAND-NEW console — a visible black window on Wyatt's screen, whose ✕ kills the run.
@@ -228,6 +229,23 @@ if (process.argv.includes("--explain")) {
  * "in progress" stub behind. */
 function archivePrevious(reportPath) {
   if (!fs.existsSync(reportPath)) return null;
+  /* ⛔ NOT WHAT A CHECKOUT JUST RESTORED. A `git checkout` rewrites this path from the committed tree, so the
+     file sitting here is often the LAST COMMITTED report rather than a run's own output — and archiving it
+     files another copy of something the repo already holds, one per trial, for ever. Measured 2026-09-17:
+     .planning/sea-trials/ held SEA-TRIAL-2045-2026.09.13.5.md and -2046-, byte-identical to each other AND to
+     the report committed at ea943c2a; they came from two runs that each followed a branch switch. Both deleted.
+     So: when the file on disk is byte-identical to HEAD's version of the same path, it is the committed file a
+     checkout restored, not a run's output — leave it alone and let this run overwrite it. Anything that differs
+     by a byte is somebody's real output and is archived as before. The naming below is untouched: an archive is
+     named after the report INSIDE it, which is the only naming that cannot lie. */
+  try {
+    const head = execSync(`git show HEAD:${path.relative(REPO, reportPath).split(path.sep).join("/")}`,
+      { ...NO_CONSOLE_WINDOW, cwd: REPO, encoding: "buffer", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 32 * 1024 * 1024 });
+    if (Buffer.compare(head, fs.readFileSync(reportPath)) === 0) {
+      say("  the report on disk is the committed one a checkout restored — not archiving a second copy");
+      return null;
+    }
+  } catch (e) { /* no HEAD copy (a new path, a detached tree, no git): fall through and archive as before */ }
   const dir = path.join(path.dirname(reportPath), "sea-trials");
   fs.mkdirSync(dir, { recursive: true });
   const base = path.basename(reportPath, ".md");
@@ -270,11 +288,15 @@ try {
 } catch (e) {
   /* `npm test` failed. DO NOT guess the culprit from a tail-slice of the whole run's output — CEO
      Review 185 caught that approach naming two PASSING gates while the real failure went unnamed.
-     Re-run package.json's own chain, one entry at a time, and report whichever one actually exits
+     Re-run the suite's own chain, one entry at a time, and report whichever one actually exits
      non-zero (scripts/lib/npm_test_culprit.mjs). Slower than a tail-slice, but this path is only
-     ever taken when the suite is already red. */
-  const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
-  const result = findCulprit(pkg.scripts && pkg.scripts.test, { cwd: REPO });
+     ever taken when the suite is already red.
+     THE CHAIN NOW COMES FROM THE MANIFEST (architecture item 63): `scripts.test` is one command,
+     `node scripts/run_gates.mjs`, so reading it here would hand findCulprit a ONE-entry chain and
+     this report would name the runner instead of the gate — the exact defect CEO 185 found. The
+     list is scripts/gates.manifest.json, rendered back into the `&&` chain string findCulprit's
+     contract takes (scripts/qa/sea_trial_names_failing_gate_check.mjs holds that contract). */
+  const result = findCulprit(chainString(), { cwd: REPO });
   unitCulpritBlock = renderCulprit(result);
   unitTail = result.failed === true
     ? `FAILING GATE: ${result.entry}\n\n${[result.stdout, result.stderr].filter(Boolean).join("\n")}`

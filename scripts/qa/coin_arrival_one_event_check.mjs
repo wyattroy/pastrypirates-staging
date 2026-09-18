@@ -123,16 +123,20 @@ function rules(files) {
        && leaveCalls === 1 && /coinsLeave\(/.test(payOutBody) && !/export\s+(async\s+)?function\s+coinsLeave\b/.test(board),
     "the one event consumer spends through the spending door (payOut), a trade's payer through payInto, and nothing else drops coins out of a purse",
     "a spending skips payOut, a trade's payer loses no coins as they fly, or coins are dropped out of a purse directly");
-  /* 11. ONE DOCK EVENT, TWO EMITTERS — AND THEY MUST CARRY THE SAME FIELDS.
-     A human's dock is emitted by src/ui/flow.js and a bot's by src/engine/index.js. That is the two-places
-     fault this whole cleanup exists to remove, and on 2026-09-17 it cost exactly what it always costs: the
-     engine's line gained `paid` and flow.js's did not, so `spent` fell to 0 on a HUMAN'S PURCHASE and the
-     coins stopped being drawn leaving — the opposite of the fault the fix was for, on the commonest action in
-     the game. Rule 10 above was green throughout, because it reads the CONSUMER and the consumer was right.
-     Found by Wy-Blade on a phone, from a dock event that read `paid=undefined` where a pass should read
-     `paid=0` — two values that behave identically at the call site, which is why nothing else caught it.
-     Until there is ONE emitter, this holds the two identical in both directions: a field added to one and not
-     the other fails, whichever one it is. */
+  /* 11. ONE DOCK EVENT, ONE PRODUCER — AND IT SAYS WHAT WAS PAID.
+     A human's dock used to be emitted by src/ui/flow.js and a bot's by src/engine/index.js, kept in step by
+     hand. On 2026-09-17 that cost exactly what it always costs: the engine's line gained `paid` and flow.js's
+     did not, so `spent` fell to 0 on a HUMAN'S PURCHASE and the coins stopped being drawn leaving — the
+     opposite of the fault the fix was for, on the commonest action in the game. Rule 10 above was green
+     throughout, because it reads the CONSUMER and the consumer was right. Found by Wy-Blade on a phone, from a
+     dock event that read `paid=undefined` where a pass should read `paid=0` — two values that behave
+     identically at the call site, which is why nothing else caught it.
+     This rule held the two emitters identical in both directions. That was a splint; architecture item 49,
+     2026-09-18, did the repair: the human berth hands the engine what the captain decided and Game.dockDone
+     writes the line, so there is ONE emit site and nothing left to drift from. What this rule keeps is what
+     the SPENDING DOOR above needs — that the thing rule 10 reads is written in one place and still says what
+     was paid. The whole fact, both berths and their posed events, is
+     scripts/qa/dock_event_one_producer_check.mjs. */
   const dockShapes = [];
   for (const [f, s] of [["src/ui/board.js", board], ...others]) {
     let i = 0;
@@ -159,17 +163,12 @@ function rules(files) {
       i = end < 0 ? i + 8 : end;
     }
   }
-  const shapeOf = d => d[1].join(",");
-  const distinct = [...new Set(dockShapes.map(shapeOf))];
-  const everyHasPaid = dockShapes.length > 0 && dockShapes.every(d => d[1].includes("paid"));
-  const odd = distinct.length > 1
-    ? dockShapes.map(d => `${d[0]} [${d[1].filter(k => !dockShapes.every(o => o[1].includes(k))).join(" ") || "—"}]`).join(" vs ")
-    : "";
-  rule(dockShapes.length >= 2 && distinct.length === 1 && everyHasPaid,
-    `every emitter of a dock event carries the same fields, \`paid\` among them (${dockShapes.length}: ${dockShapes.map(d => d[0]).join(", ")})`,
-    dockShapes.length < 2 ? "a dock event is emitted in fewer than two places — if it now has ONE emitter, delete this rule and say so"
-      : !everyHasPaid ? `a dock emitter does not say what was PAID: ${dockShapes.filter(d => !d[1].includes("paid")).map(d => d[0]).join(", ")} — that berth's purchase would draw no coins leaving`
-      : `the dock emitters have drifted apart: ${odd}`);
+  const saysPaid = dockShapes.length === 1 && dockShapes[0][1].includes("paid");
+  rule(saysPaid,
+    `a dock event has one producer, and it says what was PAID (${dockShapes.length ? dockShapes[0][0] : "nowhere"})`,
+    dockShapes.length === 0 ? "nothing in src/ builds a dock event any more — the spending door above reads a record nobody writes"
+      : dockShapes.length > 1 ? `a dock event is built in ${dockShapes.length} places: ${dockShapes.map(d => d[0]).join(", ")} — two producers is the fault that stopped a person's coins being drawn leaving on 2026-09-17`
+      : `the one dock emitter does not say what was PAID (it carries ${dockShapes[0][1].join(" ")}) — a purchase would draw no coins leaving`);
 
   return out;
 }
@@ -192,9 +191,10 @@ const MUTANTS = [
   ["\"leaving\" cleared somewhere other than a departure", broken("src/ui/board.js", "export function payOut(", "function leak2(s){LEAVING[s]=0;}\nexport function payOut("), 8],
   ["a purchase dropping its coins without the spending door", broken("src/orchestrator.js", "payOut(spender,spent)", "payInto(spender,spent)"), 10],
   ["a dock reading the price of a crate nobody bought", broken("src/orchestrator.js", 'const spent=(e.t==="dock"&&e.paid>0)?e.paid', 'const spent=(e.t==="dock"&&e.price>0)?e.price'), 9],
-  ["the human berth's dock event losing `paid` again", broken("src/ui/flow.js", "\n    paid:buy&&!buy.paidIng?price:0,", ""), 11],
-  ["the engine's dock event losing `paid`", broken("src/engine/index.js", "\n      paid:buy&&!buy.paidIng?price:0,", ""), 11],
-  ["a field added to one dock emitter and not the other", broken("src/engine/index.js", 'this.ev({t:"dock",p:p.idx,', 'this.ev({t:"dock",berth:1,p:p.idx,'), 11],
+  ["the one dock event losing `paid`", broken("src/engine/index.js", "\n      paid:buy&&!buy.paidIng?price:0,", ""), 11],
+  ["a second dock producer put back in the human berth (the 2026-09-17 shape)",
+    broken("src/ui/flow.js", "  g.dockDone(player,ing,h,price,buy);",
+      '  g.ev({t:"dock",p:player.idx,ing,heads:h?1:0,got:"bought",price,left:undefined,black:0,wentDry:0,firstDry:0});'), 11],
 ];
 let proofOk = true;
 for (const [what, mutant, idx] of MUTANTS) {

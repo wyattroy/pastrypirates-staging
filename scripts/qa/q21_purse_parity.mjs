@@ -153,5 +153,5 @@ console.log(`     A lag used to be excused outright, which pointed the excuse aw
 console.log(`     under test — a wait going wrong looks exactly like a guest a whole day behind.`);
 if (!lags.length && !desyncs.length)
   console.log(`\n  Nothing disagreed. The sighting was 1 in 10 voyages, so this is "not seen in ${rollovers} rollover(s)" — not "fixed", and not "not a bug".`);
-killAll();
+await killAll();
 process.exit((desyncs.length || heldLags) ? 1 : 0);

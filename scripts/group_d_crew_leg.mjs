@@ -161,9 +161,9 @@ try {
 } catch (e) {
   fails++; log("ABORT: " + (e && e.message ? e.message : e));
 } finally {
-  if (code) { try { await A.ev(`(async()=>{const st=(await import('/src/state/index.js')).appState;
-      if(st.db) await st.db.ref('rooms/${code}').remove(); return 1;})()`); log(`\n  room ${code} deleted`); } catch (e) { log("  could not delete room: " + e.message); } }
-  killAll();
+  /* killAll() deletes the room too, since 2026-09-17 — it is the same teardown that used to live
+     here, moved into the rig so the thirteen probes that never had one get it as well. */
+  await killAll();
 }
 
 fs.writeFileSync(path.join(OUT, "crew-leg-log.txt"), notes.join("\n") + "\n");

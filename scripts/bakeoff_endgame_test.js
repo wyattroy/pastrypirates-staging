@@ -12,8 +12,15 @@
 // seat order.
 //
 //   node scripts/bakeoff_endgame_test.js
+//
+// RE-POINTED at the live engine 2026-09-18. It had imported `../v2bakeoff/src/engine/index.js`, a
+// tree deleted at the 2026-08-26 cutover, so it threw ERR_MODULE_NOT_FOUND on load and had not run
+// for three weeks. Nothing else asks these four questions — bakeoff_test.js, bakeoff_parity_test.js
+// and bakeoff_recipe_check.js are all about the bake ITSELF, not about how the voyage ends around
+// it — so this is re-pointed rather than retired. Only the import moved; not a line of what it
+// asserts was touched.
 
-import { Game, roundCfg } from "../v2bakeoff/src/engine/index.js";
+import { Game, roundCfg } from "../src/engine/index.js";
 
 const STRATS=["pirate","trader","balanced","rusher"];
 let failures=0;
@@ -134,7 +141,6 @@ const perfect=(bake)=>bake.order.map(ing=>bake.slots.indexOf(ing));
 
   const stormBefore=g.stormOrder("N").map(x=>x.idx);
   const adjBefore=g.adjOpp(q).map(x=>x.idx);
-  const tradeBefore=g.tradeOpp(q).map(x=>x.idx);
   const holdBefore=g.holdersOf(p.ing[0],q).map(x=>x.idx);
   const dockBefore=g.dockOccupiedBy?null:null;
   check("before the ovens: the storm moves them",stormBefore.includes(0),
@@ -146,7 +152,14 @@ const perfect=(bake)=>bake.order.map(ing=>bake.slots.indexOf(ing));
   check("the storm no longer moves a baking captain",!g.stormOrder("N").map(x=>x.idx).includes(0),
         "storm order after lighting: "+JSON.stringify(g.stormOrder("N").map(x=>x.idx)));
   check("nobody is adjacent to them any more",!g.adjOpp(q).map(x=>x.idx).includes(0));
-  check("they cannot be traded with",!g.tradeOpp(q).map(x=>x.idx).includes(0));
+  /* SAME QUESTION, TODAY'S WORDS. This asked `g.tradeOpp(q)` — a method architecture item 13
+     (0e9c3b1c, 2026-09-17) deleted, because a hail now reaches the whole table from wherever ye
+     float, so "who is within hailing distance" stopped being a question. What is left of "can I
+     trade with them" is "do they still hold a crate anybody could hail them for", which the engine
+     answers through holdersOf/inPlay. Asked across EVERY crate aboard, so it is the stronger form
+     of the line below it, not a copy of it. This is the one assertion whose spelling changed in
+     the re-point; nothing else in this file was touched. */
+  check("they cannot be traded with",!g.ings.some(i=>g.holdersOf(i,q).map(x=>x.idx).includes(0)));
   check("their cargo is not raidable",!g.holdersOf(p.ing[0],q).map(x=>x.idx).includes(0));
   check("they are not a legal attack target",g.canAttack(q,p)===false);
   // NOT `|| true`. The first draft of this line ended in `||true`, which made it incapable of

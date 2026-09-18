@@ -115,7 +115,7 @@ launch(DBG_G, "/tmp/chrome-w7c-guest");
 const H = await attach(DBG_H), G = await attach(DBG_G);
 
 let fails = 0;
-const bail = async m => { console.log("INSTRUMENT DID NOT REACH ITS SUBJECT — " + m); killAll(); process.exit(2); };
+const bail = async m => { console.log("INSTRUMENT DID NOT REACH ITS SUBJECT — " + m); await killAll(); process.exit(2); };
 
 console.log("W7b CREW — does the guest's boat walk the route in a real crew room?\n");
 const code = await makeHost(H, url, "HostCap");
@@ -232,5 +232,5 @@ if (shotIdx < 0) console.log(`  NO MATCHED PAIR — no corner route came in flig
 
 if (gs.sails.length < WANT) { console.log(`\n  NOT RUN TO SIZE — ${gs.sails.length} of ${WANT} sails measured on the guest. A sail that could not be observed is not a sail that passed.`); fails++; }
 console.log(fails ? `\nFAILED — the guest is not walking every route.` : `\nPASSED — every measured sail walked on the guest, ${gWalk} of ${gWalk}.`);
-killAll();
+await killAll();
 process.exit(fails ? 1 : 0);

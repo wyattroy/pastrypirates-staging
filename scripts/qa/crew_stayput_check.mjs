@@ -58,7 +58,7 @@ await G.shot("crew-guest-sail.png");
 await H.shot("crew-host-sail.png");
 
 console.log("\n=== T-02 — can a GUEST stay put?  (room " + code + ") ===");
-if (!found) { console.log("  the guest was never asked to sail — INCONCLUSIVE, nothing asserted\n"); killAll(); process.exit(2); }
+if (!found) { console.log("  the guest was never asked to sail — INCONCLUSIVE, nothing asserted\n"); await killAll(); process.exit(2); }
 
 const s = found.hit;
 let unlocked = null;
@@ -82,5 +82,5 @@ else if (s.stayCells > 0 && unlocked) verdict = "PASS — the guest has a stay s
 else if (s.stayCells > 0) verdict = "PARTIAL — square drawn, but tapping it did not reveal Stay put";
 else verdict = "FAIL — still no stay square on the guest";
 console.log("\n  " + verdict + "\n");
-killAll();
+await killAll();
 process.exit(verdict.startsWith("PASS") ? 0 : 1);

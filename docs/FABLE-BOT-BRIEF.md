@@ -63,12 +63,23 @@ and must not be touched.
 Run things:
 
 ```bash
-node scripts/bot_ladder.js 400      # THE GATE. new brain vs incumbent, same seeds. ~10 min.
-node scripts/bot_matrix.js 7919     # every candidate turn for one decision, with its arithmetic
-npm test                            # 21 gates
-node scripts/bakeoff_baseline.js    # 200-game determinism fingerprint
+node scripts/bot_ladder4.js 400     # THE GATE. same seeds, same command, either side of your change.
+node scripts/bot_matrix3.js 7919    # every candidate turn for one decision, with its arithmetic
+npm test
 node scripts/no_undef_check.js
 ```
+
+> **THE COMMANDS ABOVE WERE REPLACED ON 2026-09-18 — the originals had not run since the cutover.**
+> This block said `scripts/bot_ladder.js`, `scripts/bot_matrix.js` and `scripts/bakeoff_baseline.js`
+> <!-- doc-check: allow scripts/bot_matrix.js -->
+> <!-- doc-check: allow scripts/bakeoff_baseline.js -->
+> — all three imported `v2bakeoff/`, so all three threw `ERR_MODULE_NOT_FOUND` on load for three
+> weeks and nobody noticed. The first two have live successors, named above; the third is retired to
+> `scripts/tool_archive/` because it fingerprinted the game with `BAKEOFF_ENABLED` **off**, and the
+> bake-off has since shipped with that flag hardcoded true, so the rollback it proved is not a path
+> anyone can take. **The ladder is not a like-for-like swap:** `bot_ladder4.js` has no seat axis —
+> this engine ships one bot brain — so §5 below, "both brains at one table", describes an
+> arrangement that no longer exists. Read it for the discipline, not for the command.
 
 > **`v2bakeoff/` NO LONGER EXISTS.** The v2.0 cutover (2026-08-26) deleted `v2/`, `v2bakeoff/` and
 > `3/` — 96 files, recoverable from git history — and promoted `4/` to the repo root. So this

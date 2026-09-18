@@ -116,7 +116,7 @@ console.log("  both seats driving\n");
 for (let i = 0; i < Math.ceil((MINUTES * 60) / 2); i++) await sleep(2000);
 
 const prompts = JSON.parse(await G.ev(`JSON.stringify(window.__w14?window.__w14.prompts:[])`));
-killAll();
+await killAll();
 
 if (!prompts.length) {
   console.log(`=== NOT RUN — the guest never reached a tap-to-sail prompt in ${MINUTES} minutes, so nothing was measured. That is not a pass.`);

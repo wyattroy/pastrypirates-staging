@@ -28,6 +28,7 @@ const ROOT = path.join(fileURLToPath(import.meta.url), "..", "..", "..");
 const { openChrome, sleep } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/cdp.mjs")).href);
 const { GATE_SRC, makePlayer } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/player.mjs")).href);
 const { gameURL } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/chrome.mjs")).href);
+const { noteRoom, dropNotedRooms } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/crew_room.mjs")).href);
 
 const HTTP_PORT = 8302;
 const OUTDIR = path.join(ROOT, "sea-trial-shots");
@@ -256,7 +257,7 @@ let host = null, guest = null;
 try {
   host = await openChrome({ W, H, dbgPort: 9412, httpPort: HTTP_PORT, serveRoot: ROOT,
     profileDir: path.join(OUTDIR, "prof-sail-crew-host"), mobile: true, dsf: 2 });
-  const code = await bootHost(host, "test1");
+  const code = noteRoom(await bootHost(host, "test1"));   // noted now; the `finally` below deletes it
   console.log("room code:", code, "— re-run to compare; the seed is random per room, not yet pinned.");
 
   guest = await openChrome({ W, H, dbgPort: 9413, httpPort: HTTP_PORT,
@@ -303,4 +304,8 @@ try {
 } finally {
   try { if (host) host.close(); } catch {}
   try { if (guest) guest.close(); } catch {}
+  /* AND THE ROOM. Browsers first, then the room — a host that is still alive re-writes its seats,
+     so a delete under a live host is a delete the host undoes. Awaited, on every way out: before
+     2026-09-17 this probe left a live room behind on every run, pass or fail. */
+  for (const r of await dropNotedRooms()) console.log(r.ok ? `room ${r.code} deleted` : `could not delete room ${r.code}: ${r.why}`);
 }

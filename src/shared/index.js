@@ -452,7 +452,7 @@ const STORM_PUSH=3;
 
 /* ================= THE BAKE-OFF (v2.1, experimental) =================
    The end-of-voyage minigame: five mixing bowls, shuffled, named back in the recipe's own order.
-   See v2bakeoff/src/engine/bakeoff.js for the pure core and RULES-V2.md for the ruleset.
+   See src/engine/bakeoff.js for the pure core and RULES-V2.md for the ruleset.
 
    BAKEOFF_ENABLED IS A ROLLBACK SWITCH, NOT A TUNING KNOB. False restores the pre-bake-off game
    exactly — the instant finish and the one-lap final round — and scripts/bakeoff_baseline.js proves  [UNGATED-IN-4: bakeoff_baseline.js reads the root tree, not this one]
@@ -495,6 +495,12 @@ const BAKE_ATTENTION=0.24;
 // already understands, rather than an arbitrary "3 rewatches max" nobody can reason about. It also
 // gives coins a use at the very end of a voyage, where they had none — every other way to spend
 // them is out at sea.
+/* ⭐ AND IF THIS NUMBER IS EVER TUNED, THIS IS THE ONLY PLACE IT MOVES — architecture item 17, 2026-09-18.
+   Three things read it and NOTHING ELSE MAY: Game.rewatchCost (which charges, and which every
+   affordability test goes through), the rules page and the How-to-play modal (rulesFacts.bakeRewatch,
+   filled into <b data-rule="bakeRewatch">), and the button a captain taps ("bake.watchAgain" takes it
+   as {n}). NO SECOND KNOB: a price that is different for a second look, or for a particular captain,
+   is derived in Game.rewatchCost from this — never typed beside it. */
 const BAKE_REWATCH_COST=1;
 /* ⭐ A CAPTAIN'S STARTING PURSE — THE ONE RULE (architecture item 2, 2026-09-16).
    The captain who sails first gets cfg.startCoins, and each captain after them one more (3/4/5/6 at a

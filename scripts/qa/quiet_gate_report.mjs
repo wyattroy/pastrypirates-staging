@@ -12,7 +12,7 @@
 // with no failing behaviour behind it. Auto-retiring a gate whose subject "looks quiet" is the same
 // failure aimed the other way — a mechanical script would be silently REMOVING real protection with
 // no human ever looking at what it covers. So this prints CANDIDATES for a person (or a CEO review)
-// to read and decide on. It never deletes, never edits scripts.test, never touches package.json.
+// to read and decide on. It never deletes, never edits the gate manifest, never touches package.json.
 //
 // ============================================================================
 // What "quiet" means here, mechanically (never hand-typed — CLAUDE.md convention 2)
@@ -34,6 +34,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readGates, splitEntry } from "../lib/gate_chain.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -55,15 +56,13 @@ function gitLastCommitDate(relPath) {
   }
 }
 
-// A "gate" is a script actually wired into the suite — scripts.test is the only source of truth
+// A "gate" is a script actually wired into the suite — scripts/gates.manifest.json is the only source of truth
 // for that (CLAUDE.md convention 2). scripts/qa/ also holds one-off measurement probes that share
 // the w##_/q##_ naming (e.g. w14_swept_geometry.mjs, a POSE-THE-BOARD geometry probe, never a
 // gate) — including those here would report retirement candidates for scripts nothing depends on,
 // which is not this report's job and would mislead whoever reads it.
-const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
-const chainStr = (pkg.scripts && pkg.scripts.test) || "";
 const wiredScripts = new Set(
-  [...chainStr.matchAll(/node\s+(\S+)/g)].map((m) => m[1].split(path.sep).join("/"))
+  readGates().map((entry) => splitEntry(entry).script.split(path.sep).join("/"))
 );
 
 const files = fs
@@ -90,7 +89,7 @@ rows.sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
 
 console.log(`${rows.length} per-bug gate(s) found wired into npm test under scripts/qa/ (w<digits>_ / q<digits>_ naming).`);
 if (skipped.length) {
-  console.log(`(${skipped.length} file(s) share the naming but are NOT in scripts.test — one-off probes, not gates; not reported: ${skipped.join(", ")})`);
+  console.log(`(${skipped.length} file(s) share the naming but are NOT in the gate manifest — one-off probes, not gates; not reported: ${skipped.join(", ")})`);
 }
 console.log(`Quiet threshold for this report: ${QUIET_DAYS_THRESHOLD}+ days since the gate file itself last changed.`);
 console.log(`This is a REPORT ONLY — it never retires anything. Read docs/GATE-RETIREMENT.md before archiving.\n`);
@@ -106,6 +105,6 @@ for (const r of rows) {
 console.log(`\n${quietCount} of ${rows.length} are quiet-candidates. Next step for each: open the gate, open the code`);
 console.log(`it guards, confirm the specific defect can no longer occur (deleted code path, superseded by a broader`);
 console.log(`structural gate) — never on this report's say-so alone — then \`git mv\` it into scripts/qa/gate_archive/`);
-console.log(`and drop it from package.json's scripts.test + gates.total in the same commit.`);
+console.log(`and drop it from scripts/gates.manifest.json + package.json's gates.total in the same commit.`);
 
 process.exit(0);

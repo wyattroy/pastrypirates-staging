@@ -179,7 +179,7 @@ const DRAINED = Promise.resolve();
    property the note below calls load-bearing (a sail's own sound, instant). */
 let _tail = DRAINED, _busy = false;
 export function liveRender(){
-  if(appState.replaying)return DRAINED;  // during reload-replay we rebuild state silently, no render/broadcast
+  if(appState.replaying)return DRAINED;  // during reload-replay we rebuild state silently: nothing is DRAWN. (It used to be the broadcast guard too — architecture item 47 moved that onto pushEvents, where publishNow's path reaches it as well.)
   appState.evIdx=Math.max(0,appState.game.events.length-1);
   if(!appState.game.events.length)return DRAINED;
   const _nh=netHandlers();
@@ -351,12 +351,33 @@ export function panel(html,needsAction=false){
   const inner=$("apGridInner");
   if(pendingClear){clearTimeout(pendingClear);pendingClear=null;}
   if(!html){
+    /* ⭐ THE GRACE IS FOR THE CONTENT. WHETHER THIS SEAT IS STILL BEING ASKED SOMETHING IS NOT CONTENT,
+       AND IT LEAVES AT ONCE — architecture item 9b, 2026-09-18, and it is the one place that says so.
+       `needsAction` is not decoration: the ONE narrator refuses to say a word (or broadcast one) while it
+       is up (src/ui/util.js narrateEvent), because a line must never be laid over a decision this screen
+       is waiting on. Carrying the mark out on the CONTENT's clearing timer meant an answered prompt went
+       on claiming a decision for CLEAR_GRACE_MS after the captain had made it.
+       MEASURED, two windows, a real crew room (host 1200x950 + guest 375x812 dsf3 touch): a captain on
+       the screen running the engine taps Flee and then a square; Game.flee records the flight and the
+       fight narrates it ~20ms later, inside the grace — so "HostCap — ye slip away!" was said on NO
+       screen, the host's own or the guest's, because the host never reaches the broadcast either. Said
+       0 times in 2 posed host flights; 1 time in 2 posed guest flights (a guest's square is picked
+       remotely, so the host's box is not marked and the line goes out normally). Item 9 found this and
+       parked it (its commit's NOT DONE, and this file's fight gate's header).
+       ONE PLACE, AND IT DELETES A COPY: renderAskPrompt's `done` used to drop the mark by hand one
+       statement before clearing the box (src/ui/flow.js), and renderPickPrompt's teardown did not — two
+       prompt renderers, one fact, two answers, and the pick was the one that got it wrong. The box now
+       says it for both, and for a prompt cleared remotely (orchestrator.js watchPrompt) too.
+       NOTHING ELSE MOVES: the content, the row collapse and the reveal gates keep the whole grace, so a
+       replace one statement away still clones its ghost and fades exactly as before.
+       Gate: scripts/qa/prompt_answered_one_place_check.mjs. */
+    setNeedsAction(false);
     // Defer — a replacement may be one statement away.
     pendingClear=setTimeout(()=>{
       pendingClear=null;
       inner.innerHTML="";
       $("actionPanel").style.display="none";
-      $("actionPanel").classList.remove("needsAction","pendingReveal","pendingStage");
+      $("actionPanel").classList.remove("pendingReveal","pendingStage");
       resizePanel(false);
     },CLEAR_GRACE_MS);
     return;

@@ -35,6 +35,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.join(fileURLToPath(import.meta.url), "..", "..", "..");
 const { openChrome, sleep } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/cdp.mjs")).href);
 const { makePlayer, GATE_SRC } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/player.mjs")).href);
+const { noteRoom, dropNotedRooms } = await import(pathToFileURL(path.join(ROOT, "scripts/lib/crew_room.mjs")).href);
+/* ⛔ EVERY EARLY EXIT GIVES THE ROOM BACK — 2026-09-17. `process.exit()` runs no `finally`, so the
+   teardown at the foot of this file never saw the five "nothing measured" doors above it, and this
+   probe left a live room in the database on each of them. */
+const dropRooms = async () => { for (const r of await dropNotedRooms()) console.log(r.ok ? `room ${r.code} deleted` : `could not delete room ${r.code}: ${r.why}`); };
+const bail = async (code) => { await dropRooms(); process.exit(code); };
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const W = +arg("w", 390), H = +arg("h", 844);
@@ -109,7 +115,7 @@ try {
     await hostC.nav(hurl); await sleep(2600);
     await hostC.ev(GATE_SRC);
     const hc = await hostC.ev(`__gate(document.getElementById('choiceHost'))`);
-    if (!hc || !hc.ok) { console.log("host card not clickable — nothing measured"); process.exit(2); }
+    if (!hc || !hc.ok) { console.log("host card not clickable — nothing measured"); await bail(2); }
     await hostC.clickXY(hc.x, hc.y);
     await sleep(800);
     const hn = await hostC.ev(`__gate(document.getElementById('nameModalInput'))`);
@@ -125,11 +131,12 @@ try {
       await sleep(600);
       code = await hostC.ev(`(document.getElementById('roomCode')||{textContent:''}).textContent.trim()`);
     }
+    noteRoom(code);   // noted now; every door out of this probe deletes it
     console.log("room code:", code || "(never appeared)");
-    if (!/^[A-Z0-9]{4}$/.test(code)) { console.log("no room — nothing measured"); process.exit(2); }
+    if (!/^[A-Z0-9]{4}$/.test(code)) { console.log("no room — nothing measured"); await bail(2); }
 
     const jc = await c.ev(`__gate(document.getElementById('choiceJoin'))`);
-    if (!jc || !jc.ok) { console.log("join card not clickable — nothing measured"); process.exit(2); }
+    if (!jc || !jc.ok) { console.log("join card not clickable — nothing measured"); await bail(2); }
     await c.clickXY(jc.x, jc.y); await sleep(900);
     const hasModal = await c.ev(`(()=>{const m=document.getElementById('nameModal'); return !!(m && getComputedStyle(m).display !== 'none');})()`);
     if (hasModal) {
@@ -146,7 +153,7 @@ try {
     await c.ev(`(() => { const j = document.getElementById('joinCode'); if (j) j.value = ${JSON.stringify(code)};
       const n = document.getElementById('joinName'); if (n) n.value = "probeguest"; return 1; })()`);
     const jb = await c.ev(`__gate(document.getElementById('btnJoin'))`);
-    if (!jb || !jb.ok) { console.log("join button not clickable — nothing measured"); process.exit(2); }
+    if (!jb || !jb.ok) { console.log("join button not clickable — nothing measured"); await bail(2); }
     await c.clickXY(jb.x, jb.y);
     await sleep(2500);
 
@@ -213,7 +220,7 @@ try {
     console.log("stuck at:", where);
     console.log("screenshot: sea-trial-shots/sail-probe-stuck.png");
   }
-  if (!cells) { console.log("NO SAIL PROMPT REACHED — nothing measured. Not a result about the game."); c.close(); process.exit(2); }
+  if (!cells) { console.log("NO SAIL PROMPT REACHED — nothing measured. Not a result about the game."); c.close(); await bail(2); }
 
   await sleep(1200); // let the 180ms camera fit and its lerp finish
 
@@ -336,4 +343,5 @@ red-proof: with the board shoved a viewport sideways, the probe sees ${proof} sq
 } finally {
   c.close();
   if (hostC) hostC.close();
+  await dropRooms();   // browsers first, then the room — a live host re-writes what we just deleted
 }

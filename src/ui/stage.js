@@ -21,7 +21,7 @@ import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, ref
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
 import { HEXCOL, emojify, DIRS, STORM_PUSH, BOAT_IMG } from "../shared/index.js";
-import { say, sayText, whoseTurn } from "./util.js";   // every word from src/shared/words.js; whose turn it is (architecture item 3)
+import { say, sayText, whoseTurn, BUBBLE_MS_PER_CHAR } from "./util.js";   // every word from src/shared/words.js; whose turn it is (architecture item 3); the bubble's typing rate, shared with the coin that waits for it
 import { showsThinkingIndicator } from "../shared/visibility.js";
 import { pilotToggle, pilotIsOn, pilotMsg, pilotSee } from "./pilot.js";
 import { showCourseFor, paintMarks, clearCourse, forgetCourse, redrawCourse } from "./course.js";
@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.17.6-staging@c844a5dd";
+const PP4_STAMP = "2026.09.17.6-staging@2b6b59fb";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -101,7 +101,6 @@ const S = {
   battle: null,             // [attacker, defender] while a fight is live — the camera holds on it
   subject: null,            // seat index the next flash() line is about (stashed by panel.js)
   subjectSet: false,        // …and whether that was DECIDED from an event (so the colour sniff must not override it)
-  evType: null,
   hurry: null,              // resolver for tap-to-hurry on the live bubble
   bubPlace: null,           // live bubble's positioner — run every tick, same loop as the camera
   frameKey: "",             // the prompt the director last re-framed for (once per ask, never per frame)
@@ -1905,8 +1904,16 @@ function stageFlash(msg, ms, holdMs, variants, opts){
   // playtest 5: a manual pinch/pan holds the camera only until the next action — then the
   // director takes the wheel again, so other captains' moves never play off screen.
   S.lock = false;
-  const evType = S.evType; S.evType = null;
-  if (evType === "storm") camFull();                 // watch the shove land from above
+  /* (A SECOND STORM CAMERA STOOD HERE and never once fired — deleted by architecture item 24, 2026-09-18:
+     `const evType = S.evType; S.evType = null; if (evType === "storm") camFull();`, "watch the shove land
+     from above". It could not fire: `evType` was written only by narrateLastEvent (src/ui/util.js) and by
+     a guest's watchNarr, and both set it AFTER describeFor() has returned a line — and there is no `storm`
+     entry in EVENT_NARRATION, so describeFor returns null for a storm and both writers return before the
+     assignment. MEASURED in four crew-room storms, host and guest, sampling the board's applied viewBox at
+     every animation frame: neither screen ever showed "0 0 640 640", which is the only thing camFull()
+     produces. The storm's wide shot is stormCam, asked for once, by the one event consumer.
+     The whole `evType` bridge went with it — S.evType, its accessor, and both writers — because this was
+     its only reader, and a flag three places write and nobody reads is worse than the dead line it fed.) */
   /* playtest 12 item 10: while a battle card is live, the camera HOLDS on the battle — a flee
      call can only be made by someone who can see the fight, not the caller's own boat.
      playtest 22 extends that ruling to the WHOLE fight rather than to the card alone (Wyatt: "the
@@ -1916,7 +1923,7 @@ function stageFlash(msg, ms, holdMs, variants, opts){
      whoever the opening line named, and then every "X calls Y" line glided it to the CALLER. So
      the hold is now armed by the battle itself (S.battle — held by the one event consumer on the fight's `engage` and let go on its
      `disengage`, on every screen: architecture item 4); the card, and the test that read it, were removed at his ask on 2026-09-14. */
-  else if (S.battle) { /* hold the shot on the fight until it resolves */ }
+  if (S.battle) { /* hold the shot on the fight until it resolves */ }
   /* A WAIT LINE IS NOT A SECOND DIRECTOR — architecture item 46. "…is choosing where to sail…" and
      "…is deciding…" are drawn ONLY on a screen that is not the one being asked (waitLineIsSelfAddressed,
      at the top of this function), so a wait line is a watcher's line by construction — and what a
@@ -1955,8 +1962,11 @@ function stageFlash(msg, ms, holdMs, variants, opts){
     const host = fxHost();
     host.appendChild(b);
     hopParrot();
-    // playtest 4: lines type themselves in, the game's own reveal — and fade out on replace
-    try { typewriterReveal(b.querySelector(".pp4BubIn"), 9); } catch (e) {}
+    /* playtest 4: lines type themselves in, the game's own reveal — and fade out on replace.
+       THE RATE IS NOT TYPED HERE ANY MORE. It is the same number util.js counts a coin's wait in
+       (lineWritten): how long the words take to write is one fact, and it used to be a 9 here and a 9
+       there, kept in step by nothing. Move it and both move. */
+    try { typewriterReveal(b.querySelector(".pp4BubIn"), BUBBLE_MS_PER_CHAR); } catch (e) {}
     /* ONLY AS WIDE AS THE WORDS — playtest 23 item 3 (Wyatt): "the narration text boxes should only
        be as wide as they need to be… For a single line text box the boxes should be only as wide as
        they need to be to fit the text."
@@ -2470,13 +2480,15 @@ function flipArmed(el, onClick){
     // that settles a quarter of all fights. Read straight off the battle card's own wind badge
     // rather than re-deriving the geometry, so the card and the ceremony can never disagree about
     // who holds the wind. Built with DOM nodes, not innerHTML: the captain's name is player-typed.
-    /* THE WIND'S RULE FOR A TIE, READ FROM THE GAME — the battle box it used to be read off is gone (2026-09-14). S.battle holds the
-       two fighters this stage frames (window.__pp4.battle), and the engine's own downwindSide says who holds the wind, so the stage
-       and the bubble that opens the fight (orchestrator.js renderBattle) ask the same function and cannot disagree.
+    /* THE WIND'S RULE FOR A TIE, READ FROM THE FIGHT ITSELF — architecture item 25, 2026-09-18. S.battle is [attacker, defender, wind],
+       all three written by the ONE event consumer from the fight's `engage` event, which is where Game.beginBattle recorded the engine's
+       single reading of the wind. This used to call g.downwindSide(A, D) here: a second reading, taken off whatever this screen's board
+       held at the moment the ceremony rose. On a guest that is a board which may be several records behind — measured, a phone said
+       "CROSSWIND · ties collide" in its bubble and "HostCap is firin' downwind" on this stage, about the same fight.
        Built with DOM nodes, not innerHTML: the captain's name is player-typed. */
     if (!fm && S.battle && appState.game){
       const g = appState.game, A = g.players[S.battle[0]], D = g.players[S.battle[1]];
-      const dw = A && D && g.downwindSide ? g.downwindSide(A, D) : null;
+      const dw = S.battle[2];
       const holder = dw === "a" ? A : dw === "d" ? D : null;
       t.textContent = sayText("ceremony.broadside",{});
       st.textContent = "";
@@ -3181,17 +3193,32 @@ function rcCourseRelease(){
   const c = rcCourseCard; rcCourseCard = null;
   if (c && c.isConnected) chartFrontRecipe(c);
 }
+/* ⭐ A COURSE ALREADY ON THE WATER IS NOT REDRAWN. Wyatt, 2026-09-18: "recipe picker: DON'T redraw
+   the dotted line when the player clicks the recipe that's already on top; that line is already
+   there; we don't want the line to redraw itself."
+
+   The guard is the ANSWER, not the gesture — what is remembered is the course that is currently
+   drawn (which captain, which ingredients), so ANY repeat that would produce the same dashes is
+   skipped: tapping the front card, a paint with nothing changed, a swap that lands back where it
+   started. Keying it on "was this the same card element" would only cover the one path he named
+   and would let the other two keep flickering.
+   Cleared by clearGlow(), which is the one teardown — so a course that has been taken off the
+   water is always drawn afresh, and the memo can never claim dashes that are not there. */
+let rcChartedKey = null;
 function chartFrontRecipe(card){
   if (rcCourseHeld) { rcCourseCard = card; return; }
   const g = appState.game; if (!g || !card) return;
   const ids = [...card.querySelectorAll("[data-ing]")].map(e => e.dataset.ing).filter(Boolean);
   const seat = appState.askedSeat;   // the captain the picker is asking (util.js raiseLocalPrompt) — see the cream box's note
+  const key = seat + "|" + ids.join(",");
+  if (key === rcChartedKey) return;                       // the same course, already on the water
+  rcChartedKey = key;
   const me = (seat != null && g.players) ? g.players[seat] : null;
   if (me) showCourseFor(g, me, svgEl(), cellPx(), ids, { trace: true });   // the picker's route draws itself (course.js)
   else paintMarks(ids.map(i => (g.dockOf && g.dockOf[i]) || (g.islandOf && g.islandOf[i])).filter(Boolean), cellPx());
 }
 
-function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); forgetCourse(); }
+function clearGlow(){ document.querySelectorAll(".pp4Glow").forEach(e => e.remove()); forgetCourse(); rcChartedKey = null; }
 /* Put the picker back to "nothing chosen yet" — his 6.7. It exists because THREE things carry the
    selected state and all three have to go together: the module's `focusBtn`, the card's .pp4Focus
    outline, and the "Bake this!" pill. recipeGuard's own second-tap branch already did exactly this
@@ -6036,15 +6063,13 @@ export function initStage(){
     narr: (html, opts, variants) => (S.active ? stageFlash(html, undefined, undefined, variants, opts) : null),
     set subject(v){ S.subject = v; }, get subject(){ return S.subject; },
     /* subjectSet NEEDS ITS OWN ACCESSOR, and forgetting it made W4-2's fix a no-op that MEASURED as
-       working. This object is a BRIDGE, not the state — `subject` and `evType` reach S only through
-       the pairs above. panel.js writes `window.__pp4.subjectSet = true`; without this line that set
+       working. This object is a BRIDGE, not the state — `subject` reaches S only through the pair above. panel.js writes `window.__pp4.subjectSet = true`; without this line that set
        a plain property on the bridge and never arrived, so `decided` was always false, the colour
        sniff always ran, and a battle result naming one captain was re-anchored exactly as before.
        Caught by driving the real flash() path and reading the bubble's class — the seam test that
        matters, as opposed to the one I ran first, which evaluated panel.js's expression alone and
        reported success on a fix that did nothing. */
     set subjectSet(v){ S.subjectSet = v; }, get subjectSet(){ return S.subjectSet; },
-    set evType(v){ S.evType = v; }, get evType(){ return S.evType; },
     /* THE ONE DOOR FOR A TURN'S FRAME (architecture item 46). `local` is this screen's locality for
        that captain's choice — decisionIsLocal, the one display door's own second input, passed by the
        one event consumer on the `turn` event. `pos` (optional) is the asked captain's authoritative
@@ -6060,11 +6085,14 @@ export function initStage(){
        It used to centre the MIDPOINT at a fixed 2.0x, which frames two adjacent ships and crops two
        that are not — camFitSeats derives the zoom from the gap instead, so both boats are on screen
        whatever the fight looks like. Re-fitting only when the pair changes: an unchanged re-fit
-       would restart the CAM_GLIDE_MS tween — and hold the tick loop in its fast gear — on every round. */
-    battle: (a, d) => { if (!S.active) return;
+       would restart the CAM_GLIDE_MS tween — and hold the tick loop in its fast gear — on every round.
+       ⭐ AND IT CARRIES THE WIND (architecture item 25, 2026-09-18): S.battle is [attacker, defender, wind] — the third slot is the
+       engine's own reading, off the `engage` event, so the flip ceremony's stakes line names the captain the engine named instead of
+       working it out from the board this screen happens to be drawing. One slot, one lifetime: battleEnd drops all three together. */
+    battle: (a, d, dw) => { if (!S.active) return;
       const g = appState.game; if (!g || !g.players[a] || !g.players[d]) return;
       const same = S.battle && S.battle[0] === a && S.battle[1] === d;
-      S.battle = [a, d]; S.lock = false;
+      S.battle = [a, d, dw === undefined ? null : dw]; S.lock = false;
       if (!same) camFitSeats([a, d]); },
     battleEnd: () => { S.battle = null; },
     flip: flipArmed,

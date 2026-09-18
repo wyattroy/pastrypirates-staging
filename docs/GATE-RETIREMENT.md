@@ -4,6 +4,16 @@ Wyclau charter, risk 3: *"wyclau can die by growing, like its predecessors: mont
 any part that hasn't fired in a month justifies itself or goes."* This is that pass, applied to
 `npm test`.
 
+> **WHERE THE LIST LIVES, since architecture item 63 (2026-09-18).** `npm test` is one command —
+> `node scripts/run_gates.mjs` — and the gates themselves are **`scripts/gates.manifest.json`**, in
+> order, one whole invocation per entry (flags included). They used to be an `&&` chain inside
+> `package.json`'s `scripts.test`, until that chain reached **8150** characters against a measured
+> ceiling of **8154**: npm runs `scripts.test` through `cmd.exe`, which refuses a command line past
+> 8191, so a 172nd gate under any name killed the whole suite with *"The command line is too long."*
+> before a single check ran. Nothing about WHICH gates run, or in what order, changed with the move.
+> Every reader — the counter, the health check, the quiet report, the sea trial's failing-gate
+> namer — goes through the one reader, `scripts/lib/gate_chain.mjs`.
+
 **Two mechanisms, kept deliberately separate — one is mechanical, one is never automated.**
 
 ## 1. The suite ceiling — mechanical, wired, red-proofed
@@ -24,7 +34,7 @@ already grown past whatever comfortable number someone picked.
 ## 2. Per-bug gate candidates — reported, never automated
 
 `scripts/qa/quiet_gate_report.mjs` — **run it by hand, it is not in `npm test`.** It lists every
-gate actually wired into `scripts.test` whose filename matches the project's per-bug naming
+gate actually wired into the gate manifest whose filename matches the project's per-bug naming
 convention (`w<digits>_...` / `q<digits>_...`, one per numbered playtest finding), sorted by how
 long it has been since the gate's own file last changed in git, and flags anything 14+ days quiet
 as a candidate worth a human's five minutes.
@@ -49,8 +59,9 @@ the report apart from those, and it does not touch them.
 2. Read the gate and the code it guards. Confirm, in writing (the commit message, or the ledger),
    *why* the defect it protects against can no longer occur.
 3. `git mv scripts/qa/<the_gate>.mjs scripts/qa/gate_archive/`
-4. Remove its line from `package.json`'s `scripts.test`; decrement `gates.total` in the same edit.
-5. `npm test` — confirms the count still matches the (now shorter) chain, and that nothing else
+4. Remove its entry from **`scripts/gates.manifest.json`**; decrement `gates.total` in
+   `package.json` in the same edit.
+5. `npm test` — confirms the count still matches the (now shorter) list, and that nothing else
    broke.
 6. Say what you retired and why in the commit message and the ledger — an append-only record,
    same convention as everything else in `.planning/CTO-LEDGER.md`.

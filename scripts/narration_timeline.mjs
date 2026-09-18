@@ -36,6 +36,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { REPO, CHROME, LINUX_ARGS, gameURL, GAME_PATH, PYTHON, staticServerArgs } from "./lib/chrome.mjs";
 import { driver, driverOff } from "./mp_rig.mjs";
+import { noteRoom, dropNotedRooms } from "./lib/crew_room.mjs";   // this leg hosts its own room; it deletes it
 import { PROBE_SRC, BOARD_SAMPLER_SRC, PILL_PROBE_SRC, RECIPE_PROBE_SRC, HOLD_TEXTS, measureHold, measureHoldTwice } from "./lib/narration_probe.mjs";
 
 const OUT = process.argv[2] || path.join(process.cwd(), "narration-timeline");
@@ -70,7 +71,9 @@ const killAll = () => {
   for (const h of myHttp) { }
 };
 process.on("exit", killAll);
-process.on("SIGINT", () => { killAll(); process.exit(1); });
+/* Ctrl-C is a door out too, and a room delete is a network round trip — so this handler holds the
+   process open for it and exits afterwards, never beside it. */
+process.on("SIGINT", async () => { killAll(); await dropNotedRooms(); process.exit(1); });
 
 /* ---------- CDP ---------- */
 async function attach(dbg, { w = W, h = H } = {}) {
@@ -526,6 +529,9 @@ async function crewLeg(out) {
     m.value='test1'; document.getElementById('btnNameConfirm').click(); return true;})()`); await sleep(1000);
   await Host.ev(`(()=>{const b=document.getElementById('btnCreate'); if(b){b.click();return true} return false})()`); await sleep(1500);
   const code = await Host.ev(`(document.getElementById('roomCode')||{}).textContent`);
+  /* NOTED THE MOMENT IT EXISTS, so the teardown below can delete it however this leg ends. This
+     probe left a room behind on every run it ever made until 2026-09-17. */
+  noteRoom((code || "").trim());
   log("room code:", code);
   if (!code || !/^[A-Z0-9]{4,6}$/.test(code.trim())) { log("crew leg: no room code — skipping"); return; }
 
@@ -598,7 +604,14 @@ try {
     out.cases = classify(out.bubbles || []);
     log("cases:", JSON.stringify(out.cases, null, 1).slice(0, 1200));
   }
-  if (CREW) { try { await crewLeg(out); } catch (e) { log("crew leg failed:", String(e).slice(0, 200)); out.crew_error = String(e).slice(0, 200); } }
+  /* ⛔ AND THE ROOM GOES BACK, WHETHER THE LEG WORKED OR NOT. The `finally` is the point: this leg
+     used to delete nothing at all, so every run — and every FAILED run — left a live room in the
+     database under test1/test2. */
+  if (CREW) {
+    try { await crewLeg(out); }
+    catch (e) { log("crew leg failed:", String(e).slice(0, 200)); out.crew_error = String(e).slice(0, 200); }
+    finally { for (const r of await dropNotedRooms()) log(r.ok ? `  room ${r.code} deleted` : `  could not delete room ${r.code}: ${r.why}`); }
+  }
 } catch (e) {
   log("FATAL:", String(e && e.stack || e).slice(0, 500));
   out.fatal = String(e && e.message || e).slice(0, 300);

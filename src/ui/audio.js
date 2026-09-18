@@ -908,6 +908,11 @@ function play(name, opts) {
      loop with scattered thunder — see stormScatterStart — and nothing else ever asked to loop, so
      the branch is deleted rather than left as a feature with no caller.) */
   /* opts.from/opts.dur play ONE SLICE of a file — the cork pop is one file holding every pitch its climb reaches. */
+  /* opts.rate pitches the sound: 2^(n/12) is n semitones up, the same arithmetic the cork pop's
+     slots are rendered at — the difference is that the pop holds 19 PRE-RENDERED pitches in one
+     file, and this shifts one buffer. Used by the coin chink, whose run climbs and would need 20
+     rendered slots otherwise. */
+  if (opts && opts.rate) src.playbackRate.value = opts.rate;
   if (opts && opts.from != null) src.start(0, opts.from, opts.dur); else src.start();
   return { src, gain };
 }
@@ -975,10 +980,35 @@ function playCoinTick() { playSpaced("abacus-click", TICK_GAP_MS); }
    rings for 0.45s). */
 const CHINK_SLOT_S = 0.5, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
 const CHINK_PICK = 0;          // 0 = A, Silver — his pick · 1 = B, Into the purse · 2 = C, On the pile
+/* ⭐ A RUN OF COINS CLIMBS. Wyatt, 2026-09-18: "can the coin chink sound increase in pitch by half
+   a step for each clink in a row?" So a haul arrives as a rising figure rather than the same note
+   twenty times.
+
+   WHAT COUNTS AS "IN A ROW" IS DERIVED, NOT TYPED. The run resets once the previous chink has
+   finished ringing and then some — CHINK_RUN_RESET is the slot's own length (Silver rings for
+   0.45s of its 0.5s slot) with half again on top. Tie it to the coin spacing instead and this file
+   has to know board.js's TREASURE_GAP_MS, which is a dial he moves; tie it to the sound's own
+   length and it stays true whichever way that dial goes.
+
+   THE CEILING IS A DRAFT AND IT IS HIS. An octave, because the game will hand this twenty coins
+   (TREASURE_MAX) and twenty half steps is an octave and a half, which is shrill. Say the word and
+   it comes off — the climb itself is what he asked for; where it stops is taste. */
+const CHINK_RUN_RESET = CHINK_SLOT_S * 1000 * 1.5, CHINK_RUN_MAX = 12;
+let chinkRun = 0, chinkLastAt = -1e9;
 function playCoinChink() {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  chinkRun = (now - chinkLastAt > CHINK_RUN_RESET) ? 0 : Math.min(CHINK_RUN_MAX, chinkRun + 1);
+  chinkLastAt = now;
   const s = Math.max(0, Math.min(CHINK_SLOTS - 1, CHINK_PICK));
-  play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S });
+  play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S,
+                       rate: Math.pow(2, chinkRun / 12) });
 }
+/* ⭐ THE CRATE'S WOOMP, AS IT LANDS IN THE HOLD. Wyatt, 2026-09-18: "the crates landing in the hold
+   should use the old crate acquisition 'woomp' sound when the crate first begins its in-hold
+   bounce." That is `store-ingredient` — the sound docks and trades have always used. It is a
+   SECOND cue, not a replacement: a bought crate still pops its cork at the dock (BUY_POP_SLOT),
+   about a second and a third before the crate arrives, so the two never land together. */
+function playCrateLand() { play("store-ingredient"); }
 function playLidNote(k) {
   const s = Math.max(0, Math.min(MARIMBA_SLOTS - 1, Math.round(k || 0)));
   play("crate-marimba", { from: s * MARIMBA_SLOT_S + MARIMBA_LEAD_S - 0.01, dur: MARIMBA_SLOT_S - MARIMBA_LEAD_S });
@@ -1525,7 +1555,7 @@ export {
   soundReady,
   onThunder,
   playPop,
-  playCardSwish, playCoinTick, playCoinChink, playLidNote, playCrateVerdict, playAwardWhoosh,
+  playCardSwish, playCoinTick, playCoinChink, playCrateLand, playLidNote, playCrateVerdict, playAwardWhoosh,
   EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
   STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
   soundDurationMs, playDrumroll, playCannon,

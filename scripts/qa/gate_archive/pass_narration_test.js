@@ -1,6 +1,49 @@
 #!/usr/bin/env node
 /* RULE-02 GATE — the pass narration tells the captain they were paid, on all 100 renderings.
  *
+ * ⛔ RETIRED TO THE ARCHIVE 2026-09-18 (architecture item 54c), AND WHY. It was uncalled and RED,
+ * with 107 failures, and every one of them was about this file rather than about the game. Worse:
+ * two of its live assertions now demand the OPPOSITE of decisions taken since it was written, so
+ * "fixing" the game to satisfy it would have overturned them.
+ *
+ *   THE FACT IT GUARDS IS TRUE TODAY, AND THIS FILE'S OWN PRINTOUT SAYS SO:
+ *       at a configured payout of 1: the engine moved the purse by 1; rendered "...(+1🌕)"
+ *       at a configured payout of 7: the engine moved the purse by 7; rendered "...(+7🌕)"
+ *   The captain is paid, the line says so, and the amount follows the config.
+ *
+ *   WHY IT WENT RED ANYWAY — the copy moved into ONE place and the wrapper came with it.
+ *   `Recipe idea! (+{n}🌕)` now lives at src/shared/words.js as `muse.idea`, not in util.js, so
+ *   "the tag is written in exactly one place in the narration table" counted 0 in util.js. And
+ *   `say()` itself holds every `N🌕` in a no-break span ("an amount and its coin are one readable
+ *   thing"), while util.js wraps the whole tag in a second one — so the real rendering is
+ *       <span class="nobrk">Recipe idea! <span class="nobrk">(+1🌕)</span></span>
+ *   and this file's `WRAPPED` literal expects exactly one span. The tag IS wrapped whole; the
+ *   literal is what is stale. That one mismatch produced 100 of the 107.
+ *
+ *   AND THE TWO THAT WOULD HAVE COST A DECISION:
+ *     · "the on-ship caption changed: undefined" — the `caps` caption was DELETED on 2026-09-14,
+ *       with every other caption, because nothing had drawn one since v2. That deletion is now
+ *       HELD by a gate in the chain: scripts/qa/muse_narration_check.mjs asserts `!entry.caps`.
+ *       This file asserts the caption is still there. The two contradict; the chain holds the
+ *       newer decision.
+ *     · the single-span wrapping, above, which would have meant un-writing words.js's wrapper.
+ *
+ *   ITS GROUND IS ALREADY HELD, BY TWO GATES IN THE CHAIN — which is the retirement criterion in
+ *   docs/GATE-RETIREMENT.md ("a broader structural gate now covers the same ground"):
+ *     scripts/qa/muse_narration_check.mjs   the pass line narrates the sighting in both persons,
+ *       carries the Recipe idea clause with the coin, the amount DERIVES from cfg.passCoin (it
+ *       changes the config to 3 and demands the text follow), the legacy string payload still
+ *       narrates, no dead caption rides along, the wave pop survives.
+ *     scripts/qa/words_one_place_check.mjs  EVERY entry in the words table — not just this one —
+ *       fails if a coin amount is not held to its number by a no-break span. That is D-06's
+ *       "wrapped whole so it cannot break across a line", generalised.
+ *   What is genuinely lost is the 50-entry x 2-person sweep. Named here rather than glossed: the
+ *   chain checks the pass line on ONE sighting, not all fifty. seaLine's both-persons contract is
+ *   still gated (muse_narration_check) but only on its own fixture.
+ *
+ *   RULE-01's half — the payment itself — is NOT retired. `scripts/pass_coin_test.js` was
+ *   re-anchored in the same commit and wired into `npm test`.
+ *
  * WHY THIS EXISTS. RULE-01 pays a dubloon for passing. A payment the interface never mentions is a
  * payment the player has to discover by watching their own purse, and a tag that states an amount
  * the engine did not pay is the interface lying to them about it. So the two land together and both
@@ -93,13 +136,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { EVENT_NARRATION, pn, NEUTRAL_VIEWER } from "../src/ui/util.js";
-import { SEA_CREATURES, emojify, COIN_IMG, WAVE_IMG } from "../src/shared/index.js";
-import { appState } from "../src/state/index.js";
-import { Game, roundCfg } from "../src/engine/index.js";
+import { EVENT_NARRATION, pn, NEUTRAL_VIEWER } from "../../../src/ui/util.js";
+import { SEA_CREATURES, emojify, COIN_IMG, WAVE_IMG } from "../../../src/shared/index.js";
+import { appState } from "../../../src/state/index.js";
+import { Game, roundCfg } from "../../../src/engine/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, "..");            // -> 4/
+const ROOT = path.join(__dirname, "..", "..", "..");   /* three levels since the archive move */
 const UTIL_PATH = path.join(ROOT, "src", "ui", "util.js");
 const UTIL_SRC = fs.readFileSync(UTIL_PATH, "utf8");
 

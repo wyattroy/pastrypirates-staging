@@ -42,6 +42,7 @@ import { legVerdictLine, legVerdict } from "./lib/leg_verdict.mjs";
 import { gameTreeHash } from "./lib/game_tree_hash.mjs";
 import { legIsFresh } from "./lib/leg_cache_key.mjs";
 import { compareWhenSettled, confirmDivergence } from "./lib/seat_parity.mjs";
+import { noteRoom, dropRoom, dropNotedRooms } from "./lib/crew_room.mjs";   // a crew leg hosts a real room; it gives it back
 
 const arg = (k, d) => { const a = process.argv.find(s => s.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const LEGS = arg("legs", "solo-desktop,solo-phone,passplay-phone,crew-desktop").split(",");
@@ -90,7 +91,11 @@ const ownPorts = { dbg: new Set(), http: new Set(), profiles: new Set() };
    collide the moment their pids agree modulo N. And `http.server <port>` matches ANY python server
    on that number, including the one he keeps on 8000. Profiles are unique per run; see killProfile. */
 const killAll = () => { for (const d of ownPorts.profiles) killProfile(d); };
-process.on("exit", killAll); for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { killAll(); process.exit(1); });
+/* ⛔ AND THE CREW ROOMS THE LEGS MADE. A signal handler can hold the process open for a network
+   round trip; the `exit` handler cannot, so it gets the synchronous half only. Before 2026-09-17
+   every crew leg here left its room standing in the live database under test1/test2. */
+process.on("exit", killAll);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, async () => { killAll(); await dropNotedRooms(); process.exit(1); });
 
 // ONE http server for the whole run (fresh port per gate invocation = fresh module cache). Legs
 // must NOT own servers: the contact sheet renders after a leg's Chrome closes, and a per-leg server
@@ -507,7 +512,7 @@ async function runLeg(name, idx) {
   const rec = { name, screens: [], consoleErrs: [], seats: [] };
   const dbg = DBG0 + idx * 4;
   ownPorts.dbg.add(dbg); ownPorts.dbg.add(dbg + 1);
-  let host = null, guest = null;
+  let host = null, guest = null, legRoom = null;
   if (def.engine === "webkit") {
     const wk = await webkitAvailable();
     if (!wk.ok) { log(`[${name}] NOT RUN — ${wk.how}`); return { name, notRun: wk.how, verdict: [] }; }
@@ -519,7 +524,7 @@ async function runLeg(name, idx) {
     if (name.startsWith("crew-")) {
       // Wyatt's ruling: crew plays to the TRUE end; players are test1/test2 so the permanent
       // gamelog rows are filterable. Two separate Chromes = separate localStorage/pp_id (§5c).
-      const code = await bootHost(host, "test1");
+      const code = legRoom = noteRoom(await bootHost(host, "test1"));   // noted now; the leg's `finally` deletes it
       log(`[${name}] room ${code} created by test1`);
       guest = await openEngine(def, { W: def.guestW, H: def.guestH, dbgPort: dbg + 1, httpPort: null, serveRoot: REPO, profileDir: path.join(OUT, `prof-${name}-b`), mobile: !!def.mobile, dsf: def.dsf || 1 });
       guest.httpPort = PORT0;
@@ -587,6 +592,11 @@ async function runLeg(name, idx) {
     // not decoration — a leg that finished with recoveries must say so in its summary
     rec.recoveries = ((host && host.recoveries) || 0) + ((guest && guest.recoveries) || 0);
     try { if (host) host.close(); } catch {} try { if (guest) guest.close(); } catch {}
+    /* THE ROOM GOES BACK TOO — browsers first, then the room, so a host that is still alive cannot
+       re-write what we just deleted. Awaited: a delete that is not awaited is a room left standing.
+       ⛔ THIS LEG'S ROOM BY NAME, never "every noted room": legs run in PARALLEL (PAR above), so a
+       wholesale drop here would delete a sibling leg's live room out from under it. */
+    if (legRoom) { const r = await dropRoom(legRoom); log(`[${name}] ${r.ok ? `room ${r.code} deleted` : `could not delete room ${r.code}: ${r.why}`}`); }
   }
   // vision judge over every distinct screen (capped)
   if (JUDGE && rec.screens.length) {

@@ -58,9 +58,17 @@ const SIZES = [
 ];
 
 /* POSE THE PETALS (rule 26 / DRIVING-THE-GAME §5e — inject the state, do not play your way to it).
-   The short form is copied from src/ui/flow.js:2184: the captain's name, <br>, then the crate icon
-   and the coins. `iconImg` renders an <img>; a 17px box is what `#pp4Prompt.radial .apBtn img` sizes
-   it to, so the second line is represented at its real width rather than as text.
+   The short form is the one src/ui/flow.js builds for a counter — words.js's "trade.wantsShort":
+   the captain's name, then what they are askin' held in ONE element (the petal is a flex column, so
+   a child is a row). `iconImg` renders an <img>; a 26px box is what `#pp4Prompt.radial .apBtn img`
+   sizes it to, so the ask is represented at its real width rather than as text.
+   ⚠ KEEP THIS IN STEP WITH words.js. It was the old "+{n}🌕" spelling until architecture item 20b
+   (2026-09-18) deleted that, and it carried "wants" until item 20c the same day, when Wyatt settled
+   the wording himself — the circle names the captain and the price and nothing else. A pose of a
+   label the game no longer draws measures a fiction, however green it comes back. Note which way
+   that error ran: the word made the posed line WIDER than the game's, so the pose was harder on the
+   names than the game is, never easier. scripts/qa/counter_price_one_wording_check.mjs holds the
+   wording itself; this file only measures whether a name fits.
 
    ⚠ IT REMOVES `pp4Center` BEFORE ADDING `radial` — THEY ARE ALTERNATIVES, NEVER BOTH, and the
    first cut of this check got that wrong and measured a fiction for a whole pass. A resting prompt
@@ -88,7 +96,7 @@ const POSE = (names, control) => `(()=>{
   const mk=(html,tag)=>{const b=document.createElement('button');b.className='apBtn';
     b.innerHTML=html;b._shortHtml=html;b.dataset.t017=tag;row.appendChild(b);return b;};
   for(const n of ${JSON.stringify(names)})
-    mk('<b style="color:#c33">'+n+'</b><br><img src="assets/ingredients/sugar.png">+3🌕','name:'+n);
+    mk('<b style="color:#c33">'+n+'</b><span><img src="assets/ingredients/sugar.png"> + <span class="nobrk">3🌕</span></span>','name:'+n);
   mk(${JSON.stringify(control)},'control');
   return "posed";})()`;
 
@@ -250,7 +258,8 @@ if (offenders.length) {
   console.log(`FAIL — ${offenders.length} captain name(s) painted outside the disc naming them:`);
   for (const o of offenders) console.log("   " + o);
   console.log(`\nThe control "${CONTROL}" fit in every size, in the same disc, measured the same way —`);
-  console.log("so this is the name, not the instrument. src/ui/flow.js:2171,2184 put the name on line");
+  console.log("so this is the name, not the instrument. humanTrade's answer options (src/ui/flow.js)");
+  console.log("put the name on line");
   console.log("one of a fixed 66px circle (index.html:1847) with nothing sizing it to fit.");
   process.exit(1);
 }

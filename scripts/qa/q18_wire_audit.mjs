@@ -60,7 +60,7 @@ console.log("  both seats driving\n");
 for (let i = 0; i < Math.ceil(SECONDS / 2); i++) await sleep(2000);
 
 const rows = JSON.parse(await G.ev(`JSON.stringify(window.__wire?window.__wire.rows:[])`));
-killAll();
+await killAll();
 
 if (!rows.length) { console.log("=== NOT RUN — no narration crossed the wire at all. That is not a pass."); process.exit(1); }
 const withEvN = rows.filter(r => r.evN != null);

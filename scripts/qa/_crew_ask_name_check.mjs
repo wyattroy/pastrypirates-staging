@@ -108,4 +108,4 @@ try {
 } catch (e) {
   say("PROBE FAILED:", e.message);
   process.exitCode = 1;
-} finally { killAll(); }
+} finally { await killAll(); }

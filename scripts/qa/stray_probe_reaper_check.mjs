@@ -30,6 +30,7 @@ import { execFileSync, spawn } from "node:child_process";
    cases 6 and 7 test BEHAVIOUR against a real directory tree and a real process, so the
    thing under test has to be the thing that ships. */
 import { sweepStaleProfiles, liveProfileDirs } from "../lib/stray_probes.mjs";
+import { readGates } from "../lib/gate_chain.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -206,12 +207,17 @@ console.log("stray_probe_reaper_check — abandoned browsers are KILLED, their f
  *     actually happened: it ran 117th, a false failure ~90th switched it off, and it stayed off for
  *     a day. Position 1 is not a preference; it is what makes the check unconditional. */
 {
-  const chain = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts.test
-    .split("&&").map((s) => s.trim());
+  /* THE LIST MOVED, THE RULE DID NOT (architecture item 63, 2026-09-18). `npm test` is no longer an
+     `&&` chain inside package.json — cmd.exe runs at most 8154 characters of `scripts.test` and the
+     chain had reached 8150 — so the order now lives in scripts/gates.manifest.json and is walked by
+     scripts/run_gates.mjs. Position 1 means exactly what it meant before: this gate runs before any
+     other gate can exit non-zero. The runner's stop-at-the-first-red walk is itself red-proofed in
+     scripts/gate_count_check.js, against a fixture manifest, so "entry 1" really is "runs first". */
+  const chain = readGates();
   const at = chain.findIndex((c) => /stray_probe_check/.test(c));
   if (at < 0) fail("stray_probe_check is not in `npm test` at all");
   else if (at !== 0) {
-    fail(`stray_probe_check runs ${at + 1}th, so ${at} gate(s) can silence it by failing first — exactly what happened on 2026-09-03. It must run FIRST.`);
+    fail(`stray_probe_check runs ${at + 1}th in scripts/gates.manifest.json, so ${at} gate(s) can silence it by failing first — exactly what happened on 2026-09-03. It must run FIRST.`);
   } else pass("stray_probe_check runs FIRST — no gate can switch it off by failing");
 }
 

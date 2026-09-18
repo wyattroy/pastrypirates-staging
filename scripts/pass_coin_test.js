@@ -254,8 +254,15 @@ const passEv = gShape.events.find((x) => x.t === "pass");
 checkTrue("CONTROL: the voyage recorded at least one turn entry", turnEv != null);
 checkTrue("CONTROL: the voyage recorded at least one pass entry", passEv != null);
 if (turnEv && passEv) {
-  const envelope = [...new Set([...Object.keys(turnEv), "sea"])].sort();
-  check("the pass entry's key set is the turn envelope plus `sea` — nothing added, removed or renamed",
+  /* ⛔ `coins` WAS ADDED ON PURPOSE AND THIS ASSERTION USED TO CONDEMN IT (re-anchored 2026-09-18,
+     architecture item 54c). It said the pass entry is the turn envelope plus `sea` and nothing
+     else; the real entry has carried `coins` since 8eca1608 (2026-09-15, "coins land when earned"),
+     with the engine's own reason beside it at src/engine/index.js:1253 — "`coins`: what flies to
+     the purse (board.js payInto)". Every screen needs to know HOW MANY coins to fly, so the number
+     rides with the event rather than each screen working it out; that is the one-display-door rule,
+     not drift. The two extras are named here WITH their reasons, so a THIRD one still fails. */
+  const envelope = [...new Set([...Object.keys(turnEv), "sea", "coins"])].sort();
+  check("the pass entry's key set is the turn envelope plus `sea` (what ye saw) and `coins` (what flies to the purse) — nothing else added, removed or renamed",
     Object.keys(passEv).sort().join(","), envelope.join(","));
 }
 
@@ -324,16 +331,32 @@ check("the human-only sea-cursor advance did not migrate into the engine", count
  * written explanation above it cannot trip the check on the explanation instead of on a breach. */
 console.log("\n  -- src/ui/flow.js: the Pass button states the amount, and derives it --");
 const LITERAL_GAIN = /\(\+\d/;
-const passBtn = upTo(regionAfter(FLOW_SRC, "if(!canOvens)opts.push({label:", 400, "pass button"), "});");
+/* ⛔ RE-ANCHORED 2026-09-18 (architecture item 54c). The old anchor was the one-liner
+   `if(!canOvens)opts.push({label:`; the option is now built over four lines inside `if(!canOvens){`,
+   and its words moved into the shared table (`say("act.muse")`, `say("act.museCoin")` ->
+   src/shared/words.js). The anchor missed, the region came back EMPTY, and three assertions
+   reported false about a button that is doing exactly what they ask. That is the failure mode this
+   file's own CONTROL below exists to catch, and it caught it. */
+const passBtn = upTo(regionAfter(FLOW_SRC, "if(!canOvens){", 500, "pass button"), 'value:"pass"});');
 console.log(`         scanned ${passBtn.length} chars: ${passBtn}`);
 checkTrue("LEG C: the Pass button reads the payout from the same round config the narration reads",
   passBtn.includes(CFG_READ));
 checkTrue("LEG C: the Pass button states no literal gain amount — the number is derived, never typed",
   !LITERAL_GAIN.test(passBtn));
-checkTrue("the amount is wrapped whole with the label, so it cannot break across a line",
-  passBtn.includes('<span class="nobrk">'));
-checkTrue("the coin is left raw for the emoji chokepoint — no hand-rolled image markup",
-  !passBtn.includes("iconImg(") && !passBtn.includes("COIN_IMG") && !passBtn.includes("<img"));
+/* THE NO-BREAK WRAPPING MOVED, IT DID NOT GO. It used to be typed into this label. Today the button
+   builds its amount through `say("act.museCoin",{n})`, and `say()` itself holds every `N🌕` in a
+   nobrk span (src/shared/words.js — "an amount and its coin are one readable thing"). So the fact is
+   still guarded, for EVERY line of copy rather than this one: scripts/qa/words_one_place_check.mjs
+   fails any WORDS entry whose coin amount is not held to its number. What this asserts is the half
+   that belongs here — that the button goes through that table at all, and so inherits the wrap. */
+checkTrue("the amount is built through the shared words table, so it inherits the no-break wrapping and cannot split across a line",
+  passBtn.includes('say("act.museCoin"'));
+/* THE COIN, NOT THE WAVE. The old form of this asserted no `iconImg(` anywhere in the region, which
+   is now false on purpose: the button opens with `iconImg(WAVE_IMG)` because Wyatt asked for the
+   wave as the real art, not the 🌊 emoji, and the asset already existed. The rule was always about
+   the COIN — it must reach the screen raw and resolve at emojify's chokepoint (D-50). */
+checkTrue("the coin is left raw for the emoji chokepoint — the button hand-rolls no coin image",
+  !passBtn.includes("COIN_IMG") && !passBtn.includes("<img") && !/iconImg\(\s*COIN/.test(passBtn));
 const flowReads = countOf(FLOW_SRC, CFG_READ);
 console.log(`         the accessor chain appears ${flowReads}x in flow.js (the label reads it twice: the guard, then the amount)`);
 checkTrue("the UI tier reads the payout rather than writing a number", flowReads >= 1);
@@ -341,9 +364,13 @@ checkTrue("the UI tier reads the payout rather than writing a number", flowReads
 /* CONTROL for the anchor convention itself. The Pass button was built to the shape of the Attack
  * option; if that precedent is gone, or the anchors here have rotted, this fails loudly instead of
  * every assertion above quietly "passing" against an empty region. */
-const attackOpt = upTo(regionAfter(FLOW_SRC, "opts.push({label:`⚔️ Attack", 400, "attack precedent"), "});");
+/* Re-anchored with the Pass button above: Attack's own words moved into the shared table too, so
+   the literal `⚔️ Attack` is no longer in flow.js — it is `act.attack` in src/shared/words.js. The
+   precedent still holds in substance: both buttons name a cost/gain they read off the round config
+   and neither types the number. */
+const attackOpt = upTo(regionAfter(FLOW_SRC, 'opts.push({label:say(g.cfg.powder?"act.attack"', 400, "attack precedent"), "});");
 checkTrue("CONTROL: the Attack precedent the Pass button copies is still present and still anchors",
-  attackOpt.includes('<span class="nobrk">') && attackOpt.includes("appState.game.cfg.powder"));
+  attackOpt.includes("say(") && attackOpt.includes("g.cfg.powder"));
 checkTrue("CONTROL: Attack states no literal amount either — same rule, both buttons",
   !/\(−\d/.test(attackOpt) && !LITERAL_GAIN.test(attackOpt));
 

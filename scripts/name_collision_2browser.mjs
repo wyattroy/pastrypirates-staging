@@ -175,10 +175,9 @@ try {
   fails++; log("ABORT: " + (e && e.message ? e.message : e));
 } finally {
   /* DELETE THE ROOM. A probe that leaves live rooms behind is litter in a database Wyatt shares
-     with real players (DRIVING-THE-GAME §3). */
-  if (code) { try { await A.ev(`(async()=>{const st=(await import('/src/state/index.js')).appState;
-      if(st.db) await st.db.ref('rooms/${code}').remove(); return 1;})()`); log(`\n  room ${code} deleted`); } catch (e) { log("  could not delete room: " + e.message); } }
-  killAll();
+     with real players (DRIVING-THE-GAME §3). killAll() does it now — the teardown that used to be
+     written out here moved into the rig on 2026-09-17, so every probe gets it and not just this one. */
+  await killAll();
   // leave nothing behind, so the next run cannot inherit a browser that has already played
   for (const d of [PROF_A, PROF_B]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
 }

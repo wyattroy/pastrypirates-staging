@@ -63,7 +63,9 @@ console.log(`${v.oneWriter?'PASS':'FAIL'}  who is being asked has one writer, ra
 
 /* RED-PROOF, in memory, through the same measure. */
 const put=(f,from,to)=>files[f].includes(from)?{...files,[f]:files[f].replace(from,to)}:null;
-const M1=put('src/ui/flow.js','export async function collectSideBets(att,def){','export async function collectSideBets(att,def){\n  appState.askedSeat=att.idx;');
+/* the anchor follows collectSideBets' signature — it took the fight's wind as a third argument on 2026-09-18 (architecture item 25),
+   and a mutant that cannot be built is a red-proof that proves nothing */
+const M1=put('src/ui/flow.js','export async function collectSideBets(att,def,downwind){','export async function collectSideBets(att,def,downwind){\n  appState.askedSeat=att.idx;');
 const M2=put('src/ui/util.js','export function whoseTurn(){','function setActor(s){appState.curSeat=s;}\nexport function whoseTurn(){');
 const r1=M1&&!judge(measure(M1)).oneWriter, r2=M2&&!judge(measure(M2)).noSlot;
 console.log(`${r1?'PASS':'FAIL'}  red-proof: a second writer of who is being asked (collectSideBets) ${r1?'goes red':M1?'STAYS GREEN':'could not be built'}`);

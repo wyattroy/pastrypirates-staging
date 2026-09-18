@@ -153,9 +153,20 @@ ok("util.js reads ref.value nowhere", [...usrc.matchAll(UTIL_READ)].length === 0
  *    scripts/host_guest_parity_check.js's job; this asserts there is exactly ONE definition. */
 const wrapDefs = (usrc.match(/export function sliderWrapHTML\s*\(/g) || []).length;
 ok("exactly one sliderWrapHTML() definition", wrapDefs === 1, `${wrapDefs} found`);
+/* ⛔ RE-ANCHORED 2026-09-18 (architecture item 54c), AND THE OLD RULE COULD NOT TELL 0 FROM 2.
+   It matched the literal `class="apSliderWrap"` — with the closing quote. The builder has carried
+   an interpolated modifier since the disabled state landed:
+       `<div class="apSliderWrap${sl.disabled ? " apSliderDead" : ""}">`
+   so the literal matched ZERO times, `=== 1` was false, and the gate printed "a second piece of
+   slider markup exists" about a tree that has exactly one. A message that names the wrong
+   direction is worse than no message: it sends the next reader hunting for a copy that is not
+   there. The count is now printed, and the failure says which way it went. */
+const wrapMarkup = (src + usrc).match(/class="apSliderWrap(?=[$"\s])/g) || [];
 ok("nothing builds apSliderWrap markup outside that builder",
-   ((src + usrc).match(/class="apSliderWrap"/g) || []).length === 1,
-   "a second piece of slider markup exists — stage.js reads .apSliderWrap and .apSlider BY CLASS, so a copy that differs by one name renders a flat card on whichever tier has it");
+   wrapMarkup.length === 1,
+   wrapMarkup.length === 0
+     ? "NOTHING builds apSliderWrap markup at all — either the builder is gone (the slider renders as nothing) or it has been renamed and this gate needs re-anchoring, NOT a hunt for a duplicate"
+     : `${wrapMarkup.length} pieces of slider markup exist — stage.js reads .apSliderWrap and .apSlider BY CLASS, so a copy that differs by one name renders a flat card on whichever tier has it`);
 
 console.log("\ndlog quantity check — src/ui/flow.js + src/ui/util.js");
 /* FALSIFIABLE, NOT A BARE "OK". The comment stripper is the one part that could quietly blank the

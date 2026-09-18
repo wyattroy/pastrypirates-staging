@@ -37,6 +37,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify } from "./lib/js_region_tokenizer.js";
+import { readGates } from "./lib/gate_chain.mjs";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 let failures = 0;
@@ -78,7 +79,11 @@ const everyScript = () => {
 
 
 const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
-const chain = String(pkg.scripts?.test || "").split("&&").map(s => s.trim()).filter(Boolean);
+/* The gates, in order, from scripts/gates.manifest.json — the ONE reader, scripts/lib/gate_chain.mjs.
+   They used to be parsed out of `package.json`'s `scripts.test` string here, and in five other
+   files. Architecture item 63 moved the list into a manifest because cmd.exe runs at most 8154
+   characters of `scripts.test` (measured twice) and the chain had reached 8150. */
+const chain = readGates();
 
 /* 1. every gate the chain names is really there. A chain entry pointing at a deleted file fails the
       whole run loudly — but a chain that was EDITED to drop a gate fails nothing at all, which is

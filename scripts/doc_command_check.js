@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
+import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -638,6 +639,342 @@ for (const b of [...new Set(deadInner)]) {
 }
 if (!deadInner.length) {
   pass(`all ${innerPaths} repo path(s) inside the ${docScripts.size} script(s) the docs name exist`);
+}
+
+
+/* ---- 12. the scripts the docs name must be able to LOAD, not merely to EXIST --------------- */
+/* THE HOLE THIS CLOSES, and it is the biggest one this gate has had since §4.
+ *
+ * §1 asserts the file exists. §11 asserts the repo paths it QUOTES exist. Neither asks the one
+ * question a session actually needs answered: WILL IT START? `scripts/bot_ladder.js` exists — and
+ * has imported `../v2bakeoff/src/engine/index.js`, a tree deleted at the 2026-08-26 cutover, ever
+ * since. So it throws ERR_MODULE_NOT_FOUND on load, and `docs/BOT-DESIGN-PRINCIPLES.md` §9 — the
+ * doc `.claude/CLAUDE.md` sends you to BEFORE you are allowed to touch a bot — went on ordering
+ * every session to run it from 26 August until 18 September. This gate was green the whole time,
+ * because "the path exists" and "the tool runs" are different claims and only the first was made.
+ *
+ * §11 could not see it either, and the reason is worth writing down: §11 matches quoted paths
+ * beginning `src|scripts|docs|classic|staging`. An import specifier is RELATIVE — `../v2bakeoff/…`
+ * — so it matched nothing, and §11 printed its green line directly above the fault. An instrument
+ * whose subject is narrower than the thing it is believed to guard: this file's recurring disease,
+ * named in §4's own comment, and here again three sections later.
+ *
+ * ⛔ THE GATE MUST NOT EXECUTE WHAT THE DOCS NAME, AND THAT IS DELIBERATE, NOT TIMIDITY. A doc may
+ * legitimately teach a destructive command — `npm run deploy:staging` publishes to a live domain,
+ * and `scripts/bot_ladder.js` itself is a ten-minute run. A gate that proved loadability by
+ * importing would deploy the site to prove the deploy script parses. So this is STATIC: it reads
+ * source, extracts import/require specifiers, and asks the FILESYSTEM whether each resolves.
+ * Nothing is imported, nothing is run, no module's top level is evaluated.
+ *
+ * IT FOLLOWS THE CHAIN, because a dead tree usually sits one hop back. A script may import a
+ * perfectly live helper that imports the tree that went away, and checking only the first hop would
+ * report the whole thing healthy. Every relative specifier that resolves is itself opened and
+ * scanned, with a visited set so a cycle terminates.
+ *
+ * WHAT IT SKIPS, AND WHICH WAY THAT ERROR RUNS (the gate says so on every run, including zeroes).
+ * Every one of these was a FALSE POSITIVE on the first run of this section, in this repo, today —
+ * eleven of them — and each is skipped for a stated reason rather than muffled:
+ *   - node builtins (`node:fs`, `path`): not files in this repo, nothing to resolve;
+ *   - bare package specifiers (`puppeteer`): resolved from node_modules at run time by a resolver
+ *     this gate deliberately does not reimplement — a checkout without `npm ci` would otherwise
+ *     fail here for a reason that has nothing to do with the docs;
+ *   - DYNAMIC `import(…)`: it cannot stop a module loading. It throws at the call site, when and
+ *     if that line runs, and this repo uses it deliberately for things that may be absent —
+ *     `playtest_gate.mjs` does `try { await import("./wyclau/longrun_status.mjs") } catch {}`,
+ *     an optional extra. Calling that "cannot load" would be false about the only thing this
+ *     section claims;
+ *   - SERVER-ROOT specifiers (`/src/ui/index.js`): a URL served by the local http server to a
+ *     headless page, not a path on this machine. `player.mjs` and `mouse_qa.mjs` hand exactly that
+ *     to a browser. The filesystem is the wrong thing to ask;
+ *   - an import that is ITSELF INSIDE A STRING LITERAL: synthetic source a gate feeds to its own
+ *     red-proof. `ui_contract_check.js` writes `import … from "../net/index.js"` into a temp
+ *     fixture to prove its rule can fail, and `tree_health_check.js` keeps three such lines as
+ *     constants. §11 learned this exact lesson one section up and skips paths handed to
+ *     `fixture()`. Flagging them punishes the practice this repo insists on — and this file's own
+ *     mutants below would be the first casualties;
+ *   - computed specifiers (`import(someVariable)`): beyond a static check; guessing is the noise
+ *     §11's comment already refuses to add.
+ * Every one of these filters runs the SAME way: each can only make this section MISS a broken
+ * import, never invent one. So the finding count is a FLOOR, and a red here is a real defect
+ * without further argument. It is a green here that is worth less than it looks, which is why the
+ * count of each skip is printed rather than folded away.
+ *
+ * THE LIST OF SCRIPTS IS WIDER THAN §11's, on purpose. §11 reads `node <path>` invocations only.
+ * BOT-DESIGN-PRINCIPLES §9 named its instrument as a bare backticked `scripts/bot_ladder.js` with
+ * no `node` in front of it — the exact form §11 cannot see — so this section takes the union of
+ * both spellings, the same two shapes §5 already looks for. Widening §11 to match is a separate
+ * change with its own findings; it is not smuggled in here. */
+/* From node itself, never a typed list — the same rule §1's comment states about hand-kept lists.
+   `node:`-prefixed forms are handled separately, so this is the bare-name set. */
+const BUILTIN = new Set(builtinModules);
+
+/* THE SHAPES THAT CAN STOP A MODULE LOADING — a static specifier, resolved before a line of the
+   file runs. Written as a list of regexes rather than a parser: a parser is the
+   tooling-instead-of-the-game trap §11 names. */
+const STATIC_PATTERNS = [
+  /\bimport\s+[^;()]*?\bfrom\s*["']([^"']+)["']/g,   // import x from "…" / import {a,b} from "…"
+  /\bimport\s*["']([^"']+)["']/g,                     // import "…"  (side-effect)
+  /\bexport\s+[^;()]*?\bfrom\s*["']([^"']+)["']/g,    // export … from "…"
+  /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g,          // require("…")  — CommonJS, also load-time
+];
+/* Counted, never judged — see the skip list above for why each is the wrong thing to ask. */
+const DYNAMIC = /\bimport\s*\(\s*["'][^"']+["']\s*\)/g;
+const COMPUTED = /\b(?:import|require)\s*\(\s*(?!["'])/g;
+
+const stripJsComments = (s) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+
+/* WHERE THE STRING LITERALS ARE, so an import written INSIDE one can be recognised as a fixture.
+   Comments are stripped before this runs, which removes the apostrophes that would otherwise throw
+   the scan off. A regex literal holding a quote can still confuse it — and that miscount can only
+   mark real code as "inside a string", i.e. make this section skip something it should have
+   judged. That is the safe direction, and it is the reason this is ten lines instead of a lexer. */
+function stringRanges(src) {
+  const ranges = [];
+  for (let i = 0; i < src.length; i++) {
+    const q = src[i];
+    if (q !== '"' && q !== "'" && q !== "`") continue;
+    const start = i++;
+    for (; i < src.length; i++) {
+      if (src[i] === "\\") { i++; continue; }
+      if (src[i] === q) break;
+      if (q !== "`" && src[i] === "\n") break;   // unterminated on its line: not a string
+    }
+    ranges.push([start, i]);
+  }
+  return ranges;
+}
+const insideString = (ranges, idx) => ranges.some(([a, b]) => idx > a && idx < b);
+
+/* Resolve a RELATIVE specifier the way node would, minus the parts that need node running.
+   ESM demands the extension, so the bare path is tried first; the extension-less candidates are
+   there for the CommonJS `require("./lib/thing")` form the repo still has in .cjs hooks. */
+function resolveSpec(fromAbs, spec, fileExists) {
+  const base = path.resolve(path.dirname(fromAbs), spec);
+  const cands = [base];
+  if (!/\.[A-Za-z0-9]+$/.test(path.basename(spec))) {
+    cands.push(base + ".js", base + ".mjs", base + ".cjs",
+               path.join(base, "index.js"), path.join(base, "index.mjs"), path.join(base, "index.cjs"));
+  }
+  for (const c of cands) if (fileExists(c)) return c;
+  return null;
+}
+
+/* THE SCANNER IS A FUNCTION WITH ITS FILESYSTEM HANDED IN, so the red-proofs below can build a
+   broken tree ENTIRELY IN MEMORY. Nothing is written into the repo, and the mutants therefore
+   exercise this exact code rather than a copy of it — HARD-WON-LESSONS §12i: a gate that asserts
+   against a copy of itself drifts silently to green. */
+function scanLoadable(named, readFile, fileExists) {
+  const dead = [], seen = new Set();
+  const n = { judged: 0, files: 0, builtin: 0, bare: 0, rootUrl: 0, fixture: 0, dynamic: 0, computed: 0 };
+  const show = (abs) => path.relative(REPO, abs).split(path.sep).join("/");
+  const walk = (abs, chain) => {
+    if (seen.has(abs)) return;
+    seen.add(abs);
+    n.files++;
+    let src;
+    try { src = stripJsComments(readFile(abs)); } catch { return; }
+    n.computed += (src.match(COMPUTED) || []).length;
+    n.dynamic += (src.match(DYNAMIC) || []).length;
+    const ranges = stringRanges(src);
+    for (const re of STATIC_PATTERNS) {
+      for (const m of src.matchAll(re)) {
+        const spec = m[1];
+        if (insideString(ranges, m.index)) { n.fixture++; continue; }
+        if (spec.startsWith("node:") || BUILTIN.has(spec)) { n.builtin++; continue; }
+        /* ORDER MATTERS, and it is the difference between a rule and a decoration. A server-root
+           specifier must be taken OUT of the path-like set, not left to fall through to "bare
+           package" — with it falling through, deleting the guard below changed a counter and
+           accused nobody, so the case could only half fail. Now deleting it makes the scanner ask
+           the filesystem for C:\src\… and report a finding, which is the mistake being guarded. */
+        if (!spec.startsWith(".") && !spec.startsWith("/")) { n.bare++; continue; }
+        if (spec.startsWith("/")) { n.rootUrl++; continue; }
+        n.judged++;
+        const target = resolveSpec(abs, spec, fileExists);
+        if (!target) { dead.push({ chain: [...chain, show(abs)], spec }); continue; }
+        walk(target, [...chain, show(abs)]);
+      }
+    }
+  };
+  for (const { doc, rel } of named) {
+    const abs = path.join(REPO, rel);
+    if (!fileExists(abs)) continue;            // §1 and §5 own "the file is missing"
+    walk(abs, [`${doc} names ${rel}`]);
+  }
+  return { dead, ...n };
+}
+
+/* Which scripts the docs name — both spellings, deduplicated on doc+path. */
+function docNamedScripts(readDoc) {
+  const out = [], seen = new Set();
+  const add = (doc, rel) => {
+    if (rel.startsWith("~") || rel.includes("node_modules")) return;
+    const key = `${doc} -> ${rel}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ doc, rel });
+  };
+  for (const doc of DOCS) {
+    if (!exists(doc)) continue;
+    const text = readDoc(doc);
+    for (const m of text.matchAll(/\bnode\s+([A-Za-z0-9_./-]+\.(?:mjs|js|cjs))/g)) add(doc, m[1]);
+    for (const m of text.matchAll(/`(scripts\/[A-Za-z0-9_./-]+\.(?:mjs|js|cjs))`/g)) add(doc, m[1]);
+  }
+  return out;
+}
+
+const namedScripts = docNamedScripts((doc) => fs.readFileSync(path.join(REPO, doc), "utf8"));
+const loadReal = scanLoadable(namedScripts, (a) => fs.readFileSync(a, "utf8"), (a) => fs.existsSync(a));
+for (const d of [...new Map(loadReal.dead.map(x => [x.chain.join(" -> ") + x.spec, x])).values()]) {
+  fail(`a script the docs name CANNOT LOAD — it imports a path that does not exist: "${d.spec}"`
+     + `\n        chain: ${d.chain.join("  ->  ")}`
+     + `\n        -> re-point it at the tree that exists today, or retire it (docs/GATE-RETIREMENT.md)`
+     + ` and stop the doc naming it (\`<!-- doc-check: allow <path> -->\` marks a deliberate record).`);
+}
+if (!loadReal.dead.length) {
+  pass(`all ${namedScripts.length} script path(s) the docs name can LOAD: ${loadReal.judged} static relative import(s) `
+     + `across ${loadReal.files} file(s) resolve on disk, followed hop by hop so a dead tree behind a live helper is caught`);
+}
+/* EVERY FILTER DECLARES ITSELF, ON EVERY RUN, INCLUDING THE ZEROES — a silent zero and a silent
+   hundred read identically, and the difference is the whole result. */
+console.log(`        NOT judged, on purpose: ${loadReal.builtin} node builtin(s); ${loadReal.bare} bare package specifier(s) `
+  + `(node_modules, at run time); ${loadReal.dynamic} dynamic \`import("…")\` (cannot stop a load — it throws at the call site); `
+  + `${loadReal.rootUrl} server-root specifier(s) (a URL the local server serves a headless page, not a file here); `
+  + `${loadReal.fixture} import(s) written INSIDE a string literal (synthetic source a gate feeds its own red-proof); `
+  + `${loadReal.computed} computed specifier(s) (\`import(expr)\`).`);
+console.log(`        Nothing was imported and nothing was run. Every one of those skips can only make this section MISS a `
+  + `broken import, never invent one, so the finding count is a FLOOR.`);
+
+/* ---- 12b. AND THE LOADABILITY SCANNER MUST BE ABLE TO FAIL --------------------------------- */
+/* For every case below, the mutant that turns it red is named in the case's own title. A case that
+   returns the same answer on both sides of the fault is decoration and does not count as a rule.
+   The mutants are built in an in-memory overlay over the real filesystem, so nothing is written
+   into the repo and nothing is executed. */
+const overlayFs = (files) => ({
+  read: (abs) => (files.has(abs) ? files.get(abs) : fs.readFileSync(abs, "utf8")),
+  has: (abs) => files.has(abs) || fs.existsSync(abs),
+});
+const A = (rel) => path.join(REPO, rel);
+
+const LOAD_CASES = [];
+{
+  /* 1. MUTANT: a doc points at a script whose own import is broken. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+    `import { Game } from "../zzz_dead_tree/src/engine/index.js";\nconsole.log(Game);\n`]]);
+  const o = overlayFs(f);
+  LOAD_CASES.push(["catches a doc naming a script whose import points at a deleted tree",
+    scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has).dead.length, 1]);
+}
+{
+  /* 2. MUTANT: the dead tree is ONE HOP BACK — the named script's own import is fine. This is the
+        case that red-proofs the recursion; without it "it follows the chain" is an unbacked claim. */
+  const f = new Map([
+    [A("scripts/zzz_mutant_tool.js"), `import { helper } from "./zzz_mutant_helper.js";\n`],
+    [A("scripts/zzz_mutant_helper.js"), `import { Game } from "../zzz_dead_tree/src/engine/index.js";\n`],
+  ]);
+  const o = overlayFs(f);
+  const r = scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has);
+  LOAD_CASES.push(["follows the chain: a dead tree behind a LIVE helper is still caught", r.dead.length, 1]);
+  LOAD_CASES.push(["and names the helper in the chain, not just the tool",
+    r.dead.length === 1 && r.dead[0].chain.join(" ").includes("zzz_mutant_helper.js") ? 1 : 0, 1]);
+}
+{
+  /* 3. MUTANT: an import breaks INSIDE a script a doc ALREADY names — the live-tree case, run
+        against the real doc list rather than a fixture doc, so it proves the real wiring. The
+        control beside it (case 5) is what makes this one mean something. */
+  const victim = namedScripts.map(n => n.rel).find(rel => {
+    if (!exists(rel)) return false;
+    const src = stripJsComments(fs.readFileSync(A(rel), "utf8"));
+    return /\bfrom\s*["']\.\.?\//.test(src);
+  });
+  if (!victim) {
+    fail("the loadability red-proof has no victim: no script the docs name has a relative import, so case 3 cannot fail and is not evidence");
+  } else {
+    const mutated = fs.readFileSync(A(victim), "utf8")
+      .replace(/(\bfrom\s*["'])(\.\.?\/)/, `$1../zzz_dead_tree/`);
+    const o = overlayFs(new Map([[A(victim), mutated]]));
+    const r = scanLoadable(namedScripts, o.read, o.has);
+    LOAD_CASES.push([`catches an import broken inside ${victim}, a script the docs already name`,
+      r.dead.length > loadReal.dead.length ? 1 : 0, 1]);
+  }
+}
+{
+  /* 4. MUTANT: remove the comment strip and this goes to 1 — a dead path QUOTED IN A COMMENT is a
+        note about history, not an import. This file's own §11 comment and the paragraph above both
+        quote deleted trees; a scanner that read them would condemn the record of the fix. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+    `/* it used to say: import { Game } from "../zzz_dead_tree/src/engine/index.js"; */\nimport fs from "node:fs";\n`]]);
+  const o = overlayFs(f);
+  LOAD_CASES.push(["does not read a commented-out import as an import",
+    scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has).dead.length, 0]);
+}
+{
+  /* 5. THE CONTROL, and it has its own mutant like everything else here. It runs the real list
+        through the OVERLAY with nothing overlaid, and asserts the answer is identical to the
+        direct-filesystem run above — so case 3's extra finding is attributable to the mutation and
+        not to the harness. MUTANT: an overlay whose `has()` forgets to fall through to the real
+        filesystem (drop the `|| fs.existsSync(abs)`) turns this red at 5 -> 0, and takes case 3
+        with it — which is exactly the failure it exists to expose, because without this line case
+        3 would have read "expected 1, got 0" with no way to tell a broken scanner from a broken
+        harness. */
+  const o = overlayFs(new Map());
+  LOAD_CASES.push(["CONTROL: the unmutated tree produces exactly the findings reported above",
+    scanLoadable(namedScripts, o.read, o.has).dead.length, loadReal.dead.length]);
+}
+{
+  /* 6. MUTANT: drop any one skip and its counter moves. Asserting the COUNTS rather than "no
+        finding" is what makes this case able to fail — a builtin misfiled as a bare package would
+        still produce zero findings and would still be wrong, and nobody would ever know. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+      `import fs from "node:fs";\nimport path from "path";\nimport pptr from "puppeteer";\n`
+    + `const a = await import("/src/ui/index.js");\n`
+    + `const src = 'import { x } from "../zzz_dead_tree/x.js";';\n`
+    + `const b = await import("../zzz_dead_tree/late.js");\n`
+    + `const c = await import(someVar);\n`]]);
+  const o = overlayFs(f);
+  const r = scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has);
+  LOAD_CASES.push(["counts each skip separately — builtin/bare/dynamic/fixture/computed — and accuses none of them",
+    `${r.builtin}/${r.bare}/${r.dynamic}/${r.fixture}/${r.computed}/${r.dead.length}`, "2/1/2/1/1/0"]);
+}
+{
+  /* 9. MUTANT: judge server-root specifiers and this goes to 1, accusing a URL of not being a file.
+        THE LIVE COUNT OF THIS ONE IS ZERO TODAY — every server-root specifier in the repo right now
+        is inside a dynamic import, caught one rule earlier. A skip with no live instance is exactly
+        the "case that cannot fail" this suite is written against, so it earns its line here or not
+        at all: the mutant is what makes it evidence rather than decoration. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+    `import { appState } from "/src/state/index.js";\n`]]);
+  const o = overlayFs(f);
+  const r = scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has);
+  LOAD_CASES.push(["does not ask the filesystem about a server-root URL a headless page is meant to fetch",
+    `${r.rootUrl}/${r.dead.length}`, "1/0"]);
+}
+{
+  /* 7. MUTANT: delete the insideString() guard and this goes to 1. A gate that writes a broken
+        import into a temp fixture to prove its own rule can fail is doing the thing this repo
+        demands; condemning it would make red-proofing a liability. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+    "fixture(\"src/ui/bad.js\", `import { netSetFlip } from \"../zzz_dead_tree/index.js\";`);\n"]]);
+  const o = overlayFs(f);
+  LOAD_CASES.push(["does not accuse an import written inside a string literal — that is a fixture, not a dependency",
+    scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has).dead.length, 0]);
+}
+{
+  /* 8. MUTANT: judge dynamic imports and this goes to 1 — which would report `playtest_gate.mjs`
+        as unable to load because an OPTIONAL extra it guards with try/catch is absent. The claim
+        this section makes is "it starts"; a dynamic import cannot bear on that. */
+  const f = new Map([[A("scripts/zzz_mutant_tool.js"),
+    `let lr;\ntry { lr = await import("./zzz_optional_extra.mjs"); } catch { lr = null; }\n`]]);
+  const o = overlayFs(f);
+  LOAD_CASES.push(["does not call a missing OPTIONAL dynamic import a failure to load",
+    scanLoadable([{ doc: "fixture.md", rel: "scripts/zzz_mutant_tool.js" }], o.read, o.has).dead.length, 0]);
+}
+let loadCasesBad = 0;
+for (const [what, got, want] of LOAD_CASES) {
+  if (got !== want) { loadCasesBad++; fail(`the loadability scanner ${what} — expected ${want}, got ${got}`); }
+}
+if (!loadCasesBad) {
+  pass(`the loadability scanner survives all ${LOAD_CASES.length} mutants — each one names the mutation that turns it red, and the control proves the mutants' findings come from the mutation`);
 }
 
 

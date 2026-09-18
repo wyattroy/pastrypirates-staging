@@ -51,7 +51,7 @@ import {
   // only dockFlavor consumer, and it now needs the icon placed by the declared {prefix,name} split
   // rather than interpolated in front of the whole flavour phrase.
   DIRS, DIRNAME, STORM_PUSH, WAVE_IMG, SAIL_RANGE, SAIL_RANGE_UPWIND, OPPOSITE, man, HEXCOL, iname, ilabelImg, iconImg, NAMES, dockPlace, dockFlavorIcon, ING_IMG,
-  CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled, BAKE_REWATCH_COST,
+  CUPCAKE_IMG, CHECKMARK_IMG, CANCEL_X_IMG, DICE_IMG, FLIP_HEADS_IMG, FLIP_TAILS_IMG, COIN_SPIN_IMG, ovensNowEnabled, bake2Enabled, endCardEnabled,
   buildRoster, emojify,
 } from "../shared/index.js";
 import { el, boardCell, setFlipActive, armFlipTap, renderLiveShips, paintShipAt, setShipGlideMs, paintShipAtPoint, snapShipTo, render as renderBoard } from "./board.js";
@@ -225,7 +225,11 @@ export function renderAskPrompt(spec,answer){
   }
   const backIdx=opts.findIndex(o=>o&&o.back);
   const flipIdx=opts.findIndex(o=>o&&o.flip);
-  const done=v=>{setFlipActive(null);setNeedsAction(false);delete $("actionPanel").dataset.pp4Stage;panel("");answer(v);};
+  /* THE BOX SAYS THIS SEAT IS NO LONGER BEING ASKED — architecture item 9b. `setNeedsAction(false)` stood
+     here, one statement before the clear, and renderPickPrompt's teardown below had no such line: two
+     prompt renderers, one fact, two answers. panel("") drops the mark itself now (src/ui/panel.js), so both
+     renderers say it the same way and neither says it twice. */
+  const done=v=>{setFlipActive(null);delete $("actionPanel").dataset.pp4Stage;panel("");answer(v);};
   if(opts.some(o=>o&&o.stage))$("actionPanel").dataset.pp4Stage="1";
   if(flipIdx!==-1){
     if(!spec.battle&&window.__pp4)window.__pp4.flipMsg={m:msg||"",s:sub||""};   // same stash as the pure flip
@@ -683,6 +687,11 @@ export function renderPickPrompt(spec,answer){
      dashes off the water again, so the course flickered away between turns. With the parrot on, the
      next prompt redraws it from the LIVE game anyway, so leaving it up is both correct and
      continuous. */
+  /* AND panel("") IS ALSO WHAT SAYS THIS SEAT IS NO LONGER BEING ASKED (architecture item 9b) — the mark
+     the one narrator reads before it will say a word. It used to ride out on the box's CONTENT timer, 60ms
+     after the tap, and a flight is recorded and narrated inside that window: the captain who chose to flee
+     was the one screen never told, and on a host so was every other screen, because the host never reached
+     the broadcast either. Nothing to add here; do NOT add a second setNeedsAction(false) beside it. */
   const teardown=()=>{hs.forEach(h=>h.remove());panel("");appState.currentPrompt=null;
     if(!pilotIsOn())forgetCourse();};
   const done=v=>{teardown();answer(v);};
@@ -966,7 +975,12 @@ export async function bakeoffPrompt(player,setup,fallback){
     swaps:(setup.swaps||[]).map(sw=>[sw[0],sw[1]]),
     locked:player.bake.locked.slice(),
     attempts:player.bake.attempts,
-    cost:BAKE_REWATCH_COST,
+    /* (`cost:BAKE_REWATCH_COST` and `coins:player.coins` STOOD HERE — architecture item 17, 2026-09-18.
+       Two facts sent over the wire so a remote captain's browser could run its own little till: the price
+       of a look, and the purse to take it out of. Both are now asked of the ONE place that decides them
+       (Game.rewatchCost / Game.canRewatch) on whichever screen is asking, and a purse is the one every
+       screen is already drawing — so there is nothing left on the wire to disagree with it. The button's
+       own label asks the same constant; see playBakeoffLive.) */
     /* T-25 (Wyatt, 2026-08-26): "the bakeoff title shouldn't say The Bake-off, it should say
        {Captain's name}'s bake-off, or {Your captain's name}, Yer Bake-Off."
        IT RIDES IN THE SPEC rather than being looked up on each screen, for the reason the whole
@@ -978,18 +992,17 @@ export async function bakeoffPrompt(player,setup,fallback){
        waiting to disagree. The bot's spec (orchestrator botBakePerform) has carried this since it
        was asked for; the HUMAN's — this one — did not, which is why the line was blank on the one
        screen he was looking at. */
-    recipe:(player.recipe||[]).slice(),
-    coins:player.coins};
+    recipe:(player.recipe||[]).slice()};
   // Spending a coin goes through the ENGINE, live, one at a time — so the purse on screen drops the
-  // moment the player buys a look rather than after the whole prompt resolves. `canAfford` lets the
-  // button grey out without the UI having to know the price.
+  // moment the player buys a look rather than after the whole prompt resolves. `canAfford` asks the
+  // engine's own rule (Game.canRewatch) rather than re-typing the comparison, so the button and the
+  // till can never give different answers about the same purse.
   //
-  // MP-06, THE REMOTE HALF, and it is deliberately asymmetric in ONE place only: a guest has no
-  // engine to debit, so its own copy of this pair (orchestrator.js's bake branch) decrements the
-  // purse ON SCREEN and reports the COUNT back in the single reply, which the host then charges
-  // authoritatively. The engine stays the only thing that moves a real coin.
+  // A REMOTE CAPTAIN REACHES THIS SAME ENGINE — architecture item 17. Their tap publishes the bench's
+  // new epoch, the host charges it there and the `rewatch` event draws the coins leaving on EVERY
+  // screen, exactly as this call does here. There is no guest-side till any more.
   const onRewatch=(n)=>appState.game.bakeRewatch(player,n)>0&&(liveRender(),true);
-  onRewatch.canAfford=()=>player.coins>=BAKE_REWATCH_COST;
+  onRewatch.canAfford=()=>appState.game.canRewatch(player);
   /* THE BENCH IS PUBLISHED BY WHOEVER IS BAKING (04-01 Task 3, MP-05). Only the captain with their
      hand on the crates knows when Ready was pressed or which crate was just named, so the same
      `io.onBench` hook exists on both tiers and the guest's copy (orchestrator.js's bake branch)
@@ -1281,6 +1294,11 @@ export function stormCamForEvent(ev){
    exactly as liveRender's publish line is (ui-tier may never import src/net/, D-07), and pushEvents
    is a monotonic while-loop over appState.evPushed, so an early call costs one extra no-op pass and
    can never double-send or reorder.
+   ⚠ "CAN NEVER DOUBLE-SEND" WAS TRUE OF LIVE PLAY ONLY, and architecture item 47 (2026-09-18) found
+   the exception: during a host's reload-replay the frontier had been reset to 0 while the engine
+   rebuilt the whole voyage, so the first call from here flushed every record the crew already held
+   — thirty-six duplicate serials in the measured room. liveRender's own `replaying` return covered
+   its own path and this one had nothing. Fixed on the publisher, not here (see below).
    WHY NOT SIMPLY MOVE liveRender() ABOVE THE RIDE — the tempting one-line version: liveRender's
    drain is FIRE-AND-FORGET (`_nh.onConsumeEvent(e).catch(...)`, deliberately not awaited, because
    liveRender's body must stay synchronous for EVERY call site — the count is not the point and a
@@ -1294,7 +1312,8 @@ export function stormCamForEvent(ev){
    build when one did, correctly: this file DRAWS, and a conditional on who is playing has no
    business in it. The publish is host-only because PUBLISHING is host-only, so the guard sits on
    pushEvents itself (src/orchestrator.js), where rule 23 sanctions "who computes" and where it
-   protects every caller rather than this one. */
+   protects every caller rather than this one. The same is now true of "a screen rebuilding its own
+   history publishes nothing" — item 47 put it on the publisher for exactly this reason. */
 export function publishNow(){
   const h=netHandlers();
   if(h.onEvents)h.onEvents();
@@ -1717,9 +1736,18 @@ let stormGate=null;
 export function armStormGate(p){ stormGate=p; }
 export async function runStormLive(dirKey){
   const g=appState.game;
-  const evStorm=g.ev({t:"storm",dir:dirKey,dist:STORM_PUSH});
+  g.ev({t:"storm",dir:dirKey,dist:STORM_PUSH});
+  /* THE WIDE SHOT IS NOT ASKED FOR HERE — architecture item 24, 2026-09-18. `stormCamForEvent(evStorm)`
+     stood on the next line, one statement after this tier handed the same event to the drain — so the
+     HOST aimed the storm's camera twice and every other screen once. MEASURED in a crew room (host
+     1200x950, guest iPhone-13-mini 375x812 dsf3), both calls caught at the stage bridge with their stacks:
+       t=-0.004s  stormCamForEvent <- consumeEvent (src/orchestrator.js) <- liveRender (src/ui/panel.js)
+       t=-0.003s  stormCamForEvent <- runStormLive (this function)      <- runLiveNet
+     One millisecond apart, off the same board, so the second re-aimed the camera at the frame the first
+     was already gliding to and nothing ever looked wrong — which is exactly why it survived. The cue
+     belongs to the one event consumer, off the `storm` event, on every screen; liveRender() below is
+     simply how this tier reaches it. Both screens arrived at the identical viewBox, 55-65ms apart. */
   liveRender();
-  stormCamForEvent(evStorm);
   await narrateLastEvent();
   if(stormGate){ const gate=stormGate; stormGate=null; await gate; }
   // furthest downwind moves first, so the lead ship clears its square before the ship behind it
@@ -1728,56 +1756,61 @@ export async function runStormLive(dirKey){
     const wasDocked=g.adjPort(player)!==null;
     const before=[...player.pos];
     let outcome="moved";
-    /* D-53 (Wyatt, 2026-09-01): "the storm should smoothly move players to their final square in
-       one move" — measured first (scripts/qa/w_storm_step_probe.mjs, a driven live storm, ship
-       transform sampled every ~35ms): his named cause (an indexing bug) is NOT what's happening —
-       a full 3-square push is timed evenly, ~780ms per square, exactly STORM_STEP_MS apart. What
-       IS happening is by design: every ORDINARY square (no event) gets its own renderLiveShips()
-       + a fixed STORM_STEP_MS pause, one square at a time, so a 3-square push reads as three
-       separate hops rather than one glide to wherever the ship ends up.
-       pendingSquares defers that paint: ordinary squares accumulate silently (player.pos already
-       moved in engine state; nothing on screen has caught up yet) and are flushed as ONE
-       renderLiveShips() call, so the ship's own CSS transition (SHIP_GLIDE_MS, same one every
-       other ship move already uses) glides it directly from its pre-push square to wherever it
-       actually stops — 1, 2 or 3 squares away — in one continuous move.
-       NOT touched: the event-driven liveRender() below. That call is the ONE consumer or broadcast
-       path (rule 23, src/ui/panel.js's own liveRender() drains+broadcasts events, it does not
-       merely repaint) — windmove/anchorHold/blocked/swept all still fire it exactly where they did
-       before, at the moment their event lands, for multiplayer correctness. Deferring THAT would
-       delay what a guest receives, which is a sync risk this fix has no reason to take for a purely
-       cosmetic win. Where an event does land, its own render already reflects the current (already
-       mutated) position, so any pending ordinary squares are covered by it for free — flushed
-       without a second paint. */
-    let pendingSquares=false;
+    /* ⭐ THIS LOOP DRAWS NO SHIP — architecture item 24, 2026-09-18. It keeps the storm's BEAT; the one
+       event consumer moves every hull, on every screen, off that ship's own record. `drivenSquares` is
+       the beat's condition and nothing else: true once this ship has been driven at least one ordinary
+       square that no record has spoken for yet.
+
+       D-53 (Wyatt, 2026-09-01): "the storm should smoothly move players to their final square in one
+       move" — measured then (scripts/qa/w_storm_step_probe.mjs, a driven live storm, ship transform
+       sampled every ~35ms): his named cause (an indexing bug) was NOT what was happening — a full
+       3-square push was timed evenly, ~780ms per square, exactly STORM_STEP_MS apart. Those digits
+       record that run; they are not a claim about today. D-53's fix deferred this tier's own per-square
+       paints and flushed them as ONE renderLiveShips(), which got the picture right and left the SECOND
+       MOVE PATH standing: the host drew the push itself, every other screen drew it off the engine.
+
+       AND THREE QUARTERS OF THAT PAINT WAS ALREADY BEING THROWN AWAY. Measured 2026-09-18, two windows,
+       a real crew room, every write to a ship's group recorded with the value it replaced:
+         0.773s seat 3  [3,6] -> [3,3]    the flush
+         0.773s seat 3  [3,3] -> [3,6]    undone in the same millisecond, by the PREVIOUS ship's record
+                                          reaching render() inside the one consumer
+         1.545s seat 3  [3,6] -> [3,3]    the hull actually moves — on its OWN record, like a guest's
+       A flush survived only where nothing was in flight to overwrite it: the first ship the storm
+       reaches, and any ship following an awaited drain (a rim sweep). Those ships were drawn moving
+       0.83s, 0.87s, 0.83s and 0.80s ahead of the guest across three runs; every other ship agreed to
+       within 38-54ms, which is the wire. One boat in a storm had a head start and the rest paid a
+       wasted write for it.
+
+       NOW: the engine's record moves the hull here as everywhere, and it is PUBLISHED BEFORE THE BEAT
+       (below) rather than after it — so every screen draws a ship inside its own 770ms slot and the
+       storm's summary still lands after the last hull has arrived. That is the picture D-53 earned, and
+       a guest gets it too: before this, a guest's boats each moved a full slot late and the last one
+       could still be gliding while the summary was being read out. The storm takes exactly as long as
+       it did — the beats are unchanged and there are still as many of them. */
+    let drivenSquares=false;
     for(let s=0;s<STORM_PUSH;s++){
       const was=[...player.pos];
       const evBefore=g.events.length;
       outcome=g.stormStep(player,dirKey);
       const movedSquare=(player.pos[0]!==was[0]||player.pos[1]!==was[1]);
-      if(movedSquare&&outcome!=="swept")pendingSquares=true;
+      if(movedSquare&&outcome!=="swept")drivenSquares=true;
       if(outcome==="swept"){
-        /* CEO REVIEW 72 CAUGHT THIS: stormStep() already wrote player.pos to the RIM-ENTRY square
-           before returning "swept" (tradewind(), src/engine/index.js), so painting from the LIVE
-           position here — as a plain renderLiveShips() does — glides the ship onto the whirlpool
-           itself and holds it there, before animateRimSweepIfAny() snaps it back to ride around.
-           Teleport, pause, snap-back, ride: exactly the bug D-22 excluded a swept step to avoid,
-           reintroduced by reading current state instead of the pre-sweep one.
-           `was`, captured at the top of THIS iteration, is the fix: it is the position as it stood
-           immediately before this (sweeping) stormStep call, which already carries every ordinary
-           square walked in earlier iterations of this same push (each mutated player.pos in turn)
-           and excludes only the sweep itself — precisely the D-22/W9 contract, restored.
-           ONE TICK (RIM_SWEEP_TICK_MS), NOT STORM_STEP_MS — CEO REVIEW 72's follow-up caught a
-           second issue: with no yield at all here, this paint and PART A's own paintShipAt(seat,
-           from) below (animateRimSweepRun) land in the same task, and "a browser paints once per
-           task" is the exact hazard that function's own comment two screens down names for the
-           identical shape — so `was` would never reach the screen. A full STORM_STEP_MS (770ms)
-           wait was tried first and pulled in a SEPARATE, likely pre-existing artifact (a probe
-           caught the ship's transform reverting to its pre-push cell mid-wait — recorded in
-           .planning/CTO-LEDGER.md, not yet root-caused). One tick is the minimum that still forces
-           a real paint (the same unit SAIL_ROUTE_TICK_MS/RIM_SWEEP_TICK_MS both use for exactly
-           this "guarantee at least one frame" purpose elsewhere in this file) without holding the
-           window open long enough, in every probe run since, to reproduce that artifact. */
-        if(pendingSquares){paintShipAt(player.idx,was);await sleep(RIM_SWEEP_TICK_MS);pendingSquares=false;}
+        /* (THE LAST HOST-ONLY PAINT STOOD HERE and is deleted by architecture item 24, 2026-09-18:
+           `if(pendingSquares){paintShipAt(player.idx,was);await sleep(RIM_SWEEP_TICK_MS);…}` — this tier
+           putting the hull back on its pre-sweep square so the ride began from the right place, plus a
+           one-tick yield so that paint could reach the screen at all. CEO REVIEW 72 earned both, and the
+           reasons are worth keeping: painting from the LIVE position glided the ship onto the whirlpool
+           and held it there before the ride snapped it back (teleport, pause, snap-back, ride — the very
+           bug D-22 excluded a swept step to avoid), and with no yield the corrective paint and the ride's
+           own first paint landed in one task, where a browser paints once, so `was` never reached the
+           screen. A full STORM_STEP_MS wait was tried instead and pulled in a separate artifact
+           (.planning/CTO-LEDGER.md, not root-caused).
+           IT IS DELETED RATHER THAN TUNED because it was the second move path: no other screen has it,
+           and no other screen needs it. stormStep emits `windmove` AT the rim-entry square before it
+           sweeps, so the one consumer's render() carries the hull there and animateRimSweepIfAny rides
+           it round — which is what a guest has always done. MEASURED on a posed sweep, two windows: the
+           ride drew [1,6] -> [2,2], five squares, on both screens, 131ms apart. There is nothing left
+           for a yield to make visible.) */
         /* THE HOST-ONLY ESCAPE HATCH IS GONE (W9, rule 23). This used to reconstruct the rim-entry
            square by hand — from `was` plus the wind — because the event stream did not contain it,
            and then call animateRimSweepRun directly. runStormLive is host-only, and that was
@@ -1816,12 +1849,9 @@ export async function runStormLive(dirKey){
          the board state, and an ordinary sail's narration all hang off it — only its mid-storm
          bubble is withheld here, and the summary's swept clause reports it once the storm is done
          (noteStormOutcome now notes "swept"). */
-      if(g.events.length>evBefore){liveRender();pendingSquares=false;if(g.events[g.events.length-1].t!=="tradewind")await narrateLastEvent();}
+      if(g.events.length>evBefore){liveRender();drivenSquares=false;if(g.events[g.events.length-1].t!=="tradewind")await narrateLastEvent();}
       if(outcome!=="moved")break;
     }
-    // flush any ordinary squares nothing above already painted — the whole push (however many
-    // squares it actually covered) becomes this ONE glide.
-    if(pendingSquares){renderLiveShips();await sleep(STORM_STEP_MS);}
     const moved=(player.pos[0]!==before[0]||player.pos[1]!==before[1]);
     const evBefore=g.events.length;
     g.noteStormOutcome(player,outcome,moved,wasDocked);
@@ -1830,6 +1860,18 @@ export async function runStormLive(dirKey){
     // src/ui/util.js). liveRender still runs so the square it landed on is painted at the moment it
     // lands, which is the thing D-22 exists to protect; only the awaited bubble is gone from here.
     if(g.events.length>evBefore)liveRender();
+    /* ⭐ THE RECORD FIRST, THEN THE BEAT — architecture item 24, and the order is the whole of it.
+       The wait used to stand ABOVE noteStormOutcome, beside a renderLiveShips() that drew this ship
+       here: the hull moved at the top of its slot on this tier and the record that moves it everywhere
+       else was published 770ms later, at the bottom. That is how the head start was built. Published
+       first, every screen — this one included — draws the push at the top of its own slot and the beat
+       is the rest AFTER it, so a 700ms glide always lands inside its 770ms slot and the storm's summary
+       still arrives with every hull already home.
+       ⚠ THE BEAT IS THE STORM'S PACE AND THERE IS NO SECOND KNOB. STORM_STEP_MS (src/ui/util.js) is the
+       one number; if Wyatt asks for a quicker storm it moves, and it moves the rim-sweep pace with it.
+       Do not add a smaller number here for one case — that is two places deciding one fact, on the item
+       that removed them. */
+    if(drivenSquares)await sleep(STORM_STEP_MS);
   }
   // ...and THEN the one line that reads the whole storm at once. Emitted here rather than left to
   // the engine's runStorm() because the live path drives the push itself, square by square, and
@@ -1916,7 +1958,8 @@ export async function humanDock(player,port){
     say("dock.flipHelp",{heads:g.cfg.dockHeads,tails:g.cfg.dockTails}),"dock");
   if(h==="back")return "back";
   g.payDock(player,h);   // credited AND recorded in one place, shared with a bot's dock (engine Game.payDock)
-  let got=h?"treasure":"dockhand";
+  // READ BEFORE THE BUY, and handed to the engine untouched: buying takes the crate off the shelf and the
+  // price climbs as the island empties (v2 rule 11), so this is the price the captain was actually offered.
   const price=g.cratePrice(ing);
   /* THE CAPTAINS PANEL IS DRAWN FROM THE LAST EVENT'S SNAPSHOT, not from live player state — so
      coins earned here stayed invisible until the `dock` event was finally emitted, which is AFTER
@@ -2012,27 +2055,23 @@ export async function humanDock(player,port){
       // D-40 safety net: buyCrate re-reads the purse itself — `canBuy` was computed BEFORE the
       // await, and the shot clock's penalty can take a coin while this prompt sits open. One
       // purchase path with the bots (Game.buyCrate), so the two can never diverge on the rule.
-      if(v==="coin"){buy=g.buyCrate(player,ing);if(buy)got="bought";break;}
+      if(v==="coin"){buy=g.buyCrate(player,ing);break;}
       if(v==="barter"){
         const give=await pickBarterCrates(player,ing);
         if(!give)continue;                       // backed out of the picker — offer the berth again
-        buy=g.barterCrate(player,ing,give);if(buy)got="bought";
+        buy=g.barterCrate(player,ing,give);
         break;
       }
       break;                                     // "Nah"
     }
   }
-  // WHAT WAS LEFT ON THE SHELF, decided by the engine for bot and human alike (Game.dockLeft) — a captain who
-  // taps "Nah" and a bot that declines get the identical sentence, which is the rule this whole file is held to.
-  /* `paid` IS WHAT LEFT THE PURSE and `price` is what the crate cost — and this line is the HUMAN berth's
-     copy of the engine's dock event (engine/index.js). The two must carry the same fields: on 2026-09-17 the
-     engine's gained `paid` and this one did not, so a human's PURCHASE stopped drawing its coins leaving for
-     one build. `scripts/qa/dock_event_one_shape_check.mjs` now fails if the two ever differ again. */
-  g.ev({t:"dock",p:player.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
-    paid:buy&&!buy.paidIng?price:0,
-    paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
-    left:buy?undefined:g.dockLeft(player,ing),
-    black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
+  /* THE BERTH HANDS THE ENGINE WHAT THE CAPTAIN DECIDED, AND THE ENGINE'S OWN LINE SAYS IT (architecture item 49).
+     This berth used to write its own copy of the dock event beside the engine's, the two kept in step by hand — and on
+     2026-09-17 they fell out of step: the engine's line gained `paid`, this one did not, and a person's PURCHASE stopped
+     drawing its coins leaving the purse for a whole build on staging. What was bought, bartered or refused is all this
+     berth knows that the engine does not; every word of the line itself — what the flip turned up, what was paid, what
+     was left on the shelf — is Game.dockDone's, exactly as it is for a bot. */
+  g.dockDone(player,ing,h,price,buy);
   /* HIS ITEM 9: THE CRATE LANDS WHEN YE BUY IT. One call moved, none added.
      "the crate sound and the crate animation arrive after the summary has faded, instead of on the
      Buy click." Measured: 5489ms between the trusted mouse-down on the Buy petal and liveRender()
@@ -2100,6 +2139,22 @@ export async function humanDock(player,port){
    presents gets the slider. See ask()'s own note in util.js. */
 // the engine owns what a counter MEANS (see Game.counterTerms) — this is just the reach.
 const counterTerms=(offer,r)=>appState.game.counterTerms(offer,r);
+/* ⭐ WHAT A DEAL COMES TO, IN WORDS — the crate and the coin, decided here, once (architecture item 20b, 2026-09-18).
+   WYATT, ON HIS OWN PLAYTEST: "Fix this so it is intuitive -- i've also noticed the confusion when i play."
+   Four places in this file turned a deal into words and one of them disagreed with the other three. Measured on a posed
+   counter (a crate offered with 3🌕 on it, countered for 9 more), desktop 1400x900 and phone 375x812 dsf3:
+     the ask line  read  "💰 Crustbeard wants 🥛 Fresh Milk + 12🌕"    — the whole price, correctly
+     the CIRCLE    read  "Crustbeard" / "🥛+12🌕"                      — the same 12, with a + in front of it
+   The + was words.js's "trade.coinsShort" ("+{n}🌕"), a leftover from when a counter really was "+k coins ON TOP".
+   Since counterTerms (engine) started returning the TOTAL, that + has been telling a captain the price is twelve MORE
+   than the offer they are looking at. A trade prompt that misstates the price is worse than one that says nothing —
+   the same fault, one size down, as the circle that once showed only a name (see humanAnswersHail's note).
+   So: ONE builder, and the amount is "coin.amount" ({n}🌕) wherever it is read. `icons` is the only difference a
+   surface may ask for — a petal has room for the crate's picture, not its name — and it changes no word.
+   NOTHING ELSE MAY WORD A DEAL: scripts/qa/counter_price_one_wording_check.mjs fails if a second builder appears, or
+   if either answer circle goes back to a sentence typed into this file instead of one from words.js. */
+const dealBits=(ing,coins,icons)=>[ing?(icons?iconImg(ING_IMG[ing]):ilabelImg(ing)):null,
+  coins?say("coin.amount",{n:coins}):null].filter(Boolean).join(" + ");
 /* THE COUNTER-OFFER, REBUILT — playtest 21 item 7 (Wyatt): "'Ask it' is really confusing because
    i clicked it thinking that i could counteroffer their money with asking for their milk. Instead,
    it simply initiated the trade (which i did not want). I want a way to counteroffer with other of
@@ -2181,10 +2236,9 @@ async function counterOffer(q,player,offer){
        which is the counter's own shape (askFor on top, Game.counterTerms). */
     const room=askIng?g.counterRoom(player,offer,askIng):coinRoom;
     if(!room)continue;                           // no such counter can be made — re-pick
-    const bits=n=>[askIng?ilabelImg(askIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
     // @copy prompt.trade.countercoins — APPROVED as written, Wyatt 2026-08-14 ("draft copy is fine")
     const n=await coinSlider(q.idx,
-      k=>say("counter.asking",{q:pn(q.idx),what:bits(k)||say("trade.nothin",{}),want:ilabelImg(offer.want)}),
+      k=>say("counter.asking",{q:pn(q.idx),what:dealBits(askIng,k)||say("trade.nothin",{}),want:ilabelImg(offer.want)}),
       room.min,room.min,room.max,say("counter.go",{}),null,null,room.base);
     if(n==null)return null;
     if(n==="__back__")continue;                  // BACK MEANS BACK — return to the crate picker
@@ -2336,7 +2390,6 @@ export async function humanTrade(player){
         await ask(player.idx,say("trade.nothingToOffer",{}),[{label:say("button.back",{}),back:true,value:-1}]);
         step=1;continue;
       }
-      const giveBits=n=>[st.baseIng?ilabelImg(st.baseIng):null,n?say("coin.amount",{n}):null].filter(Boolean).join(" + ");
       // @copy prompt.trade.addcoins
       // playtest 21 item 7: the slider here too, not only in the counter. Wyatt's rule is about the
       // ARC, not about one prompt — leaving ±1 circles on the offer-building step and removing them
@@ -2391,11 +2444,19 @@ export async function humanTrade(player){
        - the ASK now enumerates every answer, one captain per line, in full — Wyatt's instruction,
          and the only place there is room for the whole deal;
        - the CIRCLE's short form carries the crate ICON and the coins, so even the compact form can
-         never be read as "just tap the name". Short means SHORTER, not silent. */
+         never be read as "just tap the name". Short means SHORTER, not silent.
+
+     AND SHORTER STILL NAMES THE SAME PRICE — architecture item 20b, 2026-09-18, Wyatt on his own
+     playtest: "Fix this so it is intuitive -- i've also noticed the confusion when i play." The
+     circle had kept the price but SIGNED it, so "Crustbeard" over "+12🌕" read as twelve coins
+     MORE than the offer already on the table, when 12 is the whole of it. Both circles now come
+     out of the same words table (trade.takesShort / trade.wantsShort) and the same dealBits — so
+     the petal and the sentence beside it cannot mean two prices again.
+     HIS OWN WORDING FOR THAT CIRCLE, and it is final (item 20c, 2026-09-18): "Crustbeard 12🌕" —
+     the captain and the price, no verb. words.js holds it; nothing in this file picks a word. */
   const opts=[];
   const termsOf=r=>counterTerms(offer,r);
-  const bitsOf=t=>[t.giveIng?ilabelImg(t.giveIng):null,t.giveCoins?say("coin.amount",{n:t.giveCoins}):null]
-    .filter(Boolean).join(" + ");
+  const bitsOf=(t,icons)=>dealBits(t.giveIng,t.giveCoins,icons);
   const answerLines=[];
   for(let i=0;i<responses.length;i++){
     const r=responses[i];
@@ -2403,7 +2464,7 @@ export async function humanTrade(player){
       const b=bitsOf(offer);
       answerLines.push(say("trade.takes",{icon:iconImg(CHECKMARK_IMG),q:seat(r.q.idx),what:b||say("trade.offer",{})},player.idx));
       opts.push({label:say("trade.accepts",{icon:iconImg(CHECKMARK_IMG),q:seat(r.q.idx)},player.idx),
-        short:`${iconImg(CHECKMARK_IMG)}<br>${pn(r.q.idx)}`,value:i});
+        short:say("trade.takesShort",{icon:iconImg(CHECKMARK_IMG),q:seat(r.q.idx)},player.idx),value:i});
     }
     else if(r.kind==="counter"){
       /* counterTerms() is the ONE place a counter is turned into the deal it means, and the ask
@@ -2416,7 +2477,8 @@ export async function humanTrade(player){
       const swap=t.giveIng&&t.giveIng!==offer.giveIng;
       answerLines.push(say(swap?"trade.wantsInstead":"trade.wants",{q:seat(r.q.idx),what:bits||say("trade.nothin",{})},player.idx));
       opts.push({label:say("trade.wants",{q:seat(r.q.idx),what:bits||say("trade.nothin",{})},player.idx),
-        short:`${pn(r.q.idx)}<br>${t.giveIng?iconImg(ING_IMG[t.giveIng]):""}${t.giveCoins?say("trade.coinsShort",{n:t.giveCoins}):""}`,
+        // the petal: the crate's picture where the line has its name, and the same price in full
+        short:say("trade.wantsShort",{q:seat(r.q.idx),what:bitsOf(t,true)||say("trade.nothin",{})},player.idx),
         value:i,
         // the engine's one test of what an asker can honour — the same one it applies for a bot
         disabled:!g.canTakeAnswer(player,offer,r),
@@ -3426,7 +3488,12 @@ export async function showTurnOrderIntro(order){
 }
 export function battleSnapshot(o){
   const snap={};
-  for(const k of ["round","a","d","atState","dfState","atBs","dfBs","live","winCoin","result","waiting","need","title","roleA","roleD"])
+  /* `dw` — THE WIND THE FIGHT WAS CALLED IN, CARRIED WITH THE FIGHT'S WORDS (architecture item 25, 2026-09-18). Without it a watching
+     screen worked the wind out from whatever its own board said at the moment it drew the line, which is a different day's board while
+     its event queue is behind: measured, a guest said "CROSSWIND · ties collide" about a fight the host was calling "⬇ HOSTCAP FIRES
+     DOWNWIND — WINS TIES". Firebase deletes a null field, so a crosswind arrives as no `dw` at all — renderBattle reads absent and null
+     as the same answer, which is the only reason that is safe. */
+  for(const k of ["round","a","d","atState","dfState","atBs","dfBs","live","winCoin","result","waiting","need","title","roleA","roleD","dw"])
     if(o[k]!==undefined)snap[k]=o[k];
   snap.attIdx=o.att.idx;snap.defIdx=o.def.idx;
   return snap;
@@ -3449,7 +3516,10 @@ export function renderBattleFromSnap(snap,extra){
    Every non-combatant may call, from anywhere on the board, and bots call too. A NULL battle
    (rule 9: crosswind stand-off, attacker declines to pay) has no winner, so no call is correct
    and nobody is paid. */
-export async function collectSideBets(att,def){
+/* `downwind` is the fight's own reading of the wind (Game.beginBattle), handed over by asyncBattleRun — architecture item 25. A bot
+   caller used to ask appState.game.downwindSide for itself, which is the same fact decided a second time, in a file that must not
+   decide game facts at all. */
+export async function collectSideBets(att,def,downwind){
   const bets=[];
   const spectators=appState.game.players.filter(player=>player!==att&&player!==def&&!player.done);
   for(const s of spectators){
@@ -3473,8 +3543,7 @@ export async function collectSideBets(att,def){
     }else{
       // Bots read the same board a player does: the wind decides a both-heads round, so the
       // downwind ship is the sharper call — then the fuller purse as a tiebreak.
-      const dw=appState.game.downwindSide(att,def);
-      const fav=dw||(att.coins>=def.coins?"a":"d");
+      const fav=downwind||(att.coins>=def.coins?"a":"d");
       const on=appState.game.r()<.72?fav:(fav==="a"?"d":"a");
       bets.push({idx:s.idx,on});
     }
@@ -3654,7 +3723,11 @@ export function endReplay(){
     return;                 // leave evPushed where it was — pushEvents() resumes from the real
                             // frontier instead of skipping everything the replay failed to rebuild
   }
-  appState.evPushed=appState.resumeEvLen;   // events 0..resumeEvLen-1 are already in Firebase; push only what's new
+  /* (`appState.evPushed=appState.resumeEvLen` STOOD HERE — architecture item 47, 2026-09-18. It said
+     the right thing at the wrong moment: the replay's own publishNow() calls had already flushed the
+     whole rebuilt history to the crew by the time this line ran. The frontier is set where the number
+     is learned — resumeHostGame, src/orchestrator.js — and nothing between there and here may publish,
+     because pushEvents now refuses while this screen is rebuilding its own history.) */
   // The resumed host is live again: re-arm the full host-gone kit (onDisconnect + the reconnect
   // re-assert watcher). resumeHostGame already re-marked the bare onDisconnect for the reconnect
   // window; this is the durable arming, deliberately AFTER replaying clears so armHostGone()'s

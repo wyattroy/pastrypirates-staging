@@ -139,8 +139,13 @@ const shared = strip(fs.readFileSync(path.join(REPO, "src/shared/index.js"), "ut
 /* (5) THE TWO HALVES OF ONE BATTLE ARE DRAWN ALIKE (rule 8). */
 {
   const orch2 = strip(fs.readFileSync(path.join(REPO, "src/orchestrator.js"), "utf8"));
-  // the opening's words live in src/shared/words.js ("battle.opening") since 2026-09-13; the line is the sayAll + flash pair
-  const open = orch2.match(/const opening=sayAll\("battle\.opening"[^;]*;\s*await flash\(opening\.html[^;]*\)/);
+  /* the opening's words live in src/shared/words.js since 2026-09-13; the line is the sayAll + flash pair.
+     ⚠ ANCHORED ON THE STATEMENT, NOT ON WHICH LINE IT SPEAKS. This pinned the id "battle.opening", and when the
+     opening beat was given to `battle.loads` (the readable slot swap a few hundred lines up in orchestrator.js)
+     this assertion went red saying it could not find a line that is still right there. What it actually tests is
+     whether that line takes a SUBJECT — the id it happens to speak is not the fact. Any battle.* line drawn into
+     `opening` and flashed as opening.html is the statement this is about. */
+  const open = orch2.match(/const opening=sayAll\("battle\.\w+"[^;]*;\s*await flash\(opening\.html[^;]*\)/);
   if (!open) fail("could not find the battle's opening narration in orchestrator.js — re-anchor this assertion");
   else if (/subject/.test(open[0]))
     fail("the battle's OPENING line now sets a subject while the result withholds one — the two halves of one fight drawn two ways again");

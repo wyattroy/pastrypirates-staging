@@ -67,6 +67,20 @@ const { Game, roundCfg } = await import(u("src/engine/index.js"));
 const { DIRS } = await import(u("src/shared/index.js"));
 const { appState } = await import(u("src/state/index.js"));
 
+/* ⛔ SILENCE POLLY, WITH THE GAME'S OWN SEAM — re-anchored 2026-09-18 (architecture item 54c).
+   This probe ran flow.js's animateRimSweepIfAny() for real and died on
+   `TypeError: Cannot read properties of null (reading 'dataset')` at renderAskPrompt — because
+   the ride now passes through `pilotGate("rim.sweep")` (src/ui/flow.js:1410), the Pilot's lesson
+   card, which calls localAsk and needs a real #actionPanel this harness has no reason to build.
+   THE GAME IS NOT WRONG AND NEITHER IS THE LESSON: flow.js:1352 says it plainly — "a veteran never
+   reaches this function at all: pilotSpeaks() is false once the ladder is spent." A voyage after
+   the first is exactly the state this probe means to measure, and `pilotSilence()` is the seam the
+   game already exports for it (src/ui/pilot.js, added for Wyatt's ?endcard=1 shortcut, IN MEMORY
+   and never written to the stored state, so it cannot leak into a real browser).
+   pilot.js is NOT cache-busted below, so flow.js and this line share the one module instance. */
+const { pilotSilence } = await import(u("src/ui/pilot.js"));
+pilotSilence();
+
 const STRATS = ["pirate", "trader", "balanced", "rusher"];
 const SEAT = 0;
 

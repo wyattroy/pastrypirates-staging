@@ -14,6 +14,26 @@ export const MEASURE = `(() => {
   const R = el => { const r = el.getBoundingClientRect(); return { l:r.left, t:r.top, r:r.right, b:r.bottom, w:r.width, h:r.height }; };
   const mark = el => { if (!el.__qaId) el.__qaId = 'q' + (++__uid0); return el.__qaId; };
   const topmostAt = (el, x, y) => { const hit = document.elementFromPoint(x, y); return !!(hit && (hit === el || el.contains(hit) || hit.contains(el))); };
+  /* HOW AN ELEMENT IS NAMED IN A FINDING — ONE definition, because a second consumer appeared on
+     2026-09-17 (the paint-order probe at the foot of this function) and two copies of a naming rule
+     drift (CLAUDE.md, "when a second consumer of the same thing appears, converge").
+     ⚠ THE DOUBLE BACKSLASH IS LOAD-BEARING, and its absence was a live bug in the copy this
+     replaced: MEASURE is a TEMPLATE LITERAL, so a lone \s reaches the browser as a plain "s" and
+     the class list was being split on the letter s — "apMsg" was reported as "apM.g". Nothing about
+     the verdict changed, but every finding that named a coverer named it slightly wrong. */
+  /* AND AN ANONYMOUS NODE NAMES NOTHING. Measured on the real sail screen 2026-09-17: the thing
+     painted over the gold square is typewriterReveal()'s own <span> inside .apMsg — no id, no
+     class — which the old expression rendered as ". <span>". So climb to the nearest ancestor that
+     HAS a name, and keep the tag that was actually hit. */
+  const named = el => {
+    if (!el) return 'nothing (outside any element)';
+    let n = el;
+    while (n && n !== document.body && !n.id && !String(n.className||'').trim()) n = n.parentElement;
+    if (!n || n === document.body) n = el;
+    const cls = String(n.className||'').trim();
+    const label = (n.id ? '#' + n.id : '') + (cls ? '.' + cls.split(/\\s+/).slice(0,2).join('.') : '');
+    return ((label || n.tagName.toLowerCase()) + ' <' + el.tagName.toLowerCase() + '>').slice(0,60);
+  };
   // THINGS A PLAYER CLICKS — every interactive control the game presents, by class, deduped.
   const clickSel = '.apBtn, .btlBtn, .sailCell, .recipeCard, .bkoCard, .apSlider, #flipCoinWrap.active, .recipeList button';
   // vis() already excludes display:none / visibility:hidden / zero-size — so a lobby control that
@@ -40,10 +60,25 @@ export const MEASURE = `(() => {
      red-proofed in scripts/qa/checks_pointer_events_redproof.mjs, which builds both cases and
      asserts one passes and the other fails. */
   const clickable = el => getComputedStyle(el).pointerEvents !== 'none';
-  const interactive = [...document.querySelectorAll(clickSel)].filter(vis).filter(clickable).map(el => {
+  /* THE ELEMENTS ARE KEPT, not just their numbers: who is painted on top where two of them MEET is
+     a question about a pair, and a pair cannot be re-asked of the page once the page is gone. */
+  const interactiveEls = [...document.querySelectorAll(clickSel)].filter(vis).filter(clickable);
+  const interactive = interactiveEls.map(el => {
     const r = el.getBoundingClientRect(), cx = r.left + r.width/2, cy = r.top + r.height/2;
     const hit = document.elementFromPoint(cx, cy);
     const top = !!(hit && (hit === el || el.contains(hit) || hit.contains(el)));
+    /* ⭐ IS IT STILL TAPPABLE — ASKED AT FIVE POINTS, NOT ONE, and asked at all only since
+       2026-09-17. topmost (above) answers "is the CENTRE mine", and a centre is exactly the part
+       of a control something else is most likely to be sitting on. A control whose middle is under
+       a bubble but whose corners answer a tap is reachable, and reporting it as unreachable is the
+       cry-wolf failure HARD-WON-LESSONS keeps naming. So: the centre plus the four quarter-points,
+       and the COUNT is carried, not a verdict — "4/5 points reach it" is a fact the next reader can
+       act on; "covered" is not. Descendants count (a tap on a control's own label is a tap on the
+       control); an ANCESTOR does not, because a tap that lands on the parent is not a tap on this. */
+    const probes = [[cx, cy],
+      [r.left + r.width*0.25, r.top + r.height*0.25], [r.left + r.width*0.75, r.top + r.height*0.25],
+      [r.left + r.width*0.25, r.top + r.height*0.75], [r.left + r.width*0.75, r.top + r.height*0.75]];
+    const hits = probes.filter(([x, y]) => { const h = document.elementFromPoint(x, y); return !!(h && (h === el || el.contains(h))); }).length;
     // ROUND CONTROLS ARE ROUND. The prompt circles are 66px with border-radius:50%, and a
     // box-vs-box test calls two diagonal neighbours "overlapping" when their corners clip by a few
     // pixels while the circles themselves are comfortably apart. Measured on the phone leg: centres
@@ -54,17 +89,19 @@ export const MEASURE = `(() => {
     const round = br >= Math.min(el.getBoundingClientRect().width, el.getBoundingClientRect().height) / 2 - 1;
     return { id: mark(el), round, chain: (() => { const out = []; let n = el; while (n && n !== document.body) { if (n.__qaId) out.push(n.__qaId); n = n.parentElement; } return out; })(),
       tag: el.className.toString().slice(0,40) || el.id, text: (el.textContent||'').trim().slice(0,24), rect: R(el), topmost: top,
+      hits, hitPts: probes.length,        // how many of the five probe points the control itself answers
       /* a recipe card says WHICH card it is — front, back, or not yet mounted as a stack — because
          "the card behind counted as a control" is only diagnosable from that (2026-09-10) */
       rcpos: el.classList.contains('recipeCard') ? (el.dataset.rcpos || 'unmounted') : null,
       // WHAT covers it, not just THAT it is covered — a finding you cannot act on is half a finding.
-      coveredBy: top ? null : (hit ? ((hit.id ? '#'+hit.id : '') + '.' + String(hit.className||'').trim().split(/\s+/).slice(0,2).join('.') + ' <' + hit.tagName.toLowerCase() + '>').slice(0,60) : 'nothing (outside any element)'),
+      coveredBy: top ? null : named(hit),
       /* covered by a NARRATION BUBBLE — which Wyatt ruled is not a fault over a sail square (see rules 2 and 6 below) */
       underNarration: !top && !!(hit && hit.closest && hit.closest('.pp4Bub')),
       disabled: el.disabled || el.classList.contains('apDisabled') || el.getAttribute('aria-disabled') === 'true' }; });
   // THINGS A PLAYER READS — text that must not be clipped or overrun.
   const textSel = '.pname, .apMsg, .pp4Bub:not(.ambient), .prowRecipe, .pp4CerTitle, .coins, .bkoName';
-  const text = [...document.querySelectorAll(textSel)].filter(vis).map(el => {
+  const textEls = [...document.querySelectorAll(textSel)].filter(vis);
+  const text = textEls.map(el => {
     const inner = el.firstElementChild && getComputedStyle(el).overflow !== 'visible' ? el.firstElementChild : el;
     return { id: mark(el), tag: (el.className||'').toString().slice(0,30), isAsk: el.classList.contains('apMsg'),
       text: (el.textContent||'').trim().slice(0,30), rect: R(el), scrollW: el.scrollWidth, clientW: el.clientWidth,
@@ -89,7 +126,52 @@ export const MEASURE = `(() => {
     const sheet = rect.w >= innerWidth - 2 && rect.b >= innerHeight - 2;
     return { tag: el.id || el.className.toString().slice(0,30), rect, content: box, backdrop, sheet,
       contentH: box ? box.b - box.t : rect.h, contentW: box ? box.r - box.l : rect.w }; });
-  return { iw: innerWidth, ih: innerHeight, interactive, text, panels };
+  /* ─────────────────────────────────────────────────────────────────────────────────────────────
+     WHERE A CONTROL AND THE PROMPT'S OWN WORDS MEET — WHICH OF THE TWO IS PAINTED ON TOP.
+     Added 2026-09-17, because rule 6b had been answering that question by assuming it.
+
+     MEASURED (commit 8495d101, .planning/architecture-cleanup-shots/trial-conditions-sail-over-ask-*.png):
+     the Tier-1 trial reported "sailCell over '<captain>: tap to sail'" on six legs. It is the other
+     way round. #pp4Prompt is position:fixed z-index:30 and #sailHost is z-index:2 inside the board,
+     so the cream prompt bubble PAINTS OVER the gold square — 14% to 79% of it, median 70%, and the
+     pixel at the tap point is the bubble's cream. The square is still fully tappable, because the
+     radial prompt is pointer-events:none and .apMsg never sets it back: 40 of 40 probe points
+     returned div.sailCell, 4 of 4 real taps sailed the boat from inside the words' rect, and 4 of 4
+     drags separated the two. A rect-vs-rect overlap cannot tell those two stories apart, and the
+     rule reported the wrong one six times.
+
+     ⚠ WHY elementFromPoint ALONE IS NOT THE ANSWER, and this is the trap the old rule fell into
+     from the other side: hit testing SKIPS pointer-events:none, so asked plainly it says "the sail
+     square is on top" about a square that is visibly under cream. Hit order and paint order are
+     different facts. So the ask's own pointer-events is neutralised for the length of one
+     synchronous probe and restored immediately — no frame is rendered in between, so nothing on
+     screen changes and no transition can start (the game's CSS transitions are all per-property;
+     there is no transition:all anywhere in it). What comes back is paint order: who a tap WOULD
+     land on if the words could take taps at all, which is the same thing as who is drawn on top.
+
+     The box test below decides only WHICH PAIRS ARE WORTH PROBING. It is deliberately looser than
+     the judge's shapeOverlap (any positive intersection, no slack), so it is a superset and can
+     never decide a fault on its own — shapeOverlap stays the only thing that does.
+     ───────────────────────────────────────────────────────────────────────────────────────────── */
+  const askEls = textEls.filter(el => el.classList.contains('apMsg'));
+  const meetings = [];
+  for (const ctl of interactiveEls) for (const ask of askEls) {
+    if (ctl === ask || ctl.contains(ask) || ask.contains(ctl)) continue;        // nested — one cannot cover the other
+    const a = ctl.getBoundingClientRect(), b = ask.getBoundingClientRect();
+    const l = Math.max(a.left, b.left), rr = Math.min(a.right, b.right);
+    const t = Math.max(a.top, b.top), bb = Math.min(a.bottom, b.bottom);
+    if (rr <= l || bb <= t) continue;
+    const x = (l + rr) / 2, y = (t + bb) / 2;
+    const was = ask.style.pointerEvents;
+    let hit = null;
+    try { ask.style.pointerEvents = 'auto'; hit = document.elementFromPoint(x, y); }
+    finally { if (was) ask.style.pointerEvents = was; else ask.style.removeProperty('pointer-events'); }
+    meetings.push({ ctl: mark(ctl), ask: mark(ask),
+      paints: (hit && (hit === ctl || ctl.contains(hit))) ? 'control'
+            : (hit && (hit === ask || ask.contains(hit))) ? 'ask' : 'other',
+      top: named(hit), at: [Math.round(x), Math.round(y)] });
+  }
+  return { iw: innerWidth, ih: innerHeight, interactive, text, panels, meetings };
 })()`;
 
 // judge a measurement. Returns [{ok, rule, what}] — one entry per check that ran. General rules only.
@@ -172,14 +254,53 @@ const off = m.interactive.filter(e => !e.disabled && !withinVP(e.rect)).map(e =>
   //     board, not covering the game's own words: hold-the-sea reveals the board beneath a prompt,
   //     it does not reveal text beneath a button. Scoped to the prompt's own message so narration
   //     bubbles over the sea (which D-38 explicitly permits) are left alone.
+  /* ⭐ WHICH OF THE TWO IS ON TOP IS A MEASUREMENT, AND UNTIL 2026-09-17 THIS RULE NEVER TOOK IT.
+     It fired on any rect-vs-rect overlap, with no paint test and no hit test, and named the control
+     as the culprit by assumption. On six legs of the Tier-1 trial (commit 8495d101) that produced
+     "control covering the question it answers: sailCell over '<captain>: tap to sail'" — with the
+     truth the other way round: the cream prompt bubble is painted OVER the gold square (z-index 30
+     vs 2; 14–79% of it, median 70%), and the square stays fully tappable because the radial prompt
+     is pointer-events:none — 40 of 40 probe points returned div.sailCell, 4 of 4 real taps sailed
+     the boat from inside the words' rect, 4 of 4 drags separated them. See MEASURE above.
+
+     WYATT'S RULE, given the same day and now the fence in docs/INTENDED-BEHAVIOUR.md §0, verbatim:
+     "the failing rule is 'unless it hides a button that the player cannot access by either waiting
+     for 0.5 seconds or shifting the screen themselves (eg. dragging the board)'". So a cover-up is
+     a fault only when a BUTTON is hidden and the player can neither wait it out nor move the screen
+     to reach it. A button that still answers a tap where it stands is not hidden from the player at
+     all, whatever is drawn on it.
+
+     Hence the two directions, told apart by the measurement rather than by the geometry:
+       - the CONTROL paints over the words  -> the question is unreadable there. Still a fault.
+       - the WORDS paint over the control   -> the words are readable, and the control below is
+                                               reachable (the count says how reachable). Not a
+                                               fault, and the pass line NAMES which is on top so
+                                               the next reader never has to re-derive it.
+     Whether a control under the words is unreachable is rule 2's subject, not this one's — this
+     rule is about the question being legible, and two rules answering one question is how they
+     drift (rule 23). */
   const askText = m.text.filter(t => /apMsg/.test(t.tag || "") || t.isAsk);
-  const covers = [];
+  const covers = [], onTop = [];
+  /* how much of the WORDS' box the control's box takes — the number goes in the message, because a
+     button clipping 3% of a long sentence and one sitting on all of it read identically without it */
+  const pctOfWords = (a, b) => (b.w > 0 && b.h > 0)
+    ? Math.round(100 * Math.max(0, Math.min(a.r, b.r) - Math.max(a.l, b.l)) * Math.max(0, Math.min(a.b, b.b) - Math.max(a.t, b.t)) / (b.w * b.h)) : 0;
   for (const ctl of m.interactive) for (const t of askText) {
     if (!t.text) continue;
     if (ctl.chain && t.chain && (ctl.chain.includes(t.id) || t.chain.includes(ctl.id))) continue;   // nested — fine
-    if (shapeOverlap(ctl, { rect: t.rect, round: false }, 4)) covers.push(`"${ctl.text || ctl.tag}" over "${t.text}"`);
+    if (!shapeOverlap(ctl, { rect: t.rect, round: false }, 4)) continue;
+    const meet = (m.meetings || []).find(x => x.ctl === ctl.id && x.ask === t.id);
+    const ctlName = ctl.text || ctl.tag, pct = pctOfWords(ctl.rect, t.rect);
+    // NO EVIDENCE GETS THE STRICT ANSWER, never the lenient one (QA-PROCESS §"the rules that make
+    // this hold", rule 1) — an older measurement with no `meetings` reads exactly as it used to.
+    if (!meet) covers.push(`"${ctlName}" covers "${t.text}" (${pct}% of the words; which is on top was NOT measured)`);
+    else if (meet.paints === 'control') covers.push(`"${ctlName}" covers "${t.text}" (paints over ${pct}% of the words; ${meet.top} answers a tap at ${meet.at.join(",")})`);
+    else if (meet.paints === 'ask') onTop.push(`"${t.tag || 'apMsg'}" paints over "${ctl.tag}" (${pct}% of the words${ctl.hits > 0 ? `; still tappable — ${ctl.hits}/${ctl.hitPts} points reach it` : `; the control answers no tap — see not-occluded`} — not a fault)`);
+    else onTop.push(`neither "${ctlName}" nor "${t.text}" is on top where they meet — ${meet.top} is (not this rule's fault)`);
   }
-  F(covers.length === 0, "no-cover-ask", covers.length ? `control covering the question it answers: ${covers.slice(0,4).join(", ")}` : "the question is never covered by its own buttons");
+  F(covers.length === 0, "no-cover-ask", covers.length ? `control covering the question it answers: ${covers.slice(0,4).join(", ")}`
+    : onTop.length ? `the question is never hidden by its own buttons — ${[...new Set(onTop)].slice(0,3).join("; ")}`
+    : "the question is never covered by its own buttons");
 
   // 5. no content card is stretched far past its content (the empty-tower class). Backdrops exempt.
   const empty = m.panels.filter(p => !p.backdrop && !p.sheet && p.content && p.rect.h > p.contentH + 90).map(p => `${p.tag} (${p.rect.h|0}px box vs ${p.contentH|0}px content)`);

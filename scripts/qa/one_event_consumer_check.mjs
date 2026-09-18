@@ -61,7 +61,13 @@ function fnBody(src, name) {
        no longer WRITES whose turn it is from whichever seat an event names (that moved the top bar to the defender's coin).
        Every surface reads it from the stream (util.js whoseTurn); scripts/qa/whose_turn_shown_once_check.mjs holds that
        nothing in this consumer writes the turn again. */
-    const SEQ = ["syncLogLines(", "playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playVictoryBoard("];
+    /* ARCHITECTURE ITEM 50 (2026-09-18): "syncLogLines(" was the FIRST step here, and it is gone on purpose — the
+       captain's log is not a reaction to an event, it is the voyage's written record, and a record built only from
+       the events THIS SCREEN WATCHED GO BY cannot survive a reload (a host rebuilds its history with `replaying`
+       true, the drain refuses it, and the host's own log opened empty — 10 rows -> 0, measured twice). It is read
+       from game.events where the log is DRAWN now, so this consumer still fills it through its own render() step.
+       scripts/qa/captains_log_one_record_check.mjs holds that nothing else builds or empties the log. */
+    const SEQ = ["playForEvent(", "animateRimSweepIfAny(", "render(", "spawnPops(", "playVictoryBoard("];
     let last = -1, ordered = true;
     for (const step of SEQ) {
       const at = body.indexOf(step);
@@ -69,7 +75,12 @@ function fnBody(src, name) {
       if (at < last) { fail(`consumeEvent(): ${step}) appears out of order — the guest's animate-before-render ordering is load-bearing`); ordered = false; }
       last = at;
     }
-    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (log → SOUND → sweep → render → pops → the ending)");
+    if (ordered) pass("consumeEvent() holds the full drawing sequence in the proven order (SOUND → sweep → render → pops → the ending)");
+    /* AND THE LOG IS NOT ONE OF THEM — item 50's deletion asserted, not merely dropped from the list above. */
+    if (!body.includes("syncLogLines("))
+      pass("consumeEvent() does not build the captain's log — the record is read from game.events where it is drawn (item 50)");
+    else
+      fail("consumeEvent() calls syncLogLines() again — the captain's log would go back to holding only the events this screen watched go by, which is what emptied a reloading host's own log (item 50)");
     /* The specific regression his playtest caught, asserted on its own so a future reorder fails
        with the reason rather than with "out of order". */
     const iSound = body.indexOf("playForEvent("), iSail = body.indexOf("animateSailRoute(");

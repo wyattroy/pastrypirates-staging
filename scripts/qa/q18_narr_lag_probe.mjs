@@ -69,7 +69,7 @@ console.log("  both seats driving\n");
 for (let i = 0; i < Math.ceil(SECONDS / 2); i++) await sleep(2000);
 
 const hLog = JSON.parse(await H.ev(HARVEST)), gLog = JSON.parse(await G.ev(HARVEST));
-killAll();
+await killAll();
 
 console.log(`  host recorded ${hLog.length} line(s); guest recorded ${gLog.length}`);
 if (!hLog.length || !gLog.length) {

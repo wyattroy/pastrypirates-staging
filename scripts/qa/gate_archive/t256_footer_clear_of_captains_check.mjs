@@ -1,7 +1,39 @@
 /* T-256 — DOES `#legalFooter` PAINT OVER `#pp4Cap` ON PHONE WIDTH?
  *
- *   node scripts/qa/t256_footer_clear_of_captains_check.mjs
- *   node scripts/qa/t256_footer_clear_of_captains_check.mjs --after   (names the pose "after")
+ *   node scripts/qa/gate_archive/t256_footer_clear_of_captains_check.mjs
+ *   node scripts/qa/gate_archive/t256_footer_clear_of_captains_check.mjs --after   (names the pose "after")
+ *
+ * ⛔ RETIRED TO THE ARCHIVE 2026-09-18 (architecture item 54b), AND WHY — because the bug it looks
+ * for can no longer happen, so it can no longer go red whatever the game does. A check that cannot
+ * fail is not protection.
+ *
+ *   WHAT MOVED: Wyatt, 2026-09-06, having played a whole solo voyage on his phone — "It should only
+ *   be visible on the pre-game screen, not any time during the game." `index.html` now carries
+ *   `body.pp4Stage #legalFooter { display: none; }`, so the footer leaves the screen the moment the
+ *   board mounts. There is nothing left on the stage to paint over the captains card.
+ *
+ *   MEASURED, not reasoned — this file, run 2026-09-18 with its staging wait corrected below:
+ *     phone  390x664   #legalFooter visible=false display=none   overlap 0px   4 of 4 rows painted
+ *     tablet 820x1180  #legalFooter visible=false display=none   overlap 0px   4 of 4 rows painted
+ *   Both seats now report NOT APPLICABLE rather than the silent PASS the old code would have given.
+ *
+ *   AND IT CARRIED A COPIED FAULT UNTIL TODAY. Its staging wait was taken verbatim from
+ *   `t142_captains_under_modal_check.mjs` (archived beside this file, commit 654da0a1) and shared
+ *   its bug: `body.pp4Stage` plus more than one `.player-row` is satisfied all through the recipe
+ *   draft while `capEmptyTick()` holds #pp4Cap at an inline `visibility:hidden` for Wyatt's
+ *   empty-box rule. Because the wait is checked BEFORE the loop advances, this probe stopped there
+ *   every run, never picked a recipe, and then measured a bar nobody had painted — whose visible
+ *   row count is zero, which lands `lastRowCoveredPx` at 0 and READS AS PASS. The fault ran away
+ *   from the alarm: a silently green gate, which is worse than a red one. Both are fixed here, so
+ *   this stays a usable posing instrument rather than a landmine.
+ *
+ *   THE STRUCTURAL FACT IT WAS REACHING FOR IS NOW GATED, in the chain, in ~80ms:
+ *   `scripts/qa/footer_leaves_the_stage_check.mjs` — one css rule takes the footer off the stage
+ *   (by display, keyed on the board's own class), nothing in src/ writes the footer's style, and
+ *   the captains card's reservation reads the footer's real measured height and books zero when it
+ *   reads display:none. It stays out of `npm test` for the reason docs/DRIVING-THE-GAME.md §3d
+ *   already gives: a probe that drives a browser through several game starts does not belong in
+ *   the chain; gate the pure logic instead.
  *
  * WHY THIS IS A POSE AND NOT A RATE (rule 26). The claim is a geometric one — two fixed-position
  * bars sharing the bottom edge — settled by two painted rectangles, not by re-sailing a voyage.
@@ -22,7 +54,7 @@
  *
  * NO GAME CODE IS TOUCHED BY THIS FILE. It is an instrument.
  */
-import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
+import { serve, launch, attach, killAll, sleep } from "../../mp_rig.mjs";   /* one level deeper since the archive move */
 import fs from "node:fs";
 import path from "node:path";
 
@@ -101,7 +133,15 @@ const MEASURE = `JSON.stringify((()=>{
      regardless of scroll position), so a row's OWN geometric rect can legitimately extend past
      cap's box with nothing actually painted there. The number that matters is what's VISIBLE:
      the row's rect intersected with cap's own rect, THEN checked against the footer. */
-  const rows = [...cap.querySelectorAll('.player-row')].filter(vis);
+  /* THE ROW FILTER DECLARES ITSELF. vis() drops rows, so both numbers are reported on every
+     run — a silent 0-of-0 and a silent 0-of-4 look identical here and the difference is the whole
+     result. Which way the error runs: AWAY from the alarm. A dark bar yields zero visible rows,
+     which lands lastRowCoveredPx at 0 and reads as PASS, so a zero row count is reported as NOT
+     MEASURED by the verdict below, never as a pass.
+     (No backticks in this comment: it lives inside a template literal.) */
+  const rowsAll = [...cap.querySelectorAll('.player-row')];
+  const rows = rowsAll.filter(vis);
+  const capVisibility = getComputedStyle(cap).visibility;
   let lastRowCoveredPx = 0, lastRowText = null, lastRowRect = null, lastRowVisibleRect = null;
   if (footerVisible && rows.length) {
     const last = rows[rows.length - 1];
@@ -119,10 +159,11 @@ const MEASURE = `JSON.stringify((()=>{
   return {ok:true,
     viewport: {w: innerWidth, h: innerHeight, dpr: devicePixelRatio},
     stage: document.body.classList.contains('pp4Stage'), side,
-    footerVisible, footerRect,
-    capVisible, capRect,
+    footerVisible, footerRect, footerDisplay: getComputedStyle(footer).display,
+    capVisible, capRect, capVisibility,
     overlapPx,
-    rowCount: rows.length, lastRowText, lastRowRect, lastRowVisibleRect, lastRowCoveredPx,
+    rowCount: rows.length, rowCountAll: rowsAll.length, rowsDropped: rowsAll.length - rows.length,
+    lastRowText, lastRowRect, lastRowVisibleRect, lastRowCoveredPx,
   };
 })())`;
 
@@ -146,17 +187,28 @@ try {
     await C.waitFor(`(()=>{const m=document.getElementById('nameModalInput');return !!(m&&m.offsetParent)})()`, 15000, `${seat.tag} name`);
     await C.ev(`document.getElementById('btnNameConfirm').click();true`);
 
-    /* wait until the stage is up AND the captains bar has more than one row in it */
+    /* wait until the stage is up AND the captains bar is actually PAINTED.
+       ⛔ THE THIRD CLAUSE IS THE CORRECTION, 2026-09-18 (architecture item 54b). This wait was
+       copied verbatim from t142_captains_under_modal_check.mjs and carried its fault with it: the
+       first two clauses alone are satisfied all through the recipe draft, while `capEmptyTick()`
+       (src/ui/stage.js) holds #pp4Cap at an INLINE `visibility:hidden` for Wyatt's empty-box rule
+       (2026-09-09: "for this whole section of the pre-game where the captain's box is empty, hide
+       it ... make it appear after the recipe has been selected"). The bar keeps its rows the whole
+       time, so the wait passed on a screen where the bar was already dark — and because it is
+       checked BEFORE the loop advances, the probe stopped here every run and never picked a recipe
+       at all. It then measured a bar nobody had painted. t142's copy was corrected the same way in
+       commit 654da0a1. */
     let staged = false;
     for (let i = 0; i < 40; i++) {
       staged = await C.ev(`(()=>{const c=document.getElementById('pp4Cap');
-        return !!(document.body.classList.contains('pp4Stage') && c && c.querySelectorAll('.player-row').length>1)})()`);
+        return !!(document.body.classList.contains('pp4Stage') && c && c.querySelectorAll('.player-row').length>1
+          && getComputedStyle(c).visibility==='visible')})()`);
       if (staged) break;
       await C.ev(ADVANCE); await sleep(800);
     }
     if (!staged) {
-      console.log(`  ${seat.tag}: never reached the stage with a populated CAPTAINS panel — NOT MEASURED`);
-      results[seat.tag] = { ok: false, why: "never reached a populated stage" };
+      console.log(`  ${seat.tag}: never reached the stage with a PAINTED CAPTAINS panel — NOT MEASURED`);
+      results[seat.tag] = { ok: false, why: "never reached a stage with a painted captains bar" };
       continue;
     }
     await sleep(600);
@@ -189,8 +241,9 @@ try {
     console.log(`\n=== ${seat.tag} ===  ${png}`);
     if (!m.ok) { console.log(`  NOT MEASURED: ${m.why}`); continue; }
     console.log(`  viewport ${m.viewport.w}x${m.viewport.h} @${m.viewport.dpr}x   body: stage=${m.stage} side=${m.side}`);
-    console.log(`  #legalFooter visible=${m.footerVisible} rect ${m.footerRect.left}..${m.footerRect.right} x ${m.footerRect.top}..${m.footerRect.bottom} (h=${m.footerRect.h})`);
-    console.log(`  #pp4Cap      visible=${m.capVisible} rect ${m.capRect.left}..${m.capRect.right} x ${m.capRect.top}..${m.capRect.bottom} (h=${m.capRect.h})`);
+    console.log(`  #legalFooter visible=${m.footerVisible} display=${m.footerDisplay} rect ${m.footerRect.left}..${m.footerRect.right} x ${m.footerRect.top}..${m.footerRect.bottom} (h=${m.footerRect.h})`);
+    console.log(`  #pp4Cap      visible=${m.capVisible} visibility=${m.capVisibility} rect ${m.capRect.left}..${m.capRect.right} x ${m.capRect.top}..${m.capRect.bottom} (h=${m.capRect.h})`);
+    console.log(`  captain rows: ${m.rowCountAll} in the DOM, ${m.rowCount} painted (${m.rowsDropped} dropped by the visibility filter)`);
     console.log(`  vertical overlap between the two bars: ${m.overlapPx}px`);
     console.log(`  last player-row ("${m.lastRowText}"): ${m.lastRowCoveredPx}px of its VISIBLE (cap-clipped) area covered by #legalFooter`);
   }
@@ -200,6 +253,20 @@ try {
   for (const seat of SEATS) {
     const m = results[seat.tag];
     if (!m || !m.ok) { console.log(`${seat.tag}: NOT MEASURED — ${m ? m.why : 'no result'}`); continue; }
+    /* A BAR WITH NO PAINTED ROWS CANNOT ANSWER THIS QUESTION, AND MUST NOT ANSWER IT "PASS".
+       lastRowCoveredPx is 0 when there is no last row, which is the same number a clear bar gives.
+       Before this, a dark bar scored a silent green (2026-09-18, architecture item 54b). */
+    if (!m.rowCount) {
+      console.log(`${seat.tag}: NOT MEASURED — the CAPTAINS bar has ${m.rowCountAll} row(s) in the DOM and none painted (visibility=${m.capVisibility}); a bar nobody drew cannot be covered by anything`);
+      continue;
+    }
+    /* AND NEITHER CAN A SCREEN THE FOOTER HAS LEFT. `body.pp4Stage #legalFooter{display:none}`
+       (index.html) took the footer off every staged screen on Wyatt's 2026-09-06 ruling. That is
+       not this probe passing — it is the bug being unreachable. */
+    if (!m.footerVisible) {
+      console.log(`${seat.tag}: NOT APPLICABLE — #legalFooter is display=${m.footerDisplay} on the stage, so it is not on the screen to cover anything`);
+      continue;
+    }
     measured++;
     if (m.lastRowCoveredPx > 0) {
       if (seat.expectPhoneShape) {

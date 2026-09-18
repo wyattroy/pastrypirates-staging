@@ -3,6 +3,35 @@
  *   node <this file>            # the burst case  -> expected RED
  *   node <this file> --extra=0  # the red-proof   -> expected GREEN
  *
+ * ⛔ RETIRED TO THE ARCHIVE 2026-09-18 (architecture item 54c), AND IT IS THE CLEANEST EXAMPLE IN
+ * THE SUITE OF WHY AN UNRUN RED MUST DEFEND ITS EVIDENCE BEFORE ANYBODY ACTS ON IT.
+ *
+ *   IT IS RED BY DESIGN. Read its own two lines above: the default run is the burst case and is
+ *   MEANT to fail. It is a demonstration, not a gate — it can never be wired into `npm test`,
+ *   because a chain entry that exits 1 on purpose stops the build. Counted among "the uncalled
+ *   reds" it looked like sixteen problems; it was fifteen and an exhibit.
+ *
+ *   AND IT ACCUSES A FILE THAT IS NOT IN THE REPO. Its failure message names
+ *   "w7b_frames.mjs line 66 (r.ev>=n-1 && r.ev<=n+1)". Searched 2026-09-18 across the whole of
+ *   reachable history (`git log --all --name-only`, and `-S` on the filter text): NO file named
+ *   w7b_frames.mjs has ever existed here, and the only occurrence of that filter anywhere is
+ *   inside THIS file. The commit that added it (446d8e6a, 2026-08-30) says so in its own title —
+ *   "preserve the check that resolved the contradiction, OUT OF THE SCRATCHPAD". The harness it
+ *   argues with lived in a session's scratchpad and was never committed. The two files that DO
+ *   carry the w7b name — w7b_crew_sail_measure.mjs and w7b_sail_route_frontier_check.mjs — do not
+ *   contain the accused window at all.
+ *
+ *   SO WHAT IS PRESERVED HERE IS AN ARGUMENT, NOT A CHECK, and the argument is still worth having:
+ *   the guest's wire keeps pushing into `game.events` while the consumer is parked, so any
+ *   instrument that keeps frames by "this tier's events.length is within 1 of the host's" throws
+ *   away exactly the frames of the ride. Anyone who measures a guest's animation by event index
+ *   should read this first. It is documentation in the archive's own sense — one `git mv` from
+ *   runnable — rather than something the suite should ever call.
+ *
+ *   ⚠ IT WOULD NOT RUN ON WINDOWS AS WRITTEN: `launch(DBG, "/tmp/chrome-w7c")` is a POSIX profile
+ *   path. Left exactly as it is, because changing it would be a repair to a file that is being
+ *   retired, and the next reader needs to know.
+ *
  * THE SUBJECT IS THE INSTRUMENT, NOT THE WALKER. The crew harness that produced "the guest slid on
  * 7 of 14 sails" (w7b_frames.mjs) keeps a traced frame only when THAT TIER'S OWN g.events.length
  * sat inside [n-1, n+1], where n is the host's events.length at the moment the sail was spotted:
@@ -29,8 +58,8 @@
    outright, which resolves on exactly ONE machine and dies everywhere else with a module-not-found
    that reads like a missing file rather than a typed path. Same fault CEO Review 37 caught in
    whose_turn_one_fact_check.mjs; tree_health_check case 5 now fails the build on either spelling. */
-import { serve, launch, attach, killAll, sleep } from "../mp_rig.mjs";
-import { gameURL } from "../lib/chrome.mjs";
+import { serve, launch, attach, killAll, sleep } from "../../mp_rig.mjs";   /* one level deeper since the archive move */
+import { gameURL } from "../../lib/chrome.mjs";
 
 const PORT = 8547, DBG = 9447;
 const EXTRA = Number((process.argv.find(a => a.startsWith("--extra=")) || "--extra=0").slice(8));

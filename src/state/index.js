@@ -109,8 +109,11 @@ export const appState = {
   // (util.js whoseTurn), and this decides it for one phase only, the recipe draft. It replaced curSeat (architecture
   // item 3, 2026-09-16), which every prompt wrote and the top bar drew as the turn.
   askedSeat: null,
-  inBattlePrompt: false,
-  spectatingBattle: false,
+  /* (`inBattlePrompt` — "this screen's own fight prompt is up" — and `spectatingBattle` — "a fight's snapshot is live here" — stood here.
+     Between them they decided whether a narration line or a fight's words were DRAWN on a crew guest's screen, and the host had no such
+     flag: the two screens were kept in step by discipline and drifted. Deleted by architecture item 8, 2026-09-17, with the filters that
+     were their only readers — a line is drawn when it arrives, fight or no fight. `spectatingBattle`'s other reader, the clash's
+     once-per-fight edge, went to the one event consumer in architecture item 4.) */
   // The clock's six fields left with the shot clock; shotClockPaused and autoPausedByHide left
   // with play/pause (Wyatt's A-10, same day). Re-engineered pause starts from git history here.
   // /4 fast-forward: true while a one-shot ⏩ skip runs (armed by the ribbon chip, stage.js;

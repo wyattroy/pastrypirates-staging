@@ -185,6 +185,31 @@ class Game{
       return {cells:s.map(([x,y])=>[x-mx,y-my]),shapeIdx,rot,flip};
     };
     const rects=[],rectsMeta=[];
+    /* THE SEA MUST STAY ONE SEA. Would adding `cand` leave any open-water square unreachable from
+       Tortuga? Rim cells are never a stopping point (the wind sweeps you off), so they are treated
+       as impassable here exactly as the game's own routing treats them — the same predicate the
+       dock placement below already uses, which is why this is that rule applied one step earlier
+       rather than a second opinion about what "water" means. */
+    const sealsWater=(cand)=>{
+      const taken=new Set();
+      for(const r2 of rects)for(const c of r2)taken.add(c[0]+","+c[1]);
+      for(const c of cand)taken.add(c[0]+","+c[1]);
+      const open=c=>c[0]>=0&&c[1]>=0&&c[0]<n&&c[1]<n
+        &&!this.blocked(c)&&!this.onRim(c)&&!taken.has(c[0]+","+c[1]);
+      if(!open(this.home))return true;                 // never wall in Tortuga itself
+      let sea=0;
+      for(let x=0;x<n;x++)for(let y=0;y<n;y++)if(open([x,y]))sea++;
+      const seen=new Set([this.home[0]+","+this.home[1]]),q=[this.home];
+      while(q.length){
+        const c=q.shift();
+        for(const d of Object.values(DIRS)){
+          const o=[c[0]+d[0],c[1]+d[1]],k2=o[0]+","+o[1];
+          if(seen.has(k2)||!open(o))continue;
+          seen.add(k2);q.push(o);
+        }
+      }
+      return seen.size!==sea;
+    };
     for(let k=0;k<this.ings.length;k++){
       let done=false;
       // ORDER IS LOAD-BEARING — each iteration of this loop calls shapeFor(), which consumes
@@ -205,6 +230,16 @@ class Game{
             return Object.values(DIRS).some(d=>this.rim.has((c[0]+d[0])+","+(c[1]+d[1])));
           }))continue;
           if(cellsR.some(c=>rects.some(r2=>r2.some(d=>man(c,d)<spacing))))continue;
+          /* ⛔ AND IT MUST NOT WALL OFF ANY WATER. Wyatt, 2026-09-18, with a photograph:
+             "the islands have trapped in a player! fix the layout algorithm to prevent this."
+             Measured on the generator as it stood: 43 of 400 boards (10.8%) held water no captain
+             could ever reach — pockets of up to 15 squares — because every other constraint here
+             is LOCAL (does this shape fit, is it far enough from its neighbours, does it leave the
+             trade-wind lane) and none of them asks the one global question: can you still sail
+             everywhere? A ring of islands satisfies every local rule and seals the middle.
+             Checked incrementally, which is sound because adding an island can only ever REMOVE
+             water: if the sea is whole after island k it was whole after k-1. */
+          if(sealsWater(cellsR))continue;
           rects.push(cellsR);rectsMeta.push({shapeIdx,rot,flip});done=true;break;
         }
         if(done)break;
@@ -1153,7 +1188,7 @@ class Game{
     const price=this.cratePrice(ing);
     // a bot buys when it needs the crate and can afford today's price — or, if it trades for a
     // living, when the crate is leverage somebody else at the table plainly needs (rule 4 fodder)
-    let got=h?"treasure":"dockhand",buy=null;
+    let buy=null;
     if(this.cfg.dockBuy&&price!==null){
       const why=this.wantsCrate(p,ing,price),needsIt=why==="needs";
       if(why){
@@ -1165,19 +1200,37 @@ class Game{
         const bm=needsIt?this.blackMarketPick(p,ing):null;
         if(bm&&(bm.worthIt||p.coins<price))buy=this.barterCrate(p,ing,bm.give);
         if(!buy&&p.coins>=price)buy=this.buyCrate(p,ing);
-        if(buy)got="bought";
       }
     }
-    /* `price` IS THE CRATE'S PRICE AND `paid` IS WHAT LEFT THE PURSE, and they are not the same number — a dock records a price
-       whether or not anybody bought. Wyatt, 2026-09-17: "when i passed on buying a crate at a dock, 3 coins dropped out of my purse;
-       even though i didn't buy anything". The screen was reading `price` because nothing else said what was paid; now the event says
-       it. A barter pays in crates, so its `paid` is 0. */
-    this.ev({t:"dock",p:p.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
+    this.dockDone(p,ing,h,price,buy);
+    return true;
+  }
+  /* WHAT A DOCK TURN DID, SAID ONCE — THE ONE PLACE A DOCK EVENT IS WRITTEN (architecture item 49, 2026-09-18).
+     Every berth ends here: a bot's doDock above, and a person's humanDock (src/ui/flow.js), which hands over what the
+     captain DECIDED — the flip, the price the crate was offered at, and the purchase, the barter or the refusal — and
+     lets this line say it.
+
+     IT USED TO BE WRITTEN TWICE, kept in step by hand, and on 2026-09-17 the two fell out of step for real: this one
+     gained `paid` and the human berth's copy did not, so a PERSON's purchase emitted `paid=undefined`, the spending
+     door never fired, and his coins stopped being drawn leaving his purse. It reached staging. Measured on a phone,
+     his own seat, same gesture: purse 5→6→7→8→5, one silent step of 3, with ZERO coins seen leaving; after the field
+     reached both, 3→4→5→6→5→4→3, a coin at a time, 13 samples in flight. There is nothing left to keep in step —
+     scripts/qa/dock_event_one_producer_check.mjs fails if a second producer ever appears.
+
+     `price` IS THE CRATE'S PRICE AND `paid` IS WHAT LEFT THE PURSE, and they are not the same number — a dock records
+     a price whether or not anybody bought. Wyatt, 2026-09-17: "when i passed on buying a crate at a dock, 3 coins
+     dropped out of my purse; even though i didn't buy anything". A barter pays in crates, so its `paid` is 0.
+
+     THE PRICE IS THE CALLER'S TO CAPTURE, and it must be read BEFORE the purchase. Buying takes the crate off the
+     shelf and the price climbs as the island empties (v2 rule 11), so a price re-read in here would be the price of
+     the NEXT crate, not the one just bought. Both berths read it before they buy, and the gate holds them to it. */
+  dockDone(p,ing,heads,price,buy){
+    this.ev({t:"dock",p:p.idx,ing,heads:heads?1:0,got:buy?"bought":(heads?"treasure":"dockhand"),
+      price:buy&&buy.paidIng?0:price,
       paid:buy&&!buy.paidIng?price:0,
       paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
       left:buy?undefined:this.dockLeft(p,ing),
       black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
-    return true;
   }
   /* WHY NO CRATE CAME ABOARD — the ONE place both berths answer it, so a bot's dock and a human's can never
      tell two stories about the same shelf (engine doDock above, and the human's flow.js humanDock).
@@ -3316,7 +3369,7 @@ class Game{
   /* ================= THE BAKE-OFF (v2.1) =================
      Arriving at Tortuga with a full recipe no longer wins the voyage — it lights the ovens. The
      captain must then name their five ingredients back in the recipe's own order, under bowls that
-     have been shuffled. See v2bakeoff/src/engine/bakeoff.js for the pure core. */
+     have been shuffled. See src/engine/bakeoff.js for the pure core. */
   // Same predicate checkFinish has always used, extracted so both endings share one gate and can
   // never drift apart.
   /* IN PLAY — one predicate, and the ONLY thing that decides whether a captain is on the board.
@@ -3411,6 +3464,18 @@ class Game{
   }
   // Every captain at the ovens, in turn order. Bakes resolve together at the END of a day so that
   // arriving on the same day is a fair race rather than an accident of seat order (Wyatt's ruling).
+  /* ⭐ WHAT ANOTHER LOOK COSTS, AND WHETHER A PURSE CAN STAND ONE — THE ONE PLACE EITHER IS DECIDED
+     (architecture item 17, 2026-09-18). bakeRewatch charges through these two; the re-watch button
+     greys itself with them on the baker's own screen and on a remote captain's, so a purse that is
+     one coin short and a button that stays live can no longer be two different answers.
+     They used to be three: bakeRewatch's own `p.coins<cost`, flow.js's `player.coins>=BAKE_REWATCH_COST`,
+     and a third in orchestrator.js's guest branch that carried its own price (`prompt.cost||1`) and
+     its own running purse. Any change to what a look costs would have moved one of them.
+     `p` is taken so a price that ever stops being one flat coin — a captain's second look costing
+     more, say — has somewhere to be derived. THERE IS NO SECOND KNOB: if the price moves, it moves
+     here, and every screen follows. */
+  rewatchCost(p){ return BAKE_REWATCH_COST; }
+  canRewatch(p){ return !!p&&p.coins>=this.rewatchCost(p); }
   /* PAY FOR ANOTHER LOOK. Buys `n` replays of the shuffle at BAKE_REWATCH_COST each, and returns
      how many were actually AFFORDED — which is not always how many were asked for, so the caller
      must not assume. Coins are the only thing this minigame spends, and the only reason a rewatch
@@ -3421,15 +3486,24 @@ class Game{
      engine already applied. Emits an event so the spend shows up in the captain's log rather than
      coins quietly draining, and so a scrubbed replay can account for them.
 
-     Called with the whole count at once on replay, and one at a time live — see bakeTurnLive. */
+     Called with the whole count at once on replay, one at a time live from the captain's own tap
+     (flow.js onRewatch), and one at a time from a remote captain's bench moment (orchestrator.js
+     chargeRewatches) — three callers, this one charge. */
   bakeRewatch(p,n){
-    const cost=BAKE_REWATCH_COST;
-    let bought=0;
+    let bought=0,paid=0;
     for(let i=0;i<(n||0);i++){
-      if(p.coins<cost)break;
-      p.coins-=cost;bought++;
+      if(!this.canRewatch(p))break;
+      const cost=this.rewatchCost(p);
+      p.coins-=cost;paid+=cost;bought++;
     }
-    if(bought)this.ev({t:"rewatch",p:p.idx,n:bought,paid:bought*cost});
+    /* `looks`, NOT `n` — measured 2026-09-18, architecture item 17. The broadcast stamps its own
+       serial onto the wire copy of every event (`wire.n=appState.evPushed`, pushEvents, Q-18), so a
+       rewatch line that called its count `n` arrived on every screen but the host's saying how far
+       the feed had reached: a guest read `n:20` and `n:28` for two looks of one coin each. `paid` was
+       untouched, which is why nothing on screen was wrong — but the line was, everywhere the host was
+       not, and the next reader of it would have believed it. No other engine event carries a top-level
+       `n`; the collision was this one's alone. */
+    if(bought)this.ev({t:"rewatch",p:p.idx,looks:bought,paid});
     return bought;
   }
   bakersToday(order){ return order.filter(i=>this.players[i].baking&&!this.players[i].done); }

@@ -26,9 +26,25 @@
  * `offsetParent`, which is null for every position:fixed element and has condemned a working
  * screen in this project before.
  *
- * `?ovens=1` is the game's OWN shipped shortcut (shared/index.js) — a URL flag, not state
- * injection, and legal in multiplayer (measured 2026-08-22: it crosses the wire, both humans'
- * holds stocked, the TEST GAME banner drawn on both screens).
+ * `ovens` is the game's OWN shipped shortcut (shared/index.js) — a flag, not state injection, and
+ * legal in multiplayer (measured 2026-08-22: it crosses the wire, both humans' holds stocked, the
+ * TEST GAME banner drawn on both screens).
+ *
+ * ⚠ BUT IT CANNOT BE PUT IN THE URL ANY MORE, AND THAT IS WHY THIS PROBE WENT STALE. Since
+ * `bb6ed231` (2026-09-10, "A TEST URL IS ONE TAP NOW" — Wyatt on ?endcard=1: "I can't test this
+ * because it's too time consuming") a page loaded with one of these flags AUTO-STARTS A SOLO GAME
+ * at boot (orchestrator.js, the `ovensNowEnabled()||bake2Enabled()||endCardEnabled()` branch). So
+ * a host opened at `?ovens=1` never sees "Host a Crew" at all: makeHost sits on a screen already
+ * showing a solo voyage and times out, with no error and nothing in the console — the failure is
+ * shaped exactly like a hung game. Measured on 2026-09-17, two clean profiles sampled at 250ms for
+ * 20s: the BARE url put `#choiceHost` on screen at 1.5s, and `?ovens=1` never showed it at all —
+ * it was on the solo stage at 1.99s saying "Ahoy! Choose a recipe".
+ *
+ * SO THE CREW ROOM IS OPENED AT A BARE URL and the flag takes its own CREW leg instead:
+ * testFlagOn()'s precedence is soloMeta -> game.cfg -> the URL, and the cfg leg is the documented
+ * crew route (roundCfg() threads the flag onto cfg; startGame writes that cfg into the room). One
+ * value, set on the HOST — the authority — once the stage is up and long before the draft closes;
+ * stockHoldsForBakeTest reads it at runLiveNet and the rest arrives as ordinary engine events.
  *
  * Hygiene (rule 17): headless, --mute-audio, its own ports, every loop bounded, the room deleted
  * and every process killed on every exit path including a throw.
@@ -379,15 +395,17 @@ async function dropMidBake(owner) {
 }
 
 /* ---------- teardown, on every path ---------- */
+/* ⭐ THE ROOM DELETE USED TO BE HERE AND IT NEVER WORKED — removed 2026-09-17. It asked the host's
+   page to run `(()=>{…s.db.ref('rooms/'+s.room).remove();return 1})()`: a SYNCHRONOUS eval, so the
+   promise was never awaited, and killAll() SIGKILLed Chrome a millisecond later with the delete
+   still in flight. The room survived every run. mp_rig's killAll() now deletes it over REST — no
+   browser needed, awaited, and on every way out of this probe. One deleter, not two. */
 async function finish(code) {
-  try {
-    if (room && H) await H.ev(`(()=>{try{const s=__pp_app_state_debug();if(s.db&&s.room)s.db.ref('rooms/'+s.room).remove();return 1}catch(e){return 0}})()`);
-  } catch {}
   out.finishedAt = new Date().toISOString();
   out.exit = code;
   fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(out, null, 2));
   log(`\nresult.json written to ${OUT}`);
-  try { killAll(); } catch {}
+  try { await killAll(); } catch {}
   await sleep(400);
   process.exit(code);
 }
@@ -397,7 +415,7 @@ process.on("unhandledRejection", async e => { log("UNHANDLED: " + e); await fini
 /* ================= the run ================= */
 try {
   const base = serve(PORT);                       // http://127.0.0.1:PORT/  (the game is at the root since the cutover)
-  const url = base + "?ovens=1";
+  const url = base;                               // BARE — `?ovens=1` auto-starts a solo game now (see the head of this file)
   log(`=== crew bake probe (${out.mode}) — ${url} ===`);
   /* CHROME PROFILES GO TO tmpdir, NEVER TO --out. The first run put them under the shots directory
      and 1,468 files of Chrome profile — verified_contents.json, ActorSafetyLists, the lot — went
@@ -425,6 +443,27 @@ try {
   await H.waitFor(`(()=>{const b=document.getElementById('btnConfirmStart');return !!(b&&b.getBoundingClientRect().width>10)})()`, 25000, "host: Confirm start");
   await H.ev(`document.getElementById('btnConfirmStart').click();true`);
   log("voyage started");
+
+  /* THE OVENS FLAG, THROUGH ITS CREW LEG — on the host, once the stage exists and before the draft
+     closes. This replaces `?ovens=1` in the URL, which cannot reach a crew lobby since bb6ed231
+     (see the head of this file).
+
+     ⚠ AFTER THE STAGE, NOT AFTER THE CLICK, and that cost a four-minute run to learn. Written the
+     moment the confirm was pressed, the flag lands on the LOBBY's cfg and the voyage then replaces
+     the game object underneath it: `game.cfg.ovens = true` read back true, stockHoldsForBakeTest
+     read false, and the probe sailed 116 turns into a voyage where no oven was ever lit. So this
+     waits for `body.pp4Stage` — the same wait mp_rig's startVoyage() ends on — first. */
+  await H.waitFor(`document.body.classList.contains('pp4Stage')`, 30000, "host: stage is up");
+  let ovensSet = null;
+  for (let i = 0; i < 40 && ovensSet !== true; i++) {
+    ovensSet = await H.ev(`(async()=>{try{const s=(await import('/src/state/index.js')).appState;
+      if(!s.game||!s.game.cfg)return null; s.game.cfg.ovens=true; return s.game.cfg.ovens===true;}catch(e){return 'ERR '+e.message}})()`);
+    if (ovensSet !== true) await sleep(500);
+  }
+  out.ovensFlagOnHostCfg = ovensSet;
+  log(`  host game.cfg.ovens = ${ovensSet}`);
+  if (ovensSet !== true) { out.abort = "could not set the ovens flag on the host's cfg"; log("ABORT: " + out.abort); await finish(1); }
+
   await sleep(2500);
   await armIngMap(H, base); await armIngMap(G, base);
 
@@ -438,6 +477,25 @@ try {
     await sleep(1000);
   }
   await armIngMap(H, base); await armIngMap(G, base);
+
+  /* DID THE SHORTCUT ACTUALLY FIRE? `testhold` is the ENGINE's own record of a stocked hold
+     (stockHoldsForBakeTest emits one per human), so this is the flag's effect, not its value. A
+     probe that cannot see it must say so here rather than sail for four minutes and report
+     "no bake surface", which is a sentence about the instrument. */
+  for (let i = 0; i < 30; i++) {
+    out.stocked = await H.ev(`(()=>{try{const s=__pp_app_state_debug();const g=s.game||{};
+      return {testhold:(g.events||[]).filter(e=>e&&e.t==='testhold').length,
+              baking:(g.players||[]).map(p=>!!(p&&p.baking))}}catch(e){return null}})()`);
+    if (out.stocked && out.stocked.testhold > 0) break;
+    await H.ev(TICK); if (guestAlive) await G.ev(TICK);
+    await sleep(1000);
+  }
+  log(`  stocked: ${JSON.stringify(out.stocked)}`);
+  if (!out.stocked || !out.stocked.testhold) {
+    out.abort = "the ovens flag never stocked a hold — no `testhold` event on the host";
+    log("ABORT: " + out.abort); await pair("zz-no-testhold"); await finish(1);
+  }
+
   await pair("00-voyage-open", "after the draft");
 
   /* ---------- THE RED-PROOF: the host's own bake, where a bench is KNOWN to exist ---------- */

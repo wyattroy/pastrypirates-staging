@@ -92,20 +92,32 @@ console.log("\nThe battle ceremony still borrows no words");
 /* …AND IT MUST NAME THE RIGHT WIND. Added 2026-09-03 after the ceremony called every downwind battle a crosswind (a DOM lookup
    one hop short — judge-1914Z-shots/solo-tablet-wk-018.png against -018-settled.png). RE-ANCHORED 2026-09-14: Wyatt had the
    battle box removed entirely ("THe battle box covered this up. I want the battle box removed entirely."), so there is no card
-   left to read a badge off. The ceremony and the fight's opening bubble now ask THE SAME engine function, downwindSide, for the
-   same two captains — one source, so they cannot disagree.
+   left to read a badge off.
+   RE-ANCHORED AGAIN 2026-09-18 (architecture item 25), AND STRENGTHENED. From 09-14 to today this gate INSISTED that both the
+   ceremony and the fight's opening bubble call the engine's downwindSide themselves — "one source, so they cannot disagree". They
+   do disagree, and that was the fault: downwindSide reads the POSITIONS AND WIND ON THE BOARD THE SCREEN IS DRAWING, and a watching
+   screen's board is behind its event queue. Measured in a two-window crew room, one fight, 340 ms apart: host "⬇ HOSTCAP FIRES
+   DOWNWIND — WINS TIES", guest "CROSSWIND · ties collide", then the guest's OWN flip stage "HostCap is firin' downwind". So the two
+   readings are gone: Game.beginBattle takes the wind once, records it on the `engage` event and on the fight, and both screens are
+   HANDED it — the ceremony from S.battle's third slot (written by the one event consumer), the bubble from o.dw (carried on every
+   publish and across the wire). This now asserts that NEITHER asks the engine again.
    ⚠ THESE ARE A REVERT ALARM, NOT THE PROOF. The behavioural proof poses a battle, raises the real ceremony and reads the line:
-   `node scripts/qa/flip_ceremony_names_the_wind_check.mjs` (and `--before`, which makes the engine answer "crosswind" and must
-   go RED). Deliberately NOT in `npm test`: it launches Chrome for ~40s. */
-console.log("\nThe battle ceremony names the DOWNWIND captain, not a crosswind");
-const cerWind = (stage.match(/if\s*\(\s*!fm\s*&&\s*S\.battle[\s\S]{0,900}/) || [""])[0];
-/downwindSide\(\s*A\s*,\s*D\s*\)/.test(cerWind)
-  ? ok("the ceremony asks the engine's downwindSide for the two captains it frames")
-  : bad("the ceremony no longer asks the engine's downwindSide — it can call a downwind battle a crosswind");
-const rb = (orch.match(/export function renderBattle\(o\)\{[\s\S]*?\n\}/) || [""])[0];
-/downwindSide\(\s*o\.att\s*,\s*o\.def\s*\)/.test(rb) && /battle\.downwindTag/.test(rb)
-  ? ok("the fight's opening bubble asks the same downwindSide, so the bubble and the ceremony cannot name different winds")
-  : bad("renderBattle no longer asks downwindSide for its wind line — the bubble and the ceremony can disagree");
+   `node scripts/qa/flip_ceremony_names_the_wind_check.mjs` (and `--before`, which hands the stage a crosswind and must go RED).
+   Deliberately NOT in `npm test`: it launches Chrome for ~40s. The one place is held by
+   `node scripts/qa/fight_wind_decided_once_check.mjs`, which IS in the chain. */
+console.log("\nThe battle ceremony names the DOWNWIND captain the ENGINE named, and does not work it out for itself");
+/* comments never count as code: both of these blocks now CARRY the name of the call they no longer make, so that the next reader
+   knows what was deleted and why — matching on the raw text would read those sentences as the fault they describe. */
+const nocomment = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+const stageCode = nocomment(stage), orchCode = nocomment(orch);
+const cerWind = (stageCode.match(/if\s*\(\s*!fm\s*&&\s*S\.battle[\s\S]{0,900}/) || [""])[0];
+/const\s+dw\s*=\s*S\.battle\s*\[\s*2\s*\]/.test(cerWind) && !/downwindSide\s*\(/.test(cerWind)
+  ? ok("the ceremony reads the wind the fight was called in off S.battle, which the one event consumer wrote from the `engage` event")
+  : bad("the ceremony works the wind out from this screen's own board again (downwindSide) — on a guest that board is behind its event queue");
+const rb = (orchCode.match(/export function renderBattle\(o\)\{[\s\S]*?\n\}/) || [""])[0];
+/o\.dw/.test(rb) && /battle\.downwindTag/.test(rb) && !/downwindSide\s*\(/.test(rb)
+  ? ok("the fight's opening bubble says the wind it was handed (o.dw), so the bubble and the ceremony cannot name different winds")
+  : bad("renderBattle works the wind out for itself again — the bubble and the ceremony can name different winds on the same fight");
 
 console.log("\nThe renderer stamps both flip shapes");
 ((fnBody(flow, "renderAskPrompt").match(/flipMsg/g) || []).length >= 2) ? ok("flipMsg is stamped on both the pure-flip and flip-with-options paths")

@@ -101,13 +101,16 @@ function textRules(files) {
   return out;
 }
 
-/* The real screen functions, compiled from flow.js text, with ask() answered by a script: Counter, then Coin, then drag to the end. */
+/* The real screen functions, compiled from flow.js text, with ask() answered by a script: Counter, then Coin, then drag to the end.
+   `dealBits` comes along because the counter's slider line reads it — architecture item 20b (2026-09-18) made it the ONE place a
+   deal's crate and coin become words, and a screen compiled without it dies on ReferenceError rather than reporting anything. */
 function compileScreens(flowSrc) {
   const src = stripComments(flowSrc);
-  const parts = [HEADS.log, HEADS.slider, HEADS.counter, HEADS.answers].map(h => body(src, h));
-  if (parts.some(p => !p)) throw new Error("a screen function could not be found in flow.js");
-  return new Function("appState", "ask", "say", "sayText", "pn", "poss", "seat", "ilabelImg", "iconImg", "crateOpt", "CHECKMARK_IMG", "CANCEL_X_IMG", "endReplay", "netHandlers",
-    `${parts.join("\n")}\nreturn {humanAnswersHail,counterOffer,coinSlider};`);
+  const h = src.indexOf("const dealBits="), bits = h < 0 ? "" : src.slice(h, src.indexOf(";", h) + 1);
+  const parts = [HEADS.log, HEADS.slider, HEADS.counter, HEADS.answers].map(h2 => body(src, h2));
+  if (parts.some(p => !p) || !bits) throw new Error("a screen function (or dealBits) could not be found in flow.js");
+  return new Function("appState", "ask", "say", "sayText", "pn", "poss", "seat", "ilabelImg", "iconImg", "ING_IMG", "crateOpt", "CHECKMARK_IMG", "CANCEL_X_IMG", "endReplay", "netHandlers",
+    `${bits}\n${parts.join("\n")}\nreturn {humanAnswersHail,counterOffer,coinSlider};`);
 }
 async function screenCounter(flowSrc, G, purse, offered, opts = {}) {
   const { Game, roundCfg } = G;
@@ -135,7 +138,8 @@ async function screenCounter(flowSrc, G, purse, offered, opts = {}) {
     return null;
   };
   const say = k => `«${k}»`;
-  const F = compileScreens(flowSrc)(appState, ask, say, say, i => `P${i}`, i => `P${i}'s`, seat, i => `[${i}]`, i => "", (ings, i) => ({ label: i, value: i }), "", "",
+  const F = compileScreens(flowSrc)(appState, ask, say, say, i => `P${i}`, i => `P${i}'s`, seat, i => `[${i}]`, i => "",
+    new Proxy({}, { get: (_, k) => `ing/${String(k)}` }), (ings, i) => ({ label: i, value: i }), "", "",
     () => {}, () => ({ onLogDecision: n => logged.push(n) }));
   const r = await F.humanAnswersHail(q, p, offer);
   seen.response = r;
