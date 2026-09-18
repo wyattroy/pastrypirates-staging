@@ -2020,7 +2020,12 @@ export async function humanDock(player,port){
   }
   // WHAT WAS LEFT ON THE SHELF, decided by the engine for bot and human alike (Game.dockLeft) — a captain who
   // taps "Nah" and a bot that declines get the identical sentence, which is the rule this whole file is held to.
+  /* `paid` IS WHAT LEFT THE PURSE and `price` is what the crate cost — and this line is the HUMAN berth's
+     copy of the engine's dock event (engine/index.js). The two must carry the same fields: on 2026-09-17 the
+     engine's gained `paid` and this one did not, so a human's PURCHASE stopped drawing its coins leaving for
+     one build. `scripts/qa/dock_event_one_shape_check.mjs` now fails if the two ever differ again. */
   g.ev({t:"dock",p:player.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
+    paid:buy&&!buy.paidIng?price:0,
     paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
     left:buy?undefined:g.dockLeft(player,ing),
     black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});
