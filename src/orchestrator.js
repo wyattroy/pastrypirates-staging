@@ -1873,7 +1873,7 @@ export async function consumeEvent(e){
      Read off the event like `earned` above, in this one place, so a bot's purchase and a human's look the same on every screen:
      a crate bought at a dock (its price), a re-watched bake-off, a fight's powder (engine payPowder) and each refire. A TRADE IS NOT HERE ON PURPOSE —
      those coins are not taken away, they cross the table to the other captain, and payInto flies them across (below). */
-  const spent=(e.t==="dock"&&e.price>0)?e.price:(e.t==="rewatch"&&e.paid>0)?e.paid
+  const spent=(e.t==="dock"&&e.paid>0)?e.paid:(e.t==="rewatch"&&e.paid>0)?e.paid
     :((e.t==="refire"||e.t==="powder")&&e.cost>0)?e.cost:0;
   const spender=(e.t==="refire"||e.t==="powder")?e.a:e.p;
   if(spent>0&&spender!=null)payOut(spender,spent);   // the one spending door (board.js): each coin seen leaving takes itself off the number

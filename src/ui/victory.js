@@ -14,7 +14,7 @@
 
 import { appState } from "../state/index.js";
 import { ASSET_BASE, BOAT_IMG, CROWN_IMG, PARROT_IMG, SPOILS_POUCH_IMG, POCKET_COMPASS_IMG, HEXCOL, ING_ALL, ING_IMG, dockPlace, iname } from "../shared/index.js";
-import { say, sayText, pname, seatLocal, sleepMs, assignBadges } from "./util.js";
+import { say, sayText, pname, seatLocal, sleepMs, assignBadges, fixedOrigin } from "./util.js";
 import { seat } from "../shared/words.js";
 import { recipeInfo } from "./recipe.js";
 import { playWinScreen, playLidNote, playPop, playCrateVerdict, playDrumroll, playAwardWhoosh, playCoinTick, playCardSwish } from "./audio.js";
@@ -77,8 +77,15 @@ export async function playVictoryBoard(e, { fadeOutPanel, sweepCam, leanCam, las
   render();
 }
 
+/* ⚠ IN THE SPACE THE CEREMONY IS DRAWN IN, NOT THE WINDOW'S. .vcStage and the card are `position: fixed`, and on a desktop the page
+   body carries a transform — which makes the BODY the box every fixed layer is measured from, not the viewport (util.js fixedOrigin
+   has the whole story; the flip coin hit the same trap on 2026-09-16). Reading the board in window coordinates and then placing
+   inside that layer double-counted the body's own offset, which is why the podium drifted off the board's centre and drifted further
+   at other window sizes (measured: 26 px out at 1280, 69 px at 820). */
 function boardBox() {
-  const bw = $("boardwrap"), r = bw ? bw.getBoundingClientRect() : { left: 0, top: 44, width: innerWidth, height: innerWidth };
+  const bw = $("boardwrap"), o = fixedOrigin();
+  const raw = bw ? bw.getBoundingClientRect() : { left: 0, top: 44, width: innerWidth, height: innerWidth };
+  const r = { left: raw.left - o.x, top: raw.top - o.y, width: raw.width, height: raw.height };
   const top = Math.max(r.top, 44), w = Math.min(r.width, innerWidth);
   // k scales the crown and podium with the board — but never so far that the podium's labels (about 267k below the board's top) reach the card below them
   const fit = (innerHeight - 310 - top - 12) / 267;
@@ -87,9 +94,25 @@ function boardBox() {
 
 async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
   if (!v) return;
-  const box = boardBox(), k = box.k, win = g.winner, order = v.order || [];
+  let box = boardBox(), k = box.k;
+  const win = g.winner, order = v.order || [];
+  if (stageEl && stageEl.__vcStop) stageEl.__vcStop();          // the old stage's resize watchers go with it
   stageEl && stageEl.remove();
   stageEl = mk(document.body, "vcStage", null, {});
+  /* ⭐ EVERY PIECE KNOWS HOW TO PLACE ITSELF, AND IS PLACED AGAIN WHENEVER THE BOARD MOVES. Wyatt, 2026-09-17: "the final voyage end
+     ceremony does not seem to be centered on the screen properly WHEN the user resizes their screen -- it should be calculated every
+     time the screen size changes" and "the boats on the podium should always be centered". Both are the same fault: the crown, the
+     podium and the boats were placed once, in pixels, from the board's rectangle AT THAT MOMENT — so a resize, or any later layout
+     shift (the card rising under them, the panel fading), left them where the board used to be. Each piece now registers HOW it is
+     placed, and `replace()` runs them all against a freshly read board; a ResizeObserver on the board and the window's own resize
+     both call it, so it is the board that decides, every time. */
+  const placers = [];
+  const place = (el, fn) => { placers.push(() => fn(el, box, box.k)); return el; };
+  const replace = () => { if (!stageEl || !stageEl.isConnected) return; box = boardBox(); k = box.k; placers.forEach(f => f()); };
+  const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => replace()) : null;
+  const bw0 = $("boardwrap"); if (ro && bw0) ro.observe(bw0);
+  window.addEventListener("resize", replace);
+  stageEl.__vcStop = () => { try { ro && ro.disconnect(); } catch (e) {} window.removeEventListener("resize", replace); };
   const dim = mk(stageEl, "vcDim");
   const skip = reduced();
   const cx = box.x + box.w / 2, heroY = box.y + 171 * k, heroSize = 64 * k;
@@ -101,7 +124,8 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
     anim(dim, [{ opacity: 0 }, { opacity: c.dim }], { duration: 250 });
     // the camera leans in on the winner — the game's own camera, so the board stays inside its frame and every layer follows
     const lean = !skip && leanCam ? (leanCam(win, c.zoom), true) : false;
-    hero = mk(stageEl, "vcHero", `<img src="${BOAT_IMG[win]}" alt="">`, { left: (cx - heroSize / 2) + "px", top: (heroY - heroSize / 2) + "px", width: heroSize + "px" });
+    hero = place(mk(stageEl, "vcHero", `<img src="${BOAT_IMG[win]}" alt="">`, { left: (cx - heroSize / 2) + "px", top: (heroY - heroSize / 2) + "px", width: heroSize + "px" }),
+      (el, b2, k2) => { const size = 64 * k2; Object.assign(el.style, { left: (b2.x + b2.w / 2 - size / 2) + "px", top: (b2.y + 171 * k2 - size / 2) + "px", width: size + "px" }); });
     const cw = 38 * k * c.crownSize;
     const crown = mk(hero, "vcCrown", `<img src="${CROWN_IMG}" alt="">`, { left: (heroSize / 2 - cw / 2) + "px", top: (-cw * .62) + "px", width: cw + "px" });
     anim(hero, [{ opacity: 0, transform: "scale(.45)" }, { opacity: 1, transform: "scale(1)" }], { duration: 300, delay: 100 });
@@ -110,6 +134,7 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
     const name = pname(win);
     nameEl = mk(stageEl, "vcName", [...name.toUpperCase()].map(ch => `<span>${ch === " " ? "&nbsp;" : esc(ch)}</span>`).join("") +
       `<div class="vcSub">${sayText("victory.winsVoyage", { w: seat(win) })}</div>`, { top: (box.y + 218 * k) + "px", fontSize: (24 * k) + "px" });
+    place(nameEl, (el, b2, k2) => Object.assign(el.style, { top: (b2.y + 218 * k2) + "px", fontSize: (24 * k2) + "px" }));
     const land = 250 + c.drop;
     await sleepMs(land);
     playWinScreen();
@@ -138,8 +163,26 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
   const heroBottom = heroY + heroSize / 2 - p.lift * k, base = heroBottom + p.h1 * k;
   if (hero) anim(hero, [{ transform: "translateY(0)" }, { transform: `translateY(${-p.lift * k}px)` }], { duration: p.rise, fill: "forwards" });
   if (nameEl && win != null) anim(nameEl, [{ transform: "translateY(0) scale(1)" }, { transform: `translateY(${box.y + 2 * k - (box.y + 218 * k)}px) scale(.74)` }], { duration: p.rise, fill: "forwards" });
-  const hs = [p.h1, p.h1 * .66, p.h1 * .44].map(h => h * k), tw = 84 * k;
-  const tiers = [{ x: cx - tw / 2, c: "#ffe6ef", s: "#f5b3c8" }, { x: cx - tw * 1.5 - 1.5 * k, c: "#f6d7b8", s: "#e9b98f" }, { x: cx + tw / 2 + 1.5 * k, c: "#f3e8c9", s: "#dcc58f" }];
+  /* THE PODIUM'S OWN GEOMETRY, from a board rectangle handed in — so the same arithmetic serves the first placement and every
+     re-placement after a resize. A fourth captain stands to the RIGHT of the plate, so the three tiers are shifted half its width
+     left of the board's centre: what a player sees centred is the GROUP, not the plate (his "the boats on the podium should always
+     be centered"). */
+  const geom = (b2, k2) => {
+    const tw2 = 84 * k2, four = order[3] != null, sz4 = 36 * k2, gap4 = 10 * k2, lab4 = 58 * k2;
+    let mid = b2.x + b2.w / 2 - (four ? (sz4 + gap4) / 2 : 0);
+    let x4 = mid + tw2 * 1.5 + 3 * k2;
+    /* IF THE FOURTH CAPTAIN WOULD FALL OFF THE WINDOW, THE WHOLE GROUP SHUFFLES LEFT — it used to be the fourth boat alone that
+       was clamped, which pushed it away from the plate and left the group looking shoved right (measured: 116 px off centre in a
+       narrow window). Everything moves together, or nothing does. */
+    const over = (x4 + lab4) - (innerWidth - 8);
+    if (four && over > 0) { mid -= over; x4 -= over; }
+    const base2 = b2.y + 171 * k2 + 32 * k2 - p.lift * k2 + p.h1 * k2;
+    return { k: k2, tw: tw2, mid, base: base2, hs: [p.h1, p.h1 * .66, p.h1 * .44].map(h => h * k2),
+      xs: [mid - tw2 / 2, mid - tw2 * 1.5 - 1.5 * k2, mid + tw2 / 2 + 1.5 * k2], four, sz4, x4 };
+  };
+  const G0 = geom(box, k);
+  const hs = G0.hs, tw = G0.tw;
+  const tiers = [{ x: G0.xs[0], c: "#ffe6ef", s: "#f5b3c8" }, { x: G0.xs[1], c: "#f6d7b8", s: "#e9b98f" }, { x: G0.xs[2], c: "#f3e8c9", s: "#dcc58f" }];
   const pod = mk(stageEl, "vcPodium");
   anim(pod, [{ transform: `translateY(${260 * k}px)`, opacity: 0 }, { transform: "translateY(0)", opacity: 1 }], { duration: skip ? 1 : p.rise });
   const byS = s => (v.captains || []).find(c => c.seat === s) || {};
@@ -148,22 +191,41 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
     if (c.won) return sayText("victory.podium.won", {});
     if (c.baked) return sayText("victory.podium.ovens", { n: c.named || 0, size: v.size });
     return sayText("victory.podium.sailing", { n: c.crates || 0, size: v.size, sq: c.squares || 0 }); };
+  const boats = [];
   tiers.forEach((tr, i) => { const s = top3[i]; if (s == null) return;
-    mk(pod, "vcTier", `<div style="font-size:${(i ? 17 : 23) * k}px;color:${tr.s}">${i + 1}</div>`, { left: tr.x + "px", width: tw + "px", top: (base - hs[i]) + "px", height: hs[i] + "px", background: tr.c, boxShadow: `inset 0 -${8 * k}px 0 ${tr.s}` });
-    mk(pod, "vcLab" + (isLocalHuman(s) ? " mine" : ""), `<span style="color:${HEXCOL[s]}">${esc(pname(s))}</span><small>${esc(label(s))}</small>`, { left: (tr.x + 3 * k) + "px", width: (tw - 6 * k) + "px", top: (base + 11 * k) + "px", fontSize: (11 * k) + "px" });
+    const tier = mk(pod, "vcTier", `<div style="font-size:${(i ? 17 : 23) * k}px;color:${tr.s}">${i + 1}</div>`,
+      { left: tr.x + "px", width: tw + "px", top: (base - hs[i]) + "px", height: hs[i] + "px", background: tr.c });
+    place(tier, (el, b2, k2) => { const G = geom(b2, k2);
+      Object.assign(el.style, { left: G.xs[i] + "px", width: G.tw + "px", top: (G.base - G.hs[i]) + "px", height: G.hs[i] + "px" });
+      const n = el.firstElementChild; if (n) n.style.fontSize = ((i ? 17 : 23) * k2) + "px"; });
+    const lab = mk(pod, "vcLab" + (isLocalHuman(s) ? " mine" : ""), `<span style="color:${HEXCOL[s]}">${esc(pname(s))}</span><small>${esc(label(s))}</small>`,
+      { left: (tr.x + 3 * k) + "px", width: (tw - 6 * k) + "px", top: (base + 12 * k) + "px", fontSize: (11 * k) + "px" });
+    place(lab, (el, b2, k2) => { const G = geom(b2, k2);
+      Object.assign(el.style, { left: (G.xs[i] + 3 * k2) + "px", width: (G.tw - 6 * k2) + "px", top: (G.base + 12 * k2) + "px", fontSize: (11 * k2) + "px" }); });
   });
-  mk(pod, "vcPlate", null, { left: (cx - 137 * k) + "px", width: (275 * k) + "px", top: base + "px", height: (7 * k) + "px" });
+  const plate = mk(pod, "vcPlate", null, { left: (G0.mid - 137 * k) + "px", width: (275 * k) + "px", top: base + "px", height: (7 * k) + "px" });
+  place(plate, (el, b2, k2) => { const G = geom(b2, k2);
+    Object.assign(el.style, { left: (G.mid - 137 * k2) + "px", width: (275 * k2) + "px", top: G.base + "px", height: (7 * k2) + "px" }); });
   // the boats sail onto their tiers — the winner is already standing on the top one; with nobody crowned, all three sail on
   const sailing = [0, 1, 2].filter(ti => top3[ti] != null && !(win != null && ti === 0));
   sailing.forEach((ti, j) => { const s = top3[ti], size = (ti === 0 ? 56 : 46) * k, tr = tiers[ti], at = p.rise * .6 + (j + 1) * p.sailGap;
     const b = mk(stageEl, "vcBoat", `<img src="${BOAT_IMG[s]}" alt="">`, { left: (tr.x + tw / 2 - size / 2) + "px", top: (base - hs[ti] - size + 4 * k) + "px", width: size + "px" });
+    place(b, (el, b2, k2) => { const G = geom(b2, k2), sz = (ti === 0 ? 56 : 46) * k2;
+      Object.assign(el.style, { left: (G.xs[ti] + G.tw / 2 - sz / 2) + "px", top: (G.base - G.hs[ti] - sz + 4 * k2) + "px", width: sz + "px" }); });
+    boats.push(b);
     anim(b, [{ transform: `translateX(${ti === 2 ? 130 : -130}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: skip ? 1 : 500, delay: skip ? 0 : at });
     setTimeout(() => playCardSwish(), at + 150); });
-  if (rest != null) { const at4 = p.rise * .6 + 3 * p.sailGap, sz = 36 * k, lx = Math.min(cx + tw * 1.5 + 3 * k, innerWidth - 62 * k);
+  if (rest != null) { const at4 = p.rise * .6 + 3 * p.sailGap, sz = G0.sz4, lx = G0.x4;
     const b4 = mk(stageEl, "vcBoat", `<img src="${BOAT_IMG[rest]}" alt="" style="opacity:.85">`, { left: (lx + 29 * k - sz / 2) + "px", top: (base - 32 * k) + "px", width: sz + "px" });
+    place(b4, (el, b2, k2) => { const G = geom(b2, k2);
+      Object.assign(el.style, { left: (G.x4 + 29 * k2 - G.sz4 / 2) + "px", top: (G.base - 32 * k2) + "px", width: G.sz4 + "px" }); });
     anim(b4, [{ opacity: 0 }, { opacity: 1 }], { duration: 400, delay: skip ? 0 : at4 });
-    const l4 = mk(stageEl, "vcLab" + (isLocalHuman(rest) ? " mine" : ""), `<span style="color:${HEXCOL[rest]}">${esc(pname(rest))}</span><small>${esc(shortLabel(rest))}</small>`, { left: lx + "px", width: (58 * k) + "px", top: (base + 11 * k) + "px", fontSize: (11 * k) + "px" });
+    const l4 = mk(stageEl, "vcLab" + (isLocalHuman(rest) ? " mine" : ""), `<span style="color:${HEXCOL[rest]}">${esc(pname(rest))}</span><small>${esc(shortLabel(rest))}</small>`,
+      { left: lx + "px", width: (58 * k) + "px", top: (base + 12 * k) + "px", fontSize: (10 * k) + "px" });
+    place(l4, (el, b2, k2) => { const G = geom(b2, k2);
+      Object.assign(el.style, { left: G.x4 + "px", width: (58 * k2) + "px", top: (G.base + 12 * k2) + "px", fontSize: (10 * k2) + "px" }); });
     anim(l4, [{ opacity: 0 }, { opacity: 1 }], { duration: 400, delay: skip ? 0 : at4 }); }
+  replace();                                                     // one pass now, so nothing is left where the board used to be
   await sleepMs(skip ? 300 : p.rise + 3 * p.sailGap + 700 + 900);
 }
 
@@ -191,6 +253,8 @@ export function victoryCard() {
   if (!g || !wrap || !panel) return;
   wrap.classList.add("vcOn");
   placeCard(wrap);
+  /* …and the card is placed again whenever the window changes, for the same reason the podium is (his 2026-09-17 note). */
+  if (!wrap.__vcPlacing) { wrap.__vcPlacing = () => { if (wrap.classList.contains("vcOn")) placeCard(wrap); }; window.addEventListener("resize", wrap.__vcPlacing); }
   if (g.__victoryCardBuilt) return;                       // render() calls this on every repaint; the card is built once a voyage
   const v = voyageOf(g);
   if (!v) return;
@@ -286,10 +350,35 @@ export function victoryCard() {
   card.addEventListener("touchmove", ev => dragMove(ev, "touch"), { passive: false });
   card.addEventListener("touchend", ev => dragEnd(ev, "touch"));
   card.addEventListener("touchcancel", () => { if (drag && drag.kind === "touch") { const d = drag; drag = null; if (d.moved) { restAt(cur); if (d.to >= 0) restAt(d.to); } } });
-  card.addEventListener("pointerdown", ev => { if (ev.pointerType !== "touch") dragStart(ev, "pointer"); });
+  /* ⚠ A MOUSE LETS GO WHEREVER IT LIKES. Wyatt, 2026-09-17: "click-dragging to swipe those end cards doesn't work -- it's really
+     buggy. when i click once, the card starts to drag; when i release, the card continues to drag. this may have been an issue with
+     mouse up outside the window?" That is exactly it: the release listener was on the CARD, so a button let go past its edge — or
+     outside the window — never ended the drag, and the next move carried on dragging a card nobody was holding.
+     So the pointer is CAPTURED on press (every later event for that pointer comes to the card wherever it goes), and the release is
+     listened for on the window as well, with a blur to catch the drag that ends by leaving the page entirely. The touch path keeps
+     its own listeners: it never had this fault, because a touch's events already follow the finger that started them. */
+  card.addEventListener("pointerdown", ev => {
+    if (ev.pointerType === "touch") return;
+    dragStart(ev, "pointer");
+    if (drag) { try { card.setPointerCapture(ev.pointerId); } catch (e) {} }
+  });
   card.addEventListener("pointermove", ev => dragMove(ev, "pointer"));
-  card.addEventListener("pointerup", ev => dragEnd(ev, "pointer"));
-  card.addEventListener("pointercancel", () => { if (drag && drag.kind === "pointer") { const d = drag; drag = null; if (d.moved) { restAt(cur); if (d.to >= 0) restAt(d.to); } } });
+  const onBlur = () => letGoPointer(null);
+  const stopWatching = () => {                                   // the card has left; so do its window listeners, or a second voyage stacks another pair
+    window.removeEventListener("pointerup", letGoPointer);
+    window.removeEventListener("pointercancel", letGoPointer);
+    window.removeEventListener("blur", onBlur);
+  };
+  const letGoPointer = ev => {
+    if (!card.isConnected) { stopWatching(); return; }
+    if (!drag || drag.kind !== "pointer") return;
+    try { if (ev && ev.pointerId != null) card.releasePointerCapture(ev.pointerId); } catch (e) {}
+    dragEnd(ev || { clientX: drag.x, clientY: drag.y }, "pointer");
+  };
+  card.addEventListener("pointerup", letGoPointer);
+  window.addEventListener("pointerup", letGoPointer);
+  window.addEventListener("pointercancel", letGoPointer);
+  window.addEventListener("blur", onBlur);
   // the card rises, then each page plays in turn and swipes away left to the next
   if (!skip) anim(wrap, [{ transform: "translateY(110%)" }, { transform: "translateY(0)" }], { duration: 450, easing: "cubic-bezier(.2,.9,.3,1.1)", fill: "none" });
   (async () => {

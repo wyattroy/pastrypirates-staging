@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.17.5-staging@25583484";
+const PP4_STAMP = "2026.09.17.6-staging@69027937";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -5918,15 +5918,32 @@ export function cleanupLegacyTimerKey(store){
    position they take is measured, and show through the window; the column's own dark is still #pp4Veil. Up only while #pp4Veil is, read off
    its presence by an observer rather than a second switch anyone must remember (and not a :has() rule — Safari's reactivity gaps with
    :has() are recorded in index.html). */
+/* ⭐⭐ AND EVERY CENTRE STAGE RAISES IT, NOT ONLY THE COIN'S. Wyatt, 2026-09-17, for the third time on that screen: "the pre-game stage
+   is STILL not rendered correctly -- this should use the same darkening render code as the stage; not its own bespoke code."
+   He is right, and it was bespoke: an intro card dimmed with `#pp4Prompt.pp4Center`'s own backdrop, which lives INSIDE the capped
+   column — so on a desktop it darkened the column and left the page either side of it undimmed, the exact fault this layer was built
+   to end. Now the one layer answers for both, and the only difference is how dark: the coin's ceremony meets a veil that reaches
+   rgba(4,16,22,.92) at its edge, a centre-stage card meets .6, and the surround is told which so the two meet without a seam. */
+const CENTRE_STAGED = () => { const b = $("pp4Prompt"); return !!(b && b.classList.contains("pp4Center")); };
 function syncSurround(){
   let s = document.getElementById("pp4Surround");
   if (!s){ s = document.createElement("div"); s.id = "pp4Surround"; s.setAttribute("aria-hidden", "true"); document.documentElement.appendChild(s); }
-  const up = !!$("pp4Veil") && document.body.classList.contains("pp4Stage");
-  if (up){ const r = document.body.getBoundingClientRect(); s.style.left = r.left + "px"; s.style.width = r.width + "px"; }
+  const veil = !!$("pp4Veil"), up = (veil || CENTRE_STAGED()) && document.body.classList.contains("pp4Stage");
+  if (up){
+    const r = document.body.getBoundingClientRect();
+    s.style.left = r.left + "px"; s.style.width = r.width + "px";
+    s.style.setProperty("--pp4SurroundDark", veil ? "rgba(4,16,22,.92)" : "rgba(4,16,22,.6)");
+  }
   s.hidden = !up;
 }
 function watchSurround(){
-  if (typeof MutationObserver === "function") new MutationObserver(syncSurround).observe(document.body, { childList: true, attributes: true, attributeFilter: ["class"] });
+  if (typeof MutationObserver === "function"){
+    // the body's own children and class, AND the prompt box's class — pp4Center goes on and off there, and it is what a card's dark follows
+    new MutationObserver(syncSurround).observe(document.body, { childList: true, attributes: true, attributeFilter: ["class"] });
+    const watchBox = () => { const b = $("pp4Prompt"); if (b && !b.__surroundWatched){ b.__surroundWatched = true; new MutationObserver(syncSurround).observe(b, { attributes: true, attributeFilter: ["class"] }); } };
+    new MutationObserver(() => { watchBox(); syncSurround(); }).observe(document.body, { childList: true });
+    watchBox();
+  }
   if (typeof ResizeObserver === "function") new ResizeObserver(syncSurround).observe(document.body);
   window.addEventListener("resize", syncSurround);
   syncSurround();

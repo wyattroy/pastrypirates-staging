@@ -794,7 +794,14 @@ const man=(a,b)=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
    This is a leaf: the engine sums it into the `end` event, and the card only draws the rows it is sent. */
 const VOYAGE_POINTS={crate:20,ovens:50,named:15,perfect:300,day:10,dayCap:5,coin:3,coinCap:10,trade:10,tradeCap:3};
 function voyageLoserCeiling(P,size){ return size*P.crate+P.ovens+size*P.named+P.dayCap*P.day+P.coinCap*P.coin+P.tradeCap*P.trade; }
-function voyageWinBonus(P,size){ return Math.max(0,2*voyageLoserCeiling(P,size)-(size*P.crate+P.ovens+size*P.named)); }
+/* ⭐ WINNING PAYS A ROUND 500. Wyatt, 2026-09-17: "I think winning should just give you +500, make it a clean number."
+   IT WAS 445, AND THAT NUMBER WAS DOING A JOB: it was derived so that the slowest possible winner still scored DOUBLE the best
+   possible non-winner (a captain who reaches the ovens, names all five and fills their hold can reach 335). A flat 500 keeps a
+   winner ahead of every loser — the worst winner scores 500 + their own rows against a ceiling of 335 — but no longer double.
+   He was told that in the same breath as the change, and chose the round number; it is his call and it is written down here so
+   nobody "fixes" it back. voyage_score_check still proves a winner always outscores a non-winner. */
+const VOYAGE_WIN=500;
+function voyageWinBonus(P,size){ return VOYAGE_WIN; }   // eslint-disable-line no-unused-vars — P and size stay for the callers' shape
 /* c: {won, crates (recipe crates held), ovensDay, named (bake-off crates named right), tries (attempts, 0 unless
    solved), ahead (days ahead of the navigator), coins, trades}. Returns the rows in the order the card pays them. */
 function voyageScoreRows(c,P,size){

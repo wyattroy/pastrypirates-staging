@@ -50,7 +50,7 @@ players who don't win -- winning is really hard."*) — **his verdict on these n
 | Ovens lit at Tortuga | Getting home with the whole recipe | 50 |
 | Bake-off crates named right | Watching the shuffle | 15 each |
 | Perfect bake-off | Solving it on the first try; two tries earns half | 300 |
-| Won the voyage | The win (see the rule below) | worked out: 445 today |
+| Won the voyage | A flat 500 — his call, 2026-09-17 ("make it a clean number"); it was a worked-out 445 | 500 |
 | Days ahead of the navigator | Beating the bots' day-one route for this recipe | 10 a day, up to 5 days |
 | Doubloons in the hold | Spending wisely | 3 each, up to 10 |
 | Traded like a Good Friendly Pirate | Each trade struck | 10 each, up to 3 |

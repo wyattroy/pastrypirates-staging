@@ -258,7 +258,7 @@ export const SETTLE_PROBE = `(() => {
       if (par && getComputedStyle(par).visibility === 'hidden') continue;
       out += t.nodeValue;
     }
-    return out.replace(/\s+/g, ' ').trim();
+    return out.replace(/\\s+/g, ' ').trim();   // \\s, not \s: this line is inside a template literal, so one backslash never reaches the browser
   };
   const words = [...document.querySelectorAll(READ)].map(el => {
     const faded = [...el.querySelectorAll('img')].filter(i => +getComputedStyle(i).opacity < 0.99).length;

@@ -2490,7 +2490,7 @@
      clipped by the column. Its box is a clear window the column's exact size; its shadow is the dark — the same rgba the veil's gradient
      reaches at its edge, so the two meet without a seam. It takes no pointer events. */
   #pp4Surround { position:fixed; top:0; height:100%; z-index:1; pointer-events:none; background:transparent;
-    box-shadow:0 0 0 100vmax rgba(4,16,22,.92); }
+    box-shadow:0 0 0 100vmax var(--pp4SurroundDark, rgba(4,16,22,.92)); }
   #pp4Surround[hidden] { display:none; }
   .pp4CerTop { color:#ffd76b; font-weight:800; font-size:15px; letter-spacing:3px; text-align:center; }
   .pp4CerSub { color:#e8f4ee; font-weight:700; font-style:italic; font-size:14px; text-align:center;

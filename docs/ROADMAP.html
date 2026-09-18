@@ -1,0 +1,419 @@
+<title>Pastry Pirates Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:wght@400;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,800&display=swap">
+<style>
+  :root {
+    --ground: #f7f1dc; --surface: #fffdf3; --ink: #1f4249; --ink-soft: #4e6d72;
+    --teal: #1d7f8b; --teal-bright: #29a3b2; --gold: #fdb63d; --gold-deep: #b9780f; --gold-ink: #5a3a05;
+    --line: #d9e6df; --note: #eef5ef; --amber-bg: #fff3d6; --amber-line: #e0a12a; --amber-text: #8a5a00;
+    --no: #9b3b2e; --yes: #1d7f5c;
+    --display: 'Averia Serif Libre', 'Iowan Old Style', Georgia, serif;
+    --body: 'Avenir Next', Avenir, 'Nunito Sans', 'Segoe UI', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d2529; --surface: #133238; --ink: #e8f1ec; --ink-soft: #a7c0c0; --teal: #6fcad5; --teal-bright: #6fcad5;
+      --gold-deep: #fdb63d; --gold-ink: #3b2603; --line: #24484f; --note: #0f2b30;
+      --amber-bg: #2e2a17; --amber-line: #d19a2c; --amber-text: #f3c56b; --no: #f0a193; --yes: #6fd3aa;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0d2529; --surface: #133238; --ink: #e8f1ec; --ink-soft: #a7c0c0; --teal: #6fcad5; --teal-bright: #6fcad5;
+    --gold-deep: #fdb63d; --gold-ink: #3b2603; --line: #24484f; --note: #0f2b30;
+    --amber-bg: #2e2a17; --amber-line: #d19a2c; --amber-text: #f3c56b; --no: #f0a193; --yes: #6fd3aa;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+  a { color: var(--teal); text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--teal-bright); outline-offset: 2px; }
+  .page { max-width: 48rem; margin: 0 auto; padding: 2.2rem 1.25rem 1rem; display: grid; gap: 2.4rem; }
+  header { display: grid; gap: .35rem; }
+  h1 { font-family: var(--display); font-size: clamp(2rem, 6vw, 2.8rem); line-height: 1.05; margin: 0; }
+  .meta { margin: 0; font-size: .85rem; color: var(--ink-soft); }
+  nav { display: flex; flex-wrap: wrap; gap: .45rem; }
+  nav a { font-size: .82rem; font-weight: 600; text-decoration: none; padding: .3rem .75rem; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+  section { display: grid; gap: 1rem; scroll-margin-top: 1rem; }
+  section > h2 { font-family: var(--display); font-size: 1.55rem; margin: 0; border-bottom: 2px solid var(--ink); padding-bottom: .35rem; text-wrap: balance; }
+  section > p { margin: 0; max-width: 42rem; }
+  h3 { font-family: var(--display); font-size: 1.15rem; margin: .4rem 0 0; }
+  ul, ol { margin: 0; padding-left: 1.2rem; display: grid; gap: .3rem; }
+  .src { font-size: .8rem; white-space: nowrap; }
+  code { font-size: .88em; background: var(--note); padding: .05rem .3rem; border-radius: 4px; }
+
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+  .tag { display: inline-block; font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: .05rem .45rem; border-radius: 999px; white-space: nowrap; }
+  .t-done { background: var(--teal); color: var(--surface); }
+  .t-no { border: 1.5px solid var(--no); color: var(--no); }
+  .t-part { border: 1.5px solid var(--gold-deep); color: var(--gold-deep); }
+  .t-cut { border: 1.5px solid var(--ink-soft); color: var(--ink-soft); }
+
+  .days { display: grid; gap: .5rem; }
+  .day { display: grid; grid-template-columns: 5.5rem 1fr; gap: .2rem .9rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .7rem .9rem; }
+  .day.his { border-left: 5px solid var(--gold); }
+  .day.mine { border-left: 5px solid var(--teal); }
+  .day.gate { border-left: 5px solid var(--no); }
+  .day b { font-family: var(--display); font-size: 1rem; }
+  .day .who { font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+  .day p { margin: 0; font-size: .93rem; grid-column: 2; }
+  @media (max-width: 480px) { .day { grid-template-columns: 1fr; } .day p { grid-column: 1; } }
+
+  .goals { display: grid; gap: .6rem; counter-reset: g; }
+  .goal { display: grid; grid-template-columns: 2.3rem 1fr; gap: .8rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .8rem .9rem; }
+  .goal::before { counter-increment: g; content: counter(g); width: 2.3rem; height: 2.3rem; border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: var(--gold-ink);
+    background: radial-gradient(circle at 35% 30%, #ffe19a, var(--gold) 60%, #e39a1f); box-shadow: inset 0 0 0 2px rgba(120,70,0,.35); }
+  .goal b { display: block; }
+  .goal small { display: block; color: var(--ink-soft); font-size: .88rem; }
+
+  .ask-card { background: var(--amber-bg); border: 1.5px solid var(--amber-line); border-left: 6px solid var(--amber-line); border-radius: 12px; padding: 1rem 1.1rem; display: grid; gap: .6rem; }
+  .ask-card.answered { border-left-color: var(--teal); }
+  .ask-card h3 { margin: 0; font-size: 1.2rem; line-height: 1.2; }
+  .ask-card p { margin: 0; font-size: .95rem; }
+  .opts { display: grid; gap: .45rem; }
+  .opt { font: inherit; font-size: .93rem; text-align: left; padding: .6rem .8rem; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .opt[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: var(--surface); }
+  .rec { font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-left: .35rem; color: var(--gold-deep); }
+  .opt[aria-pressed="true"] .rec { color: var(--surface); }
+
+  .phase { border-left: 3px solid var(--gold); padding: .2rem 0 .2rem 1rem; display: grid; gap: .25rem; }
+  .phase h3 { margin: 0; }
+  .phase p { margin: 0; font-size: .93rem; }
+  .callout { background: var(--amber-bg); border-radius: 10px; padding: .8rem 1rem; font-size: .94rem; }
+  .callout b { display: block; margin-bottom: .2rem; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .8rem; }
+  .cols > div { background: var(--note); border-radius: 12px; padding: .8rem 1rem; }
+  .cols h4 { margin: 0 0 .3rem; font-size: .97rem; }
+  .cols ul { font-size: .91rem; }
+
+  .note { display: grid; gap: .25rem; }
+  .note label { font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+  .note textarea { font: inherit; font-size: .95rem; min-height: 3rem; resize: vertical; padding: .55rem .7rem; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; }
+  .dock { position: sticky; bottom: 0; background: var(--ground); border-top: 1px solid var(--line); padding: .7rem 1.25rem; display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; max-width: 48rem; margin: 0 auto; }
+  .copy { font: inherit; font-weight: 800; font-size: .95rem; padding: .65rem 1.1rem; border-radius: 12px; border: 1.5px solid var(--gold-deep); background: var(--gold); color: var(--gold-ink); cursor: pointer; }
+  .status { font-size: .85rem; color: var(--ink-soft); }
+  .status.warn { color: var(--amber-text); font-weight: 700; }
+</style>
+
+<main class="page">
+  <header>
+    <h1>Pastry Pirates Roadmap</h1>
+    <p class="meta">17 September 2026 · launch 1 October · his cut line: polish can slip, the Cloudflare move and working analytics cannot</p>
+  </header>
+
+  <nav aria-label="Sections">
+    <a href="#now">Where we stand</a><a href="#dev">Mac: Dev</a><a href="#goals">The six goals</a><a href="#days">The 14 days</a><a href="#settle">To settle</a><a href="#after">After launch</a><a href="#decided">What we decided</a><a href="#found">What the research found</a><a href="#risks">Risks</a><a href="#links">Where things live</a>
+  </nav>
+
+  <section id="now" aria-labelledby="now-h">
+    <h2 id="now-h">Where we stand, measured today</h2>
+    <p>Not from memory. Each line below was checked this morning, and two of them are worse than the plan assumed.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Thing</th><th>State</th><th>How I know</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Who serves the live game</strong></td><td><span class="tag t-no">GitHub, not Cloudflare</span></td><td>playpastrypirates.com answers with <code>server: GitHub.com</code>. The cutover has not happened.</td></tr>
+        <tr><td><strong>The repository</strong></td><td><span class="tag t-no">Public</span></td><td>GitHub reports the project as public, so the code is still copyable.</td></tr>
+        <tr><td><strong>Analytics</strong></td><td><span class="tag t-done">Live</span></td><td>Cookieless Google Analytics runs on the game, About and Rules, from one file. <strong>I got this wrong first time</strong> — my check looked only inside the page’s own text and missed the file it loads. Corrected by asking the live site: it serves the tag today. What’s missing is a page <em>you</em> can tap to read the numbers.</td></tr>
+        <tr><td><strong>The tutorial</strong></td><td><span class="tag t-done">Built</span></td><td>The parrot tutorial ships in <code>src/ui/pilot.js</code>, from your eight rulings on 2 September.</td></tr>
+        <tr><td><strong>Search</strong></td><td><span class="tag t-part">Half done</span></td><td>The code half is built and gated: robots file, sitemap, and a crawl-intent check that fails the build. The half that matters isn’t started: the brand collision hasn’t been re-measured since 26 August, and there’s no Search Console tag in the page.</td></tr>
+        <tr><td><strong>Firebase safety</strong></td><td><span class="tag t-no">Open</span></td><td>The budget alert and the scoped database rules were both recorded as not done on 6 September, and the game writes without signing in. On your pay-as-you-go plan, abuse is a bill, not an outage.</td></tr>
+        <tr><td><strong>The live game vs. the work</strong></td><td><span class="tag t-done">Closing tonight</span></td><td><strong>Your verdict already happened — today.</strong> You played staging .17.5, marked all 18 items “looks right”, gave five problems and said: <em>“do these changes, get them verified, then ship to main.”</em> All five are built. Unless the test re-run finds something real, production goes from 2026.09.13.5 to <strong>2026.09.17.6 tonight</strong>. Dev will confirm when it’s serving.</td></tr>
+        <tr><td><strong>Solo and crew polish</strong></td><td><span class="tag t-cut">Cuttable — your call</span></td><td>Your cut line today: polish slips before the date does.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout"><b>The one date that isn’t negotiable</b>DNSSEC — a lock on your domain — has to be switched off at Squarespace <strong>a full day before</strong> the nameservers move to Cloudflare, because that record lives for 24 hours. Move the nameservers first and the domain goes dark for real players. That is why the cutover below starts with a five-minute job of yours, on its own day.</div>
+    <div class="note"><label for="n-now">Your notes: Where we stand</label><textarea id="n-now" data-note="now" data-label="Where we stand" rows="2"></textarea></div>
+  </section>
+
+  <section id="dev" aria-labelledby="dev-h">
+    <h2 id="dev-h">What Mac: Dev says</h2>
+    <p>Asked this morning, answered in full. Dev owns current development; this is its read, not mine.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Launch-bar item</th><th>State</th><th>What’s actually left</th></tr></thead>
+      <tbody>
+        <tr><td>Solo and crew feel finished</td><td><span class="tag t-part">In progress, closest to done</span></td><td>You marked all 18 items “looks right” today, with five problems; all five are fixed and being verified now. Still missing: <strong>the crew rematch</strong> — in a crew, “play again” still drops you out of the game.</td></tr>
+        <tr><td>Tutorial</td><td><span class="tag t-done">Live</span></td><td>Nothing to build. <strong>Nobody has watched a real first-timer play it</strong>, and nobody knows whether anyone opens “How to play”.</td></tr>
+        <tr><td>Analytics</td><td><span class="tag t-done">Live</span></td><td>No banner, no cookie, your ruling. Missing: anything that turns the numbers into something you can read.</td></tr>
+        <tr><td>Private source</td><td><span class="tag t-no">Not started</span></td><td>The only launch-bar item with nothing built, and it can’t be done without the Cloudflare move, because a private repository needs a host that serves from one.</td></tr>
+        <tr><td>Search</td><td><span class="tag t-part">Half</span></td><td>See above. Dev’s words: “measured broken, and it is a BRAND COLLISION, not a tags problem”.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout"><b>Dev’s number one risk is you, and it says so plainly</b>The cutover is <strong>not started and blocked on step 0</strong>, which is your five minutes at Squarespace — and it has been the standing blocker on your sheet for days. Dev’s estimate once it’s off: 2–3 working days for the move, plus a day watching the live domain. <strong>The clock starts when you do.</strong></div>
+    <h3>Dev’s other two risks</h3>
+    <ol>
+      <li><strong>Firebase, unauthenticated and uncapped.</strong> About a day for the alert and scoped rules, plus a full crew pass, because rules that are too tight break multiplayer quietly. Today the exposure is a few players; on launch day it’s whoever finds it.</li>
+      <li><strong>The brand collision.</strong> Not a code fix, and being listed takes weeks, not days — so starting on 25 September is the same as not starting. Half a day to measure how bad it actually is.</li>
+    </ol>
+    <h3>Three cheap things only you can do</h3>
+    <ul>
+      <li><strong>Win one voyage on staging</strong> (five minutes). The smarter bots learn only from voyages a human won, and none has been logged since the logs stopped keeping names. This single game unblocks a whole workstream.</li>
+      <li><strong>Watch one first-timer play</strong> (one afternoon). Nobody in this project ever has, and it’s the only item on any list that touches a player directly.</li>
+      <li><strong>Rule on twelve narration lines</strong> that still name a captain by hand, where the storm and the co-baker line name a <em>group</em>, which the one narration rule can’t say at all.</li>
+    </ul>
+    <h3>Landed this week, and not in any backlog</h3>
+    <p>The victory card and the voyage score both shipped: a voyage now ends with a crown, a podium, awards and a score the engine works out once — your words, “SO FUN TO SEE!!!”, with winning now a flat +500. Dev also opened an art list: boats with sails down, sails as separate pieces, and a real trophy per award to retire the placeholder medals.</p>
+    <p>Dev’s own checklist, which it alone writes, is <a href="https://claude.ai/artifact/LvqytfTYCwssQzTcmNFped">here</a>. (Two links point at it — a short one and a long one — and they are the same page, not two pages. Dev has written that into the repo so nobody publishes a duplicate by mistake.)</p>
+    <div class="note"><label for="n-dev">Your notes: What Mac: Dev says</label><textarea id="n-dev" data-note="dev" data-label="What Mac: Dev says" rows="2"></textarea></div>
+  </section>
+
+  <section id="goals" aria-labelledby="goals-h">
+    <h2 id="goals-h">The six goals to hit by 1 October</h2>
+    <div class="goals">
+      <div class="goal"><div><b>The game lives on Cloudflare</b>Staging first, then the live domain, with the game untouched while staging proves it.<small>Done when: playpastrypirates.com answers as Cloudflare and a voyage plays start to finish on it. By 24 Sep.</small></div></div>
+      <div class="goal"><div><b>You can see how it’s going</b>The counting already works. What’s missing is a page you can tap that shows visits, voyages started and voyages finished.<small>Done when: you open one link on your phone and read today’s numbers without asking me. By 22 Sep.</small></div></div>
+      <div class="goal"><div><b>The code stops being copyable</b>The repository goes private, and the staging build survives it.<small>Done when: the project reads private and a no-op push still publishes staging. By 25 Sep.</small></div></div>
+      <div class="goal"><div><b>A bill can’t run away</b>The Firebase budget alert set, and the database rules scoped.<small>Done when: an alert exists, and an unauthenticated write to a room is refused. By 26 Sep.</small></div></div>
+      <div class="goal"><div><b>What players get is what we’ve built</b>Two batches, not one. The first is tonight’s: everything since 13 September, on your verdict today. The second is the “every fact decided in one place” cleanup, about 18 of 45 items done, which needs its own staging round and its own verdict.<small>Done when: production reads 2026.09.17.6 tonight, and the second batch has your yes before 30 Sep.</small></div></div>
+      <div class="goal"><div><b>Someone can find it</b>Search Console connected, sitemap complete, and one sentence saying which search we promise to win.<small>Done when: the site is confirmed listed, and the promise is written down. By 30 Sep.</small></div></div>
+    </div>
+    <div class="note"><label for="n-goals">Your notes: The six goals</label><textarea id="n-goals" data-note="goals" data-label="The six goals" rows="2"></textarea></div>
+  </section>
+
+  <section id="days" aria-labelledby="days-h">
+    <h2 id="days-h">The 14 days</h2>
+    <p>Gold is yours, teal is mine, red is a gate nothing passes until it’s green. Your share adds up to about an hour, spread over four days — plus one voyage you win on staging, which costs five minutes and unblocks the bots.</p>
+    <div class="days">
+      <div class="day his"><b>Thu 18</b><span class="who">You · 5 minutes</span><p><strong>The whole schedule starts here.</strong> Turn off DNSSEC at Squarespace. Nothing else moves today; the lock takes a day to expire, and Dev names this as the one thing blocking everything else. Read the domain name in the address bar before you touch anything — hycudesign.com’s panel looks identical and a record went to the wrong domain once.</p></div>
+      <div class="day mine"><b>Thu 18</b><span class="who">Me</span><p>Cutover pre-flight: the not-found page, the Node version pinned, caching rules matched to what Cloudflare actually serves, the teardown commit written but not landed.</p></div>
+      <div class="day mine"><b>Fri 19</b><span class="who">Me</span><p>A numbers page you can tap: visits, voyages started, voyages finished, today and this week. The counting already happens; this just shows it to you.</p></div>
+      <div class="day mine"><b>Sat 20</b><span class="who">Me</span><p>Staging published on Cloudflare. The live game is untouched all day.</p></div>
+      <div class="day his"><b>Sun 21</b><span class="who">You · 20 minutes</span><p>Play staging on your phone and your laptop. Check the build stamp reads <code>-staging@</code>. Confirm you can see your own visit in analytics.</p></div>
+      <div class="day gate"><b>Mon 22</b><span class="who">Gate</span><p>Staging runs on Cloudflare and you can read your own numbers. If either is red, the live domain waits — and polish gives up its days, not the cutover.</p></div>
+      <div class="day his"><b>Wed 24</b><span class="who">You · 15 minutes</span><p>Move the nameservers to Cloudflare. The live game changes hands today; the game itself doesn’t change.</p></div>
+      <div class="day mine"><b>Wed 24 – Thu 25</b><span class="who">Me</span><p>Watch it settle: a full voyage on the live domain, a crew game across two windows, and the old host kept warm until it’s certain.</p></div>
+      <div class="day his"><b>Thu 25</b><span class="who">You · 10 minutes</span><p>Clear the custom domain in the old host’s settings first, then make the repository private, then push anything to <code>dev</code> and watch staging still build. Delete the old staging repository once it does.</p></div>
+      <div class="day his"><b>Fri 26</b><span class="who">You · 10 minutes</span><p>Set the Firebase budget alert. Ten minutes, and it is the difference between a surprise and a bill.</p></div>
+      <div class="day mine"><b>Fri 26</b><span class="who">Me</span><p>Scope the database rules so a stranger can’t write into your rooms, and put them in the repo where they can be reviewed.</p></div>
+      <div class="day mine"><b>Sat 27 – Sun 28</b><span class="who">Me</span><p>Whole voyages to the end card, in all three modes, on the final build, both crew windows compared at your phone size — this time on the Cloudflare-served live domain, which is the thing no earlier test covers. Only real faults get fixed; polish waits.</p></div>
+      <div class="day his"><b>Mon 29</b><span class="who">You · 20 minutes</span><p><strong>The second batch, not the first.</strong> Tonight’s build already carries everything you approved today. This slot is for Wy-Blade’s “every fact decided in one place” cleanup — about 18 of 45 items done — which gets its own staging round and its own verdict. If it isn’t ready, it waits; it is not a launch blocker.</p></div>
+      <div class="day mine"><b>Tue 30</b><span class="who">Me</span><p>Search Console connected, sitemap completed, share pictures checked. Freeze: nothing else changes before launch.</p></div>
+      <div class="day his"><b>Thu 1 Oct</b><span class="who">Launch</span><p>Post it. Then watch three numbers all week: voyages finished, captains who come back, and the Firebase bill.</p></div>
+    </div>
+    <div class="callout"><b>Slack is built in, and it just grew</b>Two working days sit unused between 21 and 24 September, and the merge that was going to cost the 29th has moved twelve days earlier — it happens tonight. If something slips, it comes out of polish first, then out of search — never out of the cutover or the safety work. <strong>The date now rests on one thing: your five minutes at Squarespace tomorrow.</strong></div>
+    <div class="note"><label for="n-days">Your notes: The 14 days</label><textarea id="n-days" data-note="days" data-label="The 14 days" rows="2"></textarea></div>
+  </section>
+
+  <section id="settle" aria-labelledby="settle-h">
+    <h2 id="settle-h">To settle</h2>
+    <article class="ask-card" data-ask="seo-promise">
+      <h3>Which search are we promising to win?</h3>
+      <p>Your bar was <em>“up top, indexed by AI and Gemini, the first suggestion.”</em> On the bare phrase there’s a Warner Bros. property in the way, and that’s a long campaign that may not be winnable. On a more specific search it’s very winnable. Saying which one we promise makes it a target instead of a grievance.</p>
+      <div class="opts">
+        <button class="opt" data-val="Win the specific searches first">Win “pastry pirates game”, “pirate baking board game”, “play pastry pirates” first<span class="rec">Recommended</span></button>
+        <button class="opt" data-val="Go for the bare phrase, however long it takes">Go for the bare phrase, however long it takes</button>
+        <button class="opt" data-val="Search isn't a launch goal at all">Search isn’t a launch goal; word of mouth is</button>
+      </div>
+    </article>
+    <article class="ask-card" data-ask="coin-look">
+      <h3>The coin that comes with a bought sea: does it look plain?</h3>
+      <p>You ruled that every sea brings its own Flippinator coin, with better faces earned inside that sea. The guard: the coin you get merely for buying must look plain — no gold edge, no movement — or an expensive sea starts to read as skill, which is the exact line that costs other games their credibility.</p>
+      <div class="opts">
+        <button class="opt" data-val="Yes, the bought coin looks plain">Yes: bought coin plain, earned faces get the gold edge<span class="rec">Recommended</span></button>
+        <button class="opt" data-val="No, the bought coin can be beautiful too">No, a bought sea’s coin can be beautiful too</button>
+      </div>
+    </article>
+    <div class="note"><label for="n-settle">Your notes: To settle</label><textarea id="n-settle" data-note="settle" data-label="To settle" rows="2"></textarea></div>
+  </section>
+
+  <section id="after" aria-labelledby="after-h">
+    <h2 id="after-h">After launch</h2>
+    <p>Your ladder, with what earns each rung. The full detail is in the After Launch plan; this is the shape.</p>
+    <div class="phase"><h3>Oct · Be shared</h3><p>The drama caption after a battle, the “Ye sank yerself” card, streamer mode, the Daily Recipe and its emoji grid, “beat my voyage”, the board game waitlist. These are the cheapest way from hundreds of captains to thousands.</p></div>
+    <div class="phase"><h3>Oct, in parallel · The second sea</h3><p>Your instruction: start Pasta Pirates the moment we launch. It runs alongside everything else, through the world pipeline.</p></div>
+    <div class="phase"><h3>Nov · Foundations players never see</h3><p>Today’s sea moved into its own world folder, a test world to prove a second one costs nothing, sign-ins, and the ledger of what each captain owns.</p></div>
+    <div class="phase"><h3>Dec · Earned clout</h3><p>The trophy cabinet, win boxes, dubloons, earned coin faces, flags and pets, the bakery, the slipway ship, the leaderboard, high-fives.</p></div>
+    <div class="phase"><h3>Q1 · Earning</h3><p>The store through a company that sells on your behalf, the cookie flag, Pasta Pirates on sale, music packs.</p></div>
+    <div class="phase"><h3>Q1–Q2 · More ways to play, then the apps</h3><p>Blitz, campaign voyages, the map painter, find-me-a-crew, 2 vs 2. Then iPhone and Android, then Steam.</p></div>
+    <div class="phase"><h3>Any time · The board game</h3><p>Three publisher emails (Pandasaurus, AEG, Gamewright), each wanting a one-page sell sheet and a 2–3 minute video, which you said you can make easily. UK Games Expo’s free publisher pitches are 4–6 June 2027; the Unpub Festival is 18–22 March 2027 and announces sign-ups by newsletter.</p></div>
+    <div class="phase"><h3>Next year · The cookbook</h3><p>Your timing. The bake-every-recipe channel can start any time; the contest is scoped and ready when you want it.</p></div>
+    <div class="note"><label for="n-after">Your notes: After launch</label><textarea id="n-after" data-note="after" data-label="After launch" rows="2"></textarea></div>
+  </section>
+
+  <section id="decided" aria-labelledby="decided-h">
+    <h2 id="decided-h">What we decided, 14–17 September</h2>
+    <p>Everything you ruled in this conversation, so clearing it loses nothing. The full wording lives in the repo’s decisions file.</p>
+    <div class="cols">
+      <div><h4>The shape of the business</h4><ul>
+        <li>Success is a ladder: ready → launched → loved → earning → a studio.</li>
+        <li>It must pay its own Firebase bill, then <strong>$4,000 a month</strong> to you, then a helper.</li>
+        <li>A hobby now; a side business or company next. You’d license or sell, but not under ~$100,000.</li>
+        <li>Launch: <strong>1 October 2026</strong>. Polish is the cut line.</li>
+      </ul></div>
+      <div><h4>Money</h4><ul>
+        <li>Always free to play. Expansions and looks are sold; power never is.</li>
+        <li>No ads unless nothing else works, and never during a voyage.</li>
+        <li>No subscriptions. No charging to play with friends.</li>
+        <li>One buyer carries the crew, like Jackbox.</li>
+        <li>Money never buys dubloons. No paid mystery boxes.</li>
+        <li>Seas cost money; dubloons buy looks only.</li>
+      </ul></div>
+      <div><h4>Earned vs bought</h4><ul>
+        <li>Never sell what signals skill; sell what signals taste.</li>
+        <li>Every sea brings its own coin, and its better faces are earned inside that sea.</li>
+        <li>Earned only: recipes, the 10 trophies the game already awards, rank, streaks, pets, win-box decor.</li>
+        <li>One reserved look for earned things: a gold edge and a gentle movement. Bought things never animate.</li>
+        <li><strong>No trading and no gifting</strong> — your own second thought: “it’s your world. Clean, simple, no trading.”</li>
+      </ul></div>
+      <div><h4>Players and accounts</h4><ul>
+        <li>13 and up. Kids may play; nothing is built for them.</li>
+        <li>Never sign in to play. The invitation comes at the end of a voyage.</li>
+        <li>An account keeps wins, recipes, trophies, looks, purchases, friends.</li>
+        <li>Chat only between people who know each other. Strangers get the board and a high-five. No moderation, ever.</li>
+      </ul></div>
+      <div><h4>The game itself</h4><ul>
+        <li>The rule set is gospel: no ships with powers, no house rules.</li>
+        <li>Every voyage offers a recipe you don’t own yet, and says so.</li>
+        <li>Your pet trails your boat and wears pirate clothes.</li>
+        <li>The Daily Recipe: one recipe for everyone, ranked by score, vetted overnight by bots. Puzzle ideas moved to campaign.</li>
+        <li>Slow voyages over days: low priority. Viewers voting, the voyage recap and Discord: back burner.</li>
+      </ul></div>
+      <div><h4>The real world</h4><ul>
+        <li>The wooden board is a premium edition in small numbers <em>and</em> the first draft of a cheaper boxed game.</li>
+        <li>Pitch publishers first; crowdfund only if nobody bites. The end-card sign-up is a <strong>waitlist</strong>.</li>
+        <li>You make the sell sheet and the video.</li>
+        <li>Merch stays digital first; physical only through no-stock shops, set up by a helper.</li>
+        <li>Cookbook next year. Contest scoped, prizes in-game.</li>
+      </ul></div>
+    </div>
+    <div class="note"><label for="n-decided">Your notes: What we decided</label><textarea id="n-decided" data-note="decided" data-label="What we decided" rows="2"></textarea></div>
+  </section>
+
+  <section id="found" aria-labelledby="found-h">
+    <h2 id="found-h">What the research found</h2>
+    <p>Seven passes, condensed. Every price here was read on the page it came from.</p>
+    <h3>How comparable games make money</h3>
+    <ul>
+      <li><strong>One payer brings the table</strong> — Jackbox: “only one person in your group needs to own” it; Colonist: “only 1 player needs a Membership”.</li>
+      <li><strong>The base game is free; money buys variety</strong> — Ticket to Ride sells maps from $3.99 to $34.99; Wingspan sells $4.99 look-only packs beside $9.99 expansions.</li>
+      <li><strong>Subscriptions suit catalogues and daily habits</strong>, not one game. Board Game Arena is 36 a year, and some members told them they treat it as a donation.</li>
+      <li><strong>Donations pay bills only at scale</strong> — Lichess funds servers and one developer from millions of players.</li>
+    </ul>
+    <h3>Money for a one-person studio</h3>
+    <ul>
+      <li><strong>A company that sells on your behalf</strong> (Paddle) files sales tax worldwide for 5% + 50¢ a sale. Stripe is cheaper but leaves the filing to you; its tax service starts at $90 a month. EU tax applies to a US seller.</li>
+      <li><strong>Portals:</strong> Poki splits ad money 50/50 on players it sends, but wants 5 years of web exclusivity. CrazyGames has no exclusivity but you pay for multiplayer servers.</li>
+      <li><strong>Stores:</strong> Steam $100 per game; Apple $99 a year and a 15% cut under $1M; Apple rejects “a repackaged website”.</li>
+      <li><strong>Wordle</strong> went from under 100 players to 2 million a week in ten weeks, then sold to the NYT for low seven figures with no revenue at all. Audience is what gets priced.</li>
+    </ul>
+    <h3>Streaming and sharing</h3>
+    <ul>
+      <li>A game should be “a constant tutorial for anyone watching” — streamers won’t explain rules.</li>
+      <li>Wordle’s share grid was invented by a player and built in two weeks later; 1.2 million results were posted in the first fortnight.</li>
+      <li>Friends playing friends is what spreads: Among Us hit 774,000 people watching at once, two years after a flop launch.</li>
+      <li>Discord says over 25% of its monthly users use games inside calls.</li>
+    </ul>
+    <h3>The law, in plain terms</h3>
+    <ul>
+      <li><strong>Earned boxes with a currency nobody can buy are not gambling.</strong> Belgium: a currency doesn’t count as a wager “if this cannot be purchased”. UK: items that can’t be cashed out are “unlikely to be caught”.</li>
+      <li><strong>Trading was the risk, and you removed it.</strong> The Dutch test treats an item as valuable the moment it can be transferred. FIFA coins and CS:GO skins both grew real-money markets that regulators moved against.</li>
+      <li><strong>Paid boxes</strong> would have needed published odds (Apple and Google), and the US FTC now requires a parent’s consent under 16. You ruled them out entirely.</li>
+      <li><strong>Kids:</strong> 13-and-up avoids US parental-consent law for sign-ins and purchases.</li>
+    </ul>
+    <h3>The board game</h3>
+    <ul>
+      <li>Kickstarter tabletop campaigns funded 80% of the time in 2024; twelve first-time creators averaged about $39,000 from 782 backers. Shipping is where campaigns lose money.</li>
+      <li>Factories won’t print under ~500 copies; one designer’s 1,250-copy run landed at about $8.50 a copy.</li>
+      <li>Royalties for new designers run about 5–8%; Stonemaier pays a $10,000 advance but won’t consider a game that tops out at four players, and avoids games already published.</li>
+      <li><strong>Your four-seat rule closes two doors</strong> (Stonemaier, Calliope) before anyone reads a rule. A design question, and yours.</li>
+      <li>Nobody signs confidentiality agreements; never mail a prototype nobody asked for; agents barely exist.</li>
+    </ul>
+    <h3>Merch and food</h3>
+    <ul>
+      <li>Print-on-demand costs nothing up front: Printful tees start at $9.25–$13.50 base; Redbubble pays artists 20%. Makeship makes a plush only if 200 fans preorder in 21 days.</li>
+      <li>The Official Stardew Valley Cookbook became a New York Times bestseller. Catan and Ticket to Ride have official cookbooks. No documented bakery partnership with an indie game turned up — open water.</li>
+    </ul>
+    <div class="note"><label for="n-found">Your notes: What the research found</label><textarea id="n-found" data-note="found" data-label="What the research found" rows="2"></textarea></div>
+  </section>
+
+  <section id="risks" aria-labelledby="risks-h">
+    <h2 id="risks-h">What could stop 1 October</h2>
+    <ol>
+      <li><strong>The domain.</strong> Moving nameservers with the lock still live takes the site down for real players. Handled by doing your five-minute job a day early, and by not touching the live domain until staging has proved itself.</li>
+      <li><strong>The bill.</strong> The database answers strangers today, and you’re on a pay-as-you-go plan. Traffic you’re hoping for is also the traffic that bills you. The alert and the scoped rules both land before launch.</li>
+      <li><strong>161 commits arriving at once.</strong> Everything since 13 September reaches players in a single merge, so the whole-game check runs on the final build, not on pieces.</li>
+      <li><strong>Polish appetite.</strong> The known-bugs list is long and none of it is game-stopping. Your cut line is what protects the date; I’ll hold it unless you say otherwise.</li>
+      <li><strong>Nobody comes.</strong> A launch post is one day of attention. The share card and the Daily Recipe are what make day eight look like day one, which is why they lead the after-launch work.</li>
+    </ol>
+    <div class="note"><label for="n-risks">Your notes: Risks</label><textarea id="n-risks" data-note="risks" data-label="Risks" rows="2"></textarea></div>
+  </section>
+
+  <section id="links" aria-labelledby="links-h">
+    <h2 id="links-h">Where things live</h2>
+    <ul>
+      <li><a href="https://claude.ai/artifact/6DGyHdVj4SShy3tZumPNQn">Pastry Pirates After Launch</a> — the full plan behind the phases above.</li>
+      <li><a href="https://claude.ai/artifact/CffS7stsSzUvzkfR7TrokN">The Voyage Ahead</a> — the 20 interview questions, your answers, and the research behind each.</li>
+      <li><a href="https://claude.ai/code/artifact/a7e8dae4-42d9-4f01-891a-ef2c782f091f">Victory Card Proposals</a> — the voyage score the Daily Recipe leaderboard would use.</li>
+      <li>In the repo: your interview word for word in <code>.planning/his-words/</code>, every ruling in <code>.claude/memory/DECISIONS.md</code>, the plan in <code>docs/PRD-AFTER-LAUNCH.html</code>, this roadmap in <code>docs/ROADMAP.html</code>, and the cutover steps in <code>docs/PRD-CLOUDFLARE-CUTOVER.md</code>.</li>
+    </ul>
+    <div class="note"><label for="n-links">Your notes: Where things live</label><textarea id="n-links" data-note="links" data-label="Where things live" rows="2"></textarea></div>
+  </section>
+</main>
+
+<div class="dock">
+  <button class="copy" id="copy">Copy my notes</button>
+  <span class="status" id="status" role="status" aria-live="polite">Saves as you type</span>
+</div>
+
+<script>
+(function () {
+  var KEY = 'roadmap/wyatt-r1';
+  var status = document.getElementById('status');
+  var state = { asks: {}, notes: {} };
+  function say(msg, warn) { status.textContent = msg; status.className = 'status' + (warn ? ' warn' : ''); }
+  try { var raw = localStorage.getItem(KEY); if (raw) state = JSON.parse(raw) || state; } catch (e) { say("Can't save here, so copy your notes before you leave", true); }
+  state.asks = state.asks || {}; state.notes = state.notes || {};
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); say('Saved'); }
+    catch (e) { say("Can't save here, so copy your notes before you leave", true); }
+  }
+  document.querySelectorAll('.ask-card').forEach(function (card) {
+    var id = card.dataset.ask, btns = card.querySelectorAll('.opt');
+    function paint() {
+      btns.forEach(function (b) { b.setAttribute('aria-pressed', state.asks[id] === b.dataset.val ? 'true' : 'false'); });
+      card.classList.toggle('answered', !!state.asks[id]);
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (state.asks[id] === b.dataset.val) delete state.asks[id]; else state.asks[id] = b.dataset.val;
+        paint(); save();
+      });
+    });
+    paint();
+  });
+  document.querySelectorAll('textarea[data-note]').forEach(function (t) {
+    var id = t.dataset.note;
+    if (state.notes[id]) t.value = state.notes[id];
+    t.addEventListener('input', function () { if (t.value.trim()) state.notes[id] = t.value; else delete state.notes[id]; save(); });
+  });
+  function text() {
+    var lines = [], answered = [];
+    document.querySelectorAll('.ask-card').forEach(function (c) { if (state.asks[c.dataset.ask]) answered.push(c); });
+    if (answered.length) {
+      lines.push('ANSWERS');
+      answered.forEach(function (c) { lines.push('- ' + c.querySelector('h3').textContent + ' -> ' + state.asks[c.dataset.ask]); });
+      lines.push('');
+    }
+    var notes = [];
+    document.querySelectorAll('textarea[data-note]').forEach(function (t) {
+      if (t.value.trim()) notes.push('- ' + t.dataset.label + ':\n  ' + t.value.trim().replace(/\n/g, '\n  '));
+    });
+    if (notes.length) { lines.push('NOTES'); lines = lines.concat(notes); }
+    return lines.length ? 'Pastry Pirates Roadmap\n\n' + lines.join('\n') : '';
+  }
+  document.getElementById('copy').addEventListener('click', function () {
+    var t = text();
+    if (!t) { say('Nothing to copy yet: pick an answer or write a note'); return; }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      if (ok) { document.body.removeChild(ta); say('Copied, paste it into chat'); }
+      else { ta.style.opacity = '1'; ta.style.height = '40vh'; ta.style.width = '100%'; ta.style.zIndex = '10'; say("Couldn't copy, so your notes are selected at the top; copy them by hand", true); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { say('Copied, paste it into chat'); }, fallback);
+    else fallback();
+  });
+})();
+</script>

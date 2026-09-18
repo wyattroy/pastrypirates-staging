@@ -113,6 +113,12 @@ function rules(files) {
   // 6. EVERY SPENDING THROUGH THE ONE DOOR
   const payOutBody = body(board, "export function payOut(");
   const leaveCalls = (board.match(/\bcoinsLeave\(/g) || []).length - 1 + others.reduce((k, [, s]) => k + (s.match(/\bcoinsLeave\(/g) || []).length, 0);
+  /* AND A SPENDING IS WHAT WAS PAID, NEVER WHAT IT WOULD HAVE COST. A dock event carries the crate's `price` whether or not anybody
+     bought, so reading `price` flew coins out of a purse for a captain who passed — Wyatt, 2026-09-17: "when i passed on buying a crate
+     at a dock, 3 coins dropped out of my purse". The engine now records `paid` beside it (0 for a pass, 0 for a barter). */
+  rule(/e\.t===?"dock"&&e\.paid>0/.test(consume) && !/e\.t===?"dock"&&e\.price/.test(consume),
+    "a dock spends what was PAID, never the price of a crate nobody bought",
+    "the spending door reads a dock's `price` again — a captain who passes would watch coins leave anyway");
   rule(/payOut\(\s*spender\s*,\s*spent\s*\)/.test(consume) && /departures\(\s*seat\s*,\s*coins\s*\)/.test(payOutBody) && /departures\(\s*from\s*,\s*coins\s*\)/.test(pay)
        && leaveCalls === 1 && /coinsLeave\(/.test(payOutBody) && !/export\s+(async\s+)?function\s+coinsLeave\b/.test(board),
     "the one event consumer spends through the spending door (payOut), a trade's payer through payInto, and nothing else drops coins out of a purse",
@@ -136,7 +142,8 @@ const MUTANTS = [
   ["a count-hold put back", broken("src/ui/board.js", "export function payInto(", "function holdCoinRoll(){}\nholdCoinRoll(0,1);\nexport function payInto("), 6],
   ["the purse's drawing clicking a coin down again", broken("src/ui/board.js", "  n.textContent=show;\n  pulseEl(el);\n}", "  n.textContent=show;\n  pulseEl(el);playCoinTick();\n}"), 7],
   ["\"leaving\" cleared somewhere other than a departure", broken("src/ui/board.js", "export function payOut(", "function leak2(s){LEAVING[s]=0;}\nexport function payOut("), 8],
-  ["a purchase dropping its coins without the spending door", broken("src/orchestrator.js", "payOut(spender,spent)", "payInto(spender,spent)"), 9],
+  ["a purchase dropping its coins without the spending door", broken("src/orchestrator.js", "payOut(spender,spent)", "payInto(spender,spent)"), 10],
+  ["a dock reading the price of a crate nobody bought", broken("src/orchestrator.js", 'const spent=(e.t==="dock"&&e.paid>0)?e.paid', 'const spent=(e.t==="dock"&&e.price>0)?e.price'), 9],
 ];
 let proofOk = true;
 for (const [what, mutant, idx] of MUTANTS) {

@@ -1166,7 +1166,12 @@ class Game{
         if(buy)got="bought";
       }
     }
+    /* `price` IS THE CRATE'S PRICE AND `paid` IS WHAT LEFT THE PURSE, and they are not the same number — a dock records a price
+       whether or not anybody bought. Wyatt, 2026-09-17: "when i passed on buying a crate at a dock, 3 coins dropped out of my purse;
+       even though i didn't buy anything". The screen was reading `price` because nothing else said what was paid; now the event says
+       it. A barter pays in crates, so its `paid` is 0. */
     this.ev({t:"dock",p:p.idx,ing,heads:h?1:0,got,price:buy&&buy.paidIng?0:price,
+      paid:buy&&!buy.paidIng?price:0,
       paidIng:buy&&buy.paidIng?buy.paidIng:undefined,
       left:buy?undefined:this.dockLeft(p,ing),
       black:buy?buy.black:0,wentDry:buy?buy.wentDry:0,firstDry:buy?buy.firstDry:0});

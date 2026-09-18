@@ -89,7 +89,14 @@ const FIXTURE = `(() => {
 try {
   console.log("POINTER-EVENTS: the structural check's definition of a control\n");
   await C.ev(`location.href=${JSON.stringify(url)}`).catch(() => {});
-  await sleep(2000);
+  /* ⚠ WAIT FOR THE PAGE, DO NOT GUESS AT IT. This slept a flat 2 s and then evaluated a fixture whose first line is
+     `document.body.style.margin` — so under load, on a busy machine, `document.body` was still null and the eval threw
+     "Uncaught" at line 1, column 16. That is this gate's whole flake, named by Wy-Blade from the exceptionDetails after it
+     fired five times across two branches (RED, GREEN, RED, GREEN, GREEN). A longer sleep would only move the edge. */
+  for (let i = 0; i < 40; i++) {
+    if (await C.ev(`!!(document.body && document.readyState !== "loading")`).catch(() => false) === true) break;
+    await sleep(125);
+  }
   const n = await C.ev(FIXTURE);
   n === 3 ? pass(`instrument reached its subject — ${n} buttons built into a real page`)
           : fail(`the fixture did not build (${n} buttons) — everything below is meaningless`);

@@ -161,6 +161,16 @@ export async function attach(dbgPort, { match = null } = {}) {
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } };
   const send = (m, p = {}) => new Promise(res => { const i = ++id; pend.set(i, res); ws.send(JSON.stringify({ id: i, method: m, params: p })); });
   await send("Page.enable"); await send("Runtime.enable");
+  /* ⚠ AND THE PAGE IS READY BEFORE THE CALLER'S FIRST EVAL. A gate that attaches and evaluates straight away can hit a document that
+     is still loading, and `ev` (below) turns that into a thrown "eval: …Uncaught…" — which reads as a real failure and is not one.
+     Two browser gates have gone red that way on Wy-Blade under load and passed alone (2026-09-17). This waits, bounded, for the
+     target's own document to finish; it costs nothing on about:blank and cannot hide a genuine page error, because a page that
+     never becomes ready still goes on to fail the caller's own checks. */
+  for (let i = 0; i < 24; i++) {
+    const r = await send("Runtime.evaluate", { expression: "document.readyState", returnByValue: true });
+    if (r.result?.result?.value === "complete") break;
+    await sleep(125);
+  }
   await send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 950, deviceScaleFactor: 1, mobile: false });
 
   const ev = async expr => {

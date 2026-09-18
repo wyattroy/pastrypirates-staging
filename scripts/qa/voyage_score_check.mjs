@@ -66,12 +66,15 @@ function posed() {
   ok(end.t === "end" && end.winner === 0, `posed voyage did not end with seat 0 crowned`);
   const v = end.voyage || {};
   // BY HAND, with crate 20 · ovens 50 · named 15 · perfect 300 · day 10 (cap 5) · coin 3 (cap 10) · trade 10 (cap 3):
-  //   the most a non-winner can reach = 5·20 + 50 + 5·15 + 5·10 + 10·3 + 3·10 = 335; the win = 2·335 − (100+50+75) = 445
-  //   seat 0: 100 + 50 + 75 + 300 + 445 + 30 + 15 + 10 = 1025
+  //   the win is a FLAT 500 — his call, 2026-09-17: "I think winning should just give you +500, make it a clean number."
+  //   It was 445, derived so the slowest winner still doubled the best loser; 500 keeps that property anyway, because a winner
+  //   has by definition reached the ovens and finished: 100 + 50 + 75 + 500 = 725, against a non-winner's ceiling of
+  //   5·20 + 50 + 5·15 + 5·10 + 10·3 + 3·10 = 335, and 725 ≥ 2·335. The property check below is what proves it, not this comment.
+  //   seat 0: 100 + 50 + 75 + 300 + 500 + 30 + 15 + 10 = 1080
   //   seat 1: 100 + 50 + 45 + 0 + 0 + 10 + 21 + 0     = 226
   //   seat 2:  80 + 0 + 0 + 0 + 0 + 0 + 12 + 20       = 112
   //   seat 3:  60 + 0 + 0 + 0 + 0 + 0 + 30 + 10       = 100
-  const want = [1025, 226, 112, 100];
+  const want = [1080, 226, 112, 100];
   ok(JSON.stringify(VOYAGE_POINTS) === JSON.stringify({ crate: 20, ovens: 50, named: 15, perfect: 300, day: 10, dayCap: 5, coin: 3, coinCap: 10, trade: 10, tradeCap: 3 }),
     `VOYAGE_POINTS changed (${JSON.stringify(VOYAGE_POINTS)}) — re-work this check's hand arithmetic from his sheet before trusting it`);
   (v.captains || []).forEach((c, i) => ok(c.score === want[i], `seat ${i} scored ${c.score}, by hand ${want[i]} — rows ${JSON.stringify(c.rows && c.rows.map(r => r.key + ":" + r.pts))}`));
@@ -85,7 +88,7 @@ function posed() {
       `the end event names ${JSON.stringify(c1.namedCrates)} as named right; the locked bench seats hold ${JSON.stringify(want)}`);
     const byOrderMistake = g.players[1].bake.order.filter((x, i) => g.players[1].bake.locked[i]).slice().sort();
     ok(JSON.stringify(byOrderMistake) !== JSON.stringify(want), `RED-PROOF: the pose cannot tell "locks read in recipe order" from the truth — re-pose it`); }
-  ok(voyageWinBonus(VOYAGE_POINTS, 5) === 445, `the win pays ${voyageWinBonus(VOYAGE_POINTS, 5)}, by hand 445`);
+  ok(voyageWinBonus(VOYAGE_POINTS, 5) === 500, `the win pays ${voyageWinBonus(VOYAGE_POINTS, 5)}, and his call is a flat 500`);
   // a shared bakery: a captain who also solved first try but was not crowned gets every named crate, never the perfect bonus
   const g2 = posed(); const q = g2.players[1];
   Object.assign(q, { done: true, baking: false, bake: { locked: [true, true, true, true, true], attempts: 1, solved: true } });
@@ -118,6 +121,7 @@ const mutants = {
   "perfect paid to non-winners": (c, P, s) => voyageScoreRows({ ...c, won: 1 }, P, s).map(r => r.key === "won" && !c.won ? { ...r, pts: 0 } : r),
   "coin cap removed from a non-winner": (c, P, s) => c.won ? voyageScoreRows(c, P, s) : voyageScoreRows(c, { ...P, coinCap: 1e9 }, s),
   "win typed as a flat 200": (c, P, s) => voyageScoreRows(c, P, s).map(r => r.key === "won" && c.won ? { ...r, pts: 200 } : r),
+  "the win cut to 350": (c, P, s) => voyageScoreRows(c, P, s).map(r => r.key === "won" && c.won ? { ...r, pts: 350 } : r),
 };
 for (const [name, fn] of Object.entries(mutants)) ok(!propertyHolds(fn), `RED-PROOF: the mutant "${name}" did not turn the double-the-points check red`);
 
@@ -137,4 +141,4 @@ for (const [why, better, worse] of pairs) for (const [sa, sb] of [[0, 1], [1, 0]
 }
 
 if (fails.length) { console.log("FAIL voyage_score_check\n  " + fails.join("\n  ")); process.exit(1); }
-console.log("PASS voyage_score_check — the end is declared once, the example voyage scores 1025/226/112/100 as worked by hand, any winner doubles any non-winner over 2000 voyages (3 mutants red), and closeness breaks every tie in both seatings");
+console.log("PASS voyage_score_check — the end is declared once, the example voyage scores 1080/226/112/100 as worked by hand, any winner doubles any non-winner over 2000 voyages (4 mutants red), and closeness breaks every tie in both seatings");
