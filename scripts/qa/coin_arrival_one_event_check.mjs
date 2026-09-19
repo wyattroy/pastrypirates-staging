@@ -42,9 +42,13 @@ function rules(files) {
 
   // 1. THE CHINK, ONCE
   const arrived = body(board, "export function coinArrived(");
-  const chinkSites = (board.match(/playCoinChink\(\s*\)/g) || []).length
-    + others.reduce((n, [f, s]) => n + (f.endsWith("audio.js") ? 0 : (s.match(/playCoinChink\(\s*\)/g) || []).length), 0);
-  rule(chinkSites === 1 && /playCoinChink\(\s*\)/.test(arrived),
+  /* THE CHINK IS A CUE, NOT A FUNCTION, since 2026-09-19 — playCue("purse.coinIn"). What this gate
+     guards is unchanged and is if anything easier to state: the cue NAMES the moment, so a second
+     site would now be a second place claiming a coin arrived. */
+  const CHINK = /playCue\("purse\.coinIn"\)/g;
+  const chinkSites = (board.match(CHINK) || []).length
+    + others.reduce((n, [f, s]) => n + (f.endsWith("audio.js") ? 0 : (s.match(CHINK) || []).length), 0);
+  rule(chinkSites === 1 && /playCue\("purse\.coinIn"\)/.test(arrived),
     "the chink is played in exactly one place: the arrival event (coinArrived)",
     `the chink is played in ${chinkSites} place(s)${/playCoinChink\(\s*\)/.test(arrived) ? "" : ", and not in coinArrived"} — a coin can chink without arriving`);
 
@@ -61,7 +65,7 @@ function rules(files) {
   const setsBefore = [...before.matchAll(/n\.textContent\s*=\s*([^;]+);/g)].map(m => m[1].trim());
   const replayOrFresh = /if\s*\(\s*!Number\.isFinite\(from\)\s*\|\|\s*appState\.replaying\s*\)\s*\{\s*n\.textContent\s*=\s*show/.test(before);
   const setsAfter = [...after.matchAll(/n\.textContent\s*=\s*([^;]+);/g)].map(m => m[1].replace(/\s/g, ""));
-  const downOnly = setsAfter.length === 1 && setsAfter[0] === "show" && !/setTimeout|playCoinTick|cur\s*-\s*1/.test(show);
+  const downOnly = setsAfter.length === 1 && setsAfter[0] === "show" && !/setTimeout|playCue\("purse\.coinOut"\)|cur\s*-\s*1/.test(show);
   rule(guard >= 0 && setsBefore.length === 1 && replayOrFresh && downOnly,
     "the purse's own drawing sets a replayed, fresh or unannounced number — it never raises one and never rolls one down on a clock",
     guard < 0 ? "showSeatCoins has no `if(show>from)return;` — it can raise the number without a coin arriving"
@@ -97,8 +101,8 @@ function rules(files) {
   // 4. THE CLICK, ONCE: a coin going out of a purse sounds only in the departure event
   const left = body(board, "export function coinLeft(");
   // the End of Voyage card's stats roll-up (endCardArrives) clicks too (docs/AUDIO.md: abacus-click) — it counts totals, not a purse, so it is not a coin leaving
-  const tickSites = (board.replace(body(board, "function endCardArrives("), "").match(/playCoinTick\(\s*\)/g) || []).length;
-  rule(tickSites === 1 && /playCoinTick\(\s*\)/.test(left),
+  const tickSites = (board.replace(body(board, "function endCardArrives("), "").match(/playCue\("purse\.coinOut"\)/g) || []).length;
+  rule(tickSites === 1 && /playCue\("purse\.coinOut"\)/.test(left),
     "a coin leaving clicks in exactly one place: the departure event (coinLeft)",
     `the board plays the coin click in ${tickSites} place(s)${/playCoinTick\(\s*\)/.test(left) ? "" : ", and not in coinLeft"} — a click that is not a coin leaving`);
 
@@ -181,13 +185,13 @@ for (const r of real) console.log(`  ${r.ok ? "PASS" : "FAIL"}  ${r.text}`);
 const broken = (file, from, to) => { const f = { ...files }; if (!f[file].includes(from)) return null; f[file] = f[file].replace(from, to); return f; };
 const board = files["src/ui/board.js"], orch = files["src/orchestrator.js"];
 const MUTANTS = [
-  ["a second chink, played from the departure event", broken("src/ui/board.js", "  playCoinTick();", "  playCoinTick();playCoinChink();"), 0],
+  ["a second chink, played from the departure event", broken("src/ui/board.js", '  playCue("purse.coinOut");', '  playCue("purse.coinOut");playCue("purse.coinIn");'), 0],
   ["the purse's drawing allowed to raise the number", broken("src/ui/board.js", "  if(show>from)return;\n", "\n"), 2],
   ["a muse coin flown straight from the consumer", broken("src/orchestrator.js", "payInto(e.p,e.coins,{after:", "flyFromBoat(e.p,e.coins,{after:"), 4],
   ["a flight exported and called from elsewhere", broken("src/ui/board.js", "async function flyAcross(", "export async function flyAcross("), 5],
   ["\"on the way\" lowered somewhere other than the arrival event", broken("src/ui/board.js", "export function payInto(", "function leak(s){ON_THE_WAY[s]=0;}\nexport function payInto("), 3],
   ["a count-hold put back", broken("src/ui/board.js", "export function payInto(", "function holdCoinRoll(){}\nholdCoinRoll(0,1);\nexport function payInto("), 6],
-  ["the purse's drawing clicking a coin down again", broken("src/ui/board.js", "  n.textContent=show;\n  pulseEl(el);\n}", "  n.textContent=show;\n  pulseEl(el);playCoinTick();\n}"), 7],
+  ["the purse's drawing clicking a coin down again", broken("src/ui/board.js", "  n.textContent=show;\n  pulseEl(el);\n}", '  n.textContent=show;\n  pulseEl(el);playCue("purse.coinOut");\n}'), 7],
   ["\"leaving\" cleared somewhere other than a departure", broken("src/ui/board.js", "export function payOut(", "function leak2(s){LEAVING[s]=0;}\nexport function payOut("), 8],
   ["a purchase dropping its coins without the spending door", broken("src/orchestrator.js", "payOut(spender,spent)", "payInto(spender,spent)"), 10],
   ["a dock reading the price of a crate nobody bought", broken("src/orchestrator.js", 'const spent=(e.t==="dock"&&e.paid>0)?e.paid', 'const spent=(e.t==="dock"&&e.price>0)?e.price'), 9],

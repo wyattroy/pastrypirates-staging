@@ -81,7 +81,6 @@ const FAB = {
   tradewind: { t: "tradewind", p: 0 },
   parley: { t: "parley", a: 0, b: 1, offer: "wheat", want: "sugar", ok: true },
   aground: { t: "aground", p: 0 },
-  shipwrecked: { t: "shipwrecked", p: 0 },
   dock: { t: "dock", p: 0, ing: "wheat", got: "ing", heads: true },
   trade: { t: "trade", a: 0, b: 1, gave: "wheat", got: "sugar" },
   sidebet: { t: "sidebet", p: 0, won: true, delta: 2 },
@@ -552,9 +551,9 @@ for (const key of KEYS) {
 {
   const COVERED_SINGLE_SUBJECT = [
     "blownOut", "sail", "anchor", "moored", "blocked", "anchorHold", "tradewind",
-    "aground", "shipwrecked", "dock", "sidebet", "fish", "finish", "shotclock", "shotclockskip",
+    "aground", "dock", "sidebet", "fish", "finish", "shotclock", "shotclockskip",
   ];
-  check("COVERED_SINGLE_SUBJECT has exactly 15 keys (FIX-04 moved windmove to SILENT_KEYS, dropping this from 16)", COVERED_SINGLE_SUBJECT.length, 15);
+  check("COVERED_SINGLE_SUBJECT has exactly 14 keys (FIX-04 moved windmove to SILENT_KEYS, dropping 16 to 15; the v1 storm ladder's wreck left the tree on 2026-09-19, dropping it to 14)", COVERED_SINGLE_SUBJECT.length, 14);
   // FIX-04: windmove joins turn/end as silent — describeFor() returns null for it on every viewer,
   // per D-07/NARR-05 (both addressed and neutral variants removed together).
   const SILENT_KEYS = new Set(["turn", "end", "windmove"]); // documented as producing no captain's-log line (or none in this fabricated shape)

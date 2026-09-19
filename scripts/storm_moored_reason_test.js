@@ -195,12 +195,11 @@ console.log(`Game.mooredReason(p)/moored(p) — the three storm-moor causes (D-1
   const [p] = g.players;
   p.pos = [...berth];
   p.justDocked = false;
-  p.coins = 0; // worst case for the aground ladder: broke, so a bad outcome would be shipwrecked
+  p.coins = 0; // worst case for the aground ladder: broke, so the ladder would reach its bottom rung
   p.ing = [];  // and holding nothing, so it can't even "lose a crate" instead
   g.windPush(p, dir, 1);
   const ev = g.events[g.events.length - 1];
-  check("D-19 regression guard: berth pushed toward home never shipwrecks", p.shipwrecked, false);
-  check("D-19 regression guard: berth pushed toward home never runs aground", ev.t !== "aground" && ev.t !== "shipwrecked", true);
+  check("D-19 regression guard: berth pushed toward home never runs aground", ev.t !== "aground", true);
   check("D-19 regression guard: berth pushed toward home moors with reason \"home\"", ev.t, "moored");
   check("D-19 regression guard: reason field is exactly \"home\"", ev.reason, "home");
 }

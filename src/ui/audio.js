@@ -23,180 +23,18 @@
 // other off or being dropped (both explicitly rejected behaviours). Mute (D-13) and tab-blur
 // (D-12) both act on the single masterGain — see applyMasterGain() — so they can never fight.
 
+/* ================= THE SOUND TABLE LIVES IN src/shared/sounds.js ================= */
+/* ⭐ IT MOVED OUT OF THIS FILE ON 2026-09-19, at Wyatt's word, and WHICH HALF MOVED IS THE POINT.
+   What a sound IS — which file, which folder, which pack, how loud, which moment plays it — is
+   game data, and a new map brings its own. What a sound DOES — the AudioContext, the buses, mute,
+   the storm's scatter, the flip's loop, the bed — is this file, and every map shares it.
+   So: sounds.js answers "which sound, and when"; audio.js answers "make a noise". One table, one
+   door (`playCue` below), and a call site never names a file again. */
+import {
+  stemUrl, SFX_FILES, SFX_VOLUME, CUES, sliceFor, cueForEvent, CHINK_RUN_RESET, CHINK_RUN_MAX,
+} from "../shared/sounds.js";
+
 /* ================= Pure data — safe to import headlessly, nothing built at load ================= */
-
-// sfx/ — the repo root's set, exactly as assets are shared (this game IS the root since the 2026-08-26 cutover). /3 has no sfx/ of its own, and a
-// page-relative "sfx/" 404s silently for every stem. The same bug shipped in /v2/ and /v2bakeoff/
-// (no sfx dir exists in git under either) until it was found here by a headless probe on
-// 2026-08-09 and fixed in all three builds at Wyatt's word.
-const SFX_DIR = "sfx/";
-// The closed literal array — the ONLY source of a fetch URL anywhere in this module, never a
-// runtime string (threat T-21-02). Adding a 7th stem later means adding it here, nowhere else.
-const SFX_FILES = ["abacus-click", "award-whoosh", "coin-chink", "battle-swords", "battle-won", "bells", "cannon", "card-swish", "coin-flip", "cork-pop", "crate-chime", "crate-marimba", "crate-squawk", "drumroll", "fishing", "ship-move", "store-ingredient", "storm"];
-/* ================= THE MIX — his q7 levelling pass, 2026-09-18 ================= */
-/* Per-stem relative gain: the single tuning point for loudness, so a by-ear pass adjusts one
-   number per sound without restructuring anything else.
-
-   ⭐ THIS IS THE ONE LEVELLING PASS HE ORDERED. Wyatt's q7 ruling (2026-09-06) was "level
-   everything together, once, after all files are in", and on 2026-09-18 he put the last five in
-   scope himself: "It should relevel them too; I haven't heard them properly." So every stem below
-   is levelled here, including the cork pop and the four "Sounds of the Voyage" picks that used to
-   sit at 1 because they were rendered at the level he auditioned on a tuner page. THAT HISTORY IS
-   STILL TRUE and is kept beside each one — hearing a sound alone on a tuner page is not hearing it
-   in a game under an ocean bed, a fiddle and eight other effects, and that gap is what he is
-   naming. What changed is the conclusion, not the measurement.
-
-   ⛔ WHY LOUDNESS ALONE WAS THE WRONG YARDSTICK, and this is the whole lesson of the pass.
-   The six stems below were levelled in 2026-08 by EBU R128 integrated loudness, every one brought
-   to the same -23 LUFS. That matches how loud a sound is WHEN IT PLAYS and is blind to HOW OFTEN
-   IT PLAYS — so the sounds a player hears fifty times a voyage were boosted to match sounds heard
-   once. He found all three of the worst offenders by ear before anyone measured it:
-     "the coin flips are too loud, the sailing sound is too loud" (coin-flip 1.45, ship-move 1.72)
-     "Muse sound is also too loud by a lot"                        (fishing, ALREADY CUT to 0.81)
-   The muse is the proof: R128 had already turned it DOWN and he still called it much too loud.
-
-   ⭐⭐ EVERY NUMBER BELOW IS HIS, SET BY EAR IN THE TUNER ON 2026-09-18. They are a ruling, not a
-   default for somebody to improve on. A measured proposal was built first (the frequency-weighted
-   line is recorded below, because its METHOD is the thing worth keeping) and he then overrode it
-   with his own ear, which is what his ear is for. Where they differ, HIS NUMBER WINS — and the two
-   biggest disagreements are written down beside their stems so nobody "corrects" them back.
-
-   THE CONDITIONS HE TUNED UNDER, and they matter: **the ambience bed was OFF, the music was ON,
-   master at 0.80.** So the balance between the EFFECTS and the SEA has not yet been heard as a
-   whole — and in the same breath he RAISED the bed (AMBIENCE_SEA/GULL/CREAK below). Nothing here is
-   adjusted for that; it is written down so he can judge it in the game, which is the only place it
-   can be judged.
-
-   THE SHAPE OF WHAT HE DID — he arrived by ear at exactly the axis the first pass lacked. He RAISED
-   THE BED AND LOWERED ALMOST EVERYTHING HEARD OFTEN: sailing 1.72 -> 0.57, the muse 0.81 -> 0.38,
-   the flip 1.45 -> 0.57, the turn bell 1 -> 0.63, a crate 2.79 -> 1.82, the coin tick 3 -> 1. The
-   rare ceremony sounds went UP: crate-squawk 2.10, crate-marimba 1.94, card-swish 1.76, cork-pop
-   1.73, award-whoosh 1.48, drumroll 1.41.
-
-   THE METHOD THAT PREDICTED IT, kept because it was right about the shape and is the yardstick for
-   the next stem that arrives (docs/AUDIO.md §1c has the full two-axis table):
-       target loudness = -16.9 dB - 1.71 dB x log2(plays per voyage)
-   -16.9 is where `battle-won` sits: the loudest once-a-voyage moment, never complained about.
-   1.71 dB per doubling was the smallest slope that cut all three of his complaints by 5 dB.
-   HOW OFTEN EACH IS HEARD IS COUNTED, NEVER GUESSED — 200 seeded voyages, the shipping bot brain,
-   the bake-off ruleset, every play derived from the engine's own event stream. The headline: a
-   player hears `sail` 58 times a voyage and `pass` (the Muse) 32 — 92% and 50% of all turns.
-
-   THE CEILING IS -1 dBFS TRUE PEAK, and every gain below is checked against the file's own measured
-   peak by scripts/audio_map_check.js, which reads SFX_TRUE_PEAK_DBFS. A gain that would breach it
-   cannot be committed. MEASURED AGAINST HIS NUMBERS, 2026-09-18: nothing clips. The six gains above
-   1 land at crate-squawk -12.6, crate-marimba -9.1, store-ingredient -7.2, card-swish -5.1,
-   award-whoosh -9.4, cork-pop -2.6 dBFS, and drumroll at -7.0. The closest to the ceiling is the
-   cork pop, with 1.6 dB to spare.
-
-   MEASURED FIGURES — a measurement is not a setting, so the old ones stand and the new sit beside
-   them. Max momentary loudness (EBU R128) is the yardstick, because it reads a 120ms click and an
-   8s storm on one scale, and because a sliced file (cork-pop, crate-marimba) is played ONE SLOT at
-   a time and max-momentary measures the slot rather than the average over all nineteen.
-   Kept from the 2026-08 pass (integrated / true peak / the gain it produced):
-     battle-swords -16.3 LUFS / +0.2 dBFS -> 0.46   fishing  -21.2 / -4.3  -> 0.81
-     storm         -21.7      / -1.5      -> 0.86   coin-flip -26.8 / -4.3 -> 1.45
-     ship-move     -27.7      / -11.3     -> 1.72   store-ingredient -31.9 / -12.4 -> 2.79
-
-   ⚠ THE SWORD CLASH IS NOT A DEFECT, AND THIS NOTE USED TO SAY IT WAS. `battle-swords` measures
-   +0.2 dBFS true peak — that figure is real and stays. The VERDICT attached to it ("clipped in the
-   file, needs a fresh export") is WITHDRAWN: Luis checked the file on 2026-09-18 and found it fine,
-   and Wyatt relayed it — "luis checked the sword clash and found it fine; fix your notes it is not
-   a problem." So the -1 dBFS ceiling stands for every stem levelled here, and this one file is a
-   known, judged exception rather than an outstanding fault. Nothing downstream should carry it as
-   open work. */
-/* EVERY VALUE IS HIS, tuned by ear 2026-09-18. The comment on each stem says WHERE IT ACTUALLY
-   PLAYS — swept from every call site in src/, not from EVENT_SOUND alone, because eight of these
-   eighteen are played directly from code and never touch that map. He asked for exactly this
-   ("You mislabeled some of the sounds from where they actually appear I think" — he was right). */
-const SFX_VOLUME = {
-  /* ---- the ones he named as too loud, and the rest of the often-heard ---- */
-  /* MUSE — EVENT_SOUND.pass. Heard on HALF of all turns (31.9 a voyage). "Too loud by a lot", his
-     strongest wording, and he is righter than the stem alone explains: THE MUSE IS TWO SOUNDS, this
-     one and the muse coin's chink on the same beat. Measured together at the old gains they peaked
-     at -1.2 dBFS, a whisker off full scale; at his new pair they peak at -14.3. */
-  "fishing": 0.38,
-  /* THE COIN FLIP — playFlip()/startFlipSpinSound(), from the tapped coin (board.js setFlipCoin
-     "spin") and the small coin over a flipping boat (dockcoin.js). 32 a voyage, and that is a
-     FLOOR: the spin sound REPLAYS this stem every 965ms (its own buffer length) for as long as a
-     coin is still spinning, so a slow wire means more. */
-  "coin-flip": 0.57,
-  // SAILING — EVENT_SOUND.sail. The most-heard cue in the game: 58 a voyage, on 92% of all turns.
-  "ship-move": 0.57,
-  /* YOUR TURN — EVENT_SOUND.turn, and the ONE sound only its own seat hears
-     (LOCAL_ONLY_SOUND_EVENTS), so ~16 a voyage rather than 63. It is a SIGNAL TO ACT, not a report
-     of something that happened, which is why it can afford to sit above the reports around it. */
-  "bells": 0.63,
-  // A COIN INTO A PURSE — playCoinChink(), board.js coinArrived, the one door every earning passes
-  // through. 84 a voyage: the single most frequent sound in the game.
-  "coin-chink": 0.66,
-  /* A CRATE — two moments, one stem: bought or traded at a dock (EVENT_SOUND.dock/trade) and the
-     "woomp" as a crate's bounce BEGINS in the hold (playCrateLand, board.js, his 2026-09-18 ask).
-     ⭐ THIS, not `crate-chime`, is the sound of a crate landing in the hold. */
-  "store-ingredient": 1.82,
-  /* THE COIN TICK — playCoinTick(): a coin LEAVING a purse (board.js coinLeft), each bake-off
-     guess, and the End of Voyage stats rolling up. 79 a voyage.
-     ⚠ HE CUT THIS FROM 3 TO 1 — a 9.5 dB drop, the largest single move in his pass, and it REVERSES
-     his own 2026-09-14 ask ("The ticking sound isn't happening as it should… i don't hear it")
-     which is why the 3 was there. Both are his. Recorded rather than reconciled so nobody restores
-     the 3 from the older note believing it is the live decision. Worth knowing when he judges it:
-     the file is the quietest in the game by 5 dB (max momentary -40.2), and he tuned with the
-     ambience bed OFF, so this is the stem most likely to go missing again once the sea is back. */
-  "abacus-click": 1.00,
-
-  /* ---- the ceremony sounds: rare, and he raised almost all of them ---- */
-  /* THE CORK POP — playPop(), popin.js: a crate ARRIVING in a hold at the round's pop-in (one file
-     of 19 slots, a semitone up per pop), and buying a crate at a dock (soundForEvent dock+bought).
-     It sat at 1 because his 55% was baked into the file from the pop-in tuner. Still true; no
-     longer the conclusion — he had not heard it in the game, where it was 12 dB under the mix. */
-  "cork-pop": 1.73,
-  /* THE PAPER SWISH — playCardSwish(): the recipe cards flying in (stage.js entrance), the
-     crow's-nest prompt releasing, and the End of Voyage cards dealing and paging. */
-  "card-swish": 1.76,
-  /* ⭐ NOT A CRATE LANDING IN A HOLD — he flagged the label and he was right. playCrateVerdict(true)
-     is a VERDICT CHIME: a crate you got RIGHT on the bake-off reveal (bakeoff.js), the "BAKED!" wax
-     seal stamping down, and the "best" pill stamping in at the End of Voyage. The label was wrong;
-     the wiring is correct and was not touched. */
-  "crate-chime": 1.00,
-  /* THE MARIMBA — playLidNote(k), 8 slots of 600ms, a step up the scale per lid: each bake-off lid
-     landing (bakeoff.js dropLid), the victory letters, and the End of Voyage dock line. */
-  "crate-marimba": 1.94,
-  // A WRONG CRATE on the bake-off reveal — playCrateVerdict(false). His squawk, picked 2026-09-14.
-  "crate-squawk": 2.10,
-  // EACH AWARD CARD dealing in at the End of Voyage — playAwardWhoosh(), victory.js.
-  "award-whoosh": 1.48,
-  // THE END OF VOYAGE ROLL, before the winner is revealed — playDrumroll(), victory.js.
-  "drumroll": 1.41,
-
-  /* ---- unchanged at his hand ---- */
-  /* THE CLASH — EVENT_SOUND.engage (a fight being CALLED, on every screen) and battleflee.
-     ⚠ NOT A DEFECT, and this note used to say it was: see the withdrawn +0.2 dBFS verdict above. */
-  "battle-swords": 0.46,
-  // THE CANNON — EVENT_SOUND.shotLands (a shot getting through) and EVENT_SOUND.ovens (firing up
-  // the bakery). Its -2.0 dBFS transient is the tightest headroom in the table.
-  "cannon": 1.00,
-  // THE STORM — scattered thunder, once when a storm arrives then ~20s apart, on its own quiet bus.
-  "storm": 0.57,
-  // VICTORY — WIN_SOUND, playWinScreen(), victory.js. Heard once.
-  "battle-won": 1.00,
-};
-
-/* MEASURED TRUE PEAK of each stem's own file, dBFS — the ceiling check's evidence, and the reason
-   it is a table rather than a number typed beside each gain. scripts/audio_map_check.js computes
-   `peak + 20*log10(gain)` for every stem and fails if any lands above SFX_PEAK_CEILING_DBFS, so a
-   future gain cannot quietly push a sound into distortion. Re-measure with
-   `ffmpeg -i sfx/<stem>.mp3 -af ebur128=peak=true -f null -` and change the number here; nothing
-   else knows these figures, so there is no second place to keep in step.
-   `battle-swords` at +0.2 is above the ceiling IN THE FILE and is the one judged exception — Luis
-   checked it 2026-09-18 and found it fine (see the note above). The gate names it as such rather
-   than pretending the measurement is different. */
-const SFX_PEAK_CEILING_DBFS = -1;
-const SFX_TRUE_PEAK_DBFS = {
-  "abacus-click": -12.6, "award-whoosh": -12.8, "battle-swords": 0.2, "battle-won": -8.0,
-  "bells": -10.1, "cannon": -2.0, "card-swish": -10.0, "coin-chink": -11.7, "coin-flip": -4.3,
-  "cork-pop": -7.4, "crate-chime": -19.0, "crate-marimba": -14.9, "crate-squawk": -19.0,
-  "drumroll": -10.0, "fishing": -4.3, "ship-move": -11.3, "store-ingredient": -12.4, "storm": -1.5,
-};
 // pp_-prefixed per-browser preference convention pp_timerOff already established
 // (src/orchestrator.js:168) — mute follows it exactly, same key-naming shape.
 const MUTE_KEY = "pp_muted";
@@ -358,206 +196,7 @@ for (const fam of Object.keys(AMBIENCE_FAMILY)) {
 const AMBIENCE_FADE_IN_SEC = 2.5;
 const AMBIENCE_FADE_OUT_SEC = 0.9;
 
-/* SHOTCLOCK_SOUND_PLACEHOLDER stood here (D-22, battle-swords standing in for a purpose-made
-   time-out alert). Left with the shot clock 2026-08-28 — restore the shopping-list note with it. */
 
-// D-05 EXPLICIT PLACEHOLDER — not a final choice. The win screen gets a sound rather than
-// silence; nothing in the six actually sounds like victory, so Claude selected the short, bright
-// one — closest of the six to a chime — as a stand-in. On the shopping list for Luis: a
-// purpose-made victory sound. Swapping it is a one-constant change.
-/* T-073, 2026-09-06 — NO LONGER A PLACEHOLDER, so it no longer carries the word.
-   ⚠ AND AN EARLIER VERSION OF THIS COMMENT PUT WORDS IN WYATT'S MOUTH. It said "Wyatt's §2 ruling
-   marks PP_SFX_BattleWon.mp3 CERTAIN" — HE NEVER RULED ON THE VICTORY SOUND. CEO 227 read all
-   fourteen of his comments (INBOX-20260906T162203Z..163615Z): none mentions the victory sound, the
-   win screen, or BattleWon. "certain" was a CONFIDENCE TAG in the PRD's own table, written by a
-   session, not by him. The swap is still obviously right and squarely inside "start the SFX
-   wiring" — the attribution was not, and a false "he ruled this" in a source comment is the kind
-   of line the next session inherits as settled fact.
-   The swap retires the worst
-   pairing in the game: `store-ingredient` is the QUIETEST stem here (-31.9 LUFS, docs/AUDIO.md
-   DEFECT-3's table) and it was playing the BIGGEST moment. Kept as a named constant, not inlined,
-   so the DOM-free harness can assert it by name. */
-const WIN_SOUND = "battle-won";
-
-/* The End-of-Voyage drumroll. src/orchestrator.js has called `await flash("Drumroll...")` since
-   the moment was built and NOTHING HAS EVER PLAYED under it. Wyatt's ruling (s3 #3): "do the
-   drumroll audio timing check, and match the narration box timing to the sfx file." */
-const DRUMROLL_SOUND = "drumroll";
-
-/* THE CANNON — fired when a shot LANDS, never when a battle merely happens.
- * His ruling (s2/q5, 2026-09-06): "The cannon sound should fire when a shot has LANDED... this
- * does not overlap with teh second coin flip in a battle, but comes a moment after it (eg. 100ms
- * after)" and "cannon sound happens only when a shot lands".
- *
- * ⭐ NO OFFSET IS WIRED, MEASURED RATHER THAN TYPED. The coin stem runs 965ms; FLIP_SPIN_MS (795)
- * plus FLIP_LAND_HOLD_MS (800) put the battle's resolve 1595ms after that sound starts — 630ms of
- * clear air, six times the gap he asked for, produced by two constants that already exist. A
- * sleep(100) here would be a third constant restating them and would rot the day either moves.
- * Confirmed twice: ffprobe on the file, and soundDurationMs() in headless Chrome.
- *
- * WHY IT SITS IN THE ORCHESTRATOR AND NOT IN EVENT_SOUND: the `battle` event only fires once the
- * whole fight has RESOLVED and carries no per-outcome detail, which is the same reason the clash
- * had to move to engage time (see BATTLE_ENGAGE_SOUND above). The landing is a moment inside the
- * fight, so only the fight's own code knows it happened. */
-const CANNON_SOUND = "cannon";
-
-// 260801-7f4 — a REAL choice, and so is WIN_SOUND above now (it stopped being a placeholder at
-// departed SHOTCLOCK one); this stem literally is a sword clash; it is not on any shopping
-// list for Luis. Named as a constant (not inlined) so the DOM-free harness can assert it by name.
-// This is the moment cue for a battle being JOINED — EVENT_SOUND.engage below, the event the engine records the moment a fight is
-// called (Game.beginBattle) — never the `battle` event, because that event does not exist until the whole fight has already resolved.
-const BATTLE_ENGAGE_SOUND = "battle-swords";
-
-// D-01/D-03/D-04/D-06/D-21: the 25-key event->sound mapping, mirroring EVENT_NARRATION's exact
-// shape (src/ui/util.js) and register — a plain object literal, never a Map needing .get() with a
-// default, never a switch with no default, never a .find() that can throw on a miss. An absent
-// key reads as `undefined` and dispatches to silence with no throw and no console warning.
-const EVENT_SOUND = {
-  // D-01 (sailing); D-04 (wind pushes your boat — your ship moved, just not by choice); D-21 (a
-  // gale blows you off the dock — the identical case as windmove)
-  /* ⭐ THE STORM NO LONGER MOVES YOU WITH A SAIL SOUND. Wyatt, 2026-09-07 playtest (sound sheet
-     item 13): "Remove the movement sounds (sail and anchor) from the storm movements — they're
-     confusing and distracting."
-     WHY HE IS RIGHT AND THIS IS NOT A LOSS. `ship-move` is the sound of a captain CHOOSING to
-     sail. `windmove` and `blownOut` are the weather doing it TO them, and a storm round fires one
-     per affected ship — so a four-ship storm played the deliberate-sail cue four times for moves
-     nobody made. The storm's own bed (which now runs under the whole round, see soundForEvent)
-     is the weather's voice; these were four small ships talking over it. */
-  sail: "ship-move", windmove: null, blownOut: null,
-  // D-01/D-04: a crate changing hands, whether docking or trading
-  dock: "store-ingredient", trade: "store-ingredient",
-  // D-01; D-04 (fleeing/dodging — the clash happened, you just left it). NOT the battle's own
-  // start/end — see the `battle: null` entry below.
-  battleflee: "battle-swords", dodge: "battle-swords",
-  // D-01 (fishing); D-03 (dropping anchor in a storm); D-21 (the anchor holding — same family)
-  /* `anchorHold` is the storm case of the same instruction above — a ship riding the weather out.
-     ⚠ IT IS NOT ALLOWED TO BECOME "storm" AGAIN. That exact line was DEFECT-1 and DEFECT-2 in
-     docs/AUDIO.md (an 8-second bed at ~3x level, once per anchoring ship, unfadeable). Going
-     SILENT is strictly further from that defect than "fishing" was, and the guard in
-     scripts/audio_mapping_test.js now pins the invariant that actually matters — never a storm
-     stem — rather than the literal it used to pin. */
-  fish: "fishing", anchor: "fishing", anchorHold: null,
-  // D-04: running aground / shipwrecked both borrow storm
-  // v2.1: nothing runs aground any more — the storm keeps its own cue via `newround`
-  shipwrecked: "storm",
-  // D-06 — explicit silence, not merely absent from the table
-  blocked: null, moored: null,
-  /* T-073 — YOUR TURN. His ruling (s4/q4): "Your Turn should use the Bell SFX sound. New day
-     should NOT use this sound." So `newround` stays null below; the bell is on the TURN.
-     ⭐ THIS IS THE ONE SOUND NOT HEARD BY THE WHOLE TABLE — see LOCAL_ONLY_SOUND_EVENTS. */
-  turn: "bells",
-  newround: null, tradewind: null, bakeoff: null,
-  // architecture item 19: a boat that comes into the current AT its head rides no squares — explicit silence, like the ride itself
-  rimhead: null,
-  // playtest 21 item 3: the storm's one summary line. Deliberately SILENT — every ship in it has
-  // already played its own cue (windmove/blownOut -> ship-move, anchorHold -> fishing) as it moved,
-  // so a sound here would be a fifth noise describing four that just happened.
-  stormSummary: null,
-  end: null, finish: null,
-  // 260801-7f4 — explicit silence, not an oversight. The `battle` event only fires once the whole
-  // fight has resolved (engine winBattle), which is exactly why the clash used to land at the end
-  // instead of the start. The clash plays at engage time — the entry below.
-  battle: null,
-  /* ⭐ THE CLASH IS THE FIGHT BEING CALLED, ON EVERY SCREEN, THROUGH THIS ONE DISPATCHER — architecture item 4, 2026-09-17. His ruling
-     (2026-09-06): "I want the clashing sound to happen when battles are first called; the sound is exciting." It was played by two
-     named calls instead: the host's fight played it before its opening line, and a crew guest played it on the first battle snapshot it
-     heard — measured 4.35 s after the opening line, and 9.6 s after it when the guest was asked for a crow's-nest call. The engine now
-     records the call (`engage`, Game.beginBattle) and this map sounds it wherever that event is drawn. The fight's end (`disengage`,
-     the camera letting go) is silent. */
-  engage: BATTLE_ENGAGE_SOUND, disengage: null,
-  /* ⭐ THE CANNON RIDES THE LANDED SHOT, ON EVERY SCREEN — Wyatt, 2026-09-14: "Fix this too" (a crew guest heard no cannon).
-     It used to be played by the fight itself (`if(scorer)playCannon()` in src/orchestrator.js), and the fight runs only on
-     the device that owns it, so every other screen in a crew watched the hit in silence. The fight now RECORDS the hit as a
-     `shotLands` event — emitted only when a shot gets through, and again when a paid re-fire lands — and this line is the
-     whole of the wiring: every screen's one consumer plays it. His 2026-09-06 ruling holds unchanged, "cannon sound happens
-     only when a shot lands": a miss and a crosswind collision record no shot, so they stay silent. */
-  shotLands: CANNON_SOUND,
-  // D-21 — explicit silence: an offer is not a deal; sidebet is already narration-suppressed
-  parley: null, sidebet: null,
-  // v2 events, explicit silence rather than merely absent (D-06). `purse` especially: it exists
-  // only to push a fresh state snapshot to the Captains panel mid-turn and is invisible by design,
-  // so it must never become audible if the unmapped default ever changes.
-  purse: null, idle: null, openoffer: null, collab: null,
-  // NOTE: `anchorHold: "storm"` used to sit here, and it was the whole of DEFECT-1 and DEFECT-2 in
-  // docs/AUDIO.md. `anchorHold` is already mapped to "fishing" above, and in a JS object literal the
-  // LAST key wins — so this line silently overrode it, which (a) stranded fishing.mp3, downloaded
-  // and decoded every game and triggerable by nothing, and (b) made every anchoring ship play the
-  // 8.0-second storm bed. The comment that stood here claimed it "rides the storm bus"; it did not.
-  // soundForEvent() routes to the quiet storm bus ONLY for the pair newround+storm, so STORM_VOLUME
-  // (0.35) never applied and it landed ~3x louder than the storm is mixed to sit. noteStormOutcome()
-  // is per player, so three captains anchoring in one storm stacked three of them on top of the
-  // storm cue that had already played, and fadeStorm() could retire none of them (stormNode is only
-  // set on the newround path). Deleting one line fixed both. DO NOT RE-ADD IT.
-  /* ⭐ MUSE IS THE ANCHOR GOING DOWN. Wyatt, 2026-09-07 playtest (sound sheet item 13): "Add the
-     anchor sound to 'muse' action, played when muse is clicked."
-     `pass` IS Muse — the radial builds it as `{label: museFace, value: "pass"}` (src/ui/flow.js)
-     and the ladders key it as `act.muse`. So the cue goes in this map rather than on the button's
-     click handler: one dispatcher means the sound arrives the same way on every tier, the whole
-     table hears it (D-07), and there is no second code path to drift. It rides "fishing", which
-     is already the anchor family — `anchor` above is the same stem. */
-  pass: "fishing",
-  // a battle that ends with nobody hit has no hit to sound; the paid re-fire is covered by the
-  // flip that follows it
-  battlenull: null, refire: null,
-  // the powder a fight burns: its coins are SEEN leaving the purse (board.js coinsLeave), and the fight's own engage cue already sounds
-  powder: null,
-  // v2.1: the ovens going cold rides the battle sound of the raid that caused it — it is the
-  // consequence of that same broadside, one beat later, not a second event to be scored.
-  unfinish: null,
-  // v2.1 bake-off: a successful bake stays EXPLICIT silence (D-06). Firing up the ovens is the cannon — Wyatt, 2026-09-16: "use the
-  // cannon sound when someone fires up the bakery". On every screen, like every sound in this map.
-  ovens: CANNON_SOUND, bake: null,
-};
-
-// PURE — no ctx, no DOM, no side effect, safe to call under plain Node. Returns null, or an
-// object naming the stem and the bus to route it through.
-//
-// THE TRAP (see 21-CONTEXT.md/21-02-PLAN.md): Game.ev() (src/engine/index.js:233) stamps
-// `o.storm=this.stormNow` onto EVERY event it records, so during a stormy round every single
-// event of every captain carries `storm:true`. Keying the storm cue on `e.storm` alone would fire
-// storm.mp3 on every action of every captain for the whole round — the exact opposite of D-08
-// ("storm.mp3 fires once when the storm arrives, not once per captain the storm affects"). Keying
-// it on the PAIR (e.t is "newround" AND e.storm) is correct, and because `newround` is emitted
-// exactly once per round (src/orchestrator.js's two live `newround` emissions), D-08's fires-once
-// falls out of this pure lookup with no dedup state needed at all.
-/* ⭐ D-07'S ONE SANCTIONED EXCEPTION, AND IT IS A SET SO THAT ADDING A SECOND IS A VISIBLE ACT.
- * Everything on this path is heard by the whole table. "Your turn" cannot be — a cue meant for
- * YOU that also fires on three other screens is not a signal, it is noise, and at a four-handed
- * table it would ring four times a round. Wyatt was shown this file's own "ever" and the
- * rule-preserving alternative (everyone hears it on every turn change) and chose the seat gate
- * knowingly, 2026-09-06. Recorded in docs/INTENDED-BEHAVIOUR.md so a two-tab session does not
- * report the difference as a host/guest defect.
- * THE NEXT SOUND THAT WANTS A GATE IS A FRESH DECISION FOR HIM, not a precedent this set grants. */
-const LOCAL_ONLY_SOUND_EVENTS = new Set(["turn"]);
-
-/* STILL PURE. It only LABELS the cue; it never asks who is playing. The seat test needs appState,
- * and this file imports nothing by design (leaf tier) — so the answer is handed to playForEvent
- * by its single caller instead. That keeps the whole map assertable under plain Node. */
-function soundForEvent(e) {
-  /* ⭐ THE STORM IS SCATTERED THUNDER — and this REPLACES the loop of one day earlier.
-     Wyatt, 2026-09-08, having heard the loop: "I'll work on a longer storm track -- in the mean
-     time, play the storm.mp3 once at the beginning of a storm and then an average of once every 20
-     seconds -- not every 8 seconds. the sound in its current form is thunder. scatter pan it too."
-     He is right about what the file IS: 8.007s, and its envelope is one broadband crack that decays
-     — a thunderclap, not a wash. Looping a thunderclap every 8 seconds is a metronome made of
-     lightning. Scattered around a 20-second mean, panned somewhere new each time, it reads as
-     weather happening around the ship.
-     THE MECHANISM IS THE SEA BED'S, NOT A SECOND ONE: exponential gaps and a random pan, exactly
-     as the gulls and creaks are scattered (ambSchedule/ambFireOne). It still rides the quiet storm
-     bus, so STORM_VOLUME governs it and fadeStorm() ends it.
-     `bus: "storm"` and no `loop`: playForEvent hands this to the scatter starter below. */
-  if (e.t === "newround" && e.storm) return { name: "storm", bus: "storm", scatter: true };
-  /* A JUICIER STORE SOUND — PASSED on his game feel audit (2026-09-13), as proposed: "The same pop you are picking in the
-     tuner, so buying and the pop-in speak the same language." A crate BOUGHT at a dock plays his cork pop (BUY_POP_SLOT
-     semitones above its starting pitch); scrubbing the docks and every trade keep the store sound. */
-  if (e.t === "dock" && e.got === "bought")
-    return { name: "cork-pop", bus: "master", from: BUY_POP_SLOT * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S };
-  const name = EVENT_SOUND[e.t];
-  if (!name) return null;
-  const out = { name, bus: "master" };
-  if (LOCAL_ONLY_SOUND_EVENTS.has(e.t)) out.localOnly = true;
-  return out;
-}
 
 /* ================= Lazy audio graph — built ONLY by initAudio(), nothing at module load ================= */
 
@@ -741,7 +380,7 @@ function applyMasterGain() {
 }
 
 async function loadOne(name) {
-  const res = await fetch(`${SFX_DIR}${name}.mp3`);
+  const res = await fetch(stemUrl(name));   // the ONE url builder — src/shared/sounds.js
   const arr = await res.arrayBuffer();
   buffers[name] = await ctx.decodeAudioData(arr);
 }
@@ -1042,117 +681,85 @@ function play(name, opts) {
   return { src, gain };
 }
 
-/* ⭐ THE POP-IN'S SOUND — his cork pop, one per ingredient, climbing a semitone each (src/ui/popin.js).
-   sfx/cork-pop.mp3 holds 19 slots of 300ms: slot s is the pop pitched s semitones above his starting pitch, each
-   rendered from the tuner's own recipe (.planning/research/audio-sourcing/render_cork_run.mjs) — so a high pop is as
-   long as a low one, which a sped-up sample would not be. Each pop starts 40ms into its slot; playback starts 10ms
-   before it, so an mp3 decoder's priming delay can shift the pop but never clip its attack. */
-const POP_SLOT_S = 0.3, POP_START_S = 0.04, POP_SLOTS = 19;
-const BUY_POP_SLOT = 7;   // a bought crate's pop: seven semitones up (a fifth) — bright against the pop-in's low start
-function playPop(step) {
-  const s = Math.max(0, Math.min(POP_SLOTS - 1, Math.round(step || 0)));
-  play("cork-pop", { from: s * POP_SLOT_S + POP_START_S - 0.01, dur: POP_SLOT_S - POP_START_S });
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   ⭐⭐ playCue — THE ONE DOOR. Every sound in the game leaves through this function and no other.
+
+   WHAT IT REPLACED, and why eleven functions were one function wearing eleven hats: playPop,
+   playCardSwish, playCoinTick, playCoinChink, playCrateLand, playLidNote, playCrateVerdict,
+   playAwardWhoosh, playWinScreen, playDrumroll and playCannon. Each was named after A FILE, so a
+   call site that said `playCardSwish()` had already decided which mp3 plays — in the UI tier,
+   twenty-four times over, where a sound PACK is not a thing that can be known about. Wyatt,
+   2026-09-19: "all our new maps will have different sounds… called in one place, through one
+   channel, consistently across game modes and player types."
+
+   A CALLER NOW NAMES THE MOMENT: playCue("bakeoff.lidLands", { slot: k }). Which sound that is,
+   how loud, which slice of a sliced file, how close it may play to itself and which bus it rides
+   are all answered by CUES in src/shared/sounds.js — the one table — and by nothing else.
+
+   IT IS THE SAME DOOR THE ENGINE'S EVENTS USE. playForEvent() below turns an event into a cue name
+   (`cueForEvent`) and hands it here, so "the sound of docking" and "the sound of a card turning"
+   are the same kind of thing and cannot drift apart. That is the convergence CLAUDE.md asks for
+   when a second consumer appears: the first one goes through the new path too.
+
+   `opts.slot` overrides a sliced cue's default slot — the pop-in's climb and the bake-off's sweep
+   are the same cue played at a different rung, never a different cue.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+function playCue(cue, opts) {
+  const c = CUES[cue];
+  if (!c || !c.stem) return;                       // unknown, or a moment that is explicitly silent
+  if (c.gapMs != null && !spacedOk(c.stem, c.gapMs)) return;
+  const sl = sliceFor(cue, opts && opts.slot);
+  play(c.stem, {
+    bus: c.bus === "storm" ? (stormGain || masterGain) : masterGain,
+    from: sl.from, dur: sl.dur,
+    rate: c.climb ? climbRate() : undefined,
+  });
 }
 
-/* ⭐ THE SOUNDS OF THE VOYAGE HE PICKED — 2026-09-14, on the page of that name, each rendered from the page's own recipe
-   (.planning/research/audio-sourcing/render_voyage_sounds.mjs + sounds-of-the-voyage.html beside it). His picks, and his notes:
-     card-swish     the recipe cards arrive — "Paper swish", "remove the "boop boop" at the end -- just use the swish at the beginning."
-     abacus-click   coins tick as they count, and the End of Voyage stats as they roll up — "Abacus click", and "The coin tick"
-     crate-marimba  each bake-off lid lands a note higher — "Marimba", "make them lower pitched so they sound more like big crates."
-                    ONE FILE OF SLOTS, like the cork pop: slot k is the k-th lid of a sweep, 600ms each, the note 40ms in.
-     crate-chime /  a right crate / a wrong crate on the reveal — "Chime & thud", then 2026-09-14: "I want the "wrong" sound to be a
-     crate-squawk   squawk during the bakeoff" — the page's own squawk, his pick over re-downloading the macaw recording
-     award-whoosh   each award card dealt in — "Soft whoosh"
-   Refused, on purpose: a sting under HEADS/TAILS ("the coin already has a landing sound baked in"), and the first-home fanfare,
-   which is Luis's to make (SOUND-BRIEF.csv). */
-const MARIMBA_SLOT_S = 0.6, MARIMBA_LEAD_S = 0.04, MARIMBA_SLOTS = 8;
-/* ⭐ HOW CLOSE THE SAME SOUND MAY PLAY TO ITSELF — DECIDED HERE, AND ONLY HERE. Two copies of this rule existed: the coin tick's, here,
-   and the crate shuffle's swish, written inside the bake-off (bakeoff.js, 2026-09-15). The bake-off's copy was declared a few lines
-   BELOW the shuffle that called it, so the shuffle threw before its first crate moved — Wyatt, 2026-09-16: "during the bakeoff ... the
-   crates are never swapped around, they're just static and then they come down multiple times" (each watcher rebuilt its bench, dropped
-   the lids again, and threw again). A sound that must not stack names its gap here; nothing outside this file keeps a clock for a sound.
+/* HOW CLOSE THE SAME SOUND MAY PLAY TO ITSELF is decided in src/shared/sounds.js — each cue's
+   own `gapMs`. THE CLOCK IS HERE, keyed by STEM rather than by cue, so two cues on one stem (the
+   bake-off's shuffle and the victory card's pages both swish) cannot stack on each other either.
    scripts/qa/sound_spacing_one_place_check.mjs holds it. */
 const SOUND_LAST_AT = new Map();
-function playSpaced(name, gapMs) {
+function spacedOk(stem, gapMs) {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (now - (SOUND_LAST_AT.has(name) ? SOUND_LAST_AT.get(name) : -1e9) < gapMs) return;
-  SOUND_LAST_AT.set(name, now);
-  play(name);
+  if (now - (SOUND_LAST_AT.has(stem) ? SOUND_LAST_AT.get(stem) : -1e9) < gapMs) return false;
+  SOUND_LAST_AT.set(stem, now);
+  return true;
 }
-/* A swish per crossing of the shuffle, never two inside SWISH_GAP_MS, so a fast shuffle is a sweep and not a hiss (his 2026-09-15 ask:
-   "we want a swish sound as the crates are shuffled"). The recipe cards use the same swish. */
-const SWISH_GAP_MS = 110;
-function playCardSwish() { playSpaced("card-swish", SWISH_GAP_MS); }
-/* A coin leaving a purse clicks — one click per coin SEEN leaving (board.js coinLeft), SPEND_GAP_MS apart. Two captains can pay at once,
-   so a click closer than TICK_GAP_MS to the last is dropped rather than stacked into a buzz. */
-const TICK_GAP_MS = 35;
-function playCoinTick() { playSpaced("abacus-click", TICK_GAP_MS); }
-/* ⭐ THE CHINK A COIN MAKES LANDING IN THE PURSE — Wyatt, 2026-09-15: "the 'tick' sound of the coin is the wrong sound -- we want
-   a coin 'chink' sound whenever a coin goes into the purse." sfx/coin-chink.mp3 is ONE FILE OF THREE SLOTS — the three on his Game Feel
-   Tuner, rendered from that page's own recipe (.planning/research/audio-sourcing/render_coin_chink.mjs). 2026-09-16 he picked: "the
-   chink I pick: B".
-   LAYERED, NEVER SKIPPED. The same day: "Instead of least time between chinks, can you layer the sounds so they don't clip? i don't see
-   this being a problem but pls verify." Verified by mixing the real file at this gain exactly as Web Audio sums it
-   (scratch chink_clip.mjs, 2026-09-16): one chink peaks at 0.41 of full scale; three at his 325ms spacing, 0.41; a 20-coin haul at its
-   tightest 84ms, 0.41; even 40ms apart, 0.42 — each has decayed to a whisper before the next begins. Two on the same instant, 0.81;
-   only THREE on the same instant would clip (1.22), and no path does that: a haul's coins are at least 84ms apart, and at most two
-   purses fill at once (two side-bet winners in a four-seat game). So every chink plays.
-   RE-MEASURED FOR SILVER, 2026-09-16 (scratch chink_clip_silver.mjs, the rendered file at this gain): one chink 0.38; three at his 470ms,
-   five at 400ms, twenty at 84ms and even at 40ms, all 0.38; two on the same instant 0.75; three on the same instant 1.13 — the same
-   picture as B: only a path that lands three coins on one instant would clip, and none does. */
-/* ROUND 2, 2026-09-16: "I also don't love the coin chink sound." Three coins built like real ones went on the tuner — a struck disc
-   ringing at several pitches at once — and he picked: "the chink I pick: A". The file now holds those three, in longer slots (Silver
-   rings for 0.45s). */
-const CHINK_SLOT_S = 0.5, CHINK_LEAD_S = 0.03, CHINK_SLOTS = 3;
-const CHINK_PICK = 0;          // 0 = A, Silver — his pick · 1 = B, Into the purse · 2 = C, On the pile
-/* ⭐ A RUN OF COINS CLIMBS. Wyatt, 2026-09-18: "can the coin chink sound increase in pitch by half
-   a step for each clink in a row?" So a haul arrives as a rising figure rather than the same note
-   twenty times.
-
-   WHAT COUNTS AS "IN A ROW" IS DERIVED, NOT TYPED. The run resets once the previous chink has
-   finished ringing and then some — CHINK_RUN_RESET is the slot's own length (Silver rings for
-   0.45s of its 0.5s slot) with half again on top. Tie it to the coin spacing instead and this file
-   has to know board.js's TREASURE_GAP_MS, which is a dial he moves; tie it to the sound's own
-   length and it stays true whichever way that dial goes.
-
-   THE CEILING IS A DRAFT AND IT IS HIS. An octave, because the game will hand this twenty coins
-   (TREASURE_MAX) and twenty half steps is an octave and a half, which is shrill. Say the word and
-   it comes off — the climb itself is what he asked for; where it stops is taste. */
-const CHINK_RUN_RESET = CHINK_SLOT_S * 1000 * 1.5, CHINK_RUN_MAX = 12;
+/* ⭐ A RUN OF COINS CLIMBS — his 2026-09-18 ask, and the ONLY cue that uses it (`climb: true`, on
+   purse.coinIn). The run's shape is decided in src/shared/sounds.js (CHINK_RUN_RESET is the slot's
+   own ringing length plus half again; CHINK_RUN_MAX is the octave ceiling); the CLOCK is here,
+   with the other clock, because a clock is runtime and not design. */
 let chinkRun = 0, chinkLastAt = -1e9;
-function playCoinChink() {
+function climbRate() {
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
   chinkRun = (now - chinkLastAt > CHINK_RUN_RESET) ? 0 : Math.min(CHINK_RUN_MAX, chinkRun + 1);
   chinkLastAt = now;
-  const s = Math.max(0, Math.min(CHINK_SLOTS - 1, CHINK_PICK));
-  play("coin-chink", { from: s * CHINK_SLOT_S + CHINK_LEAD_S - 0.01, dur: CHINK_SLOT_S - CHINK_LEAD_S,
-                       rate: Math.pow(2, chinkRun / 12) });
+  return Math.pow(2, chinkRun / 12);
 }
-/* ⭐ THE CRATE'S WOOMP, AS IT LANDS IN THE HOLD. Wyatt, 2026-09-18: "the crates landing in the hold
-   should use the old crate acquisition 'woomp' sound when the crate first begins its in-hold
-   bounce." That is `store-ingredient` — the sound docks and trades have always used. It is a
-   SECOND cue, not a replacement: a bought crate still pops its cork at the dock (BUY_POP_SLOT),
-   about a second and a third before the crate arrives, so the two never land together. */
-function playCrateLand() { play("store-ingredient"); }
-function playLidNote(k) {
-  const s = Math.max(0, Math.min(MARIMBA_SLOTS - 1, Math.round(k || 0)));
-  play("crate-marimba", { from: s * MARIMBA_SLOT_S + MARIMBA_LEAD_S - 0.01, dur: MARIMBA_SLOT_S - MARIMBA_LEAD_S });
-}
-function playCrateVerdict(right) { play(right ? "crate-chime" : "crate-squawk"); }
-function playAwardWhoosh() { play("award-whoosh"); }
 
 /* Is this sound ready to play the instant it is asked for? True when it is decoded — and ALSO when sound cannot play here at
    all (no audio context yet, or muted), so nothing ever waits on a sound that will not be heard. The pop-in's show asks
    (stage.js): on a slow crew guest the sea trial's probe heard only 10 of 21 cork pops, because the file was still loading. */
-function soundReady(name) {
-  return !ctx || isMuted() || !!buffers[name];
+/* ⭐ IT TAKES A CUE, NOT A FILE — 2026-09-19, with the rest of the sound engine. Its one caller
+   (stage.js, holding the round's pop-in until the crates can actually pop) asked by stem, which
+   made it the last place in the UI tier that knew a filename. A moment is the thing it means. */
+function soundReady(cue) {
+  const c = CUES[cue];
+  if (!c || !c.stem) return true;            // a moment with no sound is never worth waiting for
+  return !ctx || isMuted() || !!buffers[c.stem];
 }
 
 // The single exported flip sound. A flip is heard ONCE per screen (architecture item 6, 2026-09-17): the screen that tapped starts it
 // with the spin its tap paints (src/ui/board.js setFlipCoin "spin", reached only from armFlipTap), and every other screen starts it
 // with the small coin over the flipping boat (src/ui/dockcoin.js flipDockCoin) — never both on one screen (D-02/D-07).
 function playFlip() {
-  play("coin-flip");
+  /* THE STEM COMES FROM THE TABLE, like every other sound. The flip cannot go through playCue
+     because it is not a one-shot — startFlipSpinSound keeps a source node alive and re-fires it
+     for as long as a coin is still spinning — but it must not name a file either, or a map that
+     changed its coin would be silent here alone. */
+  play(CUES["coin.spins"].stem);
 }
 /* THE SOUND MUST LAST AS LONG AS THE COIN SPINS — Wyatt, 2026-09-06: "the guest docking coin flip
    lasted too long -- it kept flipping longer than the sound file lasted."
@@ -1175,7 +782,7 @@ let flipLoopTimer = null;
 function startFlipSpinSound() {
   stopFlipSpinSound();
   playFlip();
-  const b = buffers["coin-flip"];
+  const b = buffers[CUES["coin.spins"].stem];
   if (!b || !b.duration) return;                 // not decoded yet: one shot is all we can honestly give
   const everyMs = Math.max(120, b.duration * 1000);
   const startedAt = Date.now();
@@ -1319,7 +926,7 @@ function ambLoopPoints(buf) {
 }
 
 async function ambLoadOne(name) {
-  const res = await fetch(`${SFX_DIR}${name}.mp3`);
+  const res = await fetch(stemUrl(name));   // the ONE url builder — src/shared/sounds.js
   const arr = await res.arrayBuffer();
   ambBuffers[name] = await ctx.decodeAudioData(arr);
 }
@@ -1625,23 +1232,21 @@ function playForEvent(e, isLocalSeat) {
   // starting a fresh one for THIS event, so a freshly-started storm cue is never immediately
   // faded by its own newround.
   if (e.t === "newround" || e.t === "end") fadeStorm();
-  const s = soundForEvent(e);
-  if (!s) return;
+  const cue = cueForEvent(e);
+  if (!cue) return;
+  const c = CUES[cue];
+  if (!c || !c.stem) return;
   /* The exception, applied. `isLocalSeat` is UNDEFINED for every caller that does not pass it, so
      a localOnly cue stays SILENT rather than leaking to the whole table when the answer is unknown
      — silence is the safe failure here, not sound. */
-  if (s.localOnly && isLocalSeat !== true) return;
+  if (c.localOnly && isLocalSeat !== true) return;
   /* The storm is not a one-shot and not a loop — it is a scatter that runs for the round. */
-  if (s.scatter) { stormScatterStart(s.name); return; }
-  play(s.name, { bus: masterGain, from: s.from, dur: s.dur });
+  if (c.scatter) { stormScatterStart(c.stem); return; }
+  /* EVERYTHING ELSE GOES OUT THE SAME DOOR AS EVERY OTHER SOUND IN THE GAME. This line is the
+     convergence: an event cue and a moment cue are one kind of thing from here on. */
+  playCue(cue);
 }
 
-// D-05's placeholder cue, tied to the win screen APPEARING, not to the `end`/`finish` events —
-// those stay silent as events per D-06. Called from both places appState.liveDone is set true
-// (host and guest).
-function playWinScreen() {
-  play(WIN_SOUND, { bus: masterGain });
-}
 
 /* (playBattleEngage stood here — the clash as a named call the orchestrator made from two seams, the host's fight and a guest's
    battle snapshot. Architecture item 4 made it EVENT_SOUND.engage; scripts/qa/fight_on_screen_one_door_check.mjs holds it.) */
@@ -1660,16 +1265,12 @@ function soundDurationMs(name) {
   return b && b.duration > 0 ? Math.round(b.duration * 1000) : 0;
 }
 
-function playDrumroll() {
-  play(DRUMROLL_SOUND, { bus: masterGain });
-}
-
-function playCannon() {
-  play(CANNON_SOUND, { bus: masterGain });
-}
+/* (playDrumroll and playCannon stood here. Both are now cues — "victory.drumroll" and the two the
+   event map reaches, "shot.lands" and "ovens.lit" — so neither needs a function of its own. The
+   cannon had no caller left at all once architecture item 4 gave the landed shot its own event.) */
 
 export {
-  SFX_DIR, SFX_FILES, SFX_VOLUME, SFX_TRUE_PEAK_DBFS, SFX_PEAK_CEILING_DBFS, MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
+  MUTE_KEY, initAudio, playFlip, startFlipSpinSound, stopFlipSpinSound, isMuted, setMuted, audioRunning, audioDiagnosis,
   kickAudioSession,
   recoverAudio,
   /* wakeCtx is exported for ONE caller: the gesture listener in src/orchestrator.js. Safari only
@@ -1679,12 +1280,11 @@ export {
   wakeCtx,
   soundReady,
   onThunder,
-  playPop,
-  playCardSwish, playCoinTick, playCoinChink, playCrateLand, playLidNote, playCrateVerdict, playAwardWhoosh,
-  EVENT_SOUND, soundForEvent, playForEvent, playWinScreen, fadeStorm,
-  STORM_VOLUME, STORM_FADE_SEC, WIN_SOUND, DRUMROLL_SOUND, CANNON_SOUND,
-  soundDurationMs, playDrumroll, playCannon,
-  BATTLE_ENGAGE_SOUND,
+  /* ⭐ THE ONE DOOR. Nothing else in this file plays a sound, and nothing outside it may. */
+  playCue,
+  playForEvent, fadeStorm,
+  STORM_VOLUME, STORM_FADE_SEC,
+  soundDurationMs,
   /* The bed. startAmbience/stopAmbience have exactly three call sites between them, all in
      src/ui/lobby.js's three screen functions — see the runtime block's header, and the gate that
      holds it to that. The constants are exported so a headless harness can assert his tuned values

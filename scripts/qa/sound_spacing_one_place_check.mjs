@@ -1,13 +1,18 @@
 #!/usr/bin/env node
-/* HOW CLOSE THE SAME SOUND MAY PLAY TO ITSELF IS DECIDED IN ONE PLACE: audio.js playSpaced.
+/* HOW CLOSE THE SAME SOUND MAY PLAY TO ITSELF IS DECIDED IN ONE PLACE — and since 2026-09-19 that
+   is two halves of one place, deliberately: the RULE is a cue's own `gapMs` in src/shared/sounds.js,
+   and the CLOCK that enforces it is `spacedOk` in src/ui/audio.js, reached only through `playCue`.
+   A rule is design and belongs with the sound; a clock is runtime and belongs with the graph.
    Wyatt, 2026-09-16, on build .5: "there's a new glitch during the bakeoff where the crates are never swapped around, they're just static
    and then they come down multiple times. this is a REGRESSION." The bake-off kept its own clock for the shuffle's swish (5e2654de), and
    declared it BELOW the `await runSwaps()` that used it — the shuffle threw before its first crate moved, and every watcher rebuilt its
    bench, dropped the lids again and threw again. The coin tick kept a second copy of the same clock in audio.js. Now both go through
-   playSpaced, and nothing outside audio.js keeps a clock for a sound.
-     1. playSpaced exists in audio.js and both spaced sounds (the coin tick and the card swish) go through it
+   the one door, and nothing outside audio.js keeps a clock for a sound.
+     1. audio.js holds exactly one spacing clock (spacedOk), playCue is its only caller, and every
+        cue that declares a gapMs is therefore spaced by it — no cue can opt out or keep its own
      2. no file outside audio.js reads performance.now() within three lines of calling a play...() sound
-     3. the bake-off's shuffle calls playCardSwish() directly, with no local sound clock (the declared-after-use shape that crashed) */
+     3. the bake-off's shuffle plays its swish through the door, with no local sound clock (the
+        declared-after-use shape that crashed) */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,9 +50,16 @@ const ruleSet = () => { const out = []; return { out, rule: (ok, pass, fail) => 
 function rules(files) {
   const { out, rule } = ruleSet();
   const audio = code(files["src/ui/audio.js"] || "");
-  rule(/function playSpaced\(/.test(audio) && /function playCoinTick\(\)\s*\{\s*playSpaced\(/.test(audio) && /function playCardSwish\(\)\s*\{\s*playSpaced\(/.test(audio),
-    "audio.js holds the one sound-spacing clock (playSpaced), and the coin tick and the card swish both go through it",
-    "a spaced sound in audio.js keeps its own clock instead of playSpaced");
+  const table = code(files["src/shared/sounds.js"] || "");
+  /* Both ends alive: the clock exists and is reached ONLY from playCue, and the table really does
+     declare gaps. Either half missing would make this rule vacuous. */
+  const spacedCallers = (audio.match(/spacedOk\(/g) || []).length;         // the definition + playCue's one call
+  const gaps = (table.match(/gapMs:/g) || []).length;
+  rule(/function spacedOk\(/.test(audio) && /if \(c\.gapMs != null && !spacedOk\(/.test(audio) && spacedCallers === 2 && gaps >= 3,
+    `audio.js holds the one sound-spacing clock (spacedOk) and playCue is its only caller; ${gaps} cue(s) in sounds.js declare a gap and every one of them is spaced by it`,
+    spacedCallers !== 2 ? `spacedOk has ${spacedCallers - 1} caller(s) besides its own definition — a second one is a second clock`
+      : gaps < 3 ? `only ${gaps} cue(s) declare a gapMs — the rule above would pass on nothing`
+      : "playCue no longer routes a cue's gapMs through the one clock, so a spaced sound can stack again");
   const clocks = [];
   for (const [f, s] of Object.entries(files)) {
     if (f === "src/ui/audio.js") continue;
@@ -56,13 +68,14 @@ function rules(files) {
   }
   rule(clocks.length === 0, "no file outside audio.js keeps a clock beside a sound", `a sound clock is kept outside audio.js at ${clocks.join(", ")}`);
   const swaps = body(code(files["src/ui/bakeoff.js"] || ""), "async function runSwaps(");
-  rule(/playCardSwish\(\)/.test(swaps) && !/lastSwish|SWISH_GAP_MS|\bswish\(\)/.test(code(files["src/ui/bakeoff.js"] || "")),
+  rule(/playCue\("bakeoff\.cratesSwap"\)/.test(swaps) && !/lastSwish|SWISH_GAP_MS|\bswish\(\)/.test(code(files["src/ui/bakeoff.js"] || "")),
     "the bake-off's shuffle plays its swish through audio.js, with no local clock to be declared too late",
     "the bake-off's shuffle keeps its own swish clock again — the shape that threw before the first crate moved");
   return out;
 }
 run(rules, [
-  ["the bake-off's own swish clock put back", "src/ui/bakeoff.js", "  async function runSwaps(){", "  const SWISH_GAP_MS=110; let lastSwish=-1e9;\n  const swish=()=>{const n=performance.now();if(n-lastSwish<SWISH_GAP_MS)return;lastSwish=n;playCardSwish();};\n  async function runSwaps(){", 1],
-  ["the coin tick keeping its own clock again", "src/ui/audio.js", 'function playCoinTick() { playSpaced("abacus-click", TICK_GAP_MS); }', 'let lastTickAt=-1e9;\nfunction playCoinTick() { const now=performance.now(); if(now-lastTickAt<TICK_GAP_MS)return; lastTickAt=now; play("abacus-click"); }', 0],
-  ["a clock beside a sound in another file", "src/ui/board.js", "  playCoinTick();           // the ONE place", "  const _t=performance.now();\n  playCoinTick();           // the ONE place", 1],
-], "a sound's spacing is decided only in audio.js");
+  ["the bake-off's own swish clock put back", "src/ui/bakeoff.js", "  async function runSwaps(){", "  const SWISH_GAP_MS=110; let lastSwish=-1e9;\n  const swish=()=>{const n=performance.now();if(n-lastSwish<SWISH_GAP_MS)return;lastSwish=n;playCue(\"bakeoff.cratesSwap\");};\n  async function runSwaps(){", 2],
+  ["a second caller of the one clock — the shape that makes it two clocks", "src/ui/audio.js", "function playCue(cue, opts) {", "function playTickNow() { if (spacedOk(\"abacus-click\", 35)) play(\"abacus-click\"); }\nfunction playCue(cue, opts) {", 0],
+  ["playCue stops honouring a cue's gap, so a spaced sound can stack again", "src/ui/audio.js", "  if (c.gapMs != null && !spacedOk(c.stem, c.gapMs)) return;", "", 0],
+  ["a clock beside a sound in another file", "src/ui/board.js", '  playCue("purse.coinOut"); // the ONE place', '  const _t=performance.now();\n  playCue("purse.coinOut"); // the ONE place', 1],
+], "a sound's spacing is declared with the cue and enforced by one clock");

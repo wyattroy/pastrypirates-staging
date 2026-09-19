@@ -16,7 +16,7 @@
 "use strict";
 import { appState } from "../state/index.js";
 import { boardShipEls, setFlipCoin, boardArtReady, FLIP_SPIN_MS } from "./board.js";
-import { soundReady, playCardSwish } from "./audio.js";
+import { soundReady, playCue } from "./audio.js";
 import { narrationHoldMs, vwPx, vhPx, isDisabledBtn, fixedOrigin, fixedRect, refreshNameMarquees,
   waitLineIsSelfAddressed, pname } from "./util.js";
 import { typewriterReveal } from "./panel.js";
@@ -46,7 +46,7 @@ const AR = { N: "↑", S: "↓", E: "→", W: "←" };
 //   YYYY.MM.DD.N  —  N is the Nth build published that day, bumped by hand exactly as the letter was.
 //
 // Staging appends its own suffix at publish time and never here — see scripts/deploy-staging.sh.
-const PP4_STAMP = "2026.09.17.6-staging@373c633b";
+const PP4_STAMP = "2026.09.19.1-staging@53338433";
 
 /* HIDE THE WHOLE STAGE LAYER — T-12 (Wyatt, 2026-08-26, with a screenshot).
    "They are successfully brought back to port (the homepage) BUT there is a bug -- the homepage
@@ -2839,7 +2839,7 @@ function rcFlightRun(key, brd){
      guests playing the pop-in over an empty grid, and a slow guest heard only 10 of its 21 pops. The sheet stays pinned
      invisible while this declines, so waiting costs only time — and never more than RC_ART_WAIT_MS per picker. */
   if (rcWaitKey !== key){ rcWaitKey = key; rcWaitFrom = performance.now(); }
-  if (performance.now() - rcWaitFrom < RC_ART_WAIT_MS && !(boardArtReady(Infinity) && soundReady("cork-pop"))) return;
+  if (performance.now() - rcWaitFrom < RC_ART_WAIT_MS && !(boardArtReady(Infinity) && soundReady("popin.crateArrives"))) return;
   rcFlightReset();
   rcFlightKey = key;
 
@@ -2854,7 +2854,7 @@ function rcFlightRun(key, brd){
   /* …and the cards' SWISH arrives with them on every path (his pick, 2026-09-14). The fly-in times its own swish off the entrance
      (rcFlightShow, lineFollows=true); every path that shows the cards WITHOUT flying them — reduced motion, a sheet already parked
      in the middle (a phone, measured: no swish at all when it hung off the fly-in alone) — swishes as they appear. */
-  const rcShow = (lineFollows) => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; if (!lineFollows){ rcCourseRelease(); if (b) playCardSwish(); } };
+  const rcShow = (lineFollows) => { const b = $("pp4Prompt"); if (b) b.style.opacity = ""; if (!lineFollows){ rcCourseRelease(); if (b) playCue("prompt.cardArrives"); } };
   if (REDUCED) { releasePopIn(); rcShow(); return; }        // parked, immediately, and no demo swap: the show IS motion
 
   /* ⭐ THE WHOLE SHOW IS MEASURED WHEN IT STARTS, NOT WHEN IT IS SCHEDULED — and his two-second
@@ -2925,7 +2925,7 @@ function rcFlightShow(box, brd, rcShow){
   /* THE SWISH AS THE CARDS FLY IN — his pick on the Sounds of the Voyage page, 2026-09-14: "Paper swish", the swish alone. Timed
      off the entrance actually starting (its `ready`), not beside it: a sound set beside an animation leads the eye by a frame,
      measured on the pop-in. A show cancelled before it starts plays nothing. */
-  entrance.ready.then(() => { if (entrance.playState !== "idle") playCardSwish(); }).catch(() => {});
+  entrance.ready.then(() => { if (entrance.playState !== "idle") playCue("recipe.cardsFlyIn"); }).catch(() => {});
   rcShow(true);   // the keyframes own opacity from here — they fill backwards through the delay
   rcLater(rcCourseRelease, Math.round(RC_FADE_MS * .62));   // the dotted line, once the cards are fully in (the .62 keyframe)
 

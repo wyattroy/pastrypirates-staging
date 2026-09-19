@@ -1,5 +1,81 @@
 # Audio — what is broken, what was chosen, and how the sounds were found
 
+## 0. THE SOUND ENGINE — one table, one door, one folder per map (2026-09-19)
+
+**Read this first; everything below it is history and tuning.** Wyatt, 2026-09-19:
+
+> *"We need a sound engine. 'Eight of the eighteen sounds never go through the event map at all —
+> they're played straight from code.' All our new maps will have different sounds, so these must be
+> cleaned up the same way the assets and narration must be — folderized, called in one place,
+> through one channel, consistently across game modes and player types."*
+
+He was quoting §1c below, which this section answers. **The measured shape of the fault:** seven
+stems were reachable only through the event map, one (the cork pop) through both, and **ten only by
+a named function call** — `playCardSwish()`, `playLidNote(k)`, `playCrateVerdict(right)` — from
+**twenty-four call sites across six files**. Every one of those function names *is a filename*, so a
+second map's sounds would have had to be threaded through all of them, in the UI tier, where a sound
+pack is not a thing that can be known about.
+
+### Where everything lives now
+
+| | file | holds |
+|---|---|---|
+| **what a sound IS** | [`src/shared/sounds.js`](../src/shared/sounds.js) | the pack and its folders, the cues, the event map, the levels, the measured peaks, the slice geometry. Pure — imports nothing, loads under plain Node, which is what makes every gate below possible. |
+| **what a sound DOES** | [`src/ui/audio.js`](../src/ui/audio.js) | the AudioContext, the buses, mute, the spacing clock, the storm's scatter, the flip's loop, the ambience bed. |
+
+**A call site names a MOMENT, never a file:** `playCue("bakeoff.lidLands", { slot: k })`. Which sound
+that is, how loud, which slice of a sliced file, how close it may play to itself and which bus it
+rides are answered by `CUES` and by nothing else.
+
+**The event map is a VIEW ON THE SAME TABLE, not a second one.** `EVENT_CUE` maps an engine event to
+a cue *name*; `playForEvent` resolves it and hands it to `playCue`. So "the sound of docking" and
+"the sound of a card turning" are the same kind of thing and cannot drift apart.
+
+### The folders, and what a new map has to supply
+
+```
+sfx/<pack>/<folder>/<stem>.mp3          e.g. sfx/home-waters/voyage/ship-move.mp3
+```
+
+- **`voyage/`** — the world's own voice: sailing, weather, crates, coins, a fight. A new map replaces
+  these, and a map that replaced nothing else would already feel new.
+- **`ceremony/`** — the furniture of the bake-off and the victory card. These belong to the GAME, not
+  to a world, so a map inherits them unless it deliberately says otherwise.
+- **`ambience/`** — the bed. **`music/`** — the track.
+
+`PACK_STEMS` lists what a pack actually ships; `stemUrl()` serves anything else out of the base pack,
+so **a second map is a folder with three files in it, not thirty**. `stemUrl()` is the only place a
+sound URL is built anywhere in the game.
+
+### Consistent across game modes and player types, by construction
+
+A cue is chosen from the moment and nothing else — never from `isHost`, never from whose turn it is,
+never from whether a bot or a person caused it. **The one exception in the game** is declared as a
+field on the cue it belongs to (`localOnly`, on `turn.begins` — his knowing ruling of 2026-09-06), so
+adding a second is a visible act in the table rather than an `if` somewhere in the UI.
+
+### What holds it
+
+- **`scripts/qa/sound_one_door_check.mjs`** — six rules, each red-proofed: no file outside the engine
+  names a stem; nothing outside `audio.js` starts a sound; every cue asked for exists; every cue in
+  the table is reachable; every stem is filed under a real folder; the seat exception is on the cue.
+  *(One declared blind spot, derived rather than typed: `storm` is both a stem and an event kind, so
+  it is excluded by name and the gate says so in its own output.)*
+- `sfx_files_exist_check` asks `stemUrl()` where a file is, so it proves the resolver too.
+- `sound_spacing_one_place_check` — the gap is on the cue, the clock is in `audio.js`, one caller.
+- `audio_map_check`, `event_sound_kinds_real_check`, `ambience_one_seam_check`,
+  `coin_arrival_one_event_check`, `fight_on_screen_one_door_check` all follow the table to its home.
+
+### It changed no sound, and that was checked rather than claimed
+
+The pass is plumbing. **177 cases compared** between the old dispatcher (read out of `origin/dev`)
+and the new one — every event kind against four shapes of event, every one of the named functions
+that went away, and every sliced stem at both ends of its range including out-of-range slots —
+**0 differences**, and the comparison red-proofed by mutating a cue's slot. In a real browser: **all
+31 mp3s loaded from their new folders (0 failures), 23 distinct stems played, 0 page errors.**
+
+---
+
 **Pick this up here.** Everything below came out of the 2026-08-19 audio audit. It is written so a
 cold session — or Wyatt, months later — can carry on without re-deriving any of it.
 

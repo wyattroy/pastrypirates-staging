@@ -1709,7 +1709,7 @@ export async function animateSailRouteRun(seat,from,path){
 
    That deletes a great deal of v1 machinery, and the deletion is the point. Gone: windLeg's
    inline island-dodge prompt, humanWind's two-leg chain, botWindLeg's mirror of it, the
-   anchor/dodge/aground/shipwreck ladder, and the second perpendicular gust. v1 needed all of it
+   anchor/dodge/aground ladder and the wreck at the bottom of it, and the second perpendicular gust. v1 needed all of it
    because a storm arrived unannounced and had to offer you a way out. v2 tells you a full round
    in advance, on the compass, which way it will blow (rule 6c) and promises the forecast is
    never wrong (rule 6d) — so the price of being caught is simply your turn, and there is nothing

@@ -26,11 +26,25 @@ const C = await attach(DBG);
 
 // duration -> stem, read off the files rather than typed
 import fs from "node:fs";
-import { execSync } from "node:child_process";
+/* ⭐ REPAIRED 2026-09-19, TWICE OVER, and both halves are the same lesson.
+   (1) This walked a FLAT `sfx/`. The stems moved into sfx/<pack>/<folder>/ with the sound engine,
+       so the scan found nothing and every sound below would have read "(unknown 1.234s)".
+   (2) It shelled out to `ffprobe`, which a fresh cloud container does not have — so on the machine
+       this project now runs on, the probe died on its first line.
+   Both are fixed by asking the BROWSER, which this probe already has: decode each stem and read
+   buffer.duration. That is the better instrument anyway — it identifies a sound by the bytes the
+   page actually fetched, so a file served from the wrong path cannot masquerade as the right one,
+   which is exactly the question the day the files move. */
 const STEMS = {};
-for (const f of fs.readdirSync(path.join(REPO, "sfx")).filter(x => x.endsWith(".mp3"))) {
-  const d = execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${path.join(REPO,"sfx",f)}"`).toString().trim();
-  STEMS[(+d).toFixed(4)] = f.replace(".mp3", "");
+async function buildStems() {
+  const durs = JSON.parse(await C.ev(`(async()=>{ const S = await import('/src/shared/sounds.js');
+    const ctx = new (window.AudioContext||window.webkitAudioContext)(); const out = {};
+    const bed = [...(window.__ambNames||[])];
+    for (const st of [...S.SFX_FILES, ...bed]) { try { const r = await fetch(S.stemUrl(st));
+      if (!r.ok) continue; out[st] = (await ctx.decodeAudioData(await r.arrayBuffer())).duration; } catch(e){} }
+    await ctx.close(); return JSON.stringify(out); })()`));
+  for (const [stem, d] of Object.entries(durs)) STEMS[(+d).toFixed(4)] = stem;
+  if (!Object.keys(STEMS).length) { console.log("⚠ no stem could be decoded — every sound below will read as unknown"); }
 }
 const nameFor = d => STEMS[(+d).toFixed(4)] || `(unknown ${d}s)`;
 
@@ -79,6 +93,7 @@ try {
   await C.ev(`localStorage.clear()`);
   await C.ev(`location.href=${JSON.stringify(url + "?pilot=vet")}`).catch(()=>{});
   await sleep(2600);
+  await buildStems();          // the page has to exist before it can decode anything
   await C.ev(`document.getElementById('choiceSolo').click()`);
   await waitFor(`(()=>{const b=document.getElementById('btnNameConfirm');return !!(b&&b.offsetParent)})()`, 15000, "name modal");
   await C.ev(`document.getElementById('nameModalInput').value='Wyatt'`);

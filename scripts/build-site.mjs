@@ -308,7 +308,7 @@ ${REVALIDATE}${revalidateRules}
 # Stable, and the bulk of the bytes.
 /assets/*
   Cache-Control: public, max-age=604800
-/sfx/*
+/sfx/**
   Cache-Control: public, max-age=604800
 `, "utf8");
 

@@ -28,7 +28,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // package.json sets "type":"module", so this is ESM — no require, no __dirname.
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = p => fs.readFileSync(path.join(REPO, p), "utf8");
@@ -126,7 +126,11 @@ else ok("one landed-hold clock", `FLIP_LAND_HOLD_MS defined once in ${holdDefs[0
    quietly checking a stale number -- which is the rule-9 corollary applied to an asset. */
 const MEASURED = { bytes: 15504, ms: 965, blipMs: 795 };
 const spin = Number((read(defs[0] || "src/ui/board.js").match(/FLIP_SPIN_MS\s*=\s*(\d+)/) || [])[1]);
-const sfxPath = path.join(REPO, "sfx", "coin-flip.mp3");
+/* WHERE THE FILE IS comes from the sound table (src/shared/sounds.js stemUrl), never a path typed
+   here — the stems moved into sfx/<pack>/<folder>/ on 2026-09-19 and a second answer would have
+   silently skipped this check instead of failing it. */
+const { stemUrl } = await import(pathToFileURL(path.join(REPO, "src", "shared", "sounds.js")).href);
+const sfxPath = path.join(REPO, stemUrl("coin-flip"));
 if (!fs.existsSync(sfxPath)) bad("flip fits its sound", "sfx/coin-flip.mp3 is missing — cannot check");
 else if (!spin) bad("flip fits its sound", "could not read FLIP_SPIN_MS");
 else {

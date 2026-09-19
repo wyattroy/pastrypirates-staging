@@ -168,7 +168,7 @@ import {
 } from "./util.js";
 import { mayRevealRecipe, offersRecipeCheck } from "../shared/visibility.js";
 import { recipeTitle, recipeInfo, winRecipeSpan, recipeArticle } from "./recipe.js";
-import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCoinTick, playCoinChink, playCrateLand, playAwardWhoosh } from "./audio.js";
+import { playFlip, startFlipSpinSound, stopFlipSpinSound, onThunder, playCue } from "./audio.js";
 import { victoryCard } from "./victory.js";
 import { popInHolds } from "./popin.js";
 
@@ -2092,7 +2092,7 @@ export function coinArrived(seat,count=1){
     n.textContent=purseShows(seat,+el.dataset.coins);
     pulseEl(el);
   }
-  playCoinChink();          // the ONE place a coin going into a purse makes its sound
+  playCue("purse.coinIn");  // the ONE place a coin going into a purse makes its sound
 }
 export function coinLeft(seat,count=1){
   if(!(count>0))return;
@@ -2103,7 +2103,7 @@ export function coinLeft(seat,count=1){
     n.textContent=Number.isFinite(cur)?Math.min(cur,show):show;
     pulseEl(el);
   }
-  playCoinTick();           // the ONE place a coin going out of a purse makes its sound
+  playCue("purse.coinOut"); // the ONE place a coin going out of a purse makes its sound
 }
 export function showSeatCoins(seat,coins){
   const el=$("coins"+seat);
@@ -2349,7 +2349,7 @@ function landInHold(flight,im,chip,dx,dy,h,base){
     /* His 2026-09-18 ask: the old crate "woomp" (store-ingredient) as the bounce BEGINS, not when
        the flight ends and not when the chip appears — this line is that moment, the one frame
        before the hop's first keyframe runs. */
-    playCrateLand();
+    playCue("crate.landsInHold");
     const hop=im.animate(hopFrames(dx.toFixed(1),dy.toFixed(1),h,CRATE_BOUNCE,CRATE_SQUASH,{base}),{duration:ms,easing:"linear",fill:"both",id:"crate-land"});
     hop.onfinish=hop.oncancel=show;
   };

@@ -169,7 +169,6 @@ const TABLE_GROUPS = {
   tradewind: "Storm",
   parley: "Trade & Parley",
   aground: "Storm",
-  shipwrecked: "Storm",
   dock: "Docking",
   trade: "Trade & Parley",
   sidebet: "Battle",

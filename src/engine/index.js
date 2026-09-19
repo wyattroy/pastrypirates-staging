@@ -313,7 +313,7 @@ class Game{
       // what the captains' rows show during the opening, before the order is known.
       return {idx:i,strategy:s,pos:[...this.home],coins:startingPurse(cfg,0),
         ing:[],recipe:a,recipeChoices:[a,b],firstFlip:new Set(),dockedNow:new Set(),
-        done:false,heads:0,flips:0,corner:null,justDocked:false,shipwrecked:false,
+        done:false,heads:0,flips:0,corner:null,justDocked:false,
         coolUntil:{},grudge:null,justLost:null,fightLog:{},
         // THE BAKE-OFF (v2.1). Initialised unconditionally, flag or no flag: they consume no r()
         // and are not in ev()'s snapshot, so with the feature off they are three inert fields and
@@ -611,8 +611,9 @@ class Game{
 
   // v2 rules 7+8. One direction, STORM_PUSH squares, and the ONLY things that stop you are land,
   // another ship, and the rim. The whole v1 aground ladder — pay-to-dodge, flip-to-anchor,
-  // lose-half-your-coins, lose-a-crate, shipwreck — is deleted: you could see this coming a round
-  // ahead on the compass (rule 6), so the price of being caught is simply your turn.
+  // lose-half-your-coins, lose-a-crate, and the wreck at the bottom of it — is deleted: you could
+  // see this coming a round ahead on the compass (rule 6), so the price of being caught is simply
+  // your turn.
   //
   // Returns an outcome string the caller narrates and acts on:
   //   "moved"    — pushed clear, turn intact

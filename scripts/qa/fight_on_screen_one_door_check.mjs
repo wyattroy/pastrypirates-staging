@@ -85,23 +85,31 @@ async function rules(files) {
   const code = Object.fromEntries(Object.entries(files).map(([f, s]) => [f, stripComments(s)]));
   const all = Object.entries(code);
   const orch = code["src/orchestrator.js"], audio = code["src/ui/audio.js"], stage = code["src/ui/stage.js"], eng = code["src/engine/index.js"];
+  /* THE SOUND TABLE MOVED OUT OF audio.js ON 2026-09-19 (src/shared/sounds.js — one table, one door,
+     so a second map can bring its own pack). This gate reads the table and IMPORTS it to hear the
+     real answer; both halves follow it to its new home. The importable half got easier: sounds.js
+     is pure and imports nothing, so it loads from a data: URL where audio.js no longer can. */
+  const table = code["src/shared/sounds.js"];
   const out = [], rule = (ok, pass, fail) => out.push({ ok, text: ok ? pass : fail });
 
   // 1. THE CLASH, ONE DOOR
   const named = all.filter(([, s]) => /\bplayBattleEngage\b/.test(s)).map(([f]) => f);
-  const map = (/const\s+EVENT_SOUND\s*=\s*\{([\s\S]*?)\n\};/.exec(audio) || [, ""])[1];
-  const mapped = /(?:^|[\s,{])engage\s*:\s*BATTLE_ENGAGE_SOUND\b/.test(map) && /const\s+BATTLE_ENGAGE_SOUND\s*=\s*"battle-swords"/.test(audio);
+  const map = (/const\s+EVENT_CUE\s*=\s*\{([\s\S]*?)\n\};/.exec(table) || [, ""])[1];
+  const mapped = /(?:^|[\s,{])engage\s*:\s*"battle\.called"/.test(map)
+    && /"battle\.called":\s*\{\s*stem:\s*BATTLE_ENGAGE_SOUND\s*\}/.test(table)
+    && /const\s+BATTLE_ENGAGE_SOUND\s*=\s*"battle-swords"/.test(table);
   const byName = all.reduce((n, [, s]) => n + count(s, /\bplay\s*\(\s*(?:BATTLE_ENGAGE_SOUND\b|["'`]battle-swords["'`])/g), 0);
   let heard = false, hearWhy = "";
   try {
-    const A = await import("data:text/javascript;base64," + Buffer.from(files["src/ui/audio.js"]).toString("base64"));
-    const s = A.soundForEvent({ t: "engage", a: 0, d: 1 }), e = A.soundForEvent({ t: "disengage", a: 0, d: 1 });
-    heard = !!(s && s.name === "battle-swords" && !s.localOnly) && e === null && A.EVENT_SOUND.disengage === null;
-    hearWhy = `engage → ${JSON.stringify(s)}, disengage → ${JSON.stringify(e)}`;
-  } catch (err) { hearWhy = "the audio module could not be imported: " + err.message; }
+    const A = await import("data:text/javascript;base64," + Buffer.from(files["src/shared/sounds.js"]).toString("base64"));
+    const s = A.cueForEvent({ t: "engage", a: 0, d: 1 }), e = A.cueForEvent({ t: "disengage", a: 0, d: 1 });
+    const cue = s && A.CUES[s];
+    heard = !!(cue && cue.stem === "battle-swords" && !cue.localOnly) && e === null && A.EVENT_SOUND.disengage === null;
+    hearWhy = `engage → ${s} (${cue ? cue.stem : "no cue"}), disengage → ${e}`;
+  } catch (err) { hearWhy = "the sound table could not be imported: " + err.message; }
   rule(named.length === 0 && mapped && byName === 0 && heard,
-    `the clash has one door: EVENT_SOUND.engage, the clash stem heard by the whole table, sounded by the one dispatcher; no playBattleEngage, nothing plays the stem by name, a fight's end is silent (${hearWhy})`,
-    `the clash has another door${named.length ? " — playBattleEngage is in " + named.join(", ") : ""}${mapped ? "" : " — EVENT_SOUND does not map engage to BATTLE_ENGAGE_SOUND (\"battle-swords\")"}${byName ? ` — the clash stem is played by name ${byName} time(s)` : ""}${heard ? "" : ` — the audio module does not sound the clash on engage for every screen and nothing on disengage (${hearWhy})`}`);
+    `the clash has one door: EVENT_CUE.engage -> the "battle.called" cue, the clash stem heard by the whole table, sounded by the one dispatcher; no playBattleEngage, nothing plays the stem by name, a fight's end is silent (${hearWhy})`,
+    `the clash has another door${named.length ? " — playBattleEngage is in " + named.join(", ") : ""}${mapped ? "" : " — the sound table does not map engage to the \"battle.called\" cue on BATTLE_ENGAGE_SOUND (\"battle-swords\")"}${byName ? ` — the clash stem is played by name ${byName} time(s)` : ""}${heard ? "" : ` — the audio module does not sound the clash on engage for every screen and nothing on disengage (${hearWhy})`}`);
 
   // 2. THE CAMERA, ONE DOOR
   const consume = fn(orch, "consumeEvent");
@@ -169,8 +177,8 @@ const broken = (file, from, to) => { const f = { ...files }; if (!f[file] || !f[
 const MUTANTS = [
   ["playBattleEngage(); back in the watched fight, before its opening line (the audit's own mutant)",
     broken("src/orchestrator.js", "  const F=appState.game.beginBattle(att,def);", "  playBattleEngage();\n  const F=appState.game.beginBattle(att,def);"), 0],
-  ["the clash taken off the engage event (EVENT_SOUND.engage silent)",
-    broken("src/ui/audio.js", "engage: BATTLE_ENGAGE_SOUND,", "engage: null,"), 0],
+  ["the clash taken off the engage event (EVENT_CUE.engage silent)",
+    broken("src/shared/sounds.js", 'engage: "battle.called",', "engage: null,"), 0],
   ["window.__pp4.battle(snap.attIdx,snap.defIdx) back in renderBattleFromSnap (the audit's own mutant)",
     broken("src/ui/flow.js", "  netHandlers().onRenderBattle(", "  if(window.__pp4)window.__pp4.battle(snap.attIdx,snap.defIdx);\n  netHandlers().onRenderBattle("), 1],
   ["the host's own release back in asyncBattle's finally",

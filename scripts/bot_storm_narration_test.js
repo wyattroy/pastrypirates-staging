@@ -80,7 +80,7 @@ function findOpenRun(g, excludeSeats) {
 
 // An open-water cell one square before an island, with NEITHER a dock cell NOR within 1 of home —
 // guarantees mooredReason(p)===null there (with p.justDocked=false), so windPush's decision ladder
-// (pay/flip/aground/shipwreck) actually runs instead of an immediate moored/anchorHold short-circuit.
+// (pay/flip/aground) actually runs instead of an immediate moored/anchorHold short-circuit.
 function findFreeIslandApproach(g) {
   for (const key of Object.keys(g.islands)) {
     const [ix, iy] = key.split(",").map(Number);
@@ -163,7 +163,7 @@ console.log(`Bot storm-push equivalence (D-09/D-10/D-11) — seed ${seed}\n`);
   check("island ahead: identical event stream", JSON.stringify(gA.events.slice(evBeforeA)), JSON.stringify(gB.events.slice(evBeforeB)));
   check("island ahead: exactly one event appended (one outcome square, one event)", gA.events.length - evBeforeA, 1);
   const evA = gA.events[gA.events.length - 1];
-  checkTrue("island ahead: outcome is one of the decision-ladder events", ["dodge", "anchor", "aground", "shipwrecked"].includes(evA.t));
+  checkTrue("island ahead: outcome is one of the decision-ladder events", ["dodge", "anchor", "aground"].includes(evA.t));
 }
 
 /* ---------- scenario 3: another ship ahead (square 2 occupied) ---------- */
@@ -236,7 +236,7 @@ function s1of(pos, dir) { return [pos[0] + dir[0], pos[1] + dir[1]]; }
   const dodgedOnce = { v: false };
   g.windPush(p, dir, 1, dodgedOnce); // leg 1: hits the island, pays/flips, sets dodgedOnce.v=true
   const firstEv = g.events[g.events.length - 1];
-  checkTrue("second leg: leg 1's outcome is a real decision-ladder event", ["dodge", "anchor", "aground", "shipwrecked"].includes(firstEv.t));
+  checkTrue("second leg: leg 1's outcome is a real decision-ladder event", ["dodge", "anchor", "aground"].includes(firstEv.t));
   checkTrue("second leg: leg 1 sets dodgedOnce.v", dodgedOnce.v, true);
   const posAfterLeg1 = [...p.pos];
   const evBefore2 = g.events.length;

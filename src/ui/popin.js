@@ -25,7 +25,7 @@
    §5: Chrome cannot composite an SVG transform animation. Each pop hands its crate back to the board's own SVG the
    instant it lands, so after the show nothing of this remains on the board. */
 import { appState } from "../state/index.js";
-import { playPop } from "./audio.js";
+import { playCue } from "./audio.js";
 
 export const POP_LEAD_MS        = 300;    // the board alone, before the first crate
 export const POP_ISLAND_GAP_MS  = 0;      // extra wait between one island and the next
@@ -171,7 +171,7 @@ export function startPopIn(){
        beside it ran a frame or two ahead of what the eye sees — measured ~30ms early at his phone size. Once it has
        started (`ready`), every beat is set from its real start time, so the sound lands with the crate. */
     const beats = lag => {
-      later(() => playPop(Math.min(n, POP_RISE_CAP) * POP_RISE_STEP), Math.max(0, at - lag));   // the sound is the crate ARRIVING
+      later(() => playCue("popin.crateArrives", { slot: Math.min(n, POP_RISE_CAP) * POP_RISE_STEP }), Math.max(0, at - lag));   // the sound is the crate ARRIVING
       later(() => sparkle(host, c, el.offsetWidth, n), Math.max(0, at + POP_MS * .36 - lag));     // the sparkle is its landing
       later(() => { showCrate(c.id); el.remove(); }, Math.max(0, at + POP_MS - lag));             // the board's own crate takes over
     };

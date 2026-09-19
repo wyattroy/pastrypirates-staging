@@ -2221,3 +2221,39 @@ been in the live game since 2026-09-10; ten browsers at once simply moved the tr
 **The general form.** When a control "does nothing" only sometimes, list every animation that can be running at that moment,
 measure each one's start and end on the page's own clock, and tap inside each window on purpose. `scripts/qa/_picker_swap_tap_check.mjs`
 is the worked example: it measures the window first, then taps inside it, and is red on 43a133fc.
+
+## A FRESH CLOUD CONTAINER CANNOT RUN 140 OF THE 177 GATES, AND SAYS SO ONLY ONCE (2026-09-19)
+
+**Wy-Blade went offline and the work moved to a cloud container. The first `npm test` died at gate
+36 of 177** — `trial_honesty_check.mjs`, one line: *"no playwright found — if it IS installed, this
+resolver is the thing that is wrong."* **161 gates after it never ran**, because the chain stops at
+the first red, and the output gives you a resolver's complaint rather than "your machine is missing
+a thing".
+
+**The resolver was right and the machine was bare.** `docs/DRIVING-THE-GAME.md` §8c has prescribed
+`~/.pw` as playwright's durable home since 2026-08-27, and both laptops have it. **A container
+created this morning does not.** The fix is the one that section already gives:
+
+```bash
+mkdir -p ~/.pw && cd ~/.pw && npm i playwright     # 2 packages, 2 seconds
+```
+
+**Do this at the START of a cloud session, before the first `npm test`** — not when a gate complains
+forty minutes in. It costs two seconds and it is the difference between a suite that reports on 177
+things and a suite that reports on 36.
+
+**THE GENERAL SHAPE, and it is the reusable half.** A gate that guards a TOOL reads, when the tool is
+absent, exactly like a gate that has found a DEFECT. This one is well written — it names the
+alternative ("if it IS installed, this resolver is the thing that is wrong") — and it still cost a
+confused minute, because the honest reading of a red gate is "I broke something" and that was not
+what had happened. **When a gate condemns something on a machine you have not used before, check the
+machine before you read the diff.** Same family as CLAUDE.md's "when a check condemns something known
+to work, suspect the check first".
+
+**The second thing a fresh container lacks is `ffprobe`.** Two probes shell out to it to identify a
+stem by its duration. There is a better instrument on a machine that has a browser anyway: **decode
+the file in the page and read `buffer.duration`.** That identifies a sound by the bytes the browser
+actually fetched, so a file served from the wrong path cannot masquerade as the right one — which is
+precisely what you want to know the day the sound files move. `scripts/qa/_sfx_timeline.mjs` had
+BOTH faults — a flat `sfx/` scan and an `ffprobe` call on its first line — and was repaired the
+same day rather than left as a note: it now asks the browser it already had.

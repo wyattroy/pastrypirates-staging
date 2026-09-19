@@ -79,7 +79,7 @@ import {
   rulesFacts, // A-7: the one source of every number the How-to-Play page teaches
   subjectOf,  // Q-18: the ONE rule both seats run — never a decision one seat ships to the other
 } from "./shared/index.js";
-import { initAudio, playForEvent, playWinScreen, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession, recoverAudio } from "./ui/audio.js";
+import { initAudio, playForEvent, isMuted, cycleSoundMode, audioRunning, wakeCtx, kickAudioSession, recoverAudio } from "./ui/audio.js";
 import {
   netDeleteRoom,
   netSetNarr, netPushChat, netWatchChat,

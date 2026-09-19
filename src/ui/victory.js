@@ -17,7 +17,7 @@ import { ASSET_BASE, BOAT_IMG, CROWN_IMG, PARROT_IMG, SPOILS_POUCH_IMG, POCKET_C
 import { say, sayText, pname, seatLocal, sleepMs, assignBadges, fixedOrigin } from "./util.js";
 import { seat } from "../shared/words.js";
 import { recipeInfo } from "./recipe.js";
-import { playWinScreen, playLidNote, playPop, playCrateVerdict, playDrumroll, playAwardWhoosh, playCoinTick, playCardSwish } from "./audio.js";
+import { playCue } from "./audio.js";
 
 /* ---------------- HIS TUNING ---------------- */
 export const VICTORY_TUNING = {
@@ -73,7 +73,7 @@ export async function playVictoryBoard(e, { fadeOutPanel, sweepCam, leanCam, las
     } catch (err) { console.error("victory board", err); }
   }
   appState.liveDone = true;
-  playWinScreen();
+  playCue("victory.arrives");
   render();
 }
 
@@ -137,14 +137,14 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
     place(nameEl, (el, b2, k2) => Object.assign(el.style, { top: (b2.y + 218 * k2) + "px", fontSize: (24 * k2) + "px" }));
     const land = 250 + c.drop;
     await sleepMs(land);
-    playWinScreen();
+    playCue("victory.arrives");
     /* the shake moves the board and this stage — never <body>: a transform on body makes it the box every fixed layer is
        placed in, and on a phone body is 56 px tall, so the full-screen dim collapsed into a strip (Wy-Blade's crew run) */
     if (c.shake && !skip) { const kf = [0, 1, 2, 3, 4, 5].map(i => ({ translate: i === 5 ? "0 0" : `${(i % 2 ? 1 : -1) * c.shake * (1 - i / 5)}px ${(i % 2 ? -1 : 1) * c.shake * .4 * (1 - i / 5)}px` }));
       [$("boardwrap"), stageEl].forEach(el => el && anim(el, kf, { duration: 320, fill: "none", easing: "linear" })); }
     [...nameEl.querySelectorAll(":scope > span")].forEach((sp, i) => {
       anim(sp, [{ transform: "scale(0)", opacity: 0 }, { transform: `scale(${c.letterPop})`, opacity: 1, offset: .6 }, { transform: "scale(1)", opacity: 1 }], { duration: 260, delay: 220 + i * c.letterGap });
-      setTimeout(() => playLidNote(Math.min(i, 7)), 220 + i * c.letterGap);
+      setTimeout(() => playCue("victory.letterPops", { slot: Math.min(i, 7) }), 220 + i * c.letterGap);
     });
     const confAt = 220 + name.length * c.letterGap;
     anim(nameEl.querySelector(".vcSub"), [{ opacity: 0 }, { opacity: .92 }], { duration: 300, delay: confAt });
@@ -214,7 +214,7 @@ async function boardBeats(g, v, shipEls, leanCam, sweepCam) {
       Object.assign(el.style, { left: (G.xs[ti] + G.tw / 2 - sz / 2) + "px", top: (G.base - G.hs[ti] - sz + 4 * k2) + "px", width: sz + "px" }); });
     boats.push(b);
     anim(b, [{ transform: `translateX(${ti === 2 ? 130 : -130}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: skip ? 1 : 500, delay: skip ? 0 : at });
-    setTimeout(() => playCardSwish(), at + 150); });
+    setTimeout(() => playCue("victory.pageTurns"), at + 150); });
   if (rest != null) { const at4 = p.rise * .6 + 3 * p.sailGap, sz = G0.sz4, lx = G0.x4;
     const b4 = mk(stageEl, "vcBoat", `<img src="${BOAT_IMG[rest]}" alt="" style="opacity:.85">`, { left: (lx + 29 * k - sz / 2) + "px", top: (base - 32 * k) + "px", width: sz + "px" });
     place(b4, (el, b2, k2) => { const G = geom(b2, k2);
@@ -279,7 +279,7 @@ export function victoryCard() {
   const slide = (from, to, dir) => { const ease = "cubic-bezier(.3,.7,.3,1)";
     anim(els[from], [{ transform: "translateX(0)" }, { transform: `translateX(${-dir * 112}%)` }], { duration: SW, fill: "forwards", easing: ease });
     anim(els[to], [{ transform: `translateX(${dir * 112}%)` }, { transform: "translateX(0)" }], { duration: SW, fill: "forwards", easing: ease });
-    playCardSwish(); };
+    playCue("victory.pageTurns"); };
   /* ⭐ THE PAGES FOLLOW HIS FINGER. Wyatt, 2026-09-17, on the victory card: "The cards should be swipable to go back and forth between
      them; not just using the little buttons at the bottom." There WAS a swipe (a pointerdown/pointerup pair with a 30px threshold),
      and two things made it feel like there wasn't: nothing moved while the finger did, and NOTHING answered at all until the card had
@@ -344,7 +344,7 @@ export function victoryCard() {
     const ease = "cubic-bezier(.3,.7,.3,1)", ms = Math.round(SW * 0.8);
     anim(els[from], [{ transform: els[from].style.transform }, { transform: `translateX(${from === goTo ? 0 : (goTo > from ? -112 : 112)}%)` }], { duration: ms, fill: "forwards", easing: ease });
     if (d.to >= 0) anim(els[d.to], [{ transform: els[d.to].style.transform }, { transform: `translateX(${d.to === goTo ? 0 : (d.to > from ? 112 : -112)}%)` }], { duration: ms, fill: "forwards", easing: ease });
-    if (take) { cur = goTo; playCardSwish(); }
+    if (take) { cur = goTo; playCue("victory.pageTurns"); }
   };
   card.addEventListener("touchstart", ev => dragStart(ev, "touch"), { passive: true });
   card.addEventListener("touchmove", ev => dragMove(ev, "touch"), { passive: false });
@@ -415,7 +415,7 @@ function pageClose(el, v, c) {
   recipe.forEach((ing, i) => { const got = has[i];
     const box = mk(row, "vcIng" + (got ? "" : " missing"), `<img src="${ING_IMG[ing]}" alt="">` + (got ? `<span class="tick">✓</span>` : (baking ? `<span class="q">?</span>` : "")));
     anim(box, [{ opacity: 0, transform: "scale(.4)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 250 + i * 110 });
-    setTimeout(() => playLidNote(got ? Math.min(i, 7) : 0), 250 + i * 110);
+    setTimeout(() => playCue("victory.bakeStep", { slot: got ? Math.min(i, 7) : 0 }), 250 + i * 110);
     if (!got && !reduced()) anim(box, [{ transform: "scale(1)" }, { transform: "scale(1.14)" }, { transform: "scale(1)" }], { duration: T.close.pulse, delay: 800, iterations: 12, fill: "none", easing: "ease-in-out" });
   });
   const place = (v.order || []).indexOf(c.seat) + 1;
@@ -447,15 +447,15 @@ function pageBake(el, v, win) {
     t += 350; }
   if (info && info.img) { const img = mk(el, "vcPastry", `<img src="${info.img}" alt="">`, { left: (W / 2 - pw / 2) + "px", top: (standY - pw * .9) + "px", width: pw + "px" });
     anim(img, [{ transform: "translateY(40px) scale(.6)", opacity: 0 }, { transform: "translateY(-6px) scale(1.06)", opacity: 1, offset: .7 }, { transform: "none", opacity: 1 }], { duration: b.rise, delay: t });
-    setTimeout(() => playPop(0), t + b.rise * .7); }
+    setTimeout(() => playCue("victory.podiumRises"), t + b.rise * .7); }
   t += b.rise;
   recipe.forEach((ing, i) => { const e = mk(el, "vcFly", `<img src="${ING_IMG[ing]}" alt="">`, { left: (W / 2 - 15 + (i - 2) * 38) + "px", top: "54px" });
     anim(e, [{ transform: `translate(${(2 - i) * 30}px,${H * .4}px) scale(.3)`, opacity: 0 }, { transform: "scale(1.25)", opacity: 1, offset: .7 }, { transform: "none", opacity: 1 }], { duration: 420, delay: t + i * b.flyGap });
-    setTimeout(() => playPop(i + 1), t + i * b.flyGap + 300); });
+    setTimeout(() => playCue("victory.boatLands", { slot: i + 1 }), t + i * b.flyGap + 300); });
   t += recipe.length * b.flyGap + 500;
   const sw = 66 * b.seal, seal = mk(el, "vcSeal", say("victory.bake.seal", {}), { left: (W / 2 + pw * .38) + "px", top: (standY - pw * .9) + "px", width: sw + "px", height: sw + "px", fontSize: Math.round(sw * .17) + "px" });
   anim(seal, [{ transform: "rotate(-14deg) scale(2.6)", opacity: 0 }, { transform: "rotate(-14deg) scale(.9)", opacity: 1, offset: .7 }, { transform: "rotate(-14deg) scale(1)", opacity: 1 }], { duration: 350, delay: t });
-  setTimeout(() => playCrateVerdict(true), t + 240);
+  setTimeout(() => playCue("victory.baked"), t + 240);
   return t + 350 + b.hold;
 }
 const recipesTotal = size => { let n = ING_ALL.length, r = 1; for (let i = 0; i < size; i++) r = r * (n - i) / (i + 1); return Math.round(r); };
@@ -471,7 +471,7 @@ function pageAwards(el, v, cardH) {
   const bubble = mk(el, "vcBubble", "");
   const n = shown.length, gap = 6, sw = Math.min(120, Math.floor((W - 16 - (n - 1) * gap) / n)), rowY = 56, sh = H - rowY - 34, rowX = W / 2 - (n * sw + (n - 1) * gap) / 2;
   let t = 0;
-  playDrumroll();
+  playCue("victory.drumroll");
   shown.forEach((s, i) => { const b = bySeat[s], last = i === n - 1, col = HEXCOL[s];
     const stat = `${b.def.stat}${b.value != null ? " — " + b.value + (b.def.unit || "") : ""}`;
     setTimeout(() => { bubble.innerHTML = say("victory.awards.goesTo", { award: b.def.name }); }, t);
@@ -482,7 +482,7 @@ function pageAwards(el, v, cardH) {
       { left: left + "px", top: top + "px", width: cw + "px", height: ch + "px", borderColor: col, zIndex: String(10 + i * 2), opacity: 0 });
     const fa = t + a.drum;
     anim(big, [{ transform: "perspective(600px) rotateY(90deg)", opacity: 1 }, { transform: "perspective(600px) rotateY(0deg)", opacity: 1 }], { duration: a.flip, delay: fa, fill: "forwards" });
-    setTimeout(() => playAwardWhoosh(), fa);
+    setTimeout(() => playCue("victory.awardDeals"), fa);
     const sa = fa + a.flip + a.gap, sx = rowX + i * (sw + gap), dx = (sx + sw / 2) - (left + cw / 2), dy = (rowY + sh / 2) - (top + ch / 2);
     const end = `perspective(600px) rotateY(0deg) translate(${dx}px,${dy}px) scale(${sw / cw},${sh / ch})`;
     anim(big, [{ transform: "perspective(600px) rotateY(0deg) translate(0px,0px) scale(1,1)", opacity: 1 }, { transform: end, opacity: 1, offset: .82 }, { transform: end, opacity: 0 }], { duration: a.shrink, delay: sa, fill: "forwards", easing: "cubic-bezier(.5,0,.3,1)" });
@@ -516,7 +516,7 @@ function pageTally(el, v, c, card) {
   const trow = mk(el, "vcRow vcTotal", `<span>${esc(sayText("victory.score.total", {}))}</span><b>0</b>`);
   reel(trow.querySelector("b"), total, totalAt + g.reel, "", true);
   setTimeout(() => { lifts.forEach(x => { try { x && x.cancel(); } catch (e) {} }); list.style.transform = ""; vp.style.overflowY = "auto"; vp.scrollTop = Math.max(0, (rows.length - g.visible) * 20); }, totalAt + g.reel + 50);
-  setTimeout(() => { playLidNote(7);   // not the coin chink: that sound is a coin ARRIVING in a purse, played in one place (coin_arrival_one_event_check)
+  setTimeout(() => { playCue("victory.scoreRowLands");   // not the coin chink: that sound is a coin ARRIVING in a purse, played in one place (coin_arrival_one_event_check)
    
     if (g.shake && !reduced()) anim(card, [0, 1, 2, 3, 4, 5, 6].map(i => ({ translate: i === 6 ? "0 0" : `${(i % 2 ? 1 : -1) * g.shake * (1 - i / 6) * Math.min(2, total / 800)}px 0` })), { duration: 380, fill: "none", easing: "linear" }); }, totalAt + g.reel);
   // "New best voyage!" — each player's own best, on their own device (his ruling, 2026-09-16)
@@ -526,7 +526,7 @@ function pageTally(el, v, c, card) {
   if (g.best && prev != null && total > prev) {
     const pill = mk(el, "vcBest", say("victory.score.best", {}), { opacity: 0 });
     anim(pill, [{ transform: "translateX(-50%) rotate(-6deg) scale(2.6)", opacity: 0 }, { transform: "translateX(-50%) rotate(-6deg) scale(.92)", opacity: 1, offset: .7 }, { transform: "translateX(-50%) rotate(-6deg) scale(1)", opacity: 1 }], { duration: 350, delay: totalAt + g.reel + 300 });
-    setTimeout(() => playCrateVerdict(true), totalAt + g.reel + 520);
+    setTimeout(() => playCue("victory.bestPill"), totalAt + g.reel + 520);
     extra = 700;
   }
   return totalAt + g.reel + extra + g.hold;
@@ -537,7 +537,7 @@ function reel(el, to, dur, prefix, quiet) {
   let start = null, shown = null;
   const step = t => { if (!el.isConnected) return; if (start === null) start = t;
     const k = Math.min(1, (t - start) / Math.max(1, dur)), v = Math.round(to * (1 - Math.pow(1 - k, 3)));
-    if (v !== shown) { shown = v; el.textContent = prefix + v; if (!quiet && k < 1) playCoinTick(); }
+    if (v !== shown) { shown = v; el.textContent = prefix + v; if (!quiet && k < 1) playCue("victory.scoreTicks"); }
     if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
@@ -558,8 +558,8 @@ function buildDock(wrap) {
     const raise = (el, delay) => anim(el, [{ transform: "scaleY(.35)", filter: "grayscale(.7)" }, { transform: "scaleY(1.12)", filter: "grayscale(0)", offset: .75 }, { transform: "scaleY(1)", filter: "grayscale(0)" }], { duration: T.dock.sailRise, delay, fill: "forwards" });
     const sails = [...dock.querySelectorAll(".vcSail")];
     appState.game.players.forEach((p, i) => { if (p.strategy !== "human" || isLocalHuman(i)) raise(sails[i], p.strategy === "human" ? 0 : 60); });
-    playCardSwish();
-    setTimeout(() => { label.textContent = sayText("victory.dock.setting", {}); playLidNote(7); }, T.dock.sailRise);
+    playCue("victory.pageTurns");
+    setTimeout(() => { label.textContent = sayText("victory.dock.setting", {}); playCue("victory.settingSail"); }, T.dock.sailRise);
     setTimeout(() => { const orig = $("btnPlayAgain"); if (orig && orig.onclick) orig.onclick(); }, T.dock.sailRise + 500);
   };
   return dock;

@@ -12,7 +12,9 @@
 //             compares against the committed manifest — the behavior oracle.
 //
 // Corpus: 30 base seeds, 12345-12374 (D-03), PLUS one explicit extra seed (14-04, EXTRA_SEEDS
-// below) added to restore REQUIRED_EVENT_TYPES coverage for `shipwrecked` under the post-14-03
+// below) added to restore REQUIRED_EVENT_TYPES coverage for the v1 storm ladder's bottom rung
+// (a kind the v2.1 engine no longer emits at all, and whose name left this tree on 2026-09-19;
+// the seed stays because removing it would reshape a corpus this script only replays) under the post-14-03
 // engine (D-15/D-18/D-21 shifted the RNG stream and routing enough that none of the original 30
 // seeds produces it any more — see docs/DETERMINISM-RERECORD.md Section 6a). The base 30 keep
 // their original seedIndex (0..29) and personality rotation unchanged; the extra seed gets the
@@ -42,8 +44,8 @@ const SEED_BASE = 12345;
 const BOT_STRATS = ["pirate", "trader", "balanced", "rusher", "monopolist"];
 const SEED_COUNT = 30; // D-03: seeds 12345-12374 inclusive — the base contiguous range, unchanged
 
-// 14-04 — one explicit extra seed appended after the base range to restore `shipwrecked`
-// coverage under the post-14-03 engine. First-match over a bounded search (seeds 12375-12379,
+// 14-04 — one explicit extra seed appended after the base range to restore the v1 storm
+// ladder's bottom-rung coverage under the post-14-03 engine. First-match over a bounded search (seeds 12375-12379,
 // evaluated at seedIndex 30, the FIXED_SEED_INDEX every extra seed after the first would also
 // use if more were ever added) — see docs/DETERMINISM-RERECORD.md Section 6a/6b for the search
 // log. Not part of the base contiguous range; appended, never inserted, so the base 30's
@@ -67,7 +69,7 @@ const REQUIRED_EVENT_TYPES = [
   "trade",                 // trade
   "dock",                  // dock
   "fish",                  // fish
-  "windmove", "tradewind", "shipwrecked", // storm and wind
+  "windmove", "tradewind",  // storm and wind
   "aground",                // run-aground
   "end", "bakeoff", "finish", // endgame
 ];

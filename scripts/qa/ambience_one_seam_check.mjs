@@ -31,7 +31,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const AUDIO = path.join(REPO, "src", "ui", "audio.js");
@@ -52,7 +52,15 @@ const arr = (src, name) => {
 };
 
 const AMB = arr(audio, "AMBIENCE_FILES");
-const SFX = arr(audio, "SFX_FILES");
+/* ⭐ THE STEM LIST AND THE FILE PATHS COME OUT OF THE SOUND TABLE — src/shared/sounds.js, which is
+   pure and imports nothing, so this still needs no browser. It moved there on 2026-09-19 with the
+   rest of the sound design, and the paths moved with it: sfx/<pack>/<folder>/<stem>.mp3. This gate
+   asks `stemUrl()` where a clip is rather than building the path itself, for the reason
+   sfx_files_exist_check gives at length — a second answer to "where is this file?" agrees right up
+   until the day a pack's fallback decides it. */
+const SOUNDS = await import(pathToFileURL(path.join(REPO, "src", "shared", "sounds.js")).href);
+const SFX = SOUNDS.SFX_FILES;
+const clipPath = stem => path.join(REPO, SOUNDS.stemUrl(stem));
 
 if (!AMB) {
   bad("src/ui/audio.js declares no AMBIENCE_FILES array — the gate cannot derive what to check, " +
@@ -64,22 +72,21 @@ if (!AMB) {
 
   /* 1 — every clip is on disk. Same reason sfx_files_exist_check exists: a merge once left
      src/ui/audio.js naming ten stems while sfx/ held eight, and npm test stayed green. */
-  const missing = AMB.filter(s => !fs.existsSync(path.join(REPO, "sfx", `${s}.mp3`)));
+  const missing = AMB.filter(s => !fs.existsSync(clipPath(s)));
   missing.length
-    ? bad(`${missing.length} ambience clip(s) have no mp3 in sfx/: ${missing.map(s => s + ".mp3").join(", ")}`)
-    : ok(`all ${AMB.length} ambience clips have an mp3 in sfx/`);
+    ? bad(`${missing.length} ambience clip(s) have no mp3 where the game fetches them: ${missing.map(s => SOUNDS.stemUrl(s)).join(", ")}`)
+    : ok(`all ${AMB.length} ambience clips have an mp3 at the path stemUrl() resolves them to`);
 
   /* 2 — THE LOAD PATH. Not one of them may sit in SFX_FILES. */
-  if (!SFX) {
-    bad("could not read SFX_FILES to prove the ambience is kept out of it");
+  if (!SFX || !SFX.length) {
+    bad("could not read SFX_FILES out of src/shared/sounds.js to prove the ambience is kept out of it");
   } else {
     const leaked = AMB.filter(s => SFX.includes(s));
     leaked.length
       ? bad(`${leaked.length} ambience clip(s) are in SFX_FILES: ${leaked.join(", ")}. ` +
             `initAudio() awaits Promise.all over that array, so EVERY sound in the game — the coin ` +
             `flip, the cannon, the your-turn bell — would stay silent until the whole ${
-              Math.round(AMB.reduce((a, s) => a + (fs.existsSync(path.join(REPO, "sfx", s + ".mp3"))
-                ? fs.statSync(path.join(REPO, "sfx", s + ".mp3")).size : 0), 0) / 1024)
+              Math.round(AMB.reduce((a, s) => a + (fs.existsSync(clipPath(s)) ? fs.statSync(clipPath(s)).size : 0), 0) / 1024)
             } KB bed had downloaded and decoded. docs/AUDIO.md §3 names this exact failure.`)
       : ok("no ambience clip is in SFX_FILES — the bed cannot block the game's other sounds");
   }
@@ -260,9 +267,9 @@ const musicFile = (audio.match(/const\s+MUSIC_FILE\s*=\s*["']([^"']+)["']/) || [
 if (!musicFile) {
   bad("src/ui/audio.js declares no MUSIC_FILE — the music has no named stem for anything to check.");
 } else {
-  fs.existsSync(path.join(REPO, "sfx", `${musicFile}.mp3`))
-    ? ok(`the music track sfx/${musicFile}.mp3 exists`)
-    : bad(`src/ui/audio.js names the music stem "${musicFile}" but sfx/${musicFile}.mp3 is not on disk — a 404 and a silent voyage.`);
+  fs.existsSync(clipPath(musicFile))
+    ? ok(`the music track ${SOUNDS.stemUrl(musicFile)} exists`)
+    : bad(`src/ui/audio.js names the music stem "${musicFile}" but ${SOUNDS.stemUrl(musicFile)} is not on disk — a 404 and a silent voyage.`);
 
   SFX && SFX.includes(musicFile)
     ? bad(`the music stem "${musicFile}" is in SFX_FILES. It is 540 KB and initAudio() awaits that ` +

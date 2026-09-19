@@ -28,7 +28,7 @@ import { panel, setNeedsAction, GHOST_FADE_MS } from "./panel.js";
 // imports neither panel.js nor this file), so this adds no cycle — see the note beside the bake-off's
 // export in ./index.js, updated in this same commit.
 import { narrationHoldMs, say, sayText } from "./util.js";
-import { playLidNote, playCrateVerdict, playCoinTick, playCardSwish } from "./audio.js";
+import { playCue } from "./audio.js";
 
 const $=(id)=>document.getElementById(id);
 // module-local, as every other src/ui/ file keeps its own
@@ -112,7 +112,7 @@ function dropLid(bowl,k){
   fall.finished.then(()=>{
     dome.style.transition="";
     if(!bowl.isConnected||!bowl.classList.contains("covered"))return;
-    playLidNote(k);   // his pick, 2026-09-14: a marimba note as the lid LANDS, a step up the scale for each lid of the sweep
+    playCue("bakeoff.lidLands", { slot: k });   // his pick, 2026-09-14: a marimba note as the lid LANDS, a step up the scale for each lid of the sweep
     dome.animate([{scale:"1 1"},{scale:"1.1 .84",offset:.3},{scale:".97 1.04",offset:.65},{scale:"1 1"}],
       {duration:SLAM_MS,easing:"ease-out",id:"bake-slam"});
     for(const side of [-1,1]){
@@ -218,7 +218,7 @@ function paintBadges(bowls,openSteps,picks){
      their guesses for the bakeoff". One per crate named or un-named, on the baker's screen and every watcher's alike, because both
      paint through here. A whole bench clearing at once (a paid rewatch) is not a guess, so it makes no sound. */
   const was=bowls.__picks;
-  if(was!=null&&Math.abs(picks.length-was)===1)playCoinTick();
+  if(was!=null&&Math.abs(picks.length-was)===1)playCue("bakeoff.pickChanges");
   bowls.__picks=picks.length;
   bowls.forEach((b,pos)=>{
     if(b.classList.contains("locked"))return;
@@ -656,7 +656,7 @@ export async function playBakeoffLive(spec,io){
   for(const [a,b] of swaps){
     const A=bowls[a],B=bowls[b];
     if(!A||!B)continue;
-    playCardSwish();
+    playCue("bakeoff.cratesSwap");
     if(reduced){
       A.classList.add("flash");B.classList.add("flash");
       await sleep(340);
@@ -974,7 +974,7 @@ export async function bakeoffReveal(view,result){
     if(num)num.textContent=String(k+1);
     el.classList.add(result.correct[k]?"right":"wrong");
     if(alreadyLocked)continue;
-    playCrateVerdict(!!result.correct[k]);   // his pick, 2026-09-14: a chime for a right crate, a thud for a wrong one — with or without the motion
+    playCue(result.correct[k] ? "bakeoff.crateRight" : "bakeoff.crateWrong");   // his pick, 2026-09-14: a chime for a right crate, a thud for a wrong one — with or without the motion
     if(!reduced&&typeof el.animate==="function")(result.correct[k]?crateRight:crateWrong)(el);
     await sleep(reduced?Math.round(REVEAL_MS*0.5):REVEAL_MS);
   }

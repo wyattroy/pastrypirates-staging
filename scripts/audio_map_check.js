@@ -67,7 +67,18 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TARGET = process.argv[2] || join(__dirname, "..", "src", "ui", "audio.js");
 const SFX_DIR = join(__dirname, "..", "sfx");
-const src = readFileSync(TARGET, "utf8");
+/* ⭐ THE SOUND DESIGN IS TWO FILES SINCE 2026-09-19, and this gate reads both as one text.
+   src/shared/sounds.js holds WHAT a sound is — the cues, the event map, the levels, the measured
+   peaks, the pack folders. src/ui/audio.js holds what a sound DOES, and with it the bed's and the
+   song's own lists, which never pass through SFX_VOLUME. Every anchor below is a distinct string,
+   so concatenating is enough and there is nothing to keep in step. A second TARGET argument still
+   works and is how the gate is pointed at a mutated copy. */
+const SOUNDS = join(__dirname, "..", "src", "shared", "sounds.js");
+const src = readFileSync(TARGET, "utf8") + "\n" + readFileSync(process.argv[3] || SOUNDS, "utf8");
+/* EVERY .mp3 UNDER sfx/, at any depth — the stems moved into sfx/<pack>/<folder>/ with the table,
+   and a scan of the top level alone would have found nothing and passed on nothing. */
+const allMp3 = (d) => !existsSync(d) ? [] : readdirSync(d, { withFileTypes: true })
+  .flatMap(e => e.isDirectory() ? allMp3(join(d, e.name)) : e.name.endsWith(".mp3") ? [e.name.replace(/\.mp3$/, "")] : []);
 
 const failures = [];
 let tally = null;
@@ -83,10 +94,10 @@ const stripComments = (s) => s
   .map(line => line.replace(/\/\/.*$/, ""))
   .join("\n");
 
-// ---- (a) no duplicate key in the EVENT_SOUND object literal ----
-const mapStart = src.indexOf("const EVENT_SOUND = {");
+// ---- (a) no duplicate key in the event->cue object literal ----
+const mapStart = src.indexOf("const EVENT_CUE = {");
 if (mapStart === -1) {
-  failures.push("could not find `const EVENT_SOUND = {` — has the map been renamed or restructured?");
+  failures.push("could not find `const EVENT_CUE = {` — has the map been renamed or restructured?");
 } else {
   // Walk forward from the opening brace, tracking nesting depth, to find the literal's own close.
   const braceOpen = src.indexOf("{", mapStart);
@@ -96,12 +107,12 @@ if (mapStart === -1) {
     else if (src[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
   }
   if (end === -1) {
-    failures.push("EVENT_SOUND's opening brace never closes — malformed literal");
+    failures.push("EVENT_CUE's opening brace never closes — malformed literal");
   } else {
     const body = src.slice(braceOpen + 1, end);
     const withoutComments = stripComments(body);
     // Bare-identifier object keys only (`key: value`), which is every key this literal uses —
-    // no quoted or computed keys appear in EVENT_SOUND.
+    // no quoted or computed keys appear in EVENT_CUE.
     const keyRe = /(^|[,{\n]\s*)([A-Za-z_$][A-Za-z0-9_$]*)\s*:/g;
     const seen = new Map();
     let m;
@@ -110,7 +121,7 @@ if (mapStart === -1) {
       seen.set(key, (seen.get(key) || 0) + 1);
     }
     for (const [key, count] of seen) {
-      if (count > 1) failures.push(`EVENT_SOUND key "${key}" is mapped ${count} times — the last one silently wins and shadows the rest`);
+      if (count > 1) failures.push(`EVENT_CUE key "${key}" is mapped ${count} times — the last one silently wins and shadows the rest`);
     }
   }
 }
@@ -167,9 +178,7 @@ if (volStart === -1) {
      absent key and a key at 1 behave identically at runtime, and only one of them looks decided),
      that every declared gain keeps its file under the peak ceiling, and that no cue names a file
      that is not there. Those are rules (b), (d) and (c). */
-  const spec = existsSync(SFX_DIR)
-    ? readdirSync(SFX_DIR).filter(f => f.endsWith(".mp3")).map(f => f.replace(/\.mp3$/, ""))
-    : [];
+  const spec = allMp3(SFX_DIR);
   const declared = new Set(names);
   const skipped = spec.filter(n => selfLevelled.has(n));
   const missing = spec.filter(n => !declared.has(n) && !selfLevelled.has(n));
@@ -181,22 +190,28 @@ if (volStart === -1) {
   tally = { files: spec.length, inVolume: count, atOne: untouched.length, skipped: skipped.length };
 }
 
-/* ---- (c) EVENT_SOUND names no stem that is not in sfx/ ----
+/* ---- (c) no CUE names a stem that is not in sfx/ ----
    A cue pointing at a file that is not there is silence that looks like a decision — the same
    family of fault as DEFECT-1, where a stem that existed could never be reached. This is the
    mirror: a reachable cue whose file does not exist. Only NAMED stems are checked; `null` is
    explicit silence and is the file's own convention for a moment that should make no sound.
 
    DEAD KEYS ARE DELIBERATELY NOT FAILED HERE, and the reason is evidence, not leniency. Measured
-   2026-09-18 over 200 seeded voyages plus a grep of every emitter in src/: seven EVENT_SOUND keys
-   name an event nothing emits — `fish`, `anchor`, `shipwrecked`, `dodge` (which name real stems)
-   and `moored`, `idle`, `bakeoff` (explicit silence). They cost nothing at runtime: an event that
-   never fires never reaches the lookup. Failing them would be a gate deciding, on its own, to
-   delete four records of intent — and the standing ruling is that the default is KEEP. They are
-   reported in docs/AUDIO.md §1c instead, where a person can rule on them. */
+   2026-09-18 over 200 seeded voyages plus a grep of every emitter in src/: six EVENT_CUE keys
+   name an event nothing emits — `fish`, `anchor`, `dodge` (which name real stems) and `moored`,
+   `idle`, `bakeoff` (explicit silence). They cost nothing at runtime: an event that never fires
+   never reaches the lookup. Failing them would be a gate deciding, on its own, to delete three
+   records of intent — and the standing ruling is that the default is KEEP. They are reported in
+   docs/AUDIO.md §1c instead, where a person can rule on them. (It was seven until 2026-09-19:
+   the wreck at the bottom of the v1 storm ladder is out of the live tree at Wyatt's word, and
+   scripts/qa/event_sound_kinds_real_check.mjs is what keeps any of them from coming back.) */
+/* ⭐ IT READS THE CUE TABLE NOW, NOT THE EVENT MAP — 2026-09-19. The event map's values became cue
+   NAMES ("which moment is this?"), and only CUES names a file. That is a strictly wider check than
+   before: it covers the ten stems that never went through the event map at all, which is the whole
+   fault Wyatt named. */
 const evSoundStems = [];
 {
-  const s0 = src.indexOf("const EVENT_SOUND = {");
+  const s0 = src.indexOf("export const CUES = {");
   if (s0 !== -1) {
     const open = src.indexOf("{", s0);
     let depth = 0, end = -1;
@@ -206,16 +221,17 @@ const evSoundStems = [];
     }
     if (end !== -1) {
       const body = stripComments(src.slice(open + 1, end));
-      for (const m of body.matchAll(/[A-Za-z_$][A-Za-z0-9_$]*\s*:\s*["']([A-Za-z0-9_-]+)["']/g))
-        evSoundStems.push(m[1]);
+      for (const m of body.matchAll(/\bstem:\s*["']([A-Za-z0-9_-]+)["']/g)) evSoundStems.push(m[1]);
     }
   }
 }
 if (existsSync(SFX_DIR)) {
-  const onDisk = new Set(readdirSync(SFX_DIR).filter(f => f.endsWith(".mp3")).map(f => f.replace(/\.mp3$/, "")));
+  const onDisk = new Set(allMp3(SFX_DIR));
   const ghosts = [...new Set(evSoundStems)].filter(n => !onDisk.has(n));
   if (ghosts.length)
-    failures.push(`EVENT_SOUND names ${ghosts.length} stem(s) with no file in sfx/: ${ghosts.join(", ")} — the cue fires and nothing is heard, which reads as a decision and is not one`);
+    failures.push(`CUES names ${ghosts.length} stem(s) with no file under sfx/: ${ghosts.join(", ")} — the cue fires and nothing is heard, which reads as a decision and is not one`);
+  if (!evSoundStems.length)
+    failures.push("no cue names a stem at all — the CUES table could not be read, so this rule would pass on nothing");
 }
 
 /* ---- (d) no gain pushes a stem's true peak above the ceiling ----
@@ -294,15 +310,15 @@ if (!process.argv[2]) {
      OWN decoration (the "changed NOTHING" arm below is what fired), which is the whole reason that
      arm exists: a mutation that does not mutate reads exactly like a rule that cannot fail. */
   const mutants = [
-    ["(a) a duplicate EVENT_SOUND key",
-      s => s.replace(/(\n\s*pass: "fishing",)/, '$1\n  pass: "storm",'),
+    ["(a) a duplicate EVENT_CUE key",
+      s => s.replace(/(\n\s*pass: "muse",)/, '$1\n  pass: "sail",'),
       /mapped 2 times/],
     ["(b) a stem in sfx/ that SFX_VOLUME does not declare",
       s => s.replace(/\n\s*"drumroll":\s*[0-9.]+,/, "\n"),
       /does not mention 1 stem/],
-    ["(c) EVENT_SOUND naming a file that is not in sfx/",
-      s => s.replace(/sail: "ship-move"/, 'sail: "ship-move-LOUD"'),
-      /no file in sfx\//],
+    ["(c) a CUE naming a file that is not in sfx/",
+      s => s.replace(/"sail":(\s*)\{ stem: "ship-move" \}/, '"sail":$1{ stem: "ship-move-LOUD" }'),
+      /no file under sfx\//],
     ["(d) a gain that pushes a true peak over the ceiling",
       s => s.replace(/"cork-pop":\s*[0-9.]+,/, '"cork-pop": 9,'),
       /above the -1 dBFS ceiling/],
@@ -322,9 +338,13 @@ if (!process.argv[2]) {
   for (const [what, mutate, expect] of mutants) {
     const mutated = mutate(src);
     if (mutated === src) { bad.push(`${what}: the mutation changed NOTHING — this case cannot fail and is not evidence`); continue; }
-    const f = join(dir, "audio.js");
+    /* THE CHILD READS THE MUTANT AND NOTHING ELSE. `src` is the two real files concatenated, so the
+       mutant already contains both; the second path is an empty file so the child does not then
+       append a PRISTINE copy of the sound table behind it and quietly heal every mutation. */
+    const f = join(dir, "audio.js"), empty = join(dir, "empty.js");
     writeFileSync(f, mutated, "utf8");
-    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), f], { encoding: "utf8" });
+    writeFileSync(empty, "", "utf8");
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), f, empty], { encoding: "utf8" });
     const out = (r.stdout || "") + (r.stderr || "");
     if (r.status === 0) bad.push(`${what}: the mutant PASSED — the rule cannot fail`);
     else if (!expect.test(out)) bad.push(`${what}: the mutant failed, but on the wrong rule (wanted ${expect}) — got: ${out.trim().split("\n").slice(0, 3).join(" | ")}`);
