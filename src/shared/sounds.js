@@ -67,9 +67,12 @@
    three files in it, not a folder with thirty. */
 export const SFX_ROOT = "sfx/";
 
-/* The base pack — the sounds in the game today. NAMED after the world rather than called
-   "default", so the second pack reads as its sibling instead of as an exception to it. */
-export const BASE_PACK = "home-waters";
+/* THE BASE PACK, AND ITS NAME IS HIS. Wyatt, 2026-09-19: "'Caribbean' is the default pastry
+   pirates pack. You can name the sound assets folder that." Named after the WORLD rather than
+   called "default", so the second pack reads as its sibling instead of as an exception to it —
+   and because the day there are four, "default" tells you nothing about which water you are in.
+   (It was `home-waters` for about an hour, which was my placeholder; his word replaced it.) */
+export const BASE_PACK = "caribbean";
 
 /* The pack in play. One binding, so the day a map carries its own sounds this is the line that
    moves — and nothing else in the game learns a new word. */

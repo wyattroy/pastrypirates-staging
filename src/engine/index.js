@@ -126,6 +126,10 @@ const PLAN={
 class Game{
   constructor(cfg,seed,record){
     this.cfg=cfg; this.record=record; this.rng=mulberry32(seed);
+    // The berth this captain is hypothetically standing in while planTurnV3 prices "dock here", so
+    // a rival's plan can be re-costed against it. Transient: posed and put back inside one
+    // evaluation, never read outside one, never serialised.
+    this.berthHold=null;
     this.seed=seed; this.randCalls=0;
     const n=cfg.grid; this.home=[Math.floor(n/2),Math.floor(n/2)];
     // --- round world: pixelated circle + trade-wind rim channel ---
@@ -2391,10 +2395,20 @@ class Game{
      STILL ON THE OLD NUMBER, DELIBERATELY: the trade pricing at askFor/worthToMe. Those turn turns back into
      COINS and were never on the ladder; the last time this constant moved under trade pricing it cost 21
      ladder points, so they move on their own measurement, not on this one. */
-  coinTurns(n){
-    const pay=((this.cfg.dockHeads||0)+(this.cfg.dockTails||0))/2||PLAN.coinsPerDockTurn;
-    return n<=0?0:n/pay;
-  }
+  /* WHAT A TURN AT A BERTH PAYS — said ONCE, and derived from the berth. Three places used to write
+     this expression out (here, tour3, rivalPlan3), two of them with a different fallback; now they
+     all ask. NO SECOND KNOB: if a berth's payout is ever tuned it moves on cfg.dockHeads/dockTails
+     and everything that prices a turn follows, which is the whole point of there being one of these. */
+  dockPay(){ return ((this.cfg.dockHeads||0)+(this.cfg.dockTails||0))/2||PLAN.coinsPerDockTurn; }
+  /* AND IT IS FRACTIONAL, DELIBERATELY. Needing 5 coins at 2 a berth turn is 2.5 turns, not 3.
+     Every caller used to round this up — acquireTurns with Math.ceil(coinTurns(...)), tour3 and
+     rivalPlan3 by dividing again inside their own Math.ceil — and a ruler that cannot see half a
+     turn cannot see a berth beating a muse. Measured on seed 79190 before the fix: a bot standing
+     on the sugar berth it needed, with an empty purse, priced working that berth at 25 turns-to-win
+     and sailing two squares away at 25, and took the sail. Half turns are what tells those apart.
+     Nobody reads this as a whole number of moves; every consumer only ever compares it with another
+     one of the same kind. */
+  coinTurns(n){ return n<=0?0:n/this.dockPay(); }
   /* ⭐ DOES THIS CAPTAIN TAKE THIS CRATE? THE ONE ANSWER — it used to be written twice, once in doDock (what a
      bot PLAYS) and once in planTurnV3's berth branch (what a bot EVALUATES), kept in step by hand. The CEO
      found the pair on 2026-09-15, the audit before it found the same shape in the dock's payment, and the
@@ -2462,8 +2476,16 @@ class Game{
        exactly what the mixed-table run showed — docks up, crates bought down, purse trebled.
        Fractional turns say what the board says: four squares is one turn, two squares is half of
        one. Every consumer compares these costs against each other, so finer resolution can only
-       sharpen the comparison; nothing reads it as a whole number of moves. */
-    return Math.ceil(d/(upwind?SAIL_RANGE_UPWIND:SAIL_RANGE));
+       sharpen the comparison; nothing reads it as a whole number of moves.
+       ⛔ AND FROM 2026-08-09 TO 2026-09-18 THE LINE BELOW SAID Math.ceil ANYWAY (fixed on Wyatt's own
+       diagnosis). Checked across every reachable commit with `git log -S` on both spellings: the
+       fractional form had NEVER existed in this repo. The paragraph above was written in 1bec0989
+       IN THE SAME COMMIT as the ceil it condemns — so this is a fix that was described and never
+       landed, not one that landed and was lost. Which is the more dangerous of the two, because a
+       comment describing a fix reads exactly like a fix. A COMMENT IS NOT THE CODE, and the gate
+       that now holds this (scripts/qa/honest_ruler_check.mjs) strips comments before it matches,
+       for that reason. */
+    return d/(upwind?SAIL_RANGE_UPWIND:SAIL_RANGE);
   }
   // The three ways to get a crate, each priced in turns, and which one wins. This is the heart of
   // the planner and the answer to "what do I do when it's out of stock everywhere" (Wyatt asked
@@ -2493,10 +2515,12 @@ class Game{
     if(price!==null){
       const dock=this.islandOf[ing];
       const sail=this.sailTurns(from,dock,wind);
-      // coins I still have to earn, at 4 a docking turn — and I can earn them at THIS dock, so
-      // the earning turns and the arrival turns stack rather than needing a detour
+      // coins I still have to earn, at whatever a berth pays (dockPay) — and I can earn them at
+      // THIS dock, so the earning turns and the arrival turns stack rather than needing a detour.
+      // FRACTIONAL: half a turn of earning is half a turn, and rounding it up is what made a berth
+      // and a muse cost the same.
       const short=Math.max(0,price-p.coins);
-      const earn=Math.ceil(this.coinTurns(short));
+      const earn=this.coinTurns(short);
       // somebody else is tied up in that berth. Only one ship fits (singleDock), so this errand
       // means loitering until they leave — price the wait, so a different ingredient wins the leg
       // instead. Without this a bot fixates on an occupied berth it can never reach, cannot
@@ -2644,6 +2668,24 @@ class Game{
   canDock(p,port){
     if(this.cfg.singleDock&&this.dockOccupiedBy(port,p))return false;
     return true;
+  }
+  /* WHAT A TURN THAT JUST SAILS WILL ACTUALLY PAY — the muse's dubloon, priced where the pass is
+     priced. takeTurn ends a turn it could not spend by leaning over the rail, and pays cfg.passCoin
+     for it (doPass, RULE-01) — bots and humans alike. The planner priced a plain sail on POSITION
+     ALONE, so a muse earned a coin in the game and nothing in the model, while the berth beside it
+     correctly credited its flip. Measured before the fix, over 1000 seeded voyages: 354 turns where
+     a bot walked off a berth it needed and mused instead, taking 354 coins where those berths would
+     have paid 708.
+     IT ASKS THE EXACT QUESTION takeTurn WILL ASK (principle 3), which is why it does not simply
+     return the config's payout. A ship that finishes beside a berth nobody is using DOCKS in takeTurn's fallback
+     and is paid the flip, and a ship that finishes at the ovens with a full recipe never sees the
+     Pass button at all (item 4, D-15). Both of those are scored as their own candidates, so
+     crediting a muse there would pay the same turn twice. */
+  passCoinAt(p,cell){
+    if(this.cfg.bakeoff&&!this.needs(p).length&&man(cell,this.home)<=1)return 0;  // the ovens, not the rail
+    const port=this.portAt(cell);
+    if(port&&this.canDock(p,port))return 0;                                       // the fallback works the berth
+    return this.cfg.passCoin||0;
   }
   // Is another 2🌕 broadside worth it? The prize is a crate whose worth the bot has already
   // computed in turns; a re-fire buys a 50% shot at it for two coins' worth of dock time. The
@@ -2852,13 +2894,20 @@ class Game{
     const held=new Set(q.ing);
     let need=Math.max(0,rs-held.size);
     const stock={};for(const ing of this.ings)stock[ing]=this.tokens[ing]||0;
-    const pay=((this.cfg.dockHeads||0)+(this.cfg.dockTails||0))/2||1;
+    const pay=this.dockPay();
     const base=this.cfg.crateBase||6;
     const fc=this.forecastWind()||this.windNow;
     let at=q.pos,coins=q.coins,t=0;
     const buys=[];
+    /* A BERTH I AM STANDING IN IS A BERTH THEY CANNOT USE. cfg.singleDock means one ship fits, so
+       while this captain works a berth, a rival whose voyage calls at that island waits for it to
+       clear. `berthHold` is the hypothesis planTurnV3 poses when it prices "dock here" — the same
+       mutate-and-restore contract as the token decrement standing beside it — and it is read HERE
+       and nowhere else, so a berth's denial is scored through the ONE rival-plan overlay rather
+       than a second mechanism bolted on next to it. */
+    const hold=this.berthHold;
     while(need>0){
-      let best=null,bing=null,bsail=0,bearn=0,bprice=0;
+      let best=null,bing=null,bsail=0,bearn=0,bprice=0,bwait=0;
       for(const ing of this.ings){
         if(held.has(ing)||buys.some(b=>b.ing===ing))continue;
         // an empty shelf is no longer a dead end: the black market prices it flat (mirrors
@@ -2869,12 +2918,15 @@ class Game{
         const price=stock[ing]>=1e9?base-1
           :stock[ing]<=0?this.cfg.blackMarket
           :Math.max(1,base-stock[ing]);
-        const earn=Math.max(0,Math.ceil((price-coins)/pay));
-        const cost=sail+earn+1;
-        if(best===null||cost<best){best=cost;bing=ing;bsail=sail;bearn=earn;bprice=price;}
+        const earn=this.coinTurns(price-coins);
+        // they only wait if they would ARRIVE while the berth is still held — the same arrival
+        // schedule tour3 already uses to decide which shelves are bare by the time you get there
+        const wait=(hold&&hold.ing===ing&&hold.by!==q)?Math.max(0,hold.until-(t+sail)):0;
+        const cost=sail+wait+earn+1;
+        if(best===null||cost<best){best=cost;bing=ing;bsail=sail;bearn=earn;bprice=price;bwait=wait;}
       }
       if(bing===null){t+=4;need--;continue;}   // nothing buyable: a deal or a fight, ~4 turns
-      t+=bsail+bearn+1;
+      t+=bsail+bwait+bearn+1;
       coins+=bearn*pay+pay-bprice;             // the buying flip pays too, same as doDock
       if(stock[bing]<1e9&&stock[bing]>0)stock[bing]--;   // the black market's shelf is bottomless
       buys.push({ing:bing,t});
@@ -2883,6 +2935,22 @@ class Game{
     }
     const home=this.legTurns3(at,this.home,fc);
     t+=(home===null?PLAN.unreachable:home)+(this.cfg.bakeoff?PLAN.bakeTurns:0);
+    /* BEING IN THEIR WAY CAN NEVER SPEED THEM UP. This walk is GREEDY — cheapest next errand, in
+       order — so a cost added to one leg can tip it into a DIFFERENT order that happens to beat the
+       order it was already taking, and the blocked plan comes back SHORTER. That is an artefact of
+       the greedy, not a voyage the rival actually gets: their unblocked self was free to take that
+       order too and did not. Caught by scripts/qa/honest_ruler_check.mjs's posed board on seed
+       79190 — sugar's berth held, their ETA 20 -> 19 — which is the whole reason that rule exists
+       as a posed board and not as a regex.
+       So the held plan is only believed while it is not faster than the free one. The error runs
+       AGAINST denial being worth anything (it can only ever price a block at zero, never at more
+       than it is worth), so the denial this engine scores is a FLOOR. */
+    if(hold&&buys.some(b=>b.ing===hold.ing)){
+      this.berthHold=null;
+      const free=this.rivalPlan3(q);
+      this.berthHold=hold;
+      if(t<free.eta)return free;
+    }
     return {eta:t,buys};
   }
   // Recompute one rival's ETA under a hypothesis about their hold — they lost a crate to me, or
@@ -2928,7 +2996,7 @@ class Game{
       return {turns:(home===null?PLAN.unreachable:home)+(this.cfg.bakeoff?PLAN.bakeTurns:0),
               first:this.home};
     }
-    const pay=((this.cfg.dockHeads||0)+(this.cfg.dockTails||0))/2||1;
+    const pay=this.dockPay();
     const base=this.cfg.crateBase||6;
     let best=PLAN.unreachable,bestFirst=null;
     const walk=(rest,at,coins,t,first)=>{
@@ -2975,7 +3043,7 @@ class Game{
           let bm=null,bmPurse=0;
           if(sail!==null&&this.cfg.blackMarket){
             const bprice=this.cfg.blackMarket;
-            const bearn=Math.max(0,Math.ceil((bprice-coins)/pay));
+            const bearn=this.coinTurns(bprice-coins);
             bm=sail+bearn+1;
             bmPurse=coins+bearn*pay+pay-bprice;
           }
@@ -2991,7 +3059,7 @@ class Game{
           }
         }else{
           const price=raw>=1e9?base-1:Math.max(1,base-left);
-          const earn=Math.max(0,Math.ceil((price-coins)/pay));
+          const earn=this.coinTurns(price-coins);
           cost=sail+earn+1;
           end=this.dockOf[ing];
           purse=coins+earn*pay+pay-price;   // the buying flip pays too, same as doDock
@@ -3097,14 +3165,18 @@ class Game{
     const heads=this.cfg.dockHeads||0,tails=this.cfg.dockTails||0;
 
     for(const cell of candidates){
-      // POSITION ALONE: the race if I simply finish the turn here.
-      const sailT=this.turnsToWin3If(p,{cell},ctx);
+      // POSITION, AND THE COIN THE RAIL PAYS FOR IT: a plain sail ends in a muse, and passCoinAt
+      // says what this particular square's version of that turn is actually worth.
+      const museCoin=this.passCoinAt(p,cell);
+      const sailT=this.turnsToWin3If(p,{cell,coins:p.coins+museCoin},ctx);
       consider({cell,type:"sail",value:this.raceScore3(sailT,ctx.plans),
                 why:this.needs(p).length?"enroute":"finishing",
-                detail:{myT:sailT}});
+                detail:{myT:sailT,museCoin}});
 
       const port=this.portAt(cell);
-      if(port&&!(this.cfg.singleDock&&this.dockOccupiedBy(port,p))){
+      // "may I work this berth" is canDock's question and it is asked HERE through canDock, not
+      // written out a second time — the same convergence the muse coin above depends on.
+      if(port&&this.canDock(p,port)){
         /* THE BERTH, BRANCHED ON THE FLIP IT ACTUALLY IS. doDock flips FIRST and buys against the
            purse the flip just paid — so heads and tails are different states, evaluated exactly as
            doDock will play them (needsIt || the merchant's leverage clause), then averaged as
@@ -3120,13 +3192,29 @@ class Game{
                                           coins:purse-(take?price:0)},ctx);
           // my purchase empties a shelf slot rivals may have been counting on — their race moves.
           // Not on a black-market buy: that shelf is bottomless, so nobody's plan changes.
+          /* AND THE BERTH IS MINE WHILE I WORK IT. Wyatt, 2026-09-18: "If you dock to get a coin,
+             your distance to that ingredient is zero. That's worth more than if you move one square
+             away to muse a coin. It's also a better move because it blocks others from using the
+             dock." Until this change dockOccupiedBy was only ever a COST — every reading of it
+             priced somebody ELSE's ship sitting in the berth — and nothing credited this captain
+             for being the ship in it.
+             HOW LONG THE BLOCK LASTS IS NOT A CONSTANT. It is the turns I still owe this berth,
+             earned at the rate any captain earns them (coinTurns of what the flip leaves me short)
+             plus the one turn the purchase itself costs. So a bot about to buy and sail denies
+             almost nothing, and a bot with an empty purse and a long grind ahead denies a lot —
+             which is the true shape of it, and it moves with the board instead of being typed. */
+          const hold=this.cfg.singleDock?1+this.coinTurns((price===null?0:price)-purse):0;
+          const bought=take&&this.tokens[port]>0;
           let ov=null;
-          if(take&&this.tokens[port]>0){
+          if(bought||hold>0){
             ov=new Map();
-            this.tokens[port]--;
+            if(bought)this.tokens[port]--;
+            const held=this.berthHold;
+            if(hold>0)this.berthHold={ing:port,until:hold,by:p};
             for(const e of ctx.plans)
               if(e.plan.buys.some(b=>b.ing===port))ov.set(e.q,this.rivalPlan3(e.q).eta);
-            this.tokens[port]++;
+            this.berthHold=held;
+            if(bought)this.tokens[port]++;
           }
           const s=this.raceScore3(myT,ctx.plans,ov);
           ep+=0.5*s;branches.push({pay,myT,take,s:+s.toFixed(4)});
@@ -3224,7 +3312,7 @@ class Game{
       };
       for(const cell of candidates){
         if(cell[0]===p.pos[0]&&cell[1]===p.pos[1])continue;
-        mv({cell,type:"sail",value:this.raceScore3(this.turnsToWin3If(p,{cell},ctx),ctx.plans),why:"enroute"});
+        mv({cell,type:"sail",value:this.raceScore3(this.turnsToWin3If(p,{cell,coins:p.coins+this.passCoinAt(p,cell)},ctx),ctx.plans),why:"enroute"});
       }
       if(move)best=move;
     }

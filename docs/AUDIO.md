@@ -34,7 +34,7 @@ a cue *name*; `playForEvent` resolves it and hands it to `playCue`. So "the soun
 ### The folders, and what a new map has to supply
 
 ```
-sfx/<pack>/<folder>/<stem>.mp3          e.g. sfx/home-waters/voyage/ship-move.mp3
+sfx/<pack>/<folder>/<stem>.mp3          e.g. sfx/caribbean/voyage/ship-move.mp3
 ```
 
 - **`voyage/`** — the world's own voice: sailing, weather, crates, coins, a fight.

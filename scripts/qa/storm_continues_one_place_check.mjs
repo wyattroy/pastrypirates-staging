@@ -38,7 +38,14 @@ const { DIRNAME } = await import(pathToFileURL(path.join(REPO, "src/shared/index
 const { WORDS } = await import(pathToFileURL(path.join(REPO, "src/shared/words.js")).href);
 const walk = d => fs.readdirSync(path.join(REPO, d), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name.endsWith(".js") ? [path.join(d, e.name)] : []);
 const ENG = "src/engine/index.js", UTIL = "src/ui/util.js", ORCH = "src/orchestrator.js", WORDS_FILE = "src/shared/words.js";
-const SEEDS = [15838, 23757, 47514];
+/* SEEDS RE-PICKED 2026-09-18, and this is fixture maintenance, not a softened rule. Rule 3 plays a REAL
+   voyage, so which days storm on a given seed depends on how the bots spend the seeded stream — and the commit
+   this note lands in changes what a bot decides. The gate said so itself rather than passing quietly: `seed 15838
+   holds 1 new storm(s) and 0 continuing one(s) — it needs both, or this rule proves nothing`. The requirement is
+   untouched; only the three seeds that satisfy it have moved. Checked with the WHOLE gate on every tree this
+   branch produces — 4 rules and 7 mutants, every mutant still red on every one. The August seeds, and the days
+   they storm on, stay in the header above: that is the record of what the fault looked like, not a live fixture. */
+const SEEDS = [20006, 20008, 20009];
 const CAPTAINS = ["pirate", "trader", "balanced", "rusher"];
 const STORM_IDS = ["day.storm", "day.stormNow", "day.stormStill"], CALM_IDS = ["day.wind", "day.windStill"];
 

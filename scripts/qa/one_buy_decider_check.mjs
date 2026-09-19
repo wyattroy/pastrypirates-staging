@@ -23,9 +23,14 @@ const rules = [
    s => s.replace("this.wantsCrate(p,port,price)", "this.needs(p).includes(port)")],
   ["the merchant's leverage clause exists in ONE place", s => (s.match(/hoardBias>=1\.4/g) || []).length === 1,
    s => s.replace("wantsCrate(p,ing,price){", "wantsCrate(p,ing,price){ if(PERSONALITY[p.strategy]&&PERSONALITY[p.strategy].hoardBias>=1.4){} ")],
-  ["the dock rate is derived from the dock, not from PLAN's frozen 4",
-   s => /coinTurns\(n\)\{[\s\S]{0,400}?dockHeads[\s\S]{0,120}?dockTails/.test(s),
-   s => s.replace(/coinTurns\(n\)\{[\s\S]*?\n  \}/, "coinTurns(n){ return n<=0?0:n/PLAN.coinsPerDockTurn; }")],
+  // 2026-09-18: the derivation moved OUT of coinTurns and into dockPay(), so that tour3 and
+  // rivalPlan3 could stop writing it out for a second and third time. This rule follows it, and
+  // now holds both halves — dockPay reads the berth, and coinTurns asks dockPay.
+  ["the dock rate is derived from the dock, not from PLAN's frozen 4, and derived in ONE place",
+   s => /dockPay\(\)\{[\s\S]{0,240}?dockHeads[\s\S]{0,120}?dockTails/.test(s) &&
+        /coinTurns\(n\)\{[\s\S]{0,200}?this\.dockPay\(\)/.test(s),
+   s => s.replace("coinTurns(n){ return n<=0?0:n/this.dockPay(); }",
+                  "coinTurns(n){ return n<=0?0:n/PLAN.coinsPerDockTurn; }")],
 ];
 
 let bad = 0;

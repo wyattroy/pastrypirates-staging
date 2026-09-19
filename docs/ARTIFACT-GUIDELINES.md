@@ -34,6 +34,26 @@ cannot tell them apart.
 - The card takes a coloured left edge so a page of verdicts reads at a glance.
 - Both are toggles: tapping the same one again clears it.
 
+## 2b. ⛔ NO "SETTLED / DONE / FYI" NOTES. THE OPEN LIST IS BLOCKERS ONLY.
+
+**His words, 2026-09-19:** *"remove the green-border notes, and don't put any back up on the
+checklist again, they're clutter."*
+
+He then listed five of them so there is no doubt what he means: "settled and closed so nobody
+re-opens them", "the sword clash is not a fault", "the twin ledger", "this build was checked before
+ye were handed it", "the cloud container can run the browser checks now". **Every one was true, and
+every one was me reassuring him about work he had not asked about.**
+
+- **The bottom section is for things that BLOCK, and nothing else.** If a row does not need a
+  decision or an action from somebody, it does not go on the page.
+- **A thing that is DONE belongs in the "what changed" list with a Pass/Problem on it**, where he
+  can judge it — or in the commit message, or in `DECISIONS.md`. Not as a note he scrolls past.
+- **Reassurance is not information.** "I checked it before handing it to you" is the baseline, not
+  news; saying it costs him a scroll and buys him nothing.
+- The green `ok` styling still exists in the page for a row he has PASSED. It is not for narration.
+
+---
+
 ## 3. RE-USE THE ARTIFACT. NEVER PUBLISH A SECOND ONE.
 
 **One sheet, one URL, updated in place.** He keeps the link open on his phone; a new URL orphans

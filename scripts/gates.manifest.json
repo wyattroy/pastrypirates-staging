@@ -84,6 +84,7 @@
     "node scripts/qa/css_no_accidental_nesting_check.mjs",
     "node scripts/qa/plaque_band_one_place_check.mjs",
     "node scripts/qa/one_buy_decider_check.mjs",
+    "node scripts/qa/honest_ruler_check.mjs",
     "node scripts/voyage_disagreements.mjs --selftest 6",
     "node scripts/qa/one_event_consumer_check.mjs",
     "node scripts/qa/one_display_door_check.mjs",

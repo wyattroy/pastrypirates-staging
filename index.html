@@ -1120,6 +1120,34 @@
   .rimSwirl { transform: scale(1.35); }
   .rimSwirl img { animation: rimSpin 6s linear infinite; opacity: .95; }   /* no will-change, same reason as .rimFlow above */
   @keyframes rimSpin { to { transform: rotate(360deg); } }
+  /* ⭐ THE CURRENT STOPS FLOWING WHEN NOBODY IS LOOKING AT THE BOARD — measured 2026-09-19, for his
+     "the game has started to drop frames on my Mac… so many moving things on screen".
+
+     THE TRADE-WIND CURRENT IS THE FLOOR UNDER EVERYTHING ELSE. Counted with the new frame harness
+     (scripts/qa/_frame_harness.mjs), a solo voyage runs a MEDIAN of 81 animations at once — and 76
+     of them are this: 36 arrows x two infinite keyframes, plus 4 whirlpools. It never stops. Every
+     effect the game has gained since — the confetti, the coin and crate flights, the speed lines,
+     the crown — lands on top of that floor, which is exactly what "so many moving things" feels
+     like. §5 of docs/BOARD-RENDERING.md measured this current at +4.2% CPU when it was ALONE; it is
+     not alone any more.
+
+     DURING THE CEREMONY THE BOARD IS NOT THE SUBJECT. `body.pp4Cer` is the veil that holds the
+     audience (stage.js, and stageHoldsAttention() names the same idea), the camera has left and the
+     board is dimmed behind it — so seventy-six animations are running for scenery nobody can see.
+
+     MEASURED, A/B ON ONE BOX, 40 s of the ceremony each way: frames over 20 ms 168 -> 82 (-51%),
+     p95 frame time 33.3 ms -> 16.8 ms (-50%), live animations 87 -> 11. ⚠ A container has no GPU
+     (software rasterisation), so those MILLISECONDS ARE NOT HIS MAC'S — the halving on one box is
+     the honest claim, and the mechanism behind it does not depend on the machine.
+
+     `animation-play-state` rather than `display:none` or a class swap on 40 elements: it costs one
+     rule, it resumes exactly where it left off, and it touches no JavaScript. The wider version —
+     pausing whenever stageHoldsAttention() is true, which also covers a centre-stage card — needs a
+     body class CSS can see, and is NOT done here because only the ceremony has been measured. */
+  body:has(.vcStage) .rimFlow img,
+  body:has(.vcStage) .rimSwirl img,
+  body.pp4Cer .rimFlow img,
+  body.pp4Cer .rimSwirl img { animation-play-state: paused; }
   @media (prefers-reduced-motion: reduce) {
     .rimFlow img { animation: none; opacity: .9; }
     .rimSwirl img { animation: none; }
