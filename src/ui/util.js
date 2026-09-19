@@ -74,7 +74,7 @@ import { escHtml, RECIPE_BOOK } from "./recipe.js";
 // imports this file directly, so a plain import is strictly simpler than a seam entry here.
 import { netHandlers } from "./handlers.js";
 /* EVERY WORD THE GAME SAYS lives in src/shared/words.js — say()/sayAll() below are the one door to it. */
-import { WORDS, fill, seat } from "../shared/words.js";
+import { WORDS, fill, seat, seats } from "../shared/words.js";
 
 /* ---------- board geometry ---------- */
 
@@ -426,15 +426,20 @@ export function say(id,facts,viewerSeat){
    line names: exactly the {html, variants} shape flash() and the wire already carry. */
 export function sayAll(id,facts){
   const html=say(id,facts,NEUTRAL_VIEWER);
-  const seats=[...new Set(Object.values(facts||{}).filter(v=>v&&typeof v==="object"&&"seat" in v).map(v=>v.seat))];
-  return {html,variants:seats.map(s=>({seat:s,html:say(id,facts,s)})).filter(v=>v.html!==html)};
+  /* A GROUP COUNTS AS EVERY CAPTAIN IN IT (2026-09-19). This gathered only `{seat}` facts, so a line
+     whose only captains arrive as `seats([...])` produced NO variants — every screen would have been
+     sent the third-person html and nobody would have read "ye". The one place that ships a group over
+     the wire must not be the one place the derivation stops. */
+  const named=[...new Set(Object.values(facts||{}).flatMap(v=>
+    (v&&typeof v==="object") ? (Array.isArray(v.seats) ? v.seats : ("seat" in v ? [v.seat] : [])) : []))];
+  return {html,variants:named.map(s=>({seat:s,html:say(id,facts,s)})).filter(v=>v.html!==html)};
 }
 /* THE PLAIN-TEXT DOOR — for words drawn with textContent, like a greyed button's reason (showWhy). A coloured name or a
    no-break span would reach the screen there as literal markup, so both are taken off. */
 export function sayText(id,facts,viewerSeat){
   return say(id,facts,viewerSeat).replace(/<[^>]*>/g,"");
 }
-export { seat };
+export { seat, seats };
 // D-17 (Wyatt-approved 2026-07-29): ingredients render as the SAME custom art the islands and the
 // captain's box draw (ilabelImg -> ING_IMG), not as raw system emoji. None of the 7 in-play
 // ingredient emoji are EMOJI_IMG keys, so emojify() could never rescue them downstream — they were
@@ -746,28 +751,25 @@ const EVENT_NARRATION={
        a summary that calls you by name while addressing everyone else in second person is the
        inconsistency rule "one display path" exists to stop. */
     const AND=say("list.and",{});
-    const list=(seats)=>{
-      const names=seats.map(i=>isLocalTo(i,viewerSeat)?`<b>${say("list.ye",{})}</b>`:pn(i));
-      if(names.length<=1)return names[0]||"";
-      if(names.length===2)return `${names[0]} ${AND} ${names[1]}`;
-      return `${names.slice(0,-1).join(", ")} ${AND} ${names[names.length-1]}`;
-    };
-    /* Second person takes the plural verb ("ye drop"), so a group is singular ONLY when it is one
-       captain who is not you. THIS IS THE BUG THE HARNESS CAUGHT: the first draft built every
-       clause in the passive ("X is driven"), which read fine in a list and produced the fragment
-       "The storm Crustbeard is driven 3 squares NORTH!" whenever it was the only clause. */
-    const sng=(seats)=>seats.length===1&&!isLocalTo(seats[0],viewerSeat);
+    /* THE GROUP IS A FACT NOW, not a helper here. Until 2026-09-19 this file built the list and its
+       "ye" by hand (a `list()` joiner and a `sng()` plurality test), because src/shared/words.js
+       could not say a group at all — the workaround that kept seven storm lines on the narration
+       check's AWAITING list. `seats()` says it, `{who:drops|drop}` carries the plurality, and the
+       two .one/.many line pairs collapsed into one line each. The words on screen are unchanged.
+       THE BUG THE HARNESS CAUGHT when this was first written, still worth knowing: the first draft
+       built every clause in the passive ("X is driven"), which read fine in a list and produced the
+       fragment "The storm Crustbeard is driven 3 squares NORTH!" whenever it was the only clause. */
     /* TWO GRAMMATICAL SUBJECTS, KEPT APART. What the storm DOES to a captain takes the storm as
        its subject, so those clauses share the one "The storm …" opener and read as one sentence
        however many of them fire. What a captain does about it takes the captain, so those follow
        the dash. Wyatt's own shape, chosen from the question UI 2026-09-06:
          "The storm drives Flaky Jack and Wyargh WEST — Crustbeard drops anchor and holds fast…" */
     const byStorm=[],byCaptain=[];
-    if(e.moved.length) byStorm.push(say("storm.drives",{who:list(e.moved),n:STORM_PUSH,dir}));
-    if(e.blown.length) byStorm.push(say("storm.blowsOff",{who:list(e.blown)}));
-    if(e.swept.length) byStorm.push(say("storm.sweeps",{who:list(e.swept)}));
-    if(e.held.length)  byCaptain.push(say(sng(e.held)?"storm.holds.one":"storm.holds.many",{who:list(e.held)}));
-    if(e.shipHeld.length)byCaptain.push(say(sng(e.shipHeld)?"storm.pinned.one":"storm.pinned.many",{who:list(e.shipHeld)}));
+    if(e.moved.length) byStorm.push(say("storm.drives",{who:seats(e.moved),n:STORM_PUSH,dir},viewerSeat));
+    if(e.blown.length) byStorm.push(say("storm.blowsOff",{who:seats(e.blown)},viewerSeat));
+    if(e.swept.length) byStorm.push(say("storm.sweeps",{who:seats(e.swept)},viewerSeat));
+    if(e.held.length)  byCaptain.push(say("storm.holds",{who:seats(e.held)},viewerSeat));
+    if(e.shipHeld.length)byCaptain.push(say("storm.pinned",{who:seats(e.shipHeld)},viewerSeat));
     const join=(a)=>a.length<=1?(a[0]||""):a.length===2?`${a[0]} ${AND} ${a[1]}`:`${a.slice(0,-1).join(", ")} ${AND} ${a[a.length-1]}`;
     /* The engine already refuses to emit this event when every bucket is empty ("say nothing
        rather than narrate an absence"), so one of these two is always populated — but a narration

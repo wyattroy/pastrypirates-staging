@@ -168,20 +168,51 @@ export function chartTour(game, player, ingsOverride){
     return { cells, marks: [[home[0], home[1]]], home: true };
   }
 
-  // ---- greedy nearest-first through every dock the recipe still needs
+  /* ⭐ NEAREST IN TURNS, UNDER THE WIND — not nearest in squares. 2026-09-19.
+     THE RULE THAT MAKES THIS MATTER, and it is not a small one: a route that touches even ONE
+     upwind square caps the WHOLE move at 2 squares instead of 4 (src/shared/index.js:312-314,
+     SAIL_RANGE / SAIL_RANGE_UPWIND). So a dock five squares away downwind is one turn nearer than a
+     dock four squares away into the wind's nose, and counting squares says the opposite.
+
+     AND THE BOTS ALREADY KNEW. They plan "costed in TURNS — sail time under the committed wind
+     forecast" (engine header, line 28) through `legTurns3`/`turnsFieldTo3`, which floods the water
+     by the real movement rule. The human's dotted line asked `seaRoutes`, whose own comment says
+     what it leaves out: "Squares sailed; wind and other ships ignored" (engine:525). That is a
+     bots-and-humans asymmetry, and CLAUDE.md says which way to close one: level the human UP.
+
+     So the ORDER of the docks now comes from the engine's own wind-aware planner — the same call,
+     the same cache, the same arithmetic the bots use, including their wind horizon: this turn is
+     sailed under windNow, and every leg after it under the forecast, because that is all anybody
+     is told. The DRAWN CELLS still come from seaRoute, which is already rim-aware and carries his
+     2026-09-11 trade-wind ruling; turnsFieldTo3 prices a rim ride the same way, so the two agree
+     about the sea and differ only about which dock is nearer.
+
+     A voyage with no wind rule in play is unchanged: with legTurns3 unavailable or no route
+     costed, this falls straight back to the square count it used before. */
   const remaining = want.slice();
   const cells = [];
   const marks = [];
   let cur = start;
+  let leg = 0;
+  const fc = (typeof game.forecastWind === "function" && game.forecastWind()) || game.windNow;
+  const byTurns = typeof game.legTurns3 === "function";
   while (remaining.length){
     const routes = game.seaRoutes(cur);   // ONE flood from where this leg starts serves every dock
-    let pick = -1, pickPath = null, pickD = Infinity;
+    const wind = leg === 0 ? game.windNow : fc;   // the bots' own horizon (engine rivalPlan3)
+    let pick = -1, pickPath = null, pickD = Infinity, pickT = Infinity;
     for (let i = 0; i < remaining.length; i++){
       const d = routes.dist[key(remaining[i].cell)];
-      if (d === undefined || d >= pickD) continue;
+      if (d === undefined) continue;
+      // turns first, squares only to break a tie (or when the engine cannot cost this leg)
+      const t = byTurns ? game.legTurns3(cur, remaining[i].cell, wind) : null;
+      const better = (t != null && pickT !== Infinity) ? (t < pickT || (t === pickT && d < pickD))
+                   : (t != null && pickT === Infinity) ? true
+                   : (pickT !== Infinity) ? false
+                   : d < pickD;
+      if (!better) continue;
       const p = game.seaRoute(routes, cur, remaining[i].cell);
       if (!p.length) continue;
-      pickD = d; pick = i; pickPath = p;
+      pickD = d; if (t != null) pickT = t; pick = i; pickPath = p;
     }
     if (pick < 0) break;                       // nothing else reachable — draw what we charted
     // the legs join, so drop the repeated cell where one ends and the next begins
@@ -189,6 +220,7 @@ export function chartTour(game, player, ingsOverride){
     marks.push(remaining[pick].cell);
     cur = remaining[pick].cell;
     remaining.splice(pick, 1);
+    leg++;
   }
   if (cells.length < 2) return null;
   return { cells, marks, home: false };

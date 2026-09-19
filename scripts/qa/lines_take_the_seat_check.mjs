@@ -70,22 +70,22 @@ const NO_SEAT = {
 const BY_RULING = {
   "muse.line": { sighting: "the sea creature's own sentence, typed both ways by hand in src/shared/index.js — theme text he ruled stays outside words.js for now (2026-09-14: \"don't do anything yet -- this is just context\"); words.js's header names it as the one exception" },
 };
-/* ⚠ AWAITING HIS WORDING — STOPPED in architecture item 43, not fixed. Each is still handed a name (or a hand-built "ye"), and the one rule's
+/* ⚠ AWAITING HIS WORDING — STOPPED in architecture item 43, not fixed.
+   EIGHT LEFT THIS LIST ON 2026-09-19, and none of them needed a word from him. Seven storm clauses and
+   the victory screen's co-baker line were filed here as "his wording"; reading them properly, they were
+   all ONE mechanism gap — src/shared/words.js could not say a GROUP of captains, so the storm summary
+   built its own "ye" by hand in util.js and the co-baker line did not bother (a captain who baked read
+   THEIR OWN NAME on their own screen). `seats()` says a group now, `{who:drops|drop}` carries its
+   plurality, and storm.holds.one/.many + storm.pinned.one/.many collapsed into one line each.
+   WHAT IS LEFT HERE IS GENUINELY HIS: two bake-off titles, the downwind tag's capitals, and the
+   counter-offer's possessive, which is a wording problem ("yers") and not a missing mechanism. Each is still handed a name (or a hand-built "ye"), and the one rule's
    derived form reads wrongly or drops words he chose. The report of that item quotes each one's text today and what the rule would render.
    When he rules, the line takes a seat and leaves this list (rule 4 fails if it is left behind). */
 const AWAITING_HIS_WORDING = {
   "battle.downwindTag": { name: "\"⬇ WYATT FIRES DOWNWIND — WINS TIES\" — said with a fight's first line to every screen now (the box it labelled went in 8eca1608); the name is in capitals, and one line would read \"⬇ Wyatt — ye FIRE DOWNWIND — WIN TIES\" on his own screen and lose the capitals on every other" },
-  "storm.drives": { who: "the storm summary names a GROUP of captains, and words.js cannot say a group: its \"ye\" is built by hand in util.js stormSummary list() — a clause filled on its own would open \"Wyatt — ye …\" in the middle of the summary" },
-  "storm.blowsOff": { who: "the storm summary's group (as storm.drives)" },
-  "storm.sweeps": { who: "the storm summary's group (as storm.drives)" },
-  "storm.holds.one": { who: "the storm summary's group (as storm.drives); one captain or several, and \"ye\" takes the plural verb" },
-  "storm.holds.many": { who: "the storm summary's group (as storm.holds.one)" },
-  "storm.pinned.one": { who: "the storm summary's group (as storm.holds.one)" },
-  "storm.pinned.many": { who: "the storm summary's group (as storm.holds.one)" },
   "bake.titleWatching": { who: "his T-25 wording (2026-08-26): \"{Captain}'s Bake-Off\" or \"{Your name}, Yer Bake-Off\" — two lines chosen in code; one line derives \"Yer Bake-Off\" and drops his name, and the bench's spec would carry a seat, not a name" },
   "bake.titleMine": { who: "the other half of his T-25 title (as bake.titleWatching)" },
   "counter.ask": { whose: "the asker's cargo, \"Crustbeard: what o' Wyatt's will ye have instead?\" — put to the countering captain alone, so the asker is never the reader and no screen reads it wrong today; but the one rule's own-screen form is \"what o' yer will ye have instead?\", which is not English (\"yers\"), and the template cannot say it" },
-  "victory.bake.cobakers": { names: "a LIST of the captains who baked too — a co-baker reads their own name today; words.js cannot say a list, and one captain would read \"Wyatt — ye baked too — Best Baker went to the fullest hold\"" },
 };
 const LISTS = [["NAME_LABELS", NAME_LABELS], ["NO_SEAT", NO_SEAT], ["BY_RULING", BY_RULING], ["AWAITING_HIS_WORDING", AWAITING_HIS_WORDING]];
 const allowed = (id, key) => LISTS.find(([, L]) => L[id] && Object.prototype.hasOwnProperty.call(L[id], key));
@@ -455,10 +455,15 @@ function analyse(files) {
         const t = words[id] || "";
         if (!new RegExp(`\\{${key}(?:'s|:)`).test(t)) continue;   // this line words {key} both ways: it is a captain's placeholder
         const v = codeOnly(value).trim();
-        if (/(?<![\w$.])seat\(/.test(v) || /^(null|undefined)$/.test(v)) continue;
-        if (/^[A-Za-z_$][\w$]*$/.test(v)) {   // a variable holding seat(…)
+        /* `seats(…)` — SEVERAL captains as one fact — counts, added 2026-09-19 with the group token.
+           It is the same derivation: words.js reads the seats and decides which of them is "ye", so a
+           group handed over whole is exactly as safe as a lone seat. What stays red is what always was:
+           a name, or a list of names joined into a string before the words could see it (the
+           `const list=s=>s.map(i=>pn(i)).join()` red-proof below is that pattern, and it still goes red). */
+        if (/(?<![\w$.])seats?\(/.test(v) || /^(null|undefined)$/.test(v)) continue;
+        if (/^[A-Za-z_$][\w$]*$/.test(v)) {   // a variable holding seat(…) or seats(…)
           let ok = false;
-          const bv = binding(s.F, v, pos); if (bv && !bv.param) ok = bv.assigns.every(([, r]) => /(?<![\w$.])seat\(/.test(codeOnly(r)));
+          const bv = binding(s.F, v, pos); if (bv && !bv.param) ok = bv.assigns.every(([, r]) => /(?<![\w$.])seats?\(/.test(codeOnly(r)));
           if (ok) continue;
         }
         notSeat.push(`${where}  "${id}" {${key}} is a captain's placeholder, handed ${value.trim().replace(/\s+/g, " ").slice(0, 60)} — not seat(…)`);
@@ -483,7 +488,7 @@ function rules(files) {
     `${A.names.length} line(s) about a captain are handed a ready-made name, so that captain's own screen can never read "ye" — hand over seat(i), or, if the line is put TO a captain or labels one, add it to NAME_LABELS with the reason:\n    ${A.names.join("\n    ")}`);
   rule(!A.notSeat.length,
     "every captain's placeholder is handed the captain — seat(…)",
-    `${A.notSeat.length} captain's placeholder(s) are handed something other than seat(…) — "ye" is derived by words.js from the seat, never built by hand:\n    ${A.notSeat.join("\n    ")}`);
+    `${A.notSeat.length} captain's placeholder(s) are handed something other than seat(…)/seats(…) — "ye" is derived by words.js from the seat, never built by hand:\n    ${A.notSeat.join("\n    ")}`);
   rule(!A.labelOnly.length,
     "every line that holds {name} — the label placeholder — is on a list, with its reason",
     `${A.labelOnly.length} line(s) hold {name} but are on no list — a line ABOUT a captain words them with a captain's placeholder ({p} {p:is|are}):\n    ${A.labelOnly.join("\n    ")}`);

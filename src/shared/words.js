@@ -48,6 +48,37 @@
 export const seat = (i) => ({ seat: i });
 const isSeat = (v) => v != null && typeof v === "object" && Object.prototype.hasOwnProperty.call(v, "seat");
 
+/* ⭐ SEVERAL CAPTAINS, AS ONE FACT: `{who: seats([0, 2])}` — "ye an' Flaky Jack".
+   WHY IT EXISTS. Eight lines sat on `lines_take_the_seat_check.mjs`'s AWAITING_HIS_WORDING list for
+   one reason, and it was never his wording: THIS FILE COULD NOT SAY A GROUP. So the storm summary
+   built its own "ye" by hand in src/ui/util.js (a `list()` helper and a `sng()` plurality test), and
+   the victory screen's co-baker line did not bother — a captain who baked read THEIR OWN NAME on
+   their own screen, which is the one thing `seat()` exists to prevent. A UI-tier workaround for a
+   words-tier fact, exactly as CLAUDE.md warns.
+
+   THE VERB SLOTS ARE THE ONES THAT WERE ALREADY THERE, on the axis they already meant. For a lone
+   captain `{p:is|are}` reads "third-person form | the ye form" — "Flaky Jack is deciding" against
+   "ye are deciding". A group needs the same two forms on the same axis, so `{who:drops|drop}` picks
+   the third-person singular only when the group is ONE captain who is not reading, and the plural
+   otherwise. That is why `storm.holds.one`/`storm.holds.many` could collapse into one line: the
+   split was the caller doing by hand what the template can now say.
+
+   A group is NEVER given the lone seat's "Name — ye" sentence opener. "Wyatt — ye an' Flaky Jack
+   drop anchor" is not a sentence anybody wants; the list simply reads "ye an' Flaky Jack". */
+export const seats = (list) => ({ seats: (list || []).filter((i) => i != null) });
+const isGroup = (v) => v != null && typeof v === "object" && Array.isArray(v.seats);
+/* Second person takes the plural verb ("ye drop"), so a group is singular ONLY when it is one
+   captain who is not the one reading. Lifted verbatim from util.js's `sng`, which it replaces. */
+const groupIsSingular = (g, look) => g.seats.length === 1 && !look.me(g.seats[0]);
+/* The joiner is words, so it lives with the words: `list.and` and `list.ye` are entries below. */
+const groupText = (g, look) => {
+  const parts = g.seats.map((i) => (look.me(i) ? `<b>${WORDS["list.ye"]}</b>` : look.name(i)));
+  const AND = WORDS["list.and"];
+  if (parts.length <= 1) return parts[0] || "";
+  if (parts.length === 2) return `${parts[0]} ${AND} ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")} ${AND} ${parts[parts.length - 1]}`;
+};
+
 /* Is the text so far the start of a sentence? "first" when nothing but art and markup came before;
    "next" after a full stop, "!" or "?"; otherwise mid-sentence. */
 const ART = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
@@ -70,7 +101,16 @@ export function fill(template, facts, look) {
     last = re.lastIndex;
     const [whole, key, possessive, other, own] = m;
     const v = facts[key];
-    if (other !== undefined) { out += isSeat(v) && look.me(v.seat) ? own : other; continue; }
+    if (other !== undefined) {
+      if (isGroup(v)) { out += groupIsSingular(v, look) ? other : own; continue; }
+      out += isSeat(v) && look.me(v.seat) ? own : other; continue;
+    }
+    if (isGroup(v)) {
+      const t = groupText(v, look);
+      // a list's possessive hangs off the last name in it, by the same rule a lone name follows
+      out += possessive ? t + (t.replace(/<[^>]*>/g, "").trim().endsWith("s") ? "'" : "'s") : t;
+      continue;
+    }
     if (isSeat(v)) {
       const mine = look.me(v.seat), at = sentenceAt(out);
       if (possessive) out += mine ? (at ? "Yer" : "yer") : look.poss(v.seat);
@@ -155,10 +195,10 @@ export const WORDS = {
   "storm.drives": "drives {who} {n} squares {dir}",
   "storm.blowsOff": "blows {who} clean off the dock",
   "storm.sweeps": "sweeps {who} into the trade winds",
-  "storm.holds.one": "{who} drops anchor an' holds fast",
-  "storm.holds.many": "{who} drop anchor an' hold fast",
-  "storm.pinned.one": "{who} is pinned by the hull ahead",
-  "storm.pinned.many": "{who} are pinned by the hull ahead",
+  /* ONE LINE EACH, not the .one/.many pair they were until 2026-09-19: the group fact carries its own
+     plurality now, so the caller no longer picks a line by counting captains. Same words either way. */
+  "storm.holds": "{who} {who:drops|drop} anchor an' {who:holds|hold} fast",
+  "storm.pinned": "{who} {who:is|are} pinned by the hull ahead",
   "storm.summary": "🌀 The storm {storm}!",
   "storm.summary.both": "🌀 The storm {storm} — {captains}!",
   "storm.summary.captains": "🌀 The storm blows through — {captains}!",
@@ -505,7 +545,8 @@ export const WORDS = {
   "victory.close.nextSail": "The {ing} was waiting at {place}",
   "victory.bake.title": "{w's} bake",
   "victory.bake.count": "{n} of {total} recipes baked",
-  "victory.bake.cobakers": "{names} baked too — Best Baker went to the fullest hold",
+  /* {who}, not {names}: a co-baker used to read their own name here on their own screen. */
+  "victory.bake.cobakers": "{who} baked too — Best Baker went to the fullest hold",
   "victory.bake.seal": "BEST<br>BAKER",
   "victory.awards.goesTo": "And {award} goes to…",
   "victory.awards.done": "Yer awards, captains!",

@@ -15,7 +15,7 @@
 import { appState } from "../state/index.js";
 import { ASSET_BASE, BOAT_IMG, CROWN_IMG, PARROT_IMG, SPOILS_POUCH_IMG, POCKET_COMPASS_IMG, HEXCOL, ING_ALL, ING_IMG, dockPlace, iname } from "../shared/index.js";
 import { say, sayText, pname, seatLocal, sleepMs, assignBadges, fixedOrigin } from "./util.js";
-import { seat } from "../shared/words.js";
+import { seat, seats } from "../shared/words.js";
 import { recipeInfo } from "./recipe.js";
 import { playCue } from "./audio.js";
 
@@ -437,9 +437,13 @@ function pageBake(el, v, win) {
     countLine = " · " + sayText("victory.bake.count", { n: list.size, total: recipesTotal(v.size) });
   }
   // his ruling (2026-08-30): honour every captain who baked, and say why the winner won
-  const cobakers = (v.captains || []).filter(x => x.seat !== win && x.tries).map(x => pname(x.seat));
+  /* ⭐ A CO-BAKER READ THEIR OWN NAME HERE until 2026-09-19 — "Wyatt baked too" on Wyatt's own screen,
+     while every other line on the same screen says "ye". The names were joined into a string before
+     the words ever saw them, so nothing downstream could tell which of them was reading. It hands the
+     CAPTAINS over now and src/shared/words.js derives the "ye", the same as every other line. */
+  const cobakers = (v.captains || []).filter(x => x.seat !== win && x.tries).map(x => x.seat);
   el.innerHTML = `<h4 class="vcHead">${say("victory.bake.title", { w: seat(win) })}</h4><div class="vcSubline">${esc(info ? info.title : "")}${esc(countLine)}</div>` +
-    (cobakers.length ? `<div class="vcSubline">${esc(sayText("victory.bake.cobakers", { names: cobakers.join(", ") }))}</div>` : "");
+    (cobakers.length ? `<div class="vcSubline">${esc(sayText("victory.bake.cobakers", { who: seats(cobakers) }))}</div>` : "");
   let t = 0;
   const H = el.clientHeight || 230, W = el.clientWidth || 355, pw = Math.min(H * .5, 120) * b.size, standY = H * .78;
   if (b.steam && !reduced()) { for (let i = 0; i < 5; i++) { const puff = mk(el, "vcSteam", null, { left: (W / 2 - 13 + (i - 2) * 10) + "px", top: (standY - 40) + "px" });
