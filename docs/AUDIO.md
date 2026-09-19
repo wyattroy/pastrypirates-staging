@@ -37,11 +37,22 @@ a cue *name*; `playForEvent` resolves it and hands it to `playCue`. So "the soun
 sfx/<pack>/<folder>/<stem>.mp3          e.g. sfx/home-waters/voyage/ship-move.mp3
 ```
 
-- **`voyage/`** — the world's own voice: sailing, weather, crates, coins, a fight. A new map replaces
-  these, and a map that replaced nothing else would already feel new.
-- **`ceremony/`** — the furniture of the bake-off and the victory card. These belong to the GAME, not
-  to a world, so a map inherits them unless it deliberately says otherwise.
+- **`voyage/`** — the world's own voice: sailing, weather, crates, coins, a fight.
+- **`ceremony/`** — the furniture of the bake-off and the victory card.
 - **`ambience/`** — the bed. **`music/`** — the track.
+
+⭐ **A NEW MAP MAY REPLACE EVERY ONE OF THEM.** Wyatt, 2026-09-19: *"A new map will replace
+everything. It'll replace the background. and the ingredients and the island assets and the sound
+effects and the music and the narration lines."* The folders exist to make a pack **readable** — so
+somebody making one can see what each sound is *for* — **not** to mark `ceremony/` as fixed. The
+fallback to the base pack is there so a half-finished pack still plays, never to suggest a pack
+should stop at the world.
+
+**AND MAPS ARE NOT BEING BUILT NOW.** *"We're not going to build that out now. What we're doing now
+is preparing for that after the launch on October 1st. We want to prepare the code base to be
+extensible in all these different directions."* Six directions, and **sound is the first of the six
+done**: the background, the ingredients, the island assets, the sound effects, the music, the
+narration lines. The other five are not started, and must not be started in place of launch work.
 
 `PACK_STEMS` lists what a pack actually ships; `stemUrl()` serves anything else out of the base pack,
 so **a second map is a folder with three files in it, not thirty**. `stemUrl()` is the only place a
@@ -345,6 +356,20 @@ in `src/`**, 2026-09-18:
 | `battle-swords` | **A fight being CALLED** (`engage`), and fleeing one. Not the fight resolving. |
 | `cannon` | **A shot landing**, and **firing up the bakery** (`ovens`). |
 | `storm` | **Scattered thunder** — once as a storm arrives, then ~20 s apart, on its own quieter bus. |
+
+#### ⛔ SETTLED 2026-09-19 — THE CRATE IN THE HOLD, AND WHY NOBODY ASKS AGAIN
+
+> *"Stop recommending crate chime to be the sound of a crate landing in the hold. You need to write
+> down that the crate landing in the hold already has the sound, and it is the thump sound from
+> buying a crate. And that is the way it should stay. Unless I say otherwise, stop suggesting."*
+
+**The crate landing in the hold plays `store-ingredient` — the crate-acquisition thump — and that is
+correct and final.** It is the `crate.landsInHold` cue, and the same stem serves `crate.changesHands`
+(a dock or a trade). **`crate-chime` is a different sound for a different moment: a crate you named
+RIGHT in the bake-off.** The stem's NAME is the only thing that invites the confusion.
+
+**This has now been offered as a "fix" by two sessions in two days.** The wiring was never wrong. If
+you are about to suggest it, you are the third — don't.
 
 #### His `crate-chime` question, answered
 

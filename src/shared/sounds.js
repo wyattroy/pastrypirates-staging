@@ -49,11 +49,16 @@
    question `assets/` answers by having `boats/`, `islands/` and `ingredients/` rather than 137
    files in a heap.
 
-     voyage/    the world's own voice — sailing, weather, crates, coins, a fight. A new map
-                replaces these, and a map that replaced nothing else would already feel new.
+     voyage/    the world's own voice — sailing, weather, crates, coins, a fight.
      ceremony/  the furniture of the bake-off and the victory card: page swishes, lid notes, the
-                drumroll, the award whoosh. These belong to the GAME, not to a world, so a map
-                inherits them unless it deliberately says otherwise.
+                drumroll, the award whoosh.
+
+   ⭐ A NEW MAP MAY REPLACE EVERY ONE OF THEM — his ruling, 2026-09-19: "A new map will replace
+   everything. It'll replace the background. and the ingredients and the island assets and the sound
+   effects and the music and the narration lines." So the two folders are there to make a pack
+   READABLE — to say what a sound is FOR, so somebody making one knows what they are making — and
+   NOT to mark `ceremony/` as fixed. The fallback below exists so a half-finished pack still plays,
+   never to suggest a pack should stop at the world.
      ambience/  the bed — the sea, the gulls, the creaking hull.
      music/     the track.
 
@@ -93,8 +98,9 @@ export const STEM_FOLDER = {
   "music-ocean": "music",
 };
 
-/* WHICH STEMS EACH PACK SHIPS. The base pack ships everything; a later map lists only what it
-   replaces. An absent stem is not a fault — it is the fallback doing its job. */
+/* WHICH STEMS EACH PACK SHIPS. The base pack ships everything; a later map lists what it replaces,
+   which his ruling expects to be ALL of them. An absent stem is not a fault — it is the fallback
+   letting a pack be finished in pieces rather than all at once. */
 export const PACK_STEMS = {
   [BASE_PACK]: null,        // null means "all of them" — the base pack is the floor
 };
@@ -419,10 +425,21 @@ export const CUES = {
   "sail":               { stem: "ship-move" },
   "crate.changesHands": { stem: "store-ingredient" },
   "crate.bought":       { stem: "cork-pop", slot: BUY_POP_SLOT },
-  /* THE CRATE'S WOOMP, AS IT LANDS IN THE HOLD. Wyatt, 2026-09-18: "the crates landing in the hold
-     should use the old crate acquisition 'woomp' sound when the crate first begins its in-hold
-     bounce." A SECOND cue on the same stem, not a replacement: a bought crate still pops its cork
-     at the dock about a second and a third earlier, so the two never land together. */
+  /* ⛔⛔ SETTLED, AND NOBODY RE-OPENS IT. Wyatt, 2026-09-19: "stop recommending crate chime to be
+     the sound of a crate landing in the hold. You need to write down that the crate landing in the
+     hold ALREADY has the sound, and it is the thump sound from buying a crate. And that is the way
+     it should stay. Unless I say otherwise, stop suggesting."
+
+     THE SOUND IS `store-ingredient` — the crate-acquisition thump — and it is RIGHT. His earlier
+     ask, 2026-09-18: "the crates landing in the hold should use the old crate acquisition 'woomp'
+     sound when the crate first begins its in-hold bounce." A second cue on the same stem, not a
+     replacement: a bought crate pops its cork at the dock about a second and a third earlier, so
+     the two never land together.
+
+     ⚠ `crate-chime` IS A DIFFERENT SOUND FOR A DIFFERENT MOMENT — a crate you named RIGHT in the
+     bake-off (bakeoff.crateRight). Its NAME is the only thing that invites the confusion, and
+     renaming a shipped file is not worth doing quietly. TWO SESSIONS IN TWO DAYS have now offered
+     to "fix" this; the wiring was never wrong. Do not offer a third time. */
   "crate.landsInHold":  { stem: "store-ingredient" },
   "battle.called":      { stem: BATTLE_ENGAGE_SOUND },
   "battle.fled":        { stem: BATTLE_ENGAGE_SOUND },
